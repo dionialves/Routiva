@@ -119,6 +119,58 @@ class DashboardTests {
       .andExpect(status().isOk()).andExpect(cardCount(0))
       .andExpect(content().string(org.hamcrest.Matchers.containsString("Grupo indisponível")));
  }
+
+ @Test void hostsWithoutValidIpAreGrayAndDoNotAffectGroups() throws Exception {
+  var healthyGroup=new Host.Group("ip-healthy","Grupo Saudável");
+  var invalidGroup=new Host.Group("ip-invalid","Grupo Sem IP");
+  var failingGroup=new Host.Group("ip-failing","Grupo Indisponível");
+  var pendingGroup=new Host.Group("ip-pending","Grupo Aguardando");
+  var healthy=new Host("ip-healthy-host","Host Válido","10.3.0.1",java.util.List.of(healthyGroup));
+  var missing=new Host("ip-missing-host","Host Sem IP","",java.util.List.of(healthyGroup,invalidGroup));
+  var malformed=new Host("ip-malformed-host","Host IP Inválido","999.1.1.1",java.util.List.of(healthyGroup,invalidGroup));
+  var noSamples=new Host("ip-no-samples","Host Sem Coleta","",java.util.List.of(healthyGroup,invalidGroup));
+  var failed=new Host("ip-failed-host","Host Sem Resposta","10.3.0.2",java.util.List.of(failingGroup));
+  var pending=new Host("ip-pending-host","Host Aguardando","10.3.0.3",java.util.List.of(pendingGroup));
+  store.save(healthy,new PingProbe.Result(10d,null));
+  store.save(missing,new PingProbe.Result(null,"IP ausente ou inválido"));
+  store.save(malformed,new PingProbe.Result(99d,null));
+  store.save(failed,new PingProbe.Result(null,"Tempo esgotado"));
+  org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(healthy,missing,malformed,noSamples,failed,pending));
+  mvc.perform(get("/hosts").param("pingStatus","gray"))
+      .andExpect(status().isOk()).andExpect(cardCount(3))
+      .andExpect(content().string(org.hamcrest.Matchers.containsString("Cinza · sem IP válido")))
+      .andExpect(result -> {
+       for(var card:resultCards(result)) {
+        assertThat(card.color()).isEqualTo("gray");
+        assertThat(card.hour()).isNull();assertThat(card.minute()).isNull();assertThat(card.current()).isNull();
+        assertThat(card.state()).isEqualTo("Sem IP válido");
+       }
+      });
+  mvc.perform(get("/grupos").header("HX-Request","true").param("pingStatus","green"))
+      .andExpect(status().isOk()).andExpect(cardCount(1))
+      .andExpect(result -> {
+       var card=resultCards(result).getFirst();
+       assertThat(card.id()).isEqualTo("ip-healthy");
+       assertThat(card.hour()).isEqualTo(10d);assertThat(card.minute()).isEqualTo(10d);assertThat(card.current()).isEqualTo(10d);
+       assertThat(card.detail()).isEqualTo("4 hosts · 3 sem IP válido");
+      });
+  mvc.perform(get("/grupos").header("HX-Request","true").param("pingStatus","gray"))
+      .andExpect(status().isOk()).andExpect(cardCount(1))
+      .andExpect(result -> assertThat(resultCards(result).getFirst().id()).isEqualTo("ip-invalid"));
+  mvc.perform(get("/hosts").header("HX-Request","true").param("groupId","ip-healthy").param("q","inválido").param("pingStatus","gray"))
+      .andExpect(status().isOk()).andExpect(cardCount(1))
+      .andExpect(result -> assertThat(resultCards(result).getFirst().id()).isEqualTo("ip-malformed-host"));
+  mvc.perform(get("/hosts").header("HX-Request","true").param("pingStatus","red"))
+      .andExpect(status().isOk()).andExpect(cardCount(1))
+      .andExpect(result -> assertThat(resultCards(result).getFirst().id()).isEqualTo("ip-failed-host"));
+  mvc.perform(get("/grupos").header("HX-Request","true").param("pingStatus","neutral"))
+      .andExpect(status().isOk()).andExpect(cardCount(1))
+      .andExpect(result -> assertThat(resultCards(result).getFirst().id()).isEqualTo("ip-pending"));
+ }
+ @SuppressWarnings("unchecked")
+ private static java.util.List<DashboardController.Card> resultCards(org.springframework.test.web.servlet.MvcResult result) {
+  return (java.util.List<DashboardController.Card>)result.getModelAndView().getModel().get("cards");
+ }
  private static org.springframework.test.web.servlet.ResultMatcher cardCount(int count) {
   return result -> assertThat(result.getResponse().getContentAsString().split("<article",-1).length-1).isEqualTo(count);
  }

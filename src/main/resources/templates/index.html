@@ -27,6 +27,7 @@
       <option value="green" th:selected="${pingStatus == 'green'}">Verde · abaixo de 15 ms</option>
       <option value="yellow" th:selected="${pingStatus == 'yellow'}">Amarelo · 15 a 20 ms</option>
       <option value="red" th:selected="${pingStatus == 'red'}">Vermelho · acima de 20 ms ou indisponível</option>
+      <option value="gray" th:selected="${pingStatus == 'gray'}" th:text="${groupPage} ? 'Cinza · sem hosts com IP válido' : 'Cinza · sem IP válido'"></option>
       <option value="neutral" th:selected="${pingStatus == 'neutral'}">Neutro · aguardando dados</option>
     </select></div>
     <div th:if="${!groupPage}"><label for="host-group">Grupo de hosts</label>
@@ -39,7 +40,7 @@
     <button type="submit">Pesquisar</button>
     <a class="clear-filters" th:href="${pagePath}">Limpar filtros</a>
   </form>
-  <div class="legend"><span>● Menos de 15 ms</span><span>● 15 a 20 ms</span><span>● Acima de 20 ms / indisponível</span></div>
+  <div class="legend"><span>● Menos de 15 ms</span><span>● 15 a 20 ms</span><span>● Acima de 20 ms / indisponível</span><span>● Sem IP válido</span></div>
   <section id="dashboard" th:attr="hx-get=${pagePath}" hx-include="#filters"
            hx-trigger="every 2s" hx-swap="innerHTML" hx-sync="this:replace" aria-label="Resultados do monitoramento">
     <th:block th:replace="~{dashboard :: content}"/>

@@ -8,7 +8,7 @@ public class PingProbe {
  private static final Pattern TIME=Pattern.compile("(?:time|tempo)([=<])\\s*([0-9]+(?:[.,][0-9]+)?)\\s*ms",Pattern.CASE_INSENSITIVE);
  public record Result(Double latency,String error) {}
  public Result ping(String ip,int timeoutMs) {
-  if(ip==null || !ip.matches("[0-9a-fA-F:.]+")) return new Result(null,"IP ausente ou inválido");
+  if(!IpAddress.isValid(ip)) return new Result(null,"IP ausente ou inválido");
   Process process=null;
   try {
    boolean windows=System.getProperty("os.name").toLowerCase().contains("win");

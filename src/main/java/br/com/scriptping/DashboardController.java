@@ -40,7 +40,7 @@ public class DashboardController {
  @SuppressWarnings("unchecked")
  private void prepare(Model model,boolean groupPage,String query,String requestedStatus,String requestedGroupId) {
   populate(model);
-  String selected=Set.of("all","green","yellow","red","neutral").contains(requestedStatus)?requestedStatus:"all";
+  String selected=Set.of("all","green","yellow","red","neutral","gray").contains(requestedStatus)?requestedStatus:"all";
   String groupId=groupPage?"":requestedGroupId.strip();
   var groupOptions=(List<Card>)model.getAttribute("groups");
   var selectedGroup=groupOptions.stream().filter(card->card.id().equals(groupId)).findFirst();
@@ -65,14 +65,46 @@ public class DashboardController {
   return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD)
       .replaceAll("\\p{M}","").toLowerCase(Locale.ROOT);
  }
- private void populate(Model model){
-  long now=System.currentTimeMillis();var hosts=monitor.hosts();var stats=store.stats(hosts,now);List<Card> cards=new ArrayList<>();Map<String,Host.Group> groups=new TreeMap<>();Map<String,List<SampleStore.Stats>> groupStats=new HashMap<>();
-  for(Host host:hosts){var s=stats.get(host.id());boolean stale=s.measuredAt()!=null && now-s.measuredAt()>staleMs;boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
-   cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),host.ip()+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList()),s.hour(),s.minute(),stale?null:s.current(),color(s.hour(),s.minute(),s.current(),offline),s.measuredAt()==null?"Aguardando primeira coleta":stale?"Coleta atrasada":s.error()!=null?s.error():"Respondendo",time(s.measuredAt())));
-   for(var g:host.groups()){groups.put(g.id(),g);groupStats.computeIfAbsent(g.id(),k->new ArrayList<>()).add(s);}
+ private void populate(Model model) {
+  long now=System.currentTimeMillis();
+  var hosts=monitor.hosts();
+  var stats=store.stats(hosts,now);
+  List<Card> cards=new ArrayList<>();
+  Map<String,Host.Group> groups=new TreeMap<>();
+  Map<String,List<SampleStore.Stats>> groupStats=new HashMap<>();
+  Map<String,Integer> groupTotals=new HashMap<>();
+  for(Host host:hosts) {
+   var s=stats.get(host.id());
+   boolean valid=IpAddress.isValid(host.ip());
+   boolean stale=s.measuredAt()!=null && now-s.measuredAt()>staleMs;
+   boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
+   String state=!valid?"Sem IP válido":s.measuredAt()==null?"Aguardando primeira coleta":stale?"Coleta atrasada":s.error()!=null?s.error():"Respondendo";
+   String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
+   cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),detail,
+       valid?s.hour():null,valid?s.minute():null,valid && !stale?s.current():null,
+       valid?color(s.hour(),s.minute(),s.current(),offline):"gray",state,valid?time(s.measuredAt()):"—"));
+   for(var g:host.groups()) {
+    groups.put(g.id(),g);
+    groupTotals.merge(g.id(),1,Integer::sum);
+    var list=groupStats.computeIfAbsent(g.id(),k->new ArrayList<>());
+    if(valid) list.add(s);
+   }
   }
-  cards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));List<Card> groupCards=new ArrayList<>();
-  for(var entry:groups.entrySet()){var list=groupStats.get(entry.getKey());boolean offline=list.stream().anyMatch(s->s.measuredAt()!=null && (s.current()==null || now-s.measuredAt()>staleMs));Double hour=avg(list,0),minute=avg(list,1),current=avg(list.stream().filter(s->s.measuredAt()!=null && now-s.measuredAt()<=staleMs).toList(),2);boolean pending=list.stream().anyMatch(s->s.measuredAt()==null);groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),list.size()+" hosts",hour,minute,current,(pending && !offline && "green".equals(color(hour,minute,current,false))?"neutral":color(hour,minute,current,offline)),offline?"Há hosts sem resposta ou atrasados":pending?"Aguardando coletas":"Hosts respondendo",time(now)));}
+  cards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
+  List<Card> groupCards=new ArrayList<>();
+  for(var entry:groups.entrySet()) {
+   var list=groupStats.get(entry.getKey());
+   int total=groupTotals.get(entry.getKey()), excluded=total-list.size();
+   boolean offline=list.stream().anyMatch(s->s.measuredAt()!=null && (s.current()==null || now-s.measuredAt()>staleMs));
+   Double hour=avg(list,0),minute=avg(list,1),current=avg(list.stream().filter(s->s.measuredAt()!=null && now-s.measuredAt()<=staleMs).toList(),2);
+   boolean pending=list.stream().anyMatch(s->s.measuredAt()==null);
+   String groupColor=color(hour,minute,current,offline);
+   if(list.isEmpty()) groupColor="gray";
+   else if(pending && !offline && groupColor.equals("green")) groupColor="neutral";
+   String state=list.isEmpty()?"Sem hosts com IP válido":offline?"Há hosts sem resposta ou atrasados":pending?"Aguardando coletas":"Hosts respondendo";
+   String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),detail,hour,minute,current,groupColor,state,time(now)));
+  }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));
  }

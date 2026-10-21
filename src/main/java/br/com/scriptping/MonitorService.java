@@ -19,7 +19,7 @@ public class MonitorService {
  }
  @Scheduled(fixedDelayString="${monitor.interval-ms}") public void tick(){
   for(Host host:hosts) {
-   if(!running.add(host.id()))continue;
+   if(!IpAddress.isValid(host.ip()) || !running.add(host.id()))continue;
    executor.submit(()->{boolean acquired=false;try{slots.acquire();acquired=true;store.save(host,probe.ping(host.ip(),timeout));}catch(InterruptedException ex){Thread.currentThread().interrupt();}catch(Exception ex){LoggerFactory.getLogger(getClass()).error("Falha ao persistir ping do host {}",host.id(),ex);}finally{if(acquired)slots.release();running.remove(host.id());}});
   }
  }
