@@ -21,8 +21,41 @@ public class DashboardController {
   if(values.stream().anyMatch(Objects::isNull))return "neutral";
   return "green";
  }
- @GetMapping("/") public String index(Model model){populate(model);return "index";}
- @GetMapping("/dashboard") public String fragment(Model model){populate(model);return "dashboard :: content";}
+ @GetMapping({"/", "/hosts", "/grupos"})
+ public String page(jakarta.servlet.http.HttpServletRequest request,
+                    jakarta.servlet.http.HttpServletResponse response,
+                    @org.springframework.web.bind.annotation.RequestParam(defaultValue="") String q,
+                    @org.springframework.web.bind.annotation.RequestParam(defaultValue="all") String pingStatus,
+                    @org.springframework.web.bind.annotation.RequestHeader(value="HX-Request",defaultValue="false") boolean partial,
+                    Model model) {
+  response.setHeader("Vary","HX-Request");
+  boolean groupPage=request.getRequestURI().equals("/grupos");
+  prepare(model,groupPage,q,pingStatus);
+  return partial?"dashboard :: content":"index";
+ }
+ // Preserve the former polling URL for clients that already have the page open.
+ @GetMapping("/dashboard") public String fragment(Model model){prepare(model,false,"","all");return "dashboard :: content";}
+
+ @SuppressWarnings("unchecked")
+ private void prepare(Model model,boolean groupPage,String query,String requestedStatus) {
+  populate(model);
+  String selected=Set.of("all","green","yellow","red","neutral").contains(requestedStatus)?requestedStatus:"all";
+  var all=(List<Card>)model.getAttribute(groupPage?"groups":"hosts");
+  String search=normalize(query.strip());
+  var filtered=all.stream().filter(card->normalize(card.name()).contains(search))
+      .filter(card->selected.equals("all") || card.color().equals(selected)).toList();
+  model.addAttribute("cards",filtered);
+  model.addAttribute("total",all.size());
+  model.addAttribute("groupPage",groupPage);
+  model.addAttribute("pageTitle",groupPage?"Grupos de hosts":"Hosts");
+  model.addAttribute("pagePath",groupPage?"/grupos":"/hosts");
+  model.addAttribute("q",query);
+  model.addAttribute("pingStatus",selected);
+ }
+ private static String normalize(String value) {
+  return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD)
+      .replaceAll("\\p{M}","").toLowerCase(Locale.ROOT);
+ }
  private void populate(Model model){
   long now=System.currentTimeMillis();var hosts=monitor.hosts();var stats=store.stats(hosts,now);List<Card> cards=new ArrayList<>();Map<String,Host.Group> groups=new TreeMap<>();Map<String,List<SampleStore.Stats>> groupStats=new HashMap<>();
   for(Host host:hosts){var s=stats.get(host.id());boolean stale=s.measuredAt()!=null && now-s.measuredAt()>staleMs;boolean offline=s.measuredAt()!=null && (s.current()==null || stale);

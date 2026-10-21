@@ -65,6 +65,14 @@ O usuário precisa ter acesso de leitura aos hosts/grupos e permissão para usar
 
 O inventário é carregado ao iniciar e sincronizado a cada 60 segundos. Em falha de sincronização, mantém o último inventário e informa o problema no painel. Hosts removidos deixam de ser monitorados na próxima sincronização; seus registros permanecem até expirar a retenção. Uma coleta em andamento pode terminar após a remoção.
 
+## Páginas e filtros
+
+- `/hosts`: cards de hosts, com pesquisa pelo nome do host.
+- `/grupos`: cards de grupos, com pesquisa pelo nome do grupo.
+- `/`: abre a página de hosts.
+
+Cada página permite combinar pesquisa por nome e status de ping (todos, verde, amarelo, vermelho ou neutro). A pesquisa ignora maiúsculas/minúsculas e acentos. Os filtros são mantidos durante a atualização automática, e os resultados acompanham as mudanças de status. A URL reflete os filtros para permitir favoritos e compartilhamento. O botão “Limpar filtros” restaura a lista completa da página. Médias de grupo sempre consideram todos os membros, independentemente da pesquisa.
+
 ## Coleta e painel
 
 Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua coleta anterior tenha terminado. Até 64 pings executam em paralelo, sem sobreposição por host. Inventários grandes podem aumentar o intervalo efetivo. Os hosts precisam ser alcançáveis pela máquina que executa a aplicação. O executor suporta Linux/macOS e Windows com saída de ping em inglês ou português; outros idiomas podem exigir ajuste do parser.

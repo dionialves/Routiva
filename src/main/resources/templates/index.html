@@ -1,2 +1,49 @@
 <!doctype html>
-<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ScriptPing • Monitor de rede</title><link rel="stylesheet" href="/style.css"><script src="/webjars/htmx.org/2.0.4/dist/htmx.min.js" defer></script></head><body><header><div><p class="eyebrow">MONITORAMENTO DE REDE</p><h1>Script<span>Ping</span></h1><p>Todos os hosts. Cada milissegundo.</p></div><div class="live">● Atualização automática · 2s</div></header><main><div class="legend"><span>● Menos de 15 ms</span><span>● 15 a 20 ms</span><span>● Acima de 20 ms / indisponível</span></div><section id="dashboard" hx-get="/dashboard" hx-trigger="every 2s" hx-swap="innerHTML" hx-sync="this:drop"><th:block th:replace="~{dashboard :: content}"/></section><p id="connection" role="status"></p></main><script>document.body.addEventListener('htmx:sendError',()=>document.getElementById('connection').textContent='Conexão com o painel interrompida. Tentando novamente…');document.body.addEventListener('htmx:afterRequest',e=>{document.getElementById('connection').textContent=e.detail.successful?'':'Falha ao atualizar o painel. Tentando novamente…';});</script></body></html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${pageTitle} + ' • ScriptPing'">ScriptPing</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/webjars/htmx.org/2.0.4/dist/htmx.min.js" defer></script>
+</head>
+<body>
+<header>
+  <div><p class="eyebrow">MONITORAMENTO DE REDE</p><h1>Script<span>Ping</span></h1><p>Todos os hosts. Cada milissegundo.</p></div>
+  <div class="live">● Atualização automática · 2s</div>
+</header>
+<main>
+  <nav class="page-nav" aria-label="Páginas de monitoramento">
+    <a href="/hosts" th:classappend="${!groupPage} ? 'active'" th:attr="aria-current=${!groupPage} ? 'page' : null">Hosts</a>
+    <a href="/grupos" th:classappend="${groupPage} ? 'active'" th:attr="aria-current=${groupPage} ? 'page' : null">Grupos de hosts</a>
+  </nav>
+  <form id="filters" class="filters" method="get" th:action="${pagePath}"
+        th:attr="hx-get=${pagePath}" hx-target="#dashboard" hx-swap="innerHTML"
+        hx-trigger="submit, input changed delay:300ms from:input, change from:select"
+        hx-sync="#dashboard:replace" hx-replace-url="true">
+    <div><label for="search">Pesquisar por nome</label><input id="search" type="search" name="q" th:value="${q}" placeholder="Digite o nome…" autocomplete="off"></div>
+    <div><label for="ping-status">Status de ping</label><select id="ping-status" name="pingStatus">
+      <option value="all" th:selected="${pingStatus == 'all'}">Todos os status</option>
+      <option value="green" th:selected="${pingStatus == 'green'}">Verde · abaixo de 15 ms</option>
+      <option value="yellow" th:selected="${pingStatus == 'yellow'}">Amarelo · 15 a 20 ms</option>
+      <option value="red" th:selected="${pingStatus == 'red'}">Vermelho · acima de 20 ms ou indisponível</option>
+      <option value="neutral" th:selected="${pingStatus == 'neutral'}">Neutro · aguardando dados</option>
+    </select></div>
+    <button type="submit">Pesquisar</button>
+    <a class="clear-filters" th:href="${pagePath}">Limpar filtros</a>
+  </form>
+  <div class="legend"><span>● Menos de 15 ms</span><span>● 15 a 20 ms</span><span>● Acima de 20 ms / indisponível</span></div>
+  <section id="dashboard" th:attr="hx-get=${pagePath}" hx-include="#filters"
+           hx-trigger="every 2s" hx-swap="innerHTML" hx-sync="this:replace" aria-label="Resultados do monitoramento">
+    <th:block th:replace="~{dashboard :: content}"/>
+  </section>
+  <p id="connection" role="status"></p>
+</main>
+<script>
+document.body.addEventListener('htmx:sendError',()=>document.getElementById('connection').textContent='Conexão com o painel interrompida. Tentando novamente…');
+document.body.addEventListener('htmx:afterRequest',e=>{document.getElementById('connection').textContent=e.detail.successful?'':'Falha ao atualizar o painel. Tentando novamente…';});
+// History restores must render the whole page, including the filter controls.
+document.addEventListener('DOMContentLoaded',()=>{htmx.config.historyRestoreAsHxRequest=false;});
+</script>
+</body>
+</html>

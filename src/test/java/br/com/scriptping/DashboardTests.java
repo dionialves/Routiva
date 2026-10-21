@@ -34,6 +34,53 @@ class DashboardTests {
   org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(h));
   mvc.perform(get("/dashboard")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Servidor exemplo"))).andExpect(content().string(org.hamcrest.Matchers.containsString("Produção"))).andExpect(content().string(org.hamcrest.Matchers.containsString("16,00"))).andExpect(content().string(org.hamcrest.Matchers.containsString("card yellow")));
  }
+
+ @Test void dedicatedPagesAndCombinedFiltersStayAppliedDuringPolling() throws Exception {
+  Host green=new Host("filter-green","Servidor Ágil","10.0.0.1",java.util.List.of(new Host.Group("filter-g","Grupo Ágil")));
+  Host yellow=new Host("filter-yellow","Servidor Médio","10.0.0.2",java.util.List.of(new Host.Group("filter-y","Grupo Médio")));
+  Host red=new Host("filter-red","Servidor Lento","10.0.0.3",java.util.List.of(new Host.Group("filter-r","Grupo Lento")));
+  Host neutral=new Host("filter-neutral","Servidor Novo","10.0.0.4",java.util.List.of(new Host.Group("filter-n","Grupo Novo")));
+  store.save(green,new PingProbe.Result(10d,null));
+  store.save(yellow,new PingProbe.Result(17d,null));
+  store.save(red,new PingProbe.Result(25d,null));
+  org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(green,yellow,red,neutral));
+  for(String path:java.util.List.of("/hosts","/grupos")) {
+   String prefix=path.equals("/hosts")?"Servidor":"Grupo";
+   mvc.perform(get(path)).andExpect(status().isOk())
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("hx-include=\"#filters\"")))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"pingStatus\"")));
+   for(var pair:java.util.Map.of("green","Ágil","yellow","Médio","red","Lento","neutral","Novo").entrySet()) {
+    mvc.perform(get(path).header("HX-Request","true").param("pingStatus",pair.getKey()))
+       .andExpect(status().isOk())
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>"+prefix+" "+pair.getValue()+"</h3>")))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("1 de 4")))
+       .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<form"))));
+   }
+   mvc.perform(get(path).header("HX-Request","true").param("q","AGIL").param("pingStatus","green"))
+       .andExpect(status().isOk())
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>"+prefix+" Ágil</h3>")))
+       .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<h3>"+prefix+" Médio</h3>"))));
+   mvc.perform(get(path).header("HX-Request","true").param("q","agil").param("pingStatus","red"))
+       .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Nenhum resultado")));
+  }
+  store.save(green,new PingProbe.Result(null,"Tempo esgotado"));
+  mvc.perform(get("/hosts").header("HX-Request","true").param("q","agil").param("pingStatus","green"))
+      .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Nenhum resultado")));
+  mvc.perform(get("/grupos").header("HX-Request","true").param("q","agil").param("pingStatus","red"))
+      .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>Grupo Ágil</h3>")));
+ }
+
+ @Test void nameFilterDoesNotExcludeMembersFromGroupAverages() throws Exception {
+  var group=new Host.Group("average-group","Grupo Principal");
+  var a=new Host("average-a","Outro nome","10.1.1.1",java.util.List.of(group));
+  var b=new Host("average-b","Mais um host","10.1.1.2",java.util.List.of(group));
+  store.save(a,new PingProbe.Result(10d,null));store.save(b,new PingProbe.Result(16d,null));
+  org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(a,b));
+  mvc.perform(get("/grupos").header("HX-Request","true").param("q","principal"))
+      .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("13,00")))
+      .andExpect(content().string(org.hamcrest.Matchers.containsString("2 hosts")))
+      .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<h3>Outro nome</h3>"))));
+ }
  @Test void persistsFailuresWithoutTurningThemIntoZero(){
   Host h=new Host("test","Teste","127.0.0.1",java.util.List.of());
   store.save(h,new PingProbe.Result(10d,null));store.save(h,new PingProbe.Result(null,"Tempo esgotado"));
