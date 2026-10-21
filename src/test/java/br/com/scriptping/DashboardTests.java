@@ -24,9 +24,16 @@ class DashboardTests {
  }
  @Test void rendersDashboardAndFragment() throws Exception {
   org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of());
-  mvc.perform(get("/")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("hx-trigger=\"every 2s\"")));
+  mvc.perform(get("/")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("hx-trigger=\"refresh\"")));
   mvc.perform(get("/dashboard")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Nenhum host")));
   mvc.perform(get("/webjars/htmx.org/2.0.4/dist/htmx.min.js")).andExpect(status().isOk());
+  mvc.perform(get("/dashboard.js")).andExpect(status().isOk());
+  for(String path:java.util.List.of("/hosts","/grupos")) {
+   mvc.perform(get(path)).andExpect(status().isOk())
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("Atualizar agora")))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("60 segundos")))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("hx-include=\"#filters\"")));
+  }
  }
  @Test void rendersPopulatedCards() throws Exception {
   Host h=new Host("render", "Servidor exemplo", "127.0.0.1", java.util.List.of(new Host.Group("g1","Produção")));

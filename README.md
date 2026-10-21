@@ -148,7 +148,7 @@ Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua c
 
 Resultados, falhas e horários são persistidos no PostgreSQL. A retenção padrão é de 7 dias, com limpeza a cada hora. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
 
-HTMX, servido localmente, atualiza o painel a cada 2 segundos sem F5. Novas medições seguem o intervalo do ping. Cada card mostra nome, IP/grupos (ou quantidade de hosts), média de 60 minutos, média de 1 minuto e último ping.
+HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. Cada card mostra nome, IP/grupos (ou quantidade de hosts), média de 60 minutos, média de 1 minuto e último ping.
 
 As janelas são móveis e usam apenas respostas válidas; falhas nunca contam como zero. Antes de completar uma hora, a média usa os dados disponíveis. Grupos exibem a média das médias por host em cada janela, com peso igual para cada host. O atual do grupo usa os últimos pings válidos e recentes. Hosts em vários grupos participam de todos eles.
 
@@ -207,6 +207,14 @@ Os intervalos precisam ser positivos. O painel consulta o banco por host e é de
 mvn test
 ```
 
-Os testes usam H2 em memória e uma API Zabbix simulada. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
+Para validar os controles de atualização no navegador com Node.js 18 ou superior (apenas para desenvolvimento):
+
+```sh
+node --test src/test/js/dashboard.test.cjs
+```
+
+Esses testes verificam os quatro intervalos, a atualização manual, a persistência da escolha e a recuperação após erros. Node.js não é necessário para executar a aplicação ou os contêineres.
+
+Os testes Java usam H2 em memória e uma API Zabbix simulada. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
 
 Referências: [user.login](https://www.zabbix.com/documentation/current/en/manual/api/reference/user/login), [API Zabbix](https://www.zabbix.com/documentation/7.0/en/manual/api), [imagem oficial PostgreSQL](https://hub.docker.com/_/postgres).

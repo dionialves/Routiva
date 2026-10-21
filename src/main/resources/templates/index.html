@@ -6,11 +6,22 @@
   <title th:text="${pageTitle} + ' • ScriptPing'">ScriptPing</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/webjars/htmx.org/2.0.4/dist/htmx.min.js" defer></script>
+  <script src="/dashboard.js" defer></script>
 </head>
 <body>
 <header>
   <div><p class="eyebrow">MONITORAMENTO DE REDE</p><h1>Script<span>Ping</span></h1><p>Todos os hosts. Cada milissegundo.</p></div>
-  <div class="live">● Atualização automática · 2s</div>
+  <div class="refresh-controls">
+    <div class="refresh-interval"><label for="refresh-interval">Atualização automática</label>
+      <select id="refresh-interval" aria-label="Intervalo de atualização automática">
+        <option value="5" selected>5 segundos</option>
+        <option value="10">10 segundos</option>
+        <option value="15">15 segundos</option>
+        <option value="60">60 segundos</option>
+      </select>
+    </div>
+    <button id="refresh-now" type="button">Atualizar agora</button>
+  </div>
 </header>
 <main>
   <nav class="page-nav" aria-label="Páginas de monitoramento">
@@ -48,16 +59,11 @@
   </form>
   <div class="legend"><span>● Menos de 15 ms</span><span>● 15 a 20 ms</span><span>● Acima de 20 ms / perdas / indisponível</span><span>● Sem IP válido</span></div>
   <section id="dashboard" th:attr="hx-get=${pagePath}" hx-include="#filters"
-           hx-trigger="every 2s" hx-swap="innerHTML" hx-sync="this:replace" aria-label="Resultados do monitoramento">
+           hx-trigger="refresh" hx-swap="innerHTML" hx-sync="this:replace" aria-label="Resultados do monitoramento">
     <th:block th:replace="~{dashboard :: content}"/>
   </section>
   <p id="connection" role="status"></p>
 </main>
-<script>
-document.body.addEventListener('htmx:sendError',()=>document.getElementById('connection').textContent='Conexão com o painel interrompida. Tentando novamente…');
-document.body.addEventListener('htmx:afterRequest',e=>{document.getElementById('connection').textContent=e.detail.successful?'':'Falha ao atualizar o painel. Tentando novamente…';});
-// History restores must render the whole page, including the filter controls.
-document.addEventListener('DOMContentLoaded',()=>{htmx.config.historyRestoreAsHxRequest=false;});
-</script>
+
 </body>
 </html>
