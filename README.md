@@ -152,13 +152,30 @@ HTMX, servido localmente, atualiza o painel a cada 2 segundos sem F5. Novas medi
 
 As janelas são móveis e usam apenas respostas válidas; falhas nunca contam como zero. Antes de completar uma hora, a média usa os dados disponíveis. Grupos exibem a média das médias por host em cada janela, com peso igual para cada host. O atual do grupo usa os últimos pings válidos e recentes. Hosts em vários grupos participam de todos eles.
 
-- Vermelho: qualquer métrica acima de 20 ms, ou host sem resposta/com coleta atrasada. Grupos ficam vermelhos se qualquer membro estiver nessa condição.
+- Vermelho: qualquer métrica acima de 20 ms, perda de pacote nos últimos 5 minutos, ou host sem resposta/com coleta atrasada. Grupos ficam vermelhos se qualquer membro estiver nessa condição.
 - Amarelo: qualquer métrica entre 15 e 20 ms, inclusive, sem condição vermelha.
 - Verde: todas as três métricas abaixo de 15 ms.
 - Cinza: host sem IP válido (ausente, malformado ou endereço não especificado como `0.0.0.0`/`::`). Não participa das médias, da avaliação de falhas nem da espera por dados do grupo. Um grupo sem nenhum host com IP válido fica cinza. O filtro cinza é separado de “aguardando dados”.
 - Neutro: aguardando dados, sem condição amarela ou vermelha. Grupos não ficam verdes enquanto aguardam a primeira coleta de um membro.
 
 Uma coleta é atrasada depois do maior valor entre 15 segundos e três intervalos de ping mais o timeout. O atual de um host atrasado aparece indisponível. Horários do painel usam America/Sao_Paulo.
+
+## Perda de pacotes e status dos cards
+
+A janela de perda é de **5 minutos móveis**. Qualquer ping perdido dentro dela mantém o card vermelho, mesmo que o ping atual já tenha voltado a responder. O card exibe a porcentagem e a contagem, por exemplo `8,33% · 5 de 60 pings`. O alerta de perda desaparece quando a última perda sai da janela; a cor ainda depende da latência e da disponibilidade das coletas.
+
+O rodapé mostra:
+
+- **Normal**: três latências abaixo de 15 ms, sem perdas recentes, com coleta disponível e recente.
+- **Latência alta**: pelo menos uma das três latências a partir de 15 ms, sem perdas; amarelo de 15 a 20 ms, vermelho acima de 20 ms.
+- **Com perda de pacotes**: pelo menos uma perda nos últimos 5 minutos, sem latência alta; vermelho.
+- **Com latência e perda de pacotes**: as duas condições ao mesmo tempo; vermelho.
+
+“Sem IP válido”, “Aguardando dados”, “Coleta atrasada” e “Falha na coleta” continuam diferenciados. Timeout e ausência de resposta ICMP contam como perdas. Erros locais ao executar o ping e coletas interrompidas não contam como pacotes perdidos nem entram no denominador da porcentagem. O detalhe da última falha continua visível abaixo do status quando necessário. As médias de latência continuam usando apenas respostas recebidas.
+
+Nos grupos, qualquer perda de um membro com IP válido deixa o card vermelho. A porcentagem do grupo é o total de pacotes perdidos dividido pelo total de pings válidos para essa contagem, somando todos os membros. A avaliação de latência usa as três médias exibidas no card do grupo. Hosts sem IP válido continuam excluídos de todas essas avaliações. Grupos sem membros válidos ficam cinza.
+
+Os filtros de situação permitem buscar Normal, Latência alta, Com perda de pacotes e Com latência e perda de pacotes. Os filtros de latência e perda também incluem os casos em que ambas ocorrem.
 
 ## Configurações no `.env`
 

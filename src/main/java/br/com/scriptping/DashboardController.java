@@ -10,7 +10,8 @@ import java.util.*;
 public class DashboardController {
  private final MonitorService monitor;private final SampleStore store;private final long staleMs;
  public DashboardController(MonitorService monitor,SampleStore store,@Value("${monitor.interval-ms}") long interval,@Value("${monitor.timeout-ms}") long timeout){this.monitor=monitor;this.store=store;staleMs=Math.max(15000,interval*3+timeout);}
- public record Card(String id,List<String> groupIds,String name,String detail,Double hour,Double minute,Double current,String color,String state,String updated) {
+ public record Card(String id,List<String> groupIds,String name,String detail,Double hour,Double minute,Double current,String color,String state,String updated,long lossAttempts,long lostPackets,String diagnostic) {
+  public String lossPercentage(){return lossAttempts==0?"—":format(100.0*lostPackets/lossAttempts)+"%";}
   public String format(Double value){return value==null?"—":String.format(Locale.forLanguageTag("pt-BR"),"%.2f",value);}
  }
  public static String color(Double hour,Double minute,Double current,boolean offline){
@@ -40,7 +41,7 @@ public class DashboardController {
  @SuppressWarnings("unchecked")
  private void prepare(Model model,boolean groupPage,String query,String requestedStatus,String requestedGroupId) {
   populate(model);
-  String selected=Set.of("all","green","yellow","red","neutral","gray").contains(requestedStatus)?requestedStatus:"all";
+  String selected=Set.of("all","green","yellow","red","neutral","gray","normal","high-latency","packet-loss","latency-and-loss").contains(requestedStatus)?requestedStatus:"all";
   String groupId=groupPage?"":requestedGroupId.strip();
   var groupOptions=(List<Card>)model.getAttribute("groups");
   var selectedGroup=groupOptions.stream().filter(card->card.id().equals(groupId)).findFirst();
@@ -52,7 +53,7 @@ public class DashboardController {
   model.addAttribute("selectedGroupName",groupId.isEmpty()?"":selectedGroup.map(Card::name).orElse("Grupo indisponível"));
   String search=normalize(query.strip());
   var filtered=all.stream().filter(card->normalize(card.name()).contains(search))
-      .filter(card->selected.equals("all") || card.color().equals(selected)).toList();
+      .filter(card->matchesStatus(card,selected)).toList();
   model.addAttribute("cards",filtered);
   model.addAttribute("total",all.size());
   model.addAttribute("groupPage",groupPage);
@@ -64,6 +65,28 @@ public class DashboardController {
  private static String normalize(String value) {
   return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD)
       .replaceAll("\\p{M}","").toLowerCase(Locale.ROOT);
+ }
+ private static boolean highLatency(Double hour,Double minute,Double current) {
+  return Arrays.asList(hour,minute,current).stream().anyMatch(v->v!=null && v>=15);
+ }
+ private static boolean matchesStatus(Card card,String selected) {
+  return switch(selected) {
+   case "all" -> true;
+   case "normal" -> card.state().equals("Normal");
+   case "high-latency" -> highLatency(card.hour(),card.minute(),card.current());
+   case "packet-loss" -> card.lostPackets()>0;
+   case "latency-and-loss" -> card.lostPackets()>0 && highLatency(card.hour(),card.minute(),card.current());
+   default -> card.color().equals(selected);
+  };
+ }
+ private static String healthState(Double hour,Double minute,Double current,boolean loss,boolean offline,boolean pending,boolean stale) {
+  boolean high=highLatency(hour,minute,current);
+  if(loss) return high?"Com latência e perda de pacotes":"Com perda de pacotes";
+  if(stale) return "Coleta atrasada";
+  if(offline) return "Falha na coleta";
+  if(high) return "Latência alta";
+  if(pending) return "Aguardando dados";
+  return "Normal";
  }
  private void populate(Model model) {
   long now=System.currentTimeMillis();
@@ -78,11 +101,15 @@ public class DashboardController {
    boolean valid=IpAddress.isValid(host.ip());
    boolean stale=s.measuredAt()!=null && now-s.measuredAt()>staleMs;
    boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
-   String state=!valid?"Sem IP válido":s.measuredAt()==null?"Aguardando primeira coleta":stale?"Coleta atrasada":s.error()!=null?s.error():"Respondendo";
+   boolean loss=valid && s.lossesFiveMinutes()>0;
+   Double hour=valid?s.hour():null, minute=valid?s.minute():null, current=valid && !stale?s.current():null;
+   String state=valid?healthState(hour,minute,current,loss,offline,s.measuredAt()==null,stale):"Sem IP válido";
+   String diagnostic=!valid?null:stale?"Coleta atrasada":s.error();
+   if(Objects.equals(diagnostic,state)) diagnostic=null;
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
    cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),detail,
-       valid?s.hour():null,valid?s.minute():null,valid && !stale?s.current():null,
-       valid?color(s.hour(),s.minute(),s.current(),offline):"gray",state,valid?time(s.measuredAt()):"—"));
+       hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?time(s.measuredAt()):"—",
+       valid?s.attemptsFiveMinutes():0,valid?s.lossesFiveMinutes():0,diagnostic));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
     groupTotals.merge(g.id(),1,Integer::sum);
@@ -95,15 +122,19 @@ public class DashboardController {
   for(var entry:groups.entrySet()) {
    var list=groupStats.get(entry.getKey());
    int total=groupTotals.get(entry.getKey()), excluded=total-list.size();
+   boolean stale=list.stream().anyMatch(s->s.measuredAt()!=null && now-s.measuredAt()>staleMs);
    boolean offline=list.stream().anyMatch(s->s.measuredAt()!=null && (s.current()==null || now-s.measuredAt()>staleMs));
    Double hour=avg(list,0),minute=avg(list,1),current=avg(list.stream().filter(s->s.measuredAt()!=null && now-s.measuredAt()<=staleMs).toList(),2);
+   long attempts=list.stream().mapToLong(SampleStore.Stats::attemptsFiveMinutes).sum();
+   long lost=list.stream().mapToLong(SampleStore.Stats::lossesFiveMinutes).sum();
    boolean pending=list.stream().anyMatch(s->s.measuredAt()==null);
-   String groupColor=color(hour,minute,current,offline);
+   String groupColor=color(hour,minute,current,offline || lost>0);
    if(list.isEmpty()) groupColor="gray";
    else if(pending && !offline && groupColor.equals("green")) groupColor="neutral";
-   String state=list.isEmpty()?"Sem hosts com IP válido":offline?"Há hosts sem resposta ou atrasados":pending?"Aguardando coletas":"Hosts respondendo";
+   String state=list.isEmpty()?"Sem hosts com IP válido":healthState(hour,minute,current,lost>0,offline,pending,stale);
+   String diagnostic=offline?"Há hosts sem resposta, com falha ou coleta atrasada":null;
    String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
-   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),detail,hour,minute,current,groupColor,state,time(now)));
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),detail,hour,minute,current,groupColor,state,time(now),attempts,lost,diagnostic));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));
