@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:scriptping}
+    username: ${POSTGRES_USER:scriptping}
+    password: ${POSTGRES_PASSWORD:}
+  sql.init.mode: always
+  task.scheduling.pool.size: 2
+  threads.virtual.enabled: true
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${PORT:8080}
+zabbix:
+  url: ${ZABBIX_URL:}
+  username: ${ZABBIX_USERNAME:}
+  password: ${ZABBIX_PASSWORD:}
+  sync-ms: ${ZABBIX_SYNC_MS:60000}
+monitor:
+  interval-ms: ${PING_INTERVAL_MS:5000}
+  timeout-ms: ${PING_TIMEOUT_MS:2000}
+  concurrency: ${PING_CONCURRENCY:64}
+  retention-hours: ${PING_RETENTION_HOURS:168}
