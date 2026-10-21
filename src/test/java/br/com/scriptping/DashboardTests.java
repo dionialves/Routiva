@@ -39,7 +39,7 @@ class DashboardTests {
   Host h=new Host("render", "Servidor exemplo", "127.0.0.1", java.util.List.of(new Host.Group("g1","Produção")));
   store.save(h,new PingProbe.Result(16d,null));
   org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(h));
-  mvc.perform(get("/dashboard")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Servidor exemplo"))).andExpect(content().string(org.hamcrest.Matchers.containsString("Produção"))).andExpect(content().string(org.hamcrest.Matchers.containsString("16,00"))).andExpect(content().string(org.hamcrest.Matchers.containsString("card yellow")));
+  mvc.perform(get("/dashboard")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Servidor exemplo"))).andExpect(content().string(org.hamcrest.Matchers.containsString("Produção"))).andExpect(content().string(org.hamcrest.Matchers.containsString("16,00"))).andExpect(content().string(org.hamcrest.Matchers.containsString("host-row yellow")));
  }
 
  @Test void dedicatedPagesAndCombinedFiltersStayAppliedDuringPolling() throws Exception {
@@ -59,14 +59,14 @@ class DashboardTests {
    for(var pair:java.util.Map.of("green","Ágil","yellow","Médio","red","Lento","neutral","Novo").entrySet()) {
     mvc.perform(get(path).header("HX-Request","true").param("pingStatus",pair.getKey()))
        .andExpect(status().isOk())
-       .andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>"+prefix+" "+pair.getValue()+"</h3>")))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString(prefix+" "+pair.getValue())))
        .andExpect(content().string(org.hamcrest.Matchers.containsString("1 de 4")))
        .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<form"))));
    }
    mvc.perform(get(path).header("HX-Request","true").param("q","AGIL").param("pingStatus","green"))
        .andExpect(status().isOk())
-       .andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>"+prefix+" Ágil</h3>")))
-       .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<h3>"+prefix+" Médio</h3>"))));
+       .andExpect(content().string(org.hamcrest.Matchers.containsString(prefix+" Ágil")))
+       .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(prefix+" Médio"))));
    mvc.perform(get(path).header("HX-Request","true").param("q","agil").param("pingStatus","red"))
        .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Nenhum resultado")));
   }
@@ -107,12 +107,12 @@ class DashboardTests {
       .andExpect(status().isOk())
       .andExpect(selectedGroup("drill-a"))
       .andExpect(cardCount(2))
-      .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<h3>Host Exclusivo B</h3>"))));
+      .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Host Exclusivo B"))));
   for(String groupId:java.util.List.of("drill-a","drill-b")) {
    mvc.perform(get("/hosts").header("HX-Request","true").param("groupId",groupId)
            .param("q","compartilhado").param("pingStatus","red"))
        .andExpect(status().isOk()).andExpect(cardCount(1))
-       .andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>Host Compartilhado</h3>")));
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("Host Compartilhado")));
   }
   mvc.perform(get("/hosts").header("HX-Request","true").param("groupId","drill-a").param("q","Exclusivo B"))
       .andExpect(status().isOk()).andExpect(cardCount(0));
@@ -179,7 +179,7 @@ class DashboardTests {
   return (java.util.List<DashboardController.Card>)result.getModelAndView().getModel().get("cards");
  }
  private static org.springframework.test.web.servlet.ResultMatcher cardCount(int count) {
-  return result -> assertThat(result.getResponse().getContentAsString().split("<article",-1).length-1).isEqualTo(count);
+  return result -> assertThat((result.getResponse().getContentAsString().split("<article",-1).length-1)+(result.getResponse().getContentAsString().split("<tr class=\"host-row",-1).length-1)).isEqualTo(count);
  }
  private static org.springframework.test.web.servlet.ResultMatcher selectedGroup(String id) {
   String quote=Character.toString(34);

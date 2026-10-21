@@ -10,7 +10,7 @@ import java.util.*;
 public class DashboardController {
  private final MonitorService monitor;private final SampleStore store;private final long staleMs;
  public DashboardController(MonitorService monitor,SampleStore store,@Value("${monitor.interval-ms}") long interval,@Value("${monitor.timeout-ms}") long timeout){this.monitor=monitor;this.store=store;staleMs=Math.max(15000,interval*3+timeout);}
- public record Card(String id,List<String> groupIds,String name,String detail,Double hour,Double minute,Double current,String color,String state,String updated,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,String diagnostic) {
+ public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,String detail,Double hour,Double minute,Double current,String color,String state,String updated,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,String diagnostic) {
   public String lossPercentage(){return lossAttempts==0?"—":format(100.0*lostPackets/lossAttempts)+"%";}
   public String minuteLossPercentage(){return minuteLossAttempts==0?"—":format(100.0*minuteLostPackets/minuteLossAttempts)+"%";}
   public String format(Double value){return value==null?"—":String.format(Locale.forLanguageTag("pt-BR"),"%.2f",value);}
@@ -108,7 +108,7 @@ public class DashboardController {
    String diagnostic=!valid?null:stale?"Coleta atrasada":s.error();
    if(Objects.equals(diagnostic,state)) diagnostic=null;
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
-   cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),detail,
+   cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),valid?host.ip():"—",String.join(", ",host.groups().stream().map(Host.Group::name).toList()),detail,
        hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?time(s.measuredAt()):"—",
        valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,diagnostic));
    for(var g:host.groups()) {
@@ -137,7 +137,7 @@ public class DashboardController {
    String state=list.isEmpty()?"Sem hosts com IP válido":healthState(hour,minute,current,lost>0,offline,pending,stale);
    String diagnostic=offline?"Há hosts sem resposta, com falha ou coleta atrasada":null;
    String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
-   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),detail,hour,minute,current,groupColor,state,time(now),attempts,lost,minuteAttempts,minuteLost,diagnostic));
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",detail,hour,minute,current,groupColor,state,time(now),attempts,lost,minuteAttempts,minuteLost,diagnostic));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));

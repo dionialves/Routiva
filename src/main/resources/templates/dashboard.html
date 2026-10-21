@@ -10,8 +10,26 @@
 <div class="empty" th:if="${total > 0 and cards.isEmpty()}">
 <h3>Nenhum resultado para estes filtros</h3><p>Altere o nome pesquisado ou o status de ping.</p>
 </div>
-<div class="grid"><th:block th:each="item : ${cards}"><article th:replace="~{dashboard :: card(${item})}"></article></th:block></div>
-<p class="note">Médias calculadas com respostas válidas nas janelas móveis. Grupos exibem a média das médias de seus hosts. Perdas nos últimos 60 minutos deixam o card vermelho, mesmo após o ping voltar a responder. Falhas de coleta e dados atrasados também são sinalizados. Hosts sem IP válido ficam cinza e não participam das médias nem da cor do grupo.</p></th:block><article th:fragment="card(card)" class="card" th:classappend="${card.color}"><div class="card-top"><h3 th:text="${card.name}"></h3><span class="dot" aria-hidden="true">●</span></div><p class="detail" th:text="${card.detail}"></p><div class="metrics"><div><label>Últimos 60 min</label><strong th:text="${card.format(card.hour)}"></strong><small>ms</small></div><div><label>Último minuto</label><strong th:text="${card.format(card.minute)}"></strong><small>ms</small></div><div><label>Atual</label><strong th:text="${card.format(card.current)}"></strong><small>ms</small></div></div><div class="packet-loss" th:if="${card.color != 'gray'}">
+<div class="grid" th:if="${groupPage}"><th:block th:each="item : ${cards}"><article th:replace="~{dashboard :: card(${item})}"></article></th:block></div>
+<div class="table-scroll" th:if="${!groupPage and !cards.isEmpty()}" role="region" aria-label="Hosts monitorados" tabindex="0">
+<table class="hosts-table">
+<caption class="sr-only">Hosts monitorados com latência, perda de pacotes e status</caption>
+<thead><tr>
+<th scope="col">Host</th><th scope="col">IP</th><th scope="col">Grupos</th>
+<th scope="col">Média · 60 min <small>ms</small></th><th scope="col">Média · 1 min <small>ms</small></th><th scope="col">Atual <small>ms</small></th>
+<th scope="col">Perda · última hora</th><th scope="col">Perda · último minuto</th><th scope="col">Status</th><th scope="col">Última coleta</th>
+</tr></thead>
+<tbody><tr class="host-row" th:each="host : ${cards}" th:classappend="${host.color}" th:attr="data-host-id=${host.id}">
+<th scope="row" class="host-name" th:text="${host.name}"></th>
+<td class="host-ip" th:text="${host.ip}"></td><td class="host-groups" th:text="${host.groupNames}"></td>
+<td class="metric" th:text="${host.format(host.hour)}"></td><td class="metric" th:text="${host.format(host.minute)}"></td><td class="metric" th:text="${host.format(host.current)}"></td>
+<td class="metric" th:text="${host.lossPercentage()}" th:title="${host.lossAttempts > 0} ? ${host.lostPackets} + ' de ' + ${host.lossAttempts} + ' pings' : 'Sem pings nesta janela'"></td>
+<td class="metric" th:text="${host.minuteLossPercentage()}" th:title="${host.minuteLossAttempts > 0} ? ${host.minuteLostPackets} + ' de ' + ${host.minuteLossAttempts} + ' pings' : 'Sem pings nesta janela'"></td>
+<td class="host-state"><span class="status-label" th:text="${host.state}"></span><small th:if="${host.diagnostic != null}" th:text="${host.diagnostic}"></small></td>
+<td class="host-updated"><time th:text="${host.updated}"></time></td>
+</tr></tbody></table>
+</div>
+<p class="note">Médias calculadas com respostas válidas nas janelas móveis. Grupos exibem a média das médias de seus hosts. Perdas nos últimos 60 minutos deixam o indicador vermelho, mesmo após o ping voltar a responder. Falhas de coleta e dados atrasados também são sinalizados. Hosts sem IP válido ficam cinza e não participam das médias nem da cor do grupo.</p></th:block><article th:fragment="card(card)" class="card" th:classappend="${card.color}"><div class="card-top"><h3 th:text="${card.name}"></h3><span class="dot" aria-hidden="true">●</span></div><p class="detail" th:text="${card.detail}"></p><div class="metrics"><div><label>Últimos 60 min</label><strong th:text="${card.format(card.hour)}"></strong><small>ms</small></div><div><label>Último minuto</label><strong th:text="${card.format(card.minute)}"></strong><small>ms</small></div><div><label>Atual</label><strong th:text="${card.format(card.current)}"></strong><small>ms</small></div></div><div class="packet-loss" th:if="${card.color != 'gray'}">
 <div class="loss-window"><span>Perda · última hora</span><strong th:text="${card.lossPercentage()}" th:title="${card.lossAttempts > 0} ? ${card.lostPackets} + ' de ' + ${card.lossAttempts} + ' pings' : 'Sem pings nesta janela'"></strong></div>
 <div class="loss-window"><span>Perda · último minuto</span><strong th:text="${card.minuteLossPercentage()}" th:title="${card.minuteLossAttempts > 0} ? ${card.minuteLostPackets} + ' de ' + ${card.minuteLossAttempts} + ' pings' : 'Sem pings nesta janela'"></strong></div>
 </div><p class="card-action" th:if="${groupPage}"><a th:href="@{/hosts(groupId=${card.id})}" th:attr="aria-label='Ver hosts do grupo ' + ${card.name}">Ver hosts do grupo →</a></p><footer><div class="card-state"><span th:text="${card.state}"></span><small th:if="${card.diagnostic != null}" th:text="${card.diagnostic}"></small></div><time th:text="${card.updated}"></time></footer></article></body></html>

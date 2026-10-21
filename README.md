@@ -134,7 +134,7 @@ O inventário é carregado ao iniciar e sincronizado a cada 60 segundos. Em falh
 
 ## Páginas e filtros
 
-- `/hosts`: cards de hosts, com pesquisa pelo nome do host.
+- `/hosts`: tabela de hosts, com uma linha por host e pesquisa pelo nome. Colunas: nome, IP, grupos, médias de 60 min/1 min, ping atual, perdas na hora/minuto, status e última coleta. A linha mantém as cores de saúde e a tabela permite rolagem horizontal em telas pequenas.
 - `/grupos`: cards de grupos, com pesquisa pelo nome do grupo.
 - `/`: abre a página de hosts.
 
@@ -148,7 +148,7 @@ Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua c
 
 Resultados, falhas e horários são persistidos no PostgreSQL. A retenção padrão é de 7 dias, com limpeza a cada hora. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
 
-HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. Cada card mostra nome, IP/grupos (ou quantidade de hosts), média de 60 minutos, média de 1 minuto e último ping.
+HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. A página de hosts mostra os dados em tabela; os grupos continuam em cards. As duas visualizações incluem as médias de 60 minutos/1 minuto, ping atual, perdas e status.
 
 As janelas são móveis e usam apenas respostas válidas; falhas nunca contam como zero. Antes de completar uma hora, a média usa os dados disponíveis. Grupos exibem a média das médias por host em cada janela, com peso igual para cada host. O atual do grupo usa os últimos pings válidos e recentes. Hosts em vários grupos participam de todos eles.
 
