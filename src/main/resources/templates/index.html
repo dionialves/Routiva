@@ -29,6 +29,13 @@
       <option value="red" th:selected="${pingStatus == 'red'}">Vermelho · acima de 20 ms ou indisponível</option>
       <option value="neutral" th:selected="${pingStatus == 'neutral'}">Neutro · aguardando dados</option>
     </select></div>
+    <div th:if="${!groupPage}"><label for="host-group">Grupo de hosts</label>
+      <select id="host-group" name="groupId">
+        <option value="" th:selected="${groupId.isEmpty()}">Todos os grupos</option>
+        <option th:if="${groupUnavailable}" th:value="${groupId}" selected>Grupo indisponível</option>
+        <option th:each="group : ${groupOptions}" th:value="${group.id}" th:text="${group.name}" th:selected="${group.id == groupId}"></option>
+      </select>
+    </div>
     <button type="submit">Pesquisar</button>
     <a class="clear-filters" th:href="${pagePath}">Limpar filtros</a>
   </form>

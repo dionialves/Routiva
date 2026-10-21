@@ -81,6 +81,51 @@ class DashboardTests {
       .andExpect(content().string(org.hamcrest.Matchers.containsString("2 hosts")))
       .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<h3>Outro nome</h3>"))));
  }
+
+ @Test void groupLinksOpenOnlyMembersAndPreserveGroupDuringFiltering() throws Exception {
+  var a=new Host.Group("drill-a","Grupo Repetido");
+  var b=new Host.Group("drill-b","Grupo Repetido");
+  var first=new Host("drill-first","Host Exclusivo A","10.2.0.1",java.util.List.of(a));
+  var shared=new Host("drill-shared","Host Compartilhado","10.2.0.2",java.util.List.of(a,b));
+  var outside=new Host("drill-outside","Host Exclusivo B","10.2.0.3",java.util.List.of(b));
+  store.save(first,new PingProbe.Result(10d,null));
+  store.save(shared,new PingProbe.Result(25d,null));
+  store.save(outside,new PingProbe.Result(10d,null));
+  org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(first,shared,outside));
+  mvc.perform(get("/grupos"))
+      .andExpect(status().isOk())
+      .andExpect(content().string(org.hamcrest.Matchers.containsString("href=\"/hosts?groupId=drill-a\"")))
+      .andExpect(content().string(org.hamcrest.Matchers.containsString("href=\"/hosts?groupId=drill-b\"")));
+  mvc.perform(get("/hosts").param("groupId","drill-a"))
+      .andExpect(status().isOk())
+      .andExpect(selectedGroup("drill-a"))
+      .andExpect(cardCount(2))
+      .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<h3>Host Exclusivo B</h3>"))));
+  for(String groupId:java.util.List.of("drill-a","drill-b")) {
+   mvc.perform(get("/hosts").header("HX-Request","true").param("groupId",groupId)
+           .param("q","compartilhado").param("pingStatus","red"))
+       .andExpect(status().isOk()).andExpect(cardCount(1))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>Host Compartilhado</h3>")));
+  }
+  mvc.perform(get("/hosts").header("HX-Request","true").param("groupId","drill-a").param("q","Exclusivo B"))
+      .andExpect(status().isOk()).andExpect(cardCount(0));
+  mvc.perform(get("/hosts"))
+      .andExpect(status().isOk()).andExpect(cardCount(3));
+  mvc.perform(get("/hosts").param("groupId","unknown"))
+      .andExpect(status().isOk()).andExpect(cardCount(0))
+      .andExpect(selectedGroup("unknown"));
+  org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(outside));
+  mvc.perform(get("/hosts").header("HX-Request","true").param("groupId","drill-a"))
+      .andExpect(status().isOk()).andExpect(cardCount(0))
+      .andExpect(content().string(org.hamcrest.Matchers.containsString("Grupo indisponível")));
+ }
+ private static org.springframework.test.web.servlet.ResultMatcher cardCount(int count) {
+  return result -> assertThat(result.getResponse().getContentAsString().split("<article",-1).length-1).isEqualTo(count);
+ }
+ private static org.springframework.test.web.servlet.ResultMatcher selectedGroup(String id) {
+  String quote=Character.toString(34);
+  return result -> assertThat(java.util.regex.Pattern.compile("<option(?=[^>]*value="+quote+java.util.regex.Pattern.quote(id)+quote+")(?=[^>]*selected)[^>]*>").matcher(result.getResponse().getContentAsString()).find()).isTrue();
+ }
  @Test void persistsFailuresWithoutTurningThemIntoZero(){
   Host h=new Host("test","Teste","127.0.0.1",java.util.List.of());
   store.save(h,new PingProbe.Result(10d,null));store.save(h,new PingProbe.Result(null,"Tempo esgotado"));

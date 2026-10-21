@@ -71,6 +71,8 @@ O inventário é carregado ao iniciar e sincronizado a cada 60 segundos. Em falh
 - `/grupos`: cards de grupos, com pesquisa pelo nome do grupo.
 - `/`: abre a página de hosts.
 
+Na página de grupos, o link “Ver hosts do grupo” abre `/hosts?groupId=ID`, exibindo apenas os membros daquele grupo. A página de hosts também oferece um seletor de grupos; essa seleção permanece ativa durante a pesquisa, o filtro de status e as atualizações automáticas. O vínculo usa o identificador do grupo, incluindo hosts que pertencem a vários grupos. Grupos removidos ou inexistentes mostram uma lista vazia, sem exibir hosts de outros grupos.
+
 Cada página permite combinar pesquisa por nome e status de ping (todos, verde, amarelo, vermelho ou neutro). A pesquisa ignora maiúsculas/minúsculas e acentos. Os filtros são mantidos durante a atualização automática, e os resultados acompanham as mudanças de status. A URL reflete os filtros para permitir favoritos e compartilhamento. O botão “Limpar filtros” restaura a lista completa da página. Médias de grupo sempre consideram todos os membros, independentemente da pesquisa.
 
 ## Coleta e painel
