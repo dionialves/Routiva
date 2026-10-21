@@ -39,7 +39,7 @@ class PacketLossTests {
     @Test void fiveLostPingsKeepRecoveredHostAndGroupRedUntilTheyExpire() throws Exception {
         var host=host("loss-five","10.9.0.1");
         long now=System.currentTimeMillis();
-        for(int i=0;i<5;i++) sample(host,now-120000-i,null,"Tempo esgotado");
+        for(int i=0;i<5;i++) sample(host,now-1800000-i,null,"Tempo esgotado");
         for(int i=0;i<55;i++) sample(host,now-1000-i,10d,null);
         when(monitor.hosts()).thenReturn(List.of(host));
         for(String path:List.of("/hosts","/grupos")) {
@@ -55,7 +55,7 @@ class PacketLossTests {
         mvc.perform(get("/hosts")).andExpect(status().isOk())
             .andExpect(content().string(org.hamcrest.Matchers.containsString("5 de 60 pings")))
             .andExpect(content().string(org.hamcrest.Matchers.containsString("Com perda de pacotes")));
-        jdbc.update("UPDATE ping_sample SET measured_at=? WHERE host_id=? AND latency IS NULL",now-301000,host.id());
+        jdbc.update("UPDATE ping_sample SET measured_at=? WHERE host_id=? AND latency IS NULL",now-3601000,host.id());
         for(String path:List.of("/hosts","/grupos")) {
             var card=cards(path,"all").getFirst();
             assertThat(card.state()).isEqualTo("Normal");
@@ -91,20 +91,20 @@ class PacketLossTests {
     @Test void lossWindowHasExactBoundaryExcludesOtherTargetsAndLocalExecutionErrors() {
         var host=host("loss-boundary","10.9.2.1");
         long now=System.currentTimeMillis();
-        sample(host,now-300000,null,"Tempo esgotado");
-        sample(host,now-300001,null,"Sem resposta ICMP");
+        sample(host,now-3600000,null,"Tempo esgotado");
+        sample(host,now-3600001,null,"Sem resposta ICMP");
         sample(host,now-1000,12d,null);
         sample(host,now-500,null,"Falha ao executar ping");
         sample(host,now-400,null,"Interrompido");
         sample(host,now+10000,null,"Tempo esgotado");
         sample(new Host(host.id(),host.name(),"10.9.2.99",host.groups()),now,null,"Tempo esgotado");
         var stats=store.stats(List.of(host),now).get(host.id());
-        assertThat(stats.lossesFiveMinutes()).isEqualTo(1);
-        assertThat(stats.attemptsFiveMinutes()).isEqualTo(2);
+        assertThat(stats.lossesLastHour()).isEqualTo(1);
+        assertThat(stats.attemptsLastHour()).isEqualTo(2);
         assertThat(stats.hour()).isEqualTo(12d);
         stats=store.stats(List.of(host),now+1).get(host.id());
-        assertThat(stats.lossesFiveMinutes()).isZero();
-        assertThat(stats.attemptsFiveMinutes()).isEqualTo(1);
+        assertThat(stats.lossesLastHour()).isZero();
+        assertThat(stats.attemptsLastHour()).isEqualTo(1);
     }
 
     @Test void groupLossUsesPacketTotalsAndExcludesInvalidIpHosts() throws Exception {

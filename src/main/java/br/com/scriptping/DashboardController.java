@@ -101,7 +101,7 @@ public class DashboardController {
    boolean valid=IpAddress.isValid(host.ip());
    boolean stale=s.measuredAt()!=null && now-s.measuredAt()>staleMs;
    boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
-   boolean loss=valid && s.lossesFiveMinutes()>0;
+   boolean loss=valid && s.lossesLastHour()>0;
    Double hour=valid?s.hour():null, minute=valid?s.minute():null, current=valid && !stale?s.current():null;
    String state=valid?healthState(hour,minute,current,loss,offline,s.measuredAt()==null,stale):"Sem IP válido";
    String diagnostic=!valid?null:stale?"Coleta atrasada":s.error();
@@ -109,7 +109,7 @@ public class DashboardController {
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
    cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),detail,
        hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?time(s.measuredAt()):"—",
-       valid?s.attemptsFiveMinutes():0,valid?s.lossesFiveMinutes():0,diagnostic));
+       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,diagnostic));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
     groupTotals.merge(g.id(),1,Integer::sum);
@@ -125,8 +125,8 @@ public class DashboardController {
    boolean stale=list.stream().anyMatch(s->s.measuredAt()!=null && now-s.measuredAt()>staleMs);
    boolean offline=list.stream().anyMatch(s->s.measuredAt()!=null && (s.current()==null || now-s.measuredAt()>staleMs));
    Double hour=avg(list,0),minute=avg(list,1),current=avg(list.stream().filter(s->s.measuredAt()!=null && now-s.measuredAt()<=staleMs).toList(),2);
-   long attempts=list.stream().mapToLong(SampleStore.Stats::attemptsFiveMinutes).sum();
-   long lost=list.stream().mapToLong(SampleStore.Stats::lossesFiveMinutes).sum();
+   long attempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastHour).sum();
+   long lost=list.stream().mapToLong(SampleStore.Stats::lossesLastHour).sum();
    boolean pending=list.stream().anyMatch(s->s.measuredAt()==null);
    String groupColor=color(hour,minute,current,offline || lost>0);
    if(list.isEmpty()) groupColor="gray";
