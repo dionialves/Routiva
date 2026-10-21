@@ -135,10 +135,10 @@ O inventário é carregado ao iniciar e sincronizado a cada 60 segundos. Em falh
 ## Páginas e filtros
 
 - `/hosts`: tabela de hosts, com uma linha por host e pesquisa pelo nome. Colunas: nome, IP, grupos, médias de 60 min/1 min, ping atual, perdas na hora/minuto, status e última coleta. A linha mantém as cores de saúde e a tabela permite rolagem horizontal em telas pequenas.
-- `/grupos`: cards de grupos, com pesquisa pelo nome do grupo.
+- `/grupos`: tabela de grupos, com nome, quantidade de hosts, latências, perdas, status e atualização. O nome do grupo é um link para seus hosts.
 - `/`: abre a página de hosts.
 
-Na página de grupos, o link “Ver hosts do grupo” abre `/hosts?groupId=ID`, exibindo apenas os membros daquele grupo. A página de hosts também oferece um seletor de grupos; essa seleção permanece ativa durante a pesquisa, o filtro de status e as atualizações automáticas. O vínculo usa o identificador do grupo, incluindo hosts que pertencem a vários grupos. Grupos removidos ou inexistentes mostram uma lista vazia, sem exibir hosts de outros grupos.
+Na página de grupos, clicar no nome do grupo abre `/hosts?groupId=ID`, exibindo apenas os membros daquele grupo. A página de hosts também oferece um seletor de grupos; essa seleção permanece ativa durante a pesquisa, o filtro de status e as atualizações automáticas. O vínculo usa o identificador do grupo, incluindo hosts que pertencem a vários grupos. Grupos removidos ou inexistentes mostram uma lista vazia, sem exibir hosts de outros grupos.
 
 Cada página permite combinar pesquisa por nome e status de ping (todos, verde, amarelo, vermelho, cinza ou neutro). A pesquisa ignora maiúsculas/minúsculas e acentos. Os filtros são mantidos durante a atualização automática, e os resultados acompanham as mudanças de status. A URL reflete os filtros para permitir favoritos e compartilhamento. O botão “Limpar filtros” restaura a lista completa da página. Médias de grupo sempre consideram todos os membros, independentemente da pesquisa.
 
@@ -148,7 +148,7 @@ Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua c
 
 Resultados, falhas e horários são persistidos no PostgreSQL. A retenção padrão é de 7 dias, com limpeza a cada hora. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
 
-HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. A página de hosts mostra os dados em tabela; os grupos continuam em cards. As duas visualizações incluem as médias de 60 minutos/1 minuto, ping atual, perdas e status.
+HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. As páginas de hosts e grupos mostram os dados em tabelas. As duas visualizações incluem as médias de 60 minutos/1 minuto, ping atual, perdas e status.
 
 As janelas são móveis e usam apenas respostas válidas; falhas nunca contam como zero. Antes de completar uma hora, a média usa os dados disponíveis. Grupos exibem a média das médias por host em cada janela, com peso igual para cada host. O atual do grupo usa os últimos pings válidos e recentes. Hosts em vários grupos participam de todos eles.
 

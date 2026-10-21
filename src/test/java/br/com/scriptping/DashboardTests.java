@@ -55,7 +55,9 @@ class DashboardTests {
    String prefix=path.equals("/hosts")?"Servidor":"Grupo";
    mvc.perform(get(path)).andExpect(status().isOk())
        .andExpect(content().string(org.hamcrest.Matchers.containsString("hx-include=\"#filters\"")))
-       .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"pingStatus\"")));
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"pingStatus\"")))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("<table class=\"hosts-table")))
+       .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<article"))));
    for(var pair:java.util.Map.of("green","Ágil","yellow","Médio","red","Lento","neutral","Novo").entrySet()) {
     mvc.perform(get(path).header("HX-Request","true").param("pingStatus",pair.getKey()))
        .andExpect(status().isOk())
@@ -74,7 +76,7 @@ class DashboardTests {
   mvc.perform(get("/hosts").header("HX-Request","true").param("q","agil").param("pingStatus","green"))
       .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Nenhum resultado")));
   mvc.perform(get("/grupos").header("HX-Request","true").param("q","agil").param("pingStatus","red"))
-      .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("<h3>Grupo Ágil</h3>")));
+      .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Grupo Ágil")));
  }
 
  @Test void nameFilterDoesNotExcludeMembersFromGroupAverages() throws Exception {
@@ -86,7 +88,7 @@ class DashboardTests {
   mvc.perform(get("/grupos").header("HX-Request","true").param("q","principal"))
       .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("13,00")))
       .andExpect(content().string(org.hamcrest.Matchers.containsString("2 hosts")))
-      .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("<h3>Outro nome</h3>"))));
+      .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Outro nome"))));
  }
 
  @Test void groupLinksOpenOnlyMembersAndPreserveGroupDuringFiltering() throws Exception {
