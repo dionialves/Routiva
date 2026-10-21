@@ -4,7 +4,7 @@ Monitor de latência com Java 21, Spring Boot, Thymeleaf, HTMX e PostgreSQL em D
 
 ## Executar
 
-Pré-requisitos: JDK 21, Maven 3.6.3+, Docker com Compose e comando `ping` instalado e autorizado a enviar ICMP. A aplicação roda na máquina local e o PostgreSQL roda em contêiner.
+Pré-requisitos: JDK 21, Maven 3.6.3+, Docker com Compose e comando `ping` instalado e autorizado a enviar ICMP. Você pode executar Spring e PostgreSQL em contêineres separados (veja abaixo), ou rodar Java localmente com apenas o banco em Docker.
 
 1. Crie sua configuração:
 
@@ -42,6 +42,73 @@ Para gerar e executar o JAR, na pasta que contém `.env`:
 mvn clean package
 java -jar target/scriptping-1.0.0.jar
 ```
+
+## Servidor: Spring e PostgreSQL em contêineres separados
+
+Pré-requisitos no servidor: Git, [Docker Engine](https://docs.docker.com/engine/install/) e Docker Compose v2 ou superior. Não é necessário instalar Java ou Maven no servidor; o Docker compila e testa o projeto em uma etapa de build e gera a imagem final com Java 21 e `ping` instalado.
+
+```sh
+git clone https://github.com/dionialves/Routiva.git
+cd Routiva
+cp .env.example .env
+nano .env
+```
+
+Preencha `ZABBIX_URL`, `ZABBIX_USERNAME`, `ZABBIX_PASSWORD` e `POSTGRES_PASSWORD`. As credenciais são lidas do `.env` em tempo de execução e não entram na imagem. Para acesso direto pela rede:
+
+```dotenv
+APP_BIND_ADDRESS=0.0.0.0
+APP_PORT=8080
+```
+
+Inicie os dois contêineres:
+
+```sh
+docker compose up -d --build --wait
+docker compose ps
+docker compose logs --tail=100 app
+```
+
+Abra `http://IP_DO_SERVIDOR:8080/hosts` ou `/grupos`. Libere a porta TCP 8080 no firewall da rede/servidor quando necessário. O painel não tem autenticação; este exemplo é para a rede de testes.
+
+O serviço `app` aguarda o healthcheck do PostgreSQL. Ele se conecta a `postgres:5432` pela rede interna do Compose, independentemente de `POSTGRES_HOST`/`POSTGRES_PORT` no `.env` (essas duas opções continuam servindo ao modo Java local). Dentro do contêiner, o Spring sempre escuta em `0.0.0.0:8080`; `APP_PORT` controla a porta publicada no servidor. O banco permanece acessível no servidor apenas por loopback. Seu volume `postgres_data` é preservado.
+
+O contêiner Java roda com usuário sem privilégios de administrador. O Compose permite ICMP para o grupo desse usuário por `ping_group_range`; não precisa de modo privilegiado. O servidor e a rede Docker precisam ter rota para o Zabbix e os hosts monitorados. Para verificar a saída ICMP, substitua o IP abaixo por um host da sua rede:
+
+```sh
+docker compose exec app ping -n -c 1 192.0.2.10
+```
+
+A saúde da aplicação é verificada por `/actuator/health`, incluindo a conexão com o banco. Falhas ICMP de hosts aparecem nos cards e não deixam o contêiner indisponível. `restart: unless-stopped` reinicia contêineres após falha do processo ou reinício do Docker; um healthcheck com falha, sozinho, não reinicia o contêiner.
+
+### Usando o Nginx instalado no mesmo servidor
+
+Se o Nginx já ocupa a porta 8080, configure no `.env`:
+
+```dotenv
+APP_BIND_ADDRESS=127.0.0.1
+APP_PORT=8081
+```
+
+Mantenha o Nginx com `listen 8080` e `proxy_pass http://127.0.0.1:8081;`. Aplique as alterações:
+
+```sh
+docker compose up -d --build --wait
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+O acesso continua em `http://IP_DO_SERVIDOR:8080`. Nesse modo, a porta do contêiner só é publicada no loopback do servidor.
+
+### Atualizar, acompanhar e parar
+
+```sh
+git pull --ff-only
+docker compose up -d --build --wait
+docker compose logs -f --tail=100 app
+```
+
+Atualizações da aplicação preservam o banco. Para parar a aplicação, use `docker compose stop app`; para remover os dois contêineres preservando o banco, use `docker compose down`. Não use `down -v` se quiser manter os dados. Após mudar o `.env`, use `docker compose up -d` para recriar o contêiner com os novos valores; apenas `restart` não atualiza variáveis de ambiente.
 
 ## PostgreSQL em Docker
 
@@ -110,7 +177,9 @@ Uma coleta é atrasada depois do maior valor entre 15 segundos e três intervalo
 | PING_CONCURRENCY | 64 | Máximo de pings simultâneos |
 | PING_RETENTION_HOURS | 168 | Retenção do histórico |
 | SERVER_ADDRESS | 127.0.0.1 | Interface de escuta da aplicação |
-| PORT | 8080 | Porta web |
+| PORT | 8080 | Porta web no modo Java local |
+| APP_BIND_ADDRESS | 0.0.0.0 | Interface publicada pelo Docker; use 127.0.0.1 com Nginx local |
+| APP_PORT | 8080 | Porta do servidor publicada pelo contêiner Spring |
 
 Os intervalos precisam ser positivos. O painel consulta o banco por host e é destinado inicialmente a inventários pequenos/médios. Não possui autenticação e escuta apenas localmente por padrão. Para acesso em rede, configure `SERVER_ADDRESS` e um proxy com autenticação e HTTPS conforme seu ambiente.
 
