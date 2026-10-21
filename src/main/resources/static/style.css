@@ -5,4 +5,4 @@
 
 .gray{--accent:#98a2b3}.legend span:nth-child(4){color:#98a2b3}
 
-.packet-loss{display:flex;justify-content:space-between;gap:12px;padding:12px 0 16px;font-size:12px;color:#a7b5ca}.packet-loss>div{text-align:right}.packet-loss strong{color:var(--accent);font-variant-numeric:tabular-nums}.packet-loss small,.card-state small{display:block;margin-top:5px;color:#97a5bd;font-size:11px}.card-state{max-width:80%}footer{align-items:flex-start}footer time{white-space:nowrap}.card-state>span{color:var(--accent)}
+.packet-loss{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:12px 0 16px;font-size:12px;color:#a7b5ca}.loss-window{min-width:0}.loss-window>span{display:block;font-size:11px;margin-bottom:8px}.loss-window>strong{display:block;font-size:20px}.packet-loss strong{color:var(--accent);font-variant-numeric:tabular-nums}.packet-loss small,.card-state small{display:block;margin-top:5px;color:#97a5bd;font-size:11px}.card-state{max-width:80%}footer{align-items:flex-start}footer time{white-space:nowrap}.card-state>span{color:var(--accent)}

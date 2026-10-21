@@ -51,9 +51,13 @@ class PacketLossTests {
             assertThat(card.lostPackets()).isEqualTo(5);
             assertThat(card.lossAttempts()).isEqualTo(60);
             assertThat(card.lossPercentage()).isEqualTo("8,33%");
+            assertThat(card.minuteLossPercentage()).isEqualTo("0,00%");
+            assertThat(card.minuteLossAttempts()).isEqualTo(55);
         }
         mvc.perform(get("/hosts")).andExpect(status().isOk())
             .andExpect(content().string(org.hamcrest.Matchers.containsString("5 de 60 pings")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Perda · última hora")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Perda · último minuto")))
             .andExpect(content().string(org.hamcrest.Matchers.containsString("Com perda de pacotes")));
         jdbc.update("UPDATE ping_sample SET measured_at=? WHERE host_id=? AND latency IS NULL",now-3601000,host.id());
         for(String path:List.of("/hosts","/grupos")) {
@@ -113,17 +117,57 @@ class PacketLossTests {
         var invalid=new Host("loss-weight-invalid","Sem IP","",a.groups());
         long now=System.currentTimeMillis();
         sample(a,now-1000,null,"Tempo esgotado");sample(a,now,10d,null);
-        for(int i=0;i<8;i++) sample(b,now-i,10d,null);
+        for(int i=0;i<8;i++) sample(b,now-120000-i,10d,null);
         for(int i=0;i<10;i++) sample(invalid,now-i,null,"Tempo esgotado");
         when(monitor.hosts()).thenReturn(List.of(a,b,invalid));
         var group=cards("/grupos","all").getFirst();
         assertThat(group.lossAttempts()).isEqualTo(10);
         assertThat(group.lostPackets()).isEqualTo(1);
         assertThat(group.lossPercentage()).isEqualTo("10,00%");
+        assertThat(group.minuteLossAttempts()).isEqualTo(2);
+        assertThat(group.minuteLostPackets()).isEqualTo(1);
+        assertThat(group.minuteLossPercentage()).isEqualTo("50,00%");
         assertThat(group.color()).isEqualTo("red");
         assertThat(cards("/hosts","gray")).singleElement().satisfies(c->{
             assertThat(c.lostPackets()).isZero();assertThat(c.lossAttempts()).isZero();assertThat(c.lossPercentage()).isEqualTo("—");
+            assertThat(c.minuteLostPackets()).isZero();assertThat(c.minuteLossAttempts()).isZero();assertThat(c.minuteLossPercentage()).isEqualTo("—");
         });
+    }
+
+    @Test void minuteWindowHasIndependentBoundaryAndIgnoresLocalFailures() {
+        var host=host("loss-minute-boundary","10.9.5.1");
+        long now=System.currentTimeMillis();
+        sample(host,now-60000,null,"Tempo esgotado");
+        sample(host,now-60001,null,"Sem resposta ICMP");
+        sample(host,now-1000,12d,null);
+        sample(host,now-500,null,"Falha ao executar ping");
+        sample(host,now-400,null,"Interrompido");
+        sample(host,now+10000,null,"Tempo esgotado");
+        sample(new Host(host.id(),host.name(),"10.9.5.99",host.groups()),now,null,"Tempo esgotado");
+        var stats=store.stats(List.of(host),now).get(host.id());
+        assertThat(stats.attemptsLastHour()).isEqualTo(3);
+        assertThat(stats.lossesLastHour()).isEqualTo(2);
+        assertThat(stats.attemptsLastMinute()).isEqualTo(2);
+        assertThat(stats.lossesLastMinute()).isEqualTo(1);
+        stats=store.stats(List.of(host),now+1).get(host.id());
+        assertThat(stats.lossesLastHour()).isEqualTo(2);
+        assertThat(stats.attemptsLastMinute()).isEqualTo(1);
+        assertThat(stats.lossesLastMinute()).isZero();
+    }
+
+    @Test void noMinuteSamplesShowDashWithoutClearingHourlyLoss() throws Exception {
+        var host=host("loss-minute-empty","10.9.6.1");
+        long now=System.currentTimeMillis();
+        sample(host,now-120000,null,"Tempo esgotado");
+        sample(host,now-119000,10d,null);
+        when(monitor.hosts()).thenReturn(List.of(host));
+        for(String path:List.of("/hosts","/grupos")) {
+            var card=cards(path,"all").getFirst();
+            assertThat(card.lossPercentage()).isEqualTo("50,00%");
+            assertThat(card.minuteLossPercentage()).isEqualTo("—");
+            assertThat(card.color()).isEqualTo("red");
+            assertThat(card.state()).isEqualTo("Com perda de pacotes");
+        }
     }
 
     @Test void totalLossAndCollectorFailuresRemainDistinct() throws Exception {

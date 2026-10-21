@@ -162,7 +162,7 @@ Uma coleta é atrasada depois do maior valor entre 15 segundos e três intervalo
 
 ## Perda de pacotes e status dos cards
 
-A janela de perda é de **60 minutos móveis**. Qualquer ping perdido dentro dela mantém o card vermelho, mesmo que o ping atual já tenha voltado a responder. O card exibe a porcentagem e a contagem, por exemplo `8,33% · 5 de 60 pings`. O alerta de perda desaparece quando a última perda sai da janela; a cor ainda depende da latência e da disponibilidade das coletas.
+A janela de perda é de **60 minutos móveis**. Qualquer ping perdido dentro dela mantém o card vermelho, mesmo que o ping atual já tenha voltado a responder. O card exibe dois percentuais, lado a lado: **Perda · última hora** e **Perda · último minuto**. Cada um usa apenas os pings da respectiva janela móvel. A contagem fica disponível ao passar o mouse sobre o percentual. Sem pings elegíveis na janela, aparece `—`, em vez de uma porcentagem zero. O alerta de perda desaparece quando a última perda sai da janela; a cor ainda depende da latência e da disponibilidade das coletas.
 
 O rodapé mostra:
 
@@ -173,7 +173,7 @@ O rodapé mostra:
 
 “Sem IP válido”, “Aguardando dados”, “Coleta atrasada” e “Falha na coleta” continuam diferenciados. Timeout e ausência de resposta ICMP contam como perdas. Erros locais ao executar o ping e coletas interrompidas não contam como pacotes perdidos nem entram no denominador da porcentagem. O detalhe da última falha continua visível abaixo do status quando necessário. As médias de latência continuam usando apenas respostas recebidas.
 
-Nos grupos, qualquer perda de um membro com IP válido deixa o card vermelho. A porcentagem do grupo é o total de pacotes perdidos dividido pelo total de pings válidos para essa contagem, somando todos os membros. A avaliação de latência usa as três médias exibidas no card do grupo. Hosts sem IP válido continuam excluídos de todas essas avaliações. Grupos sem membros válidos ficam cinza.
+Nos grupos, qualquer perda de um membro com IP válido deixa o card vermelho. Para cada janela (hora e minuto), a porcentagem do grupo é o total de pacotes perdidos dividido pelo total de pings válidos para essa contagem, somando todos os membros. A avaliação de latência usa as três médias exibidas no card do grupo. Hosts sem IP válido continuam excluídos de todas essas avaliações. Grupos sem membros válidos ficam cinza.
 
 Os filtros de situação permitem buscar Normal, Latência alta, Com perda de pacotes e Com latência e perda de pacotes. Os filtros de latência e perda também incluem os casos em que ambas ocorrem.
 

@@ -10,8 +10,9 @@ import java.util.*;
 public class DashboardController {
  private final MonitorService monitor;private final SampleStore store;private final long staleMs;
  public DashboardController(MonitorService monitor,SampleStore store,@Value("${monitor.interval-ms}") long interval,@Value("${monitor.timeout-ms}") long timeout){this.monitor=monitor;this.store=store;staleMs=Math.max(15000,interval*3+timeout);}
- public record Card(String id,List<String> groupIds,String name,String detail,Double hour,Double minute,Double current,String color,String state,String updated,long lossAttempts,long lostPackets,String diagnostic) {
+ public record Card(String id,List<String> groupIds,String name,String detail,Double hour,Double minute,Double current,String color,String state,String updated,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,String diagnostic) {
   public String lossPercentage(){return lossAttempts==0?"—":format(100.0*lostPackets/lossAttempts)+"%";}
+  public String minuteLossPercentage(){return minuteLossAttempts==0?"—":format(100.0*minuteLostPackets/minuteLossAttempts)+"%";}
   public String format(Double value){return value==null?"—":String.format(Locale.forLanguageTag("pt-BR"),"%.2f",value);}
  }
  public static String color(Double hour,Double minute,Double current,boolean offline){
@@ -109,7 +110,7 @@ public class DashboardController {
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
    cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),detail,
        hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?time(s.measuredAt()):"—",
-       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,diagnostic));
+       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,diagnostic));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
     groupTotals.merge(g.id(),1,Integer::sum);
@@ -127,6 +128,8 @@ public class DashboardController {
    Double hour=avg(list,0),minute=avg(list,1),current=avg(list.stream().filter(s->s.measuredAt()!=null && now-s.measuredAt()<=staleMs).toList(),2);
    long attempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastHour).sum();
    long lost=list.stream().mapToLong(SampleStore.Stats::lossesLastHour).sum();
+   long minuteAttempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastMinute).sum();
+   long minuteLost=list.stream().mapToLong(SampleStore.Stats::lossesLastMinute).sum();
    boolean pending=list.stream().anyMatch(s->s.measuredAt()==null);
    String groupColor=color(hour,minute,current,offline || lost>0);
    if(list.isEmpty()) groupColor="gray";
@@ -134,7 +137,7 @@ public class DashboardController {
    String state=list.isEmpty()?"Sem hosts com IP válido":healthState(hour,minute,current,lost>0,offline,pending,stale);
    String diagnostic=offline?"Há hosts sem resposta, com falha ou coleta atrasada":null;
    String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
-   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),detail,hour,minute,current,groupColor,state,time(now),attempts,lost,diagnostic));
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),detail,hour,minute,current,groupColor,state,time(now),attempts,lost,minuteAttempts,minuteLost,diagnostic));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));
