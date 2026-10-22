@@ -35,10 +35,21 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   refreshButton.addEventListener('click', refresh);
 
+  filters.addEventListener('input', () => { document.getElementById('page-number').value = '1'; });
+  filters.addEventListener('change', () => { document.getElementById('page-number').value = '1'; });
+  filters.addEventListener('submit', event => {
+    if (!event.detail || !event.detail.keepPage) document.getElementById('page-number').value = '1';
+  });
+
   document.body.addEventListener('click', event => {
-    const link = event.target.closest('.sort-link');
+    const link = event.target.closest('.sort-link, .page-link');
     if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button > 0) return;
     event.preventDefault();
+    if (link.classList.contains('page-link')) {
+      document.getElementById('page-number').value = link.dataset.page;
+      htmx.trigger(filters, 'submit', { keepPage: true });
+      return;
+    }
     document.getElementById('sort-column').value = link.dataset.sort;
     document.getElementById('sort-direction').value = link.dataset.direction;
     htmx.trigger(filters, 'submit');

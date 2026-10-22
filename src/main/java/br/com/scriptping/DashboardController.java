@@ -37,18 +37,20 @@ public class DashboardController {
                     @org.springframework.web.bind.annotation.RequestParam(defaultValue="") String groupId,
                     @org.springframework.web.bind.annotation.RequestParam(defaultValue="name") String sort,
                     @org.springframework.web.bind.annotation.RequestParam(defaultValue="asc") String direction,
+                    @org.springframework.web.bind.annotation.RequestParam(defaultValue="1") int page,
                     @org.springframework.web.bind.annotation.RequestHeader(value="HX-Request",defaultValue="false") boolean partial,
                     Model model) {
   response.setHeader("Vary","HX-Request");
   boolean groupPage=request.getRequestURI().equals("/grupos");
-  prepare(model,groupPage,q,pingStatus,groupId,sort,direction);
+  prepare(model,groupPage,q,pingStatus,groupId,sort,direction,page);
+  model.addAttribute("partialResponse",partial);
   return partial?"dashboard :: content":"index";
  }
  // Preserve the former polling URL for clients that already have the page open.
- @GetMapping("/dashboard") public String fragment(Model model){prepare(model,false,"","all","","name","asc");return "dashboard :: content";}
+ @GetMapping("/dashboard") public String fragment(Model model){prepare(model,false,"","all","","name","asc",1);model.addAttribute("partialResponse",true);return "dashboard :: content";}
 
  @SuppressWarnings("unchecked")
- private void prepare(Model model,boolean groupPage,String query,String requestedStatus,String requestedGroupId,String requestedSort,String requestedDirection) {
+ private void prepare(Model model,boolean groupPage,String query,String requestedStatus,String requestedGroupId,String requestedSort,String requestedDirection,int requestedPage) {
   populate(model);
   String selected=Set.of("all","green","yellow","red","neutral","gray","normal","high-latency","packet-loss","latency-and-loss").contains(requestedStatus)?requestedStatus:"all";
   String groupId=groupPage?"":requestedGroupId.strip();
@@ -67,8 +69,17 @@ public class DashboardController {
   model.addAttribute("sort",sort);
   model.addAttribute("direction",direction);
   var filtered=all.stream().filter(card->normalize(card.name()).contains(search))
-      .filter(card->matchesStatus(card,selected)).sorted(sortComparator(sort,direction.equals("desc"))).limit(50).toList();
-  model.addAttribute("cards",filtered);
+      .filter(card->matchesStatus(card,selected)).sorted(sortComparator(sort,direction.equals("desc"))).toList();
+  int pageSize=20;
+  int totalPages=Math.max(1,(filtered.size()+pageSize-1)/pageSize);
+  int currentPage=Math.max(1,Math.min(requestedPage,totalPages));
+  int offset=(currentPage-1)*pageSize;
+  model.addAttribute("cards",filtered.subList(offset,Math.min(offset+pageSize,filtered.size())));
+  model.addAttribute("currentPage",currentPage);
+  model.addAttribute("totalPages",totalPages);
+  model.addAttribute("filteredTotal",filtered.size());
+  model.addAttribute("firstRecord",filtered.isEmpty()?0:offset+1);
+  model.addAttribute("lastRecord",Math.min(offset+pageSize,filtered.size()));
   model.addAttribute("total",all.size());
   model.addAttribute("groupPage",groupPage);
   model.addAttribute("pageTitle",groupPage?"Grupos de hosts":"Hosts");

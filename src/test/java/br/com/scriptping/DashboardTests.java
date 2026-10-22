@@ -14,6 +14,28 @@ class DashboardTests {
  @Autowired SampleStore store;
  @Autowired PacketLossAnalysisService analysis;
  @org.springframework.test.context.bean.override.mockito.MockitoBean MonitorService monitor;
+ @Test void paginatesAfterFilteringAndSorting() throws Exception {
+  var hosts=java.util.stream.IntStream.rangeClosed(1,45).mapToObj(i->new Host("page-"+i,String.format("Host %02d",i),"10.0.0."+i,java.util.List.of(new Host.Group("group-"+i,String.format("Grupo %02d",i))))).toList();
+  org.mockito.Mockito.when(monitor.hosts()).thenReturn(hosts);
+  for(String path:java.util.List.of("/hosts","/grupos")) {
+   mvc.perform(get(path)).andExpect(status().isOk()).andExpect(cardCount(20))
+       .andExpect(model().attribute("totalPages",3));
+   mvc.perform(get(path).header("HX-Request","true").param("page","2"))
+       .andExpect(status().isOk()).andExpect(cardCount(20))
+       .andExpect(result->assertThat(resultCards(result).getFirst().name()).endsWith("21"))
+       .andExpect(content().string(org.hamcrest.Matchers.containsString("Página 2 de 3")));
+   mvc.perform(get(path).param("page","999"))
+       .andExpect(status().isOk()).andExpect(cardCount(5)).andExpect(model().attribute("currentPage",3));
+   mvc.perform(get(path).param("page","-1"))
+       .andExpect(status().isOk()).andExpect(cardCount(20)).andExpect(model().attribute("currentPage",1));
+   mvc.perform(get(path).param("page","2").param("direction","desc"))
+       .andExpect(status().isOk()).andExpect(result->assertThat(resultCards(result).getFirst().name()).endsWith("25"));
+   mvc.perform(get(path).param("page","3").param("q","45"))
+       .andExpect(status().isOk()).andExpect(cardCount(1)).andExpect(model().attribute("currentPage",1));
+   mvc.perform(get(path).param("page","3").param("q","inexistente"))
+       .andExpect(status().isOk()).andExpect(cardCount(0)).andExpect(model().attribute("currentPage",1));
+  }
+ }
  @Test void thresholds(){
   assertThat(DashboardController.color(14.99,1d,2d,false)).isEqualTo("green");
   assertThat(DashboardController.color(15d,1d,2d,false)).isEqualTo("yellow");

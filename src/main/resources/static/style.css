@@ -14,3 +14,6 @@
 .host-name a{color:#4ee4b1;text-decoration:underline;text-underline-offset:4px}.host-name a:focus-visible{outline:2px solid #4ee4b1;outline-offset:4px}.group-members{min-width:140px;max-width:200px;color:#a7b5ca}.groups-table{min-width:1050px}
 
 .sort-link{display:block;color:inherit;text-decoration:none;padding:4px 0}.sort-link:hover{color:#4ee4b1}.sort-link:focus-visible{outline:2px solid #4ee4b1;outline-offset:3px}.hosts-table th[aria-sort="ascending"],.hosts-table th[aria-sort="descending"]{color:#4ee4b1}
+
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 1rem; margin: 1.25rem 0; }
+.pagination a { padding: .5rem .75rem; }
