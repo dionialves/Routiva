@@ -17,37 +17,37 @@
 <th th:replace="~{dashboard :: sortHeader('name',${groupPage} ? 'Grupo' : 'Host','')}"></th>
 <th:block th:if="${groupPage}"><th th:replace="~{dashboard :: sortHeader('members','Hosts','')}"></th></th:block>
 <th:block th:if="${!groupPage}"><th th:replace="~{dashboard :: sortHeader('ip','IP','')}"></th></th:block>
-<th th:replace="~{dashboard :: sortHeader('hour','Média · últimas 8 h','ms')}"></th>
-<th th:replace="~{dashboard :: sortHeader('minute','Média · última 1 h','ms')}"></th>
-<th th:replace="~{dashboard :: sortHeader('current','Média · últimos 5 min','ms')}"></th>
+<th th:replace="~{dashboard :: sortHeader('hour','Últimas 8 h','ms')}"></th>
+<th th:replace="~{dashboard :: sortHeader('minute','Última 1 h','ms')}"></th>
+<th th:replace="~{dashboard :: sortHeader('current','Últimos 5 min','ms')}"></th>
 <th th:replace="~{dashboard :: sortHeader('lossHour','Perda · últimas 8 h','')}"></th>
 <th th:replace="~{dashboard :: sortHeader('lossMinute','Perda · última 1 h','')}"></th>
 <th th:replace="~{dashboard :: sortHeader('lossFiveMinutes','Perda · últimos 5 min','')}"></th>
 <th th:replace="~{dashboard :: sortHeader('status','Status','')}"></th>
-<th:block th:if="${groupPage}"><th th:replace="~{dashboard :: sortHeader('updated','Atualização','')}"></th></th:block>
 </tr></thead>
 <tbody><tr class="host-row" th:each="host : ${cards}" th:classappend="${host.color}" th:attr="data-host-id=${host.id}">
 <th scope="row" class="host-name">
 <a th:if="${groupPage}" th:href="@{/hosts(groupId=${host.id})}" th:text="${host.name}" th:attr="aria-label='Ver hosts do grupo ' + ${host.name}"></a>
 <a th:if="${!groupPage}" th:href="@{/hosts/{id}(id=${host.id})}" th:text="${host.name}"></a>
 </th>
-<td class="group-members" th:if="${groupPage}" th:text="${host.detail}"></td>
+<td class="group-members" th:if="${groupPage}" th:text="${host.members} + (${host.members == 1} ? ' host' : ' hosts')"></td>
 <td class="host-ip" th:if="${!groupPage}" th:text="${host.ip}"></td>
 <td class="metric" th:text="${host.format(host.hour)}"></td><td class="metric" th:text="${host.format(host.minute)}"></td><td class="metric" th:text="${host.format(host.current)}"></td>
 <td class="metric" th:text="${host.lossPercentage()}" th:title="${host.lossTitle()}"></td>
 <td class="metric" th:text="${host.minuteLossPercentage()}" th:title="${host.minuteLossTitle()}"></td>
 <td class="metric" th:text="${host.fiveMinuteLossPercentage()}" th:title="${host.fiveMinuteLossTitle()}"></td>
-<td class="host-state"><span class="status-label" th:text="${host.state}"></span><small th:if="${host.diagnostic != null}" th:text="${host.diagnostic}"></small></td>
-<td class="host-updated" th:if="${groupPage}"><time th:text="${host.updated}"></time></td>
+<td class="host-state"><span class="status-label" th:text="${host.state}"></span></td>
 </tr></tbody></table>
 </div>
 <input th:if="${partialResponse}" id="page-number" type="hidden" name="page" th:value="${currentPage}" hx-swap-oob="true">
 <nav class="pagination" aria-label="Paginação dos resultados" th:if="${totalPages > 1}">
+<span class="pagination-summary" role="status" th:text="'Página ' + ${currentPage} + ' de ' + ${totalPages} + ' · ' + ${firstRecord} + '–' + ${lastRecord} + ' de ' + ${filteredTotal} + ' resultados'"></span>
+<div class="pagination-actions">
 <a class="page-link" th:if="${currentPage > 1}" th:href="@{${pagePath}(q=${q},pingStatus=${pingStatus},groupId=${groupId},sort=${sort},direction=${direction},page=1)}" data-page="1">Primeira</a>
 <a class="page-link" th:if="${currentPage > 1}" th:href="@{${pagePath}(q=${q},pingStatus=${pingStatus},groupId=${groupId},sort=${sort},direction=${direction},page=${currentPage - 1})}" th:attr="data-page=${currentPage - 1}">Anterior</a>
-<span role="status" th:text="'Página ' + ${currentPage} + ' de ' + ${totalPages} + ' · ' + ${firstRecord} + '–' + ${lastRecord} + ' de ' + ${filteredTotal} + ' resultados'"></span>
 <a class="page-link" th:if="${currentPage < totalPages}" th:href="@{${pagePath}(q=${q},pingStatus=${pingStatus},groupId=${groupId},sort=${sort},direction=${direction},page=${currentPage + 1})}" th:attr="data-page=${currentPage + 1}">Próxima</a>
 <a class="page-link" th:if="${currentPage < totalPages}" th:href="@{${pagePath}(q=${q},pingStatus=${pingStatus},groupId=${groupId},sort=${sort},direction=${direction},page=${totalPages})}" th:attr="data-page=${totalPages}">Última</a>
+</div>
 </nav>
 <p class="note">Latência média e perda de pacotes calculadas nas janelas móveis das últimas 8 horas, 1 hora e 5 minutos. A latência considera somente respostas válidas. Grupos exibem a média das médias de seus hosts. Percentuais de perda são sempre reais. Cores e status seguem a maior gravidade de perda nas janelas de 8 horas, 1 hora e 5 minutos. A recuperação recente não remove alertas enquanto uma dessas janelas estiver acima do limite; falhas e lacunas de coleta são sinalizadas separadamente. Hosts sem IP válido ou com incidente ativo reconhecido no Zabbix de perda de pacotes, latência ou indisponibilidade ICMP ficam cinza e não participam das estatísticas nem da cor do grupo.</p></th:block><th th:fragment="sortHeader(key,label,unit)" scope="col" th:classappend="${unit == 'ms' or key == 'lossHour' or key == 'lossMinute' or key == 'lossFiveMinutes'} ? 'numeric-heading'" th:attr="aria-sort=${sort == key} ? (${direction == 'asc'} ? 'ascending' : 'descending') : 'none'">
 <th:block th:replace="~{dashboard :: sortHeaderContent(${key},${label},${unit})}"></th:block>
