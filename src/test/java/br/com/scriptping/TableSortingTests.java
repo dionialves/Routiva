@@ -85,7 +85,9 @@ class TableSortingTests {
             assertThat(card.fiveMinuteLossAttempts()).isEqualTo(2);
             assertThat(card.fiveMinuteLostPackets()).isEqualTo(1);
             mvc.perform(get(path)).andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Média · últimas 8 h")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("<span>Últimas 8 h</span>")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("<span>Última 1 h</span>")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("<span>Últimos 5 min</span>")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Perda · últimos 5 min")));
         }
     }
