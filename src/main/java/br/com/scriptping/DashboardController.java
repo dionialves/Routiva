@@ -2,15 +2,14 @@ package br.com.scriptping;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.ui.Model;
-import org.springframework.beans.factory.annotation.Value;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 @Controller
 public class DashboardController {
- private final MonitorService monitor;private final SampleStore store;private final long staleMs;private final PacketLossPolicy lossPolicy;
- public DashboardController(MonitorService monitor,SampleStore store,PacketLossPolicy lossPolicy,@Value("${monitor.interval-ms}") long interval,@Value("${monitor.timeout-ms}") long timeout){this.monitor=monitor;this.store=store;this.lossPolicy=lossPolicy;staleMs=Math.max(15000,interval*3+timeout);}
- public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,int members,String detail,Double hour,Double minute,Double current,String color,String state,Long updatedAt,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,Double lossPercent,Double minuteLossPercent,String diagnostic) {
+ private final MonitorService monitor;private final PacketLossAnalysisService analysis;private final PacketLossPolicy lossPolicy;
+ public DashboardController(MonitorService monitor,PacketLossAnalysisService analysis,PacketLossPolicy lossPolicy){this.monitor=monitor;this.analysis=analysis;this.lossPolicy=lossPolicy;}
+ public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,int members,String detail,Double hour,Double minute,Double current,String color,String state,Long updatedAt,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,Double lossPercent,Double minuteLossPercent,boolean lossIssue,String diagnostic) {
   public String updated(){return time(updatedAt);}
   public String lossPercentage(){return lossPercent==null?"—":format(lossPercent)+"%";}
   public String minuteLossPercentage(){return minuteLossPercent==null?"—":format(minuteLossPercent)+"%";}
@@ -18,7 +17,6 @@ public class DashboardController {
   public String minuteLossTitle(){return lossTitle(minuteLostPackets,minuteLossAttempts,minuteLossPercent);}
   private static String lossTitle(long lost,long attempts,Double percent){
    if(attempts==0) return "Sem pings nesta janela";
-   if(lost>0 && percent!=null && percent==0) return "Dentro da tolerância de perda configurada";
    return lost+" de "+attempts+" pings";
   }
   public String format(Double value){return value==null?"—":String.format(Locale.forLanguageTag("pt-BR"),"%.2f",value);}
@@ -116,72 +114,86 @@ public class DashboardController {
  private static boolean matchesStatus(Card card,String selected) {
   return switch(selected) {
    case "all" -> true;
-   case "normal" -> card.state().equals("Normal");
+   case "normal" -> card.state().startsWith("Normal");
    case "high-latency" -> highLatency(card.hour(),card.minute(),card.current());
-   case "packet-loss" -> card.lossPercent()!=null && card.lossPercent()>0;
-   case "latency-and-loss" -> card.lossPercent()!=null && card.lossPercent()>0 && highLatency(card.hour(),card.minute(),card.current());
+   case "packet-loss" -> card.lossIssue();
+   case "latency-and-loss" -> card.lossIssue() && highLatency(card.hour(),card.minute(),card.current());
    default -> card.color().equals(selected);
   };
  }
- private static String healthState(Double hour,Double minute,Double current,boolean loss,boolean offline,boolean pending,boolean stale) {
+ private record Presentation(String color,String state,boolean lossIssue) {}
+ private static Presentation presentation(List<PacketLossAnalysis> results,Double hour,Double minute,Double current) {
+  String color=color(hour,minute,current,false);
   boolean high=highLatency(hour,minute,current);
-  if(loss) return high?"Com latência e perda de pacotes":"Com perda de pacotes";
-  if(stale) return "Coleta atrasada";
-  if(offline) return "Falha na coleta";
-  if(high) return "Latência alta";
-  if(pending) return "Aguardando dados";
-  return "Normal";
+  var level=results.stream().map(PacketLossAnalysis::level).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Level.NORMAL);
+  var quality=results.stream().map(PacketLossAnalysis::minute).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
+  boolean insufficient=results.isEmpty() || results.stream().anyMatch(r->r.minute()==PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
+  boolean collectorProblem=results.stream().anyMatch(r->r.stats().measuredAt()!=null && !r.collectorHealthy());
+  boolean issue=results.stream().anyMatch(PacketLossAnalysis::recentIssue);
+  String state;
+  if(level==PacketLossAnalysis.Level.CRITICO || quality==PacketLossAnalysis.Quality.CRITICO){color="red";state="Crítico: perda de pacotes";}
+  else if(collectorProblem){if(!color.equals("red"))color="yellow";state="Coleta interrompida ou com falha";}
+  else if(level==PacketLossAnalysis.Level.DEGRADADO){if(!color.equals("red"))color="yellow";state="Degradação recorrente";}
+  else if(quality==PacketLossAnalysis.Quality.DEGRADADO || quality==PacketLossAnalysis.Quality.ATENCAO){if(!color.equals("red"))color="yellow";state=quality==PacketLossAnalysis.Quality.DEGRADADO?"Perda recente: degradado":"Atenção: perda de pacotes";}
+  else if(high){state="Latência alta";}
+  else if(insufficient){color="neutral";state="Dados insuficientes";}
+  else if(quality==PacketLossAnalysis.Quality.EVENTO_ISOLADO){state="Evento isolado";}
+  else {
+   var historical=results.stream().map(PacketLossAnalysis::hour).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
+   state=historical==PacketLossAnalysis.Quality.CRITICO?"Normal · histórico crítico":historical==PacketLossAnalysis.Quality.DEGRADADO?"Normal · histórico degradado":historical==PacketLossAnalysis.Quality.ATENCAO?"Normal · histórico com atenção":"Normal";
+  }
+  if(high && issue)state+=" · latência alta";
+  return new Presentation(color,state,issue);
  }
  private void populate(Model model) {
   long now=System.currentTimeMillis();
   var hosts=monitor.hosts();
-  var stats=store.stats(hosts,now);
+  var analyses=analysis.analyze(hosts,now);
   List<Card> cards=new ArrayList<>();
   Map<String,Host.Group> groups=new TreeMap<>();
-  Map<String,List<SampleStore.Stats>> groupStats=new HashMap<>();
+  Map<String,List<PacketLossAnalysis>> groupStats=new HashMap<>();
   Map<String,Integer> groupTotals=new HashMap<>();
   for(Host host:hosts) {
-   var s=stats.get(host.id());
+   var quality=analyses.get(host.id());
+   var s=quality.stats();
    boolean valid=IpAddress.isValid(host.ip());
-   boolean stale=s.measuredAt()!=null && now-s.measuredAt()>staleMs;
+   boolean stale=s.measuredAt()!=null && !quality.fresh();
    boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
-   boolean loss=valid && lossPolicy.significant(s.lossesLastHour(),s.attemptsLastHour());
    Double hour=valid?s.hour():null, minute=valid?s.minute():null, current=valid && !stale?s.current():null;
-   String state=valid?healthState(hour,minute,current,loss,offline,s.measuredAt()==null,stale):"Sem IP válido";
-   String diagnostic=!valid?null:stale?"Coleta atrasada":s.error();
+   var display=presentation(List.of(quality),hour,minute,current);
+   String state=valid?display.state():"Sem IP válido";
+   String diagnostic=!valid?null:quality.diagnostic()+(stale?" · Coleta atrasada":s.error()!=null?" · "+s.error():"");
    if(Objects.equals(diagnostic,state)) diagnostic=null;
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
    cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),valid?host.ip():"—",String.join(", ",host.groups().stream().map(Host.Group::name).toList()),0,detail,
-       hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?s.measuredAt():null,
-       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,valid?lossPolicy.visiblePercentage(s.lossesLastHour(),s.attemptsLastHour()):null,valid?lossPolicy.visiblePercentage(s.lossesLastMinute(),s.attemptsLastMinute()):null,diagnostic));
+       hour,minute,current,valid?display.color():"gray",state,valid?s.measuredAt():null,
+       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,valid?lossPolicy.visiblePercentage(s.lossesLastHour(),s.attemptsLastHour()):null,valid?lossPolicy.visiblePercentage(s.lossesLastMinute(),s.attemptsLastMinute()):null,valid && display.lossIssue(),diagnostic));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
     groupTotals.merge(g.id(),1,Integer::sum);
     var list=groupStats.computeIfAbsent(g.id(),k->new ArrayList<>());
-    if(valid) list.add(s);
+    if(valid) list.add(quality);
    }
   }
   cards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   List<Card> groupCards=new ArrayList<>();
   for(var entry:groups.entrySet()) {
-   var list=groupStats.get(entry.getKey());
+   var qualities=groupStats.get(entry.getKey());
+   var list=qualities.stream().map(PacketLossAnalysis::stats).toList();
    int total=groupTotals.get(entry.getKey()), excluded=total-list.size();
-   boolean stale=list.stream().anyMatch(s->s.measuredAt()!=null && now-s.measuredAt()>staleMs);
-   boolean offline=list.stream().anyMatch(s->s.measuredAt()!=null && (s.current()==null || now-s.measuredAt()>staleMs));
-   Double hour=avg(list,0),minute=avg(list,1),current=avg(list.stream().filter(s->s.measuredAt()!=null && now-s.measuredAt()<=staleMs).toList(),2);
+   Double hour=avg(list,0),minute=avg(list,1),current=avg(qualities.stream().filter(PacketLossAnalysis::fresh).map(PacketLossAnalysis::stats).toList(),2);
    long attempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastHour).sum();
    long lost=list.stream().mapToLong(SampleStore.Stats::lossesLastHour).sum();
    long minuteAttempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastMinute).sum();
    long minuteLost=list.stream().mapToLong(SampleStore.Stats::lossesLastMinute).sum();
-   boolean pending=list.stream().anyMatch(s->s.measuredAt()==null);
-   boolean loss=lossPolicy.significant(lost,attempts);
-   String groupColor=color(hour,minute,current,offline || loss);
-   if(list.isEmpty()) groupColor="gray";
-   else if(pending && !offline && groupColor.equals("green")) groupColor="neutral";
-   String state=list.isEmpty()?"Sem hosts com IP válido":healthState(hour,minute,current,loss,offline,pending,stale);
-   String diagnostic=offline?"Há hosts sem resposta, com falha ou coleta atrasada":null;
+   var display=presentation(qualities,hour,minute,current);
+   String groupColor=list.isEmpty()?"gray":display.color();
+   String state=list.isEmpty()?"Sem hosts com IP válido":display.state();
+   var worstMinute=qualities.stream().map(PacketLossAnalysis::minute).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
+   var worstHour=qualities.stream().map(PacketLossAnalysis::hour).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
+   String diagnostic=list.isEmpty()?null:"Pior membro · 1 min: "+worstMinute+" · 1 h: "+worstHour;
    String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
-   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,lossPolicy.visiblePercentage(lost,attempts),lossPolicy.visiblePercentage(minuteLost,minuteAttempts),diagnostic));
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,lossPolicy.visiblePercentage(lost,attempts),lossPolicy.visiblePercentage(minuteLost,minuteAttempts),display.lossIssue(),diagnostic));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));

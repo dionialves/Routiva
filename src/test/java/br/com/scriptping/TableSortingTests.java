@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TableSortingTests {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @Autowired PacketLossAnalysisService analysis;
     @MockitoBean MonitorService monitor;
 
     Host host(String id,String name,String ip) {
@@ -25,6 +26,8 @@ class TableSortingTests {
     }
     void sample(Host host,long time,Double latency,String error) {
         jdbc.update("INSERT INTO ping_sample(host_id,target,measured_at,latency,error) VALUES(?,?,?,?,?)",host.id(),host.ip(),time,latency,error);
+        long id=jdbc.queryForObject("SELECT MAX(id) FROM ping_sample",Long.class);
+        analysis.accept(new PingSample(id,host.id(),host.ip(),time,latency,error));
     }
     @SuppressWarnings("unchecked")
     List<DashboardController.Card> sorted(String path,String column,String direction) throws Exception {

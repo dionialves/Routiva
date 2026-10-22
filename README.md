@@ -144,63 +144,103 @@ Cada página permite combinar pesquisa por nome e status de ping (todos, verde, 
 
 Clique no cabeçalho de qualquer coluna para ordenar; clique novamente para inverter crescente/decrescente. Latências, percentuais e quantidades usam valores numéricos, IPs usam ordem numérica e horários usam o instante real da coleta. Valores sem dados ficam no final em ambas as direções. A seta indica a coluna e a direção ativas. Pesquisa, filtros, atualização manual e automática preservam a ordenação, que também fica na URL.
 
-## Coleta e painel
+## Coleta e apresentação da qualidade
 
-Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua coleta anterior tenha terminado. Até 64 pings executam em paralelo, sem sobreposição por host. Inventários grandes podem aumentar o intervalo efetivo. Os hosts precisam ser alcançáveis pela máquina que executa a aplicação. O executor suporta Linux/macOS e Windows com saída de ping em inglês ou português; outros idiomas podem exigir ajuste do parser.
+A coleta passa a usar **1 ping por segundo por host** como padrão (`PING_INTERVAL_MS=1000`). Revise o `.env` existente: valores antigos, como 5000, continuam tendo prioridade. O executor não sobrepõe pings do mesmo host e respeita o timeout e o limite de concorrência. Pings demorados ou excesso de hosts podem reduzir a frequência efetiva; os cálculos usam as amostras reais e a cobertura temporal, sem inventar pacotes durante lacunas de coleta. Ajuste concorrência e recursos do servidor para seu inventário.
 
-Resultados, falhas e horários são persistidos no PostgreSQL. **Regra provisória:** a retenção é configurável e tem padrão de 48 horas, até a implementação da política definitiva. A limpeza roda ao iniciar e, depois de cada execução, aguarda o intervalo configurado (padrão: 600 segundos, ou 10 minutos). Registros acima do limite são removidos na próxima limpeza; podem permanecer além de 48 horas durante esse intervalo. A regra abrange respostas e falhas de todos os hosts, inclusive os removidos do inventário. `PING_RETENTION_HOURS` voltou a ser utilizado: revise valores antigos no `.env`, pois eles têm prioridade sobre o padrão 48. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
+O comando `ping` precisa estar instalado/autorizado e os destinos precisam ser alcançáveis pela máquina/contêiner da aplicação. Respostas válidas são gravadas imediatamente. Perdas são confirmadas somente após o timeout; erros de execução, falhas de interpretação e interrupções do coletor ficam separados dos timeouts e não entram no denominador de perda.
 
-HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. As páginas de hosts e grupos mostram os dados em tabelas. As duas visualizações incluem as médias de 60 minutos/1 minuto, ping atual, perdas e status.
+Os dados originais continuam no PostgreSQL. **Regra provisória:** retenção configurável, com padrão de 48 horas e limpeza ao iniciar e depois a cada 600 segundos. Registros mais antigos são removidos na próxima execução. Não há alteração no esquema do banco nem novas dependências.
 
-As janelas são móveis e usam apenas respostas válidas; falhas nunca contam como zero. Antes de completar uma hora, a média usa os dados disponíveis. Grupos exibem a média das médias por host em cada janela, com peso igual para cada host. O atual do grupo usa os últimos pings válidos e recentes. Hosts em vários grupos participam de todos eles.
+As tabelas, colunas, filtros, ordenação e controles de atualização foram preservados. O cabeçalho permite atualizar agora ou escolher 5, 10, 15 ou 60 segundos, com preferência salva no navegador. Esse intervalo atualiza a tela; ele não muda o intervalo dos pings.
 
-- Vermelho: qualquer métrica acima de 20 ms, percentual de perda acima da tolerância nos últimos 60 minutos, ou host sem resposta/com coleta atrasada. Nos grupos, a tolerância de perda é aplicada ao percentual agregado; hosts sem resposta ou com coleta atrasada continuam sinalizados.
-- Amarelo: qualquer métrica entre 15 e 20 ms, inclusive, sem condição vermelha.
-- Verde: todas as três métricas abaixo de 15 ms.
-- Cinza: host sem IP válido (ausente, malformado ou endereço não especificado como `0.0.0.0`/`::`). Não participa das médias, da avaliação de falhas nem da espera por dados do grupo. Um grupo sem nenhum host com IP válido fica cinza. O filtro cinza é separado de “aguardando dados”.
-- Neutro: aguardando dados, sem condição amarela ou vermelha. Grupos não ficam verdes enquanto aguardam a primeira coleta de um membro.
+## Regras de perda de pacotes
 
-Uma coleta é atrasada depois do maior valor entre 15 segundos e três intervalos de ping mais o timeout. O atual de um host atrasado aparece indisponível. Horários do painel usam America/Sao_Paulo.
+Os percentuais são **sempre reais**, inclusive abaixo dos limiares. A regra anterior que zerava perdas até 1% foi substituída: `PING_PACKET_LOSS_IGNORE_PERCENT` não é mais utilizado. O percentual é `perdidos / tentativas concluídas elegíveis × 100`; timeout é perda, erro interno não é. Sem tentativas elegíveis, aparece `—`. Os limites são comparados sem arredondamento; apenas a exibição é formatada. A contagem real fica no tooltip.
 
-## Perda de pacotes e status dos cards
+As janelas são móveis, com intervalo `(agora - duração, agora]`; os contadores não reiniciam na virada do relógio. Minuto e hora são classificados de forma independente.
 
-A janela de perda é de **60 minutos móveis**. Um percentual de perda acima da tolerância configurada nessa janela mantém o indicador vermelho, mesmo que o ping atual já tenha voltado a responder. O card exibe dois percentuais, lado a lado: **Perda · última hora** e **Perda · último minuto**. Cada um usa apenas os pings da respectiva janela móvel. A contagem fica disponível ao passar o mouse sobre o percentual. Sem pings elegíveis na janela, aparece `—`, em vez de uma porcentagem zero. O alerta de perda desaparece quando a porcentagem da hora fica dentro da tolerância; a cor ainda depende da latência e da disponibilidade das coletas.
+### Qualidade recente — 1 minuto
 
-O rodapé mostra:
+| Perdas equivalentes em 60 pacotes | Classificação |
+| --- | --- |
+| 0 | NORMAL |
+| 1 | EVENTO_ISOLADO |
+| 2 | ATENCAO |
+| 3 a 5 | DEGRADADO |
+| 6 ou mais | CRITICO |
 
-- **Normal**: três latências abaixo de 15 ms, sem perdas recentes, com coleta disponível e recente.
-- **Latência alta**: pelo menos uma das três latências a partir de 15 ms, sem perdas; amarelo de 15 a 20 ms, vermelho acima de 20 ms.
-- **Com perda de pacotes**: percentual acima da tolerância nos últimos 60 minutos, sem latência alta; vermelho.
-- **Com latência e perda de pacotes**: as duas condições ao mesmo tempo; vermelho.
+Para frequências diferentes, a quantidade equivalente é proporcional aos pings reais: `perdas × 60 / tentativas`. Por exemplo, em coleta de 5 segundos, 1 perda em 12 tentativas equivale a 5 em 60 e classifica como DEGRADADO. A classificação exige cobertura temporal mínima de 80% e pelo menos duas amostras elegíveis; sem isso retorna DADOS_INSUFICIENTES. Intervalos longos sem coleta não contam como tempo coberto. O timeout participa da margem de lacuna permitida, para não confundir uma resposta aguardando confirmação com ausência do coletor.
 
-“Sem IP válido”, “Aguardando dados”, “Coleta atrasada” e “Falha na coleta” continuam diferenciados. Timeout e ausência de resposta ICMP contam como perdas. Erros locais ao executar o ping e coletas interrompidas não contam como pacotes perdidos nem entram no denominador da porcentagem. O detalhe da última falha continua visível abaixo do status quando necessário. As médias de latência continuam usando apenas respostas recebidas.
+### Qualidade histórica — 1 hora
 
-Nos grupos, a tolerância é comparada ao percentual agregado dos membros com IP válido. Para cada janela (hora e minuto), a porcentagem do grupo é o total de pacotes perdidos dividido pelo total de pings válidos para essa contagem, somando todos os membros. A avaliação de latência usa as três médias exibidas no card do grupo. Hosts sem IP válido continuam excluídos de todas essas avaliações. Grupos sem membros válidos ficam cinza.
+| Percentual real | Classificação |
+| --- | --- |
+| Até 0,05%, inclusive | NORMAL |
+| Acima de 0,05% e abaixo de 0,1% | ATENCAO |
+| De 0,1% até abaixo de 0,5% | DEGRADADO |
+| 0,5% ou mais | CRITICO |
 
-Os filtros de situação permitem buscar Normal, Latência alta, Com perda de pacotes e Com latência e perda de pacotes. Os filtros de latência e perda também incluem os casos em que ambas ocorrem.
+Uma classificação horária degradada/crítica **não mantém a linha como falha ativa** quando a situação recente já se recuperou. O status pode apresentar “Normal · histórico degradado”; o detalhe mostra as classificações independentes do minuto e da hora.
 
-## Regras editáveis no application.properties
+### Cores e situação atual
 
-O arquivo `src/main/resources/application.properties` contém:
+- **Verde:** normal ou evento isolado, com latência normal. Uma perda isolada não caracteriza degradação operacional.
+- **Amarelo:** atenção/degradação recente, degradação recorrente, falha/interrupção de coleta ou latência entre 15 e 20 ms.
+- **Vermelho:** três perdas consecutivas confirmadas, seis perdas equivalentes em um minuto com dados suficientes, ou quantidade crítica confirmada proporcional à cadência configurada. Latência acima de 20 ms também continua vermelha.
+- **Neutro:** dados insuficientes para avaliar o período recente.
+- **Cinza:** host sem IP válido; não participa da qualidade nem das médias dos grupos.
+
+A indicação operacional crítica é imediata ao confirmar a terceira perda consecutiva, mesmo durante o aquecimento da janela. Resposta válida reinicia a sequência; erro interno a interrompe. O detalhe do status inclui a maior sequência de perdas do minuto e da hora.
+
+Para **recorrência**, são examinados os últimos três minutos completos do relógio (somente esse detector usa períodos fechados). Dois desses três minutos com pelo menos duas perdas equivalentes cada, com cobertura suficiente, identificam DEGRADAÇÃO RECORRENTE. O minuto ainda incompleto não participa. Isso altera apenas a cor e o status: não há notificações, sistema de eventos ou componentes novos no dashboard.
+
+A situação operacional de perda é mantida até cinco minutos de respostas válidas contínuas, sem nova perda, erro interno ou lacuna excessiva. A recuperação exige novas respostas que comprovem todo esse período; parar o coletor ou deixar de receber amostras não recupera o host. O percentual e a classificação histórica permanecem reais após a recuperação.
+
+Nos grupos, a cor e o status refletem o membro válido com a situação mais grave. Os percentuais da hora/minuto continuam calculados pelos totais agregados de pings, e as latências continuam sendo a média das médias dos membros. O detalhe identifica a classificação do pior membro, para não confundir a situação de um host com o percentual agregado. Grupos sem hosts válidos ficam cinza. Os filtros de perda referem-se à situação recente/operacional, sem marcar perda histórica isolada como falha ativa.
+
+## Ajuste rápido no application.properties
+
+As regras estão centralizadas em `src/main/resources/application.properties`, na seção **ANÁLISE DE PERDA DE PACOTES**:
+
+| Propriedade `monitor.loss.*` | Padrão | Finalidade |
+| --- | --- | --- |
+| minute-window-seconds | 60 | Janela móvel recente |
+| hour-window-seconds | 3600 | Janela móvel histórica |
+| minute-reference-packets | 60 | Referência para normalizar outras frequências |
+| minute-attention-losses | 2 | Início da atenção recente |
+| minute-degraded-losses | 3 | Início da degradação recente |
+| minute-critical-losses | 6 | Início da condição crítica recente |
+| hour-normal-max-percent | 0.05 | Limite normal horário inclusivo |
+| hour-degraded-min-percent | 0.1 | Início da degradação horária |
+| hour-critical-min-percent | 0.5 | Início da condição crítica horária |
+| consecutive-critical | 3 | Sequência crítica imediata |
+| recurrence-bucket-seconds | 60 | Duração dos períodos completos de recorrência |
+| recurrence-buckets | 3 | Quantos períodos completos analisar |
+| recurrence-required-buckets | 2 | Quantos períodos devem apresentar perdas |
+| recurrence-bucket-losses | 2 | Mínimo equivalente de perdas por período |
+| recovery-seconds | 300 | Tempo contínuo confirmado para recuperar |
+| minimum-coverage-ratio | 0.8 | Fração mínima de tempo coberto por amostras |
+| minimum-samples | 2 | Mínimo de amostras elegíveis |
+| max-gap-multiplier | 3 | Margem de lacuna em múltiplos da cadência; considera também timeout + cadência |
+| cache-millis | 1000 | Reutilização de uma análise entre leituras do painel |
+
+As durações avançadas são configuráveis para evolução da regra; os rótulos das colunas mantêm os períodos de 1 minuto/1 hora usados nesta versão. Para ajustar a cadência use `PING_INTERVAL_MS`, não as janelas. Limites e durações inválidos impedem a inicialização, em vez de aplicar classificações incoerentes.
+
+A retenção provisória continua no mesmo arquivo:
 
 ```properties
-monitor.packet-loss-ignore-percent=${PING_PACKET_LOSS_IGNORE_PERCENT:1}
-# PROVISÓRIO: parâmetros até a implementação da política definitiva de retenção.
 monitor.retention-hours=${PING_RETENTION_HOURS:48}
 monitor.cleanup-interval-seconds=${PING_CLEANUP_INTERVAL_SECONDS:600}
 ```
 
-Perdas **até 1%, inclusive**, são desconsideradas por padrão. Cada percentual de hora/minuto é avaliado separadamente e exibido como `0,00%` quando está dentro da tolerância. As perdas ignoradas não aparecem nos filtros/alertas de perda nem nos contadores dos tooltips; os registros originais continuam preservados no banco. A ordenação usa o percentual exibido. A cor e o status de perda continuam baseados na janela da última hora. A tolerância não oculta indisponibilidade atual, atraso de coleta ou latência alta.
+Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no properties, reconstrua a imagem: `docker compose up -d --build --wait app`. Para alterar só o `.env`, recrie o serviço com `docker compose up -d app`.
 
-Você pode editar as propriedades e reconstruir a imagem ou sobrescrever os valores no `.env`:
+### Integração e eficiência
 
-```dotenv
-PING_PACKET_LOSS_IGNORE_PERCENT=1
-PING_RETENTION_HOURS=48
-PING_CLEANUP_INTERVAL_SECONDS=600
-```
+O coletor grava cada resultado concluído e o encaminha ao analisador após a confirmação da escrita. Na inicialização, o histórico recente é restaurado uma vez, com leitura paginada pelo driver PostgreSQL. Depois disso, a apresentação reutiliza buffers compactos por host/IP e uma análise curta em cache, sem consultar o banco a cada atualização de tela. Eventos internos de amostra repetidos são deduplicados pelo ID persistido; amostras atrasadas são ordenadas pelo horário real e amostras futuras não entram nas janelas antes de seu horário. Alterar o IP separa os históricos. Resultados revertidos por rollback não entram no histórico em memória.
 
-Para aplicar alterações no `.env`, execute `docker compose up -d app`; se alterar o arquivo properties, use `docker compose up -d --build app`. A próxima inicialização já executa a limpeza com a retenção configurada. A tolerância precisa estar entre 0 e 100; retenção e intervalo devem ser positivos. O parâmetro do intervalo é em **segundos**, e o de retenção em **horas**.
+O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem amostras suficientes, não se declara recuperação nem normalidade. Não existe serviço de notificações ou registro de alertas externos. Execute uma única instância coletora por banco; não há coordenação distribuída de coleta entre réplicas. Para inventários grandes, dimensione timeout, concorrência e recursos do servidor para a cadência desejada.
 
 ## Configurações no `.env`
 
@@ -215,10 +255,9 @@ Para aplicar alterações no `.env`, execute `docker compose up -d app`; se alte
 | POSTGRES_DB | scriptping | Nome do banco |
 | POSTGRES_USER | scriptping | Usuário do banco |
 | POSTGRES_PASSWORD | obrigatório no Compose | Senha do banco |
-| PING_INTERVAL_MS | 5000 | Intervalo de disparo das coletas |
+| PING_INTERVAL_MS | 1000 | Intervalo de disparo das coletas |
 | PING_TIMEOUT_MS | 2000 | Limite de espera por resposta |
 | PING_CONCURRENCY | 64 | Máximo de pings simultâneos |
-| PING_PACKET_LOSS_IGNORE_PERCENT | 1 | Tolerância percentual inclusiva para perda |
 | PING_RETENTION_HOURS | 48 | Retenção provisória em horas |
 | PING_CLEANUP_INTERVAL_SECONDS | 600 | Intervalo provisório de limpeza em segundos |
 | SERVER_ADDRESS | 127.0.0.1 | Interface de escuta da aplicação |
@@ -242,6 +281,6 @@ node --test src/test/js/dashboard.test.cjs
 
 Esses testes verificam os quatro intervalos, a atualização manual, a persistência da escolha e a recuperação após erros. Node.js não é necessário para executar a aplicação ou os contêineres.
 
-Os testes Java usam H2 em memória e uma API Zabbix simulada. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
+Os testes Java usam H2 em memória e uma API Zabbix simulada. Incluem perdas isoladas, duas perdas, perdas consecutivas, seis perdas distribuídas, recorrência em períodos completos, limites horários exatos, recuperação, falhas/lacunas do coletor, janelas incompletas, outras cadências, amostras atrasadas/duplicadas/futuras, restauração após reinício e percentuais reais na apresentação. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
 
 Referências: [user.login](https://www.zabbix.com/documentation/current/en/manual/api/reference/user/login), [API Zabbix](https://www.zabbix.com/documentation/7.0/en/manual/api), [imagem oficial PostgreSQL](https://hub.docker.com/_/postgres).

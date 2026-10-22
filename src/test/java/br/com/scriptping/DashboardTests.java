@@ -7,11 +7,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "zabbix.url=", "zabbix.username=", "zabbix.password=", "spring.datasource.username=sa", "spring.datasource.password="})
+@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "zabbix.url=", "zabbix.username=", "zabbix.password=", "spring.datasource.username=sa", "spring.datasource.password=", "monitor.loss.minimum-coverage-ratio=0", "monitor.loss.minimum-samples=1"})
 @AutoConfigureMockMvc
 class DashboardTests {
  @Autowired MockMvc mvc;
  @Autowired SampleStore store;
+ @Autowired PacketLossAnalysisService analysis;
  @org.springframework.test.context.bean.override.mockito.MockitoBean MonitorService monitor;
  @Test void thresholds(){
   assertThat(DashboardController.color(14.99,1d,2d,false)).isEqualTo("green");
@@ -190,7 +191,7 @@ class DashboardTests {
  @Test void persistsFailuresWithoutTurningThemIntoZero(){
   Host h=new Host("test","Teste","127.0.0.1",java.util.List.of());
   store.save(h,new PingProbe.Result(10d,null));store.save(h,new PingProbe.Result(null,"Tempo esgotado"));
-  var s=store.stats(java.util.List.of(h),System.currentTimeMillis()).get("test");
+  var s=analysis.analyze(java.util.List.of(h),System.currentTimeMillis()).get("test").stats();
   assertThat(s.hour()).isEqualTo(10d);assertThat(s.minute()).isEqualTo(10d);assertThat(s.current()).isNull();assertThat(s.failures()).isEqualTo(1);assertThat(s.attempts()).isEqualTo(2);
  }
 }

@@ -5,36 +5,39 @@ import org.springframework.scheduling.annotation.Scheduled;
 import java.time.*;
 import java.util.*;
 @Repository
+@org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization
 public class SampleStore {
  // PROVISÓRIO: retenção configurável até a implementação da política definitiva.
  private final Duration retention;
  private final JdbcTemplate jdbc;
- public SampleStore(JdbcTemplate jdbc,@org.springframework.beans.factory.annotation.Value("${monitor.retention-hours:48}") long retentionHours,@org.springframework.beans.factory.annotation.Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds){
+ private final org.springframework.context.ApplicationEventPublisher publisher;
+ public SampleStore(JdbcTemplate jdbc,long retentionHours,long cleanupSeconds){this(jdbc,retentionHours,cleanupSeconds,event->{});}
+ @org.springframework.beans.factory.annotation.Autowired
+ public SampleStore(JdbcTemplate jdbc,@org.springframework.beans.factory.annotation.Value("${monitor.retention-hours:48}") long retentionHours,@org.springframework.beans.factory.annotation.Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds,org.springframework.context.ApplicationEventPublisher publisher){
   if(cleanupSeconds<1) throw new IllegalArgumentException("monitor.cleanup-interval-seconds deve ser positivo.");
   if(retentionHours<1) throw new IllegalArgumentException("monitor.retention-hours deve ser positivo.");
-  this.jdbc=jdbc;this.retention=Duration.ofHours(retentionHours);
+  this.jdbc=jdbc;this.retention=Duration.ofHours(retentionHours);this.publisher=publisher;
  }
- public void save(Host host,PingProbe.Result result){jdbc.update("INSERT INTO ping_sample(host_id,target,measured_at,latency,error) VALUES(?,?,?,?,?)",host.id(),host.ip(),System.currentTimeMillis(),result.latency(),result.error());}
+ public PingSample save(Host host,PingProbe.Result result){
+  long now=System.currentTimeMillis();
+  var key=new org.springframework.jdbc.support.GeneratedKeyHolder();
+  jdbc.update(connection->{
+   var statement=connection.prepareStatement("INSERT INTO ping_sample(host_id,target,measured_at,latency,error) VALUES(?,?,?,?,?)",new String[]{"id"});
+   statement.setString(1,host.id());statement.setString(2,host.ip());statement.setLong(3,now);statement.setObject(4,result.latency());statement.setString(5,result.error());return statement;
+  },key);
+  var sample=new PingSample(Objects.requireNonNull(key.getKey()).longValue(),host.id(),host.ip(),now,result.latency(),result.error());
+  if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()){
+   org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){@Override public void afterCommit(){publisher.publishEvent(sample);}});
+  }else publisher.publishEvent(sample);
+  return sample;
+ }
+ @org.springframework.transaction.annotation.Transactional(readOnly=true)
+ public void readRecent(long cutoff,java.util.function.Consumer<PingSample> consumer){
+  jdbc.query(connection->{var query=connection.prepareStatement("SELECT id,host_id,target,measured_at,latency,error FROM ping_sample WHERE measured_at>=? ORDER BY measured_at,id");query.setLong(1,cutoff);query.setFetchSize(1000);return query;},(org.springframework.jdbc.core.RowCallbackHandler)row->{
+   Number latency=(Number)row.getObject("latency");consumer.accept(new PingSample(row.getLong("id"),row.getString("host_id"),row.getString("target"),row.getLong("measured_at"),latency==null?null:latency.doubleValue(),row.getString("error")));
+  });
+ }
  public record Stats(Double hour,Double minute,Double current,Long measuredAt,String error,long attempts,long failures,long attemptsLastHour,long lossesLastHour,long attemptsLastMinute,long lossesLastMinute) {}
- public Map<String,Stats> stats(List<Host> hosts,long now) {
-  Map<String,Stats> result=new HashMap<>();
-  for(Host h:hosts) {
-   var aggregate=jdbc.queryForMap("""
-       SELECT AVG(latency) AS avg_hour,
-              AVG(CASE WHEN measured_at>=? THEN latency END) AS avg_minute,
-              COUNT(*) AS attempts, COUNT(*)-COUNT(latency) AS failures,
-              COUNT(CASE WHEN measured_at>=? AND (latency IS NOT NULL OR error IN ('Tempo esgotado','Sem resposta ICMP')) THEN 1 END) AS attempts_last_hour,
-              COUNT(CASE WHEN measured_at>=? AND latency IS NULL AND error IN ('Tempo esgotado','Sem resposta ICMP') THEN 1 END) AS losses_last_hour,
-              COUNT(CASE WHEN measured_at>=? AND (latency IS NOT NULL OR error IN ('Tempo esgotado','Sem resposta ICMP')) THEN 1 END) AS attempts_last_minute,
-              COUNT(CASE WHEN measured_at>=? AND latency IS NULL AND error IN ('Tempo esgotado','Sem resposta ICMP') THEN 1 END) AS losses_last_minute
-       FROM ping_sample WHERE host_id=? AND target=? AND measured_at>=? AND measured_at<=?
-       """,now-60000,now-3600000,now-3600000,now-60000,now-60000,h.id(),h.ip(),now-3600000,now);
-   var last=jdbc.queryForList("SELECT latency,measured_at,error FROM ping_sample WHERE host_id=? AND target=? AND measured_at<=? ORDER BY measured_at DESC,id DESC LIMIT 1",h.id(),h.ip(),now);
-   var row=last.isEmpty()?Map.<String,Object>of():last.getFirst();
-   result.put(h.id(),new Stats(number(aggregate.get("avg_hour")),number(aggregate.get("avg_minute")),number(row.get("latency")),row.get("measured_at")==null?null:((Number)row.get("measured_at")).longValue(),(String)row.get("error"),((Number)aggregate.get("attempts")).longValue(),((Number)aggregate.get("failures")).longValue(),((Number)aggregate.get("attempts_last_hour")).longValue(),((Number)aggregate.get("losses_last_hour")).longValue(),((Number)aggregate.get("attempts_last_minute")).longValue(),((Number)aggregate.get("losses_last_minute")).longValue()));
-  } return result;
- }
- private Double number(Object value){return value==null?null:((Number)value).doubleValue();}
  // PROVISÓRIO: executa ao iniciar e no intervalo configurado; substituir pela futura política de retenção.
  @Scheduled(fixedDelayString="${monitor.cleanup-interval-seconds:600}",timeUnit=java.util.concurrent.TimeUnit.SECONDS)
  public void cleanup(){jdbc.update("DELETE FROM ping_sample WHERE measured_at < ?",System.currentTimeMillis()-retention.toMillis());}

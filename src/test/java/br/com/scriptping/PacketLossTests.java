@@ -1,193 +1,124 @@
 package br.com.scriptping;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import java.util.List;
+import java.util.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static br.com.scriptping.PacketLossAnalysis.*;
 
-@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "zabbix.url=", "zabbix.username=", "zabbix.password=", "spring.datasource.username=sa", "spring.datasource.password="})
-@AutoConfigureMockMvc
 class PacketLossTests {
-    @Autowired MockMvc mvc;
-    @Autowired SampleStore store;
-    @Autowired JdbcTemplate jdbc;
-    @MockitoBean MonitorService monitor;
-
-    private Host host(String id, String ip) {
-        return new Host(id,id,ip,List.of(new Host.Group(id+"-group",id+" group")));
-    }
-
-    private void sample(Host host, long at, Double latency, String error) {
-        jdbc.update("INSERT INTO ping_sample(host_id,target,measured_at,latency,error) VALUES(?,?,?,?,?)",host.id(),host.ip(),at,latency,error);
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<DashboardController.Card> cards(String path,String filter) throws Exception {
-        var result=mvc.perform(get(path).header("HX-Request","true").param("pingStatus",filter))
-            .andExpect(status().isOk()).andReturn();
-        return (List<DashboardController.Card>)result.getModelAndView().getModel().get("cards");
-    }
-
-    @Test void fiveLostPingsKeepRecoveredHostAndGroupRedUntilTheyExpire() throws Exception {
-        var host=host("loss-five","10.9.0.1");
-        long now=System.currentTimeMillis();
-        for(int i=0;i<5;i++) sample(host,now-1800000-i,null,"Tempo esgotado");
-        for(int i=0;i<55;i++) sample(host,now-1000-i,10d,null);
-        when(monitor.hosts()).thenReturn(List.of(host));
-        for(String path:List.of("/hosts","/grupos")) {
-            var card=cards(path,"all").getFirst();
-            assertThat(card.color()).isEqualTo("red");
-            assertThat(card.state()).isEqualTo("Com perda de pacotes");
-            assertThat(card.current()).isEqualTo(10d);
-            assertThat(card.hour()).isEqualTo(10d);
-            assertThat(card.lostPackets()).isEqualTo(5);
-            assertThat(card.lossAttempts()).isEqualTo(60);
-            assertThat(card.lossPercentage()).isEqualTo("8,33%");
-            assertThat(card.minuteLossPercentage()).isEqualTo("0,00%");
-            assertThat(card.minuteLossAttempts()).isEqualTo(55);
+    static final long BASE=6_000_000;
+    PacketLossPolicy rules=new PacketLossPolicy();
+    PacketLossAnalyzer analyzer=new PacketLossAnalyzer(rules,1000,2000);
+    RollingPingHistory history(int seconds,Set<Integer> losses,Set<Integer> errors,Set<Integer> gaps) {
+        var history=new RollingPingHistory();
+        for(int i=1;i<=seconds;i++) {
+            if(gaps.contains(i))continue;
+            history.add(new PingSample(i,"host","10.0.0.1",BASE+i*1000L,losses.contains(i)||errors.contains(i)?null:10d,losses.contains(i)?"Tempo esgotado":errors.contains(i)?"Falha ao executar ping":null));
         }
-        mvc.perform(get("/hosts")).andExpect(status().isOk())
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("5 de 60 pings")))
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("Perda · última hora")))
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("Perda · último minuto")))
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("Com perda de pacotes")));
-        jdbc.update("UPDATE ping_sample SET measured_at=? WHERE host_id=? AND latency IS NULL",now-3601000,host.id());
-        for(String path:List.of("/hosts","/grupos")) {
-            var card=cards(path,"all").getFirst();
-            assertThat(card.state()).isEqualTo("Normal");
-            assertThat(card.color()).isEqualTo("green");
-            assertThat(card.lossPercentage()).isEqualTo("0,00%");
-        }
+        return history;
     }
+    PacketLossAnalysis analyze(int seconds,Set<Integer> losses) {return analyzer.analyze(history(seconds,losses,Set.of(),Set.of()),BASE+seconds*1000L);}
 
-    @Test void statusesAndFiltersDistinguishLatencyLossAndBoth() throws Exception {
-        var normal=host("loss-normal","10.9.1.1");
-        var high=host("loss-high","10.9.1.2");
-        var loss=host("loss-only","10.9.1.3");
-        var both=host("loss-both","10.9.1.4");
-        long now=System.currentTimeMillis();
-        sample(normal,now,14.99,null);
-        sample(high,now,15d,null);
-        sample(loss,now-1000,null,"Sem resposta ICMP");sample(loss,now,10d,null);
-        sample(both,now-1000,null,"Tempo esgotado");sample(both,now,25d,null);
-        when(monitor.hosts()).thenReturn(List.of(normal,high,loss,both));
-        for(String path:List.of("/hosts","/grupos")) {
-            assertThat(cards(path,"all")).extracting(DashboardController.Card::state)
-                .containsExactlyInAnyOrder("Normal","Latência alta","Com perda de pacotes","Com latência e perda de pacotes");
-            assertThat(cards(path,"normal")).singleElement().satisfies(c->assertThat(c.color()).isEqualTo("green"));
-            assertThat(cards(path,"yellow")).singleElement().satisfies(c->assertThat(c.state()).isEqualTo("Latência alta"));
-            assertThat(cards(path,"high-latency")).hasSize(2);
-            assertThat(cards(path,"packet-loss")).hasSize(2).allSatisfy(c->assertThat(c.color()).isEqualTo("red"));
-            assertThat(cards(path,"latency-and-loss")).singleElement().satisfies(c->assertThat(c.state()).isEqualTo("Com latência e perda de pacotes"));
-        }
-        mvc.perform(get("/hosts").header("HX-Request","true").param("groupId",both.id()+"-group").param("q","both").param("pingStatus","packet-loss"))
-            .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Com latência e perda de pacotes")));
+    @Test void noLossDuringAFullHour() {
+        var result=analyze(3600,Set.of());
+        assertThat(result.minute()).isEqualTo(Quality.NORMAL);assertThat(result.hour()).isEqualTo(Quality.NORMAL);
+        assertThat(result.level()).isEqualTo(Level.NORMAL);assertThat(result.stats().attemptsLastHour()).isEqualTo(3600);
     }
-
-    @Test void lossWindowHasExactBoundaryExcludesOtherTargetsAndLocalExecutionErrors() {
-        var host=host("loss-boundary","10.9.2.1");
-        long now=System.currentTimeMillis();
-        sample(host,now-3600000,null,"Tempo esgotado");
-        sample(host,now-3600001,null,"Sem resposta ICMP");
-        sample(host,now-1000,12d,null);
-        sample(host,now-500,null,"Falha ao executar ping");
-        sample(host,now-400,null,"Interrompido");
-        sample(host,now+10000,null,"Tempo esgotado");
-        sample(new Host(host.id(),host.name(),"10.9.2.99",host.groups()),now,null,"Tempo esgotado");
-        var stats=store.stats(List.of(host),now).get(host.id());
-        assertThat(stats.lossesLastHour()).isEqualTo(1);
-        assertThat(stats.attemptsLastHour()).isEqualTo(2);
-        assertThat(stats.hour()).isEqualTo(12d);
-        stats=store.stats(List.of(host),now+1).get(host.id());
-        assertThat(stats.lossesLastHour()).isZero();
-        assertThat(stats.attemptsLastHour()).isEqualTo(1);
+    @Test void oneLossInMinuteOrHourIsNotOperationalDegradation() {
+        var recent=analyze(3600,Set.of(3590));
+        assertThat(recent.minute()).isEqualTo(Quality.EVENTO_ISOLADO);assertThat(recent.hour()).isEqualTo(Quality.NORMAL);
+        assertThat(recent.level()).isEqualTo(Level.NORMAL);assertThat(recent.recentIssue()).isFalse();
+        var old=analyze(3600,Set.of(600));
+        assertThat(old.minute()).isEqualTo(Quality.NORMAL);assertThat(old.hour()).isEqualTo(Quality.NORMAL);
+        assertThat(old.stats().lossesLastHour()).isEqualTo(1);assertThat(old.stats().lossesLastMinute()).isZero();
     }
-
-    @Test void groupLossUsesPacketTotalsAndExcludesInvalidIpHosts() throws Exception {
-        var a=host("loss-weight-a","10.9.3.1");
-        var b=new Host("loss-weight-b","B","10.9.3.2",a.groups());
-        var invalid=new Host("loss-weight-invalid","Sem IP","",a.groups());
-        long now=System.currentTimeMillis();
-        sample(a,now-1000,null,"Tempo esgotado");sample(a,now,10d,null);
-        for(int i=0;i<8;i++) sample(b,now-120000-i,10d,null);
-        for(int i=0;i<10;i++) sample(invalid,now-i,null,"Tempo esgotado");
-        when(monitor.hosts()).thenReturn(List.of(a,b,invalid));
-        var group=cards("/grupos","all").getFirst();
-        assertThat(group.lossAttempts()).isEqualTo(10);
-        assertThat(group.lostPackets()).isEqualTo(1);
-        assertThat(group.lossPercentage()).isEqualTo("10,00%");
-        assertThat(group.minuteLossAttempts()).isEqualTo(2);
-        assertThat(group.minuteLostPackets()).isEqualTo(1);
-        assertThat(group.minuteLossPercentage()).isEqualTo("50,00%");
-        assertThat(group.color()).isEqualTo("red");
-        assertThat(cards("/hosts","gray")).singleElement().satisfies(c->{
-            assertThat(c.lostPackets()).isZero();assertThat(c.lossAttempts()).isZero();assertThat(c.lossPercentage()).isEqualTo("—");
-            assertThat(c.minuteLostPackets()).isZero();assertThat(c.minuteLossAttempts()).isZero();assertThat(c.minuteLossPercentage()).isEqualTo("—");
-        });
+    @Test void twoLossesOnlyClassifyAttention() {
+        var result=analyze(3600,Set.of(3570,3590));
+        assertThat(result.minute()).isEqualTo(Quality.ATENCAO);assertThat(result.hour()).isEqualTo(Quality.ATENCAO);
+        assertThat(result.level()).isEqualTo(Level.NORMAL);
     }
-
-    @Test void minuteWindowHasIndependentBoundaryAndIgnoresLocalFailures() {
-        var host=host("loss-minute-boundary","10.9.5.1");
-        long now=System.currentTimeMillis();
-        sample(host,now-60000,null,"Tempo esgotado");
-        sample(host,now-60001,null,"Sem resposta ICMP");
-        sample(host,now-1000,12d,null);
-        sample(host,now-500,null,"Falha ao executar ping");
-        sample(host,now-400,null,"Interrompido");
-        sample(host,now+10000,null,"Tempo esgotado");
-        sample(new Host(host.id(),host.name(),"10.9.5.99",host.groups()),now,null,"Tempo esgotado");
-        var stats=store.stats(List.of(host),now).get(host.id());
-        assertThat(stats.attemptsLastHour()).isEqualTo(3);
-        assertThat(stats.lossesLastHour()).isEqualTo(2);
-        assertThat(stats.attemptsLastMinute()).isEqualTo(2);
-        assertThat(stats.lossesLastMinute()).isEqualTo(1);
-        stats=store.stats(List.of(host),now+1).get(host.id());
-        assertThat(stats.lossesLastHour()).isEqualTo(2);
-        assertThat(stats.attemptsLastMinute()).isEqualTo(1);
-        assertThat(stats.lossesLastMinute()).isZero();
+    @Test void threeConsecutiveLossesAreImmediatelyCriticalEvenWithoutCoverage() {
+        var result=analyze(3,Set.of(1,2,3));
+        assertThat(result.minute()).isEqualTo(Quality.DADOS_INSUFICIENTES);
+        assertThat(result.consecutive()).isEqualTo(3);assertThat(result.maxMinuteSequence()).isEqualTo(3);
+        assertThat(result.level()).isEqualTo(Level.CRITICO);
     }
-
-    @Test void noMinuteSamplesShowDashWithoutClearingHourlyLoss() throws Exception {
-        var host=host("loss-minute-empty","10.9.6.1");
-        long now=System.currentTimeMillis();
-        sample(host,now-120000,null,"Tempo esgotado");
-        sample(host,now-119000,10d,null);
-        when(monitor.hosts()).thenReturn(List.of(host));
-        for(String path:List.of("/hosts","/grupos")) {
-            var card=cards(path,"all").getFirst();
-            assertThat(card.lossPercentage()).isEqualTo("50,00%");
-            assertThat(card.minuteLossPercentage()).isEqualTo("—");
-            assertThat(card.color()).isEqualTo("red");
-            assertThat(card.state()).isEqualTo("Com perda de pacotes");
-        }
+    @Test void sixDistributedLossesInOneMinuteAreCritical() {
+        var result=analyze(3600,Set.of(3545,3555,3565,3575,3585,3595));
+        assertThat(result.minute()).isEqualTo(Quality.CRITICO);assertThat(result.level()).isEqualTo(Level.CRITICO);
+        assertThat(result.maxMinuteSequence()).isEqualTo(1);
     }
-
-    @Test void totalLossAndCollectorFailuresRemainDistinct() throws Exception {
-        var lost=host("loss-total","10.9.4.1");
-        var failed=host("loss-collector","10.9.4.2");
-        long now=System.currentTimeMillis();
-        sample(lost,now,null,"Tempo esgotado");
-        sample(failed,now,null,"Falha ao executar ping");
-        when(monitor.hosts()).thenReturn(List.of(lost,failed));
-        var losses=cards("/hosts","packet-loss");
-        assertThat(losses).singleElement().satisfies(c->{
-            assertThat(c.id()).isEqualTo(lost.id());
-            assertThat(c.lossPercentage()).isEqualTo("100,00%");
-            assertThat(c.state()).isEqualTo("Com perda de pacotes");
-            assertThat(c.hour()).isNull();assertThat(c.current()).isNull();
-        });
-        assertThat(cards("/hosts","red")).filteredOn(c->c.id().equals(failed.id())).singleElement().satisfies(c->{
-            assertThat(c.state()).isEqualTo("Falha na coleta");
-            assertThat(c.lossAttempts()).isZero();
-            assertThat(c.lossPercentage()).isEqualTo("—");
-        });
+    @Test void recurrenceUsesTwoOfThreeClosedMinutesAndRecoversWithoutErasingHistory() {
+        Set<Integer> losses=Set.of(3440,3460,3500,3520);
+        var history=history(3821,losses,Set.of(),Set.of());
+        var active=analyzer.analyze(history,BASE+3600000);
+        assertThat(active.minute()).isEqualTo(Quality.NORMAL);assertThat(active.recurring()).isTrue();
+        assertThat(active.level()).isEqualTo(Level.DEGRADADO);
+        var recovered=analyzer.analyze(history,BASE+3821000);
+        assertThat(recovered.level()).isEqualTo(Level.NORMAL);assertThat(recovered.recoveryConfirmed()).isTrue();
+        assertThat(recovered.hour()).isEqualTo(Quality.DEGRADADO);assertThat(recovered.stats().lossesLastHour()).isEqualTo(4);
+    }
+    @Test void recurrenceNeverCountsTheCurrentIncompleteClockMinute() {
+        var history=history(3600,Set.of(3500,3520,3550,3560),Set.of(),Set.of());
+        assertThat(analyzer.analyze(history,BASE+3570000).recurring()).isFalse();
+        assertThat(analyzer.analyze(history,BASE+3570000).level()).isEqualTo(Level.NORMAL);
+        assertThat(analyzer.analyze(history,BASE+3600000).recurring()).isTrue();
+    }
+    @Test void anInternalFailureBreaksTheConfirmedLossSequence() {
+        var result=analyzer.analyze(history(5,Set.of(1,3,4),Set.of(2),Set.of()),BASE+5000);
+        assertThat(result.maxHourSequence()).isEqualTo(2);assertThat(result.stats().lossesLastHour()).isEqualTo(3);
+        assertThat(result.stats().attemptsLastHour()).isEqualTo(4);assertThat(result.level()).isEqualTo(Level.NORMAL);
+    }
+    @Test void criticalColorRecoversOnlyAfterFiveContinuousMinutes() {
+        var history=history(603,Set.of(300,301,302),Set.of(),Set.of());
+        assertThat(analyzer.analyze(history,BASE+602000).level()).isEqualTo(Level.CRITICO);
+        var recovered=analyzer.analyze(history,BASE+603000);
+        assertThat(recovered.level()).isEqualTo(Level.NORMAL);assertThat(recovered.maxHourSequence()).isEqualTo(3);
+        assertThat(recovered.stats().lossesLastHour()).isEqualTo(3);
+    }
+    @Test void internalErrorsAndCollectionGapsDoNotCountAsLossOrRecovery() {
+        var errors=analyzer.analyze(history(603,Set.of(300,301,302),Set.of(500),Set.of()),BASE+603000);
+        assertThat(errors.stats().lossesLastHour()).isEqualTo(3);assertThat(errors.stats().attemptsLastHour()).isEqualTo(602);
+        assertThat(errors.level()).isEqualTo(Level.CRITICO);assertThat(errors.recoveryConfirmed()).isFalse();
+        Set<Integer> gaps=new HashSet<>();for(int i=400;i<=550;i++)gaps.add(i);
+        var interrupted=analyzer.analyze(history(603,Set.of(300,301,302),Set.of(),gaps),BASE+603000);
+        assertThat(interrupted.level()).isEqualTo(Level.CRITICO);assertThat(interrupted.recoveryConfirmed()).isFalse();
+    }
+    @Test void totalUnavailabilityOrNoMoreSamplesCannotBecomeRecovered() {
+        var history=history(3,Set.of(1,2,3),Set.of(),Set.of());
+        var result=analyzer.analyze(history,BASE+3600000);
+        assertThat(result.fresh()).isFalse();assertThat(result.recoveryConfirmed()).isFalse();
+        assertThat(result.level()).isEqualTo(Level.CRITICO);assertThat(result.minute()).isEqualTo(Quality.DADOS_INSUFICIENTES);
+    }
+    @Test void incompleteDataIsExplicitAndAbsentPacketsAreNotInvented() {
+        var result=analyzer.analyze(history(12,Set.of(10),Set.of(),Set.of()),BASE+60000);
+        assertThat(result.minute()).isEqualTo(Quality.DADOS_INSUFICIENTES);
+        assertThat(result.stats().attemptsLastMinute()).isEqualTo(12);assertThat(result.stats().lossesLastMinute()).isEqualTo(1);
+        var empty=analyzer.analyze(new RollingPingHistory(),BASE);
+        assertThat(empty.minute()).isEqualTo(Quality.DADOS_INSUFICIENTES);assertThat(empty.stats().attemptsLastMinute()).isZero();
+    }
+    @Test void cadenceChangesScaleMinuteThresholdsToRealPacketCounts() {
+        var history=new RollingPingHistory();
+        for(int i=1;i<=12;i++)history.add(new PingSample(i,"host","10.0.0.1",BASE+i*5000L,i==11?null:10d,i==11?"Tempo esgotado":null));
+        var result=new PacketLossAnalyzer(rules,5000,2000).analyze(history,BASE+60000);
+        assertThat(result.minute()).isEqualTo(Quality.DEGRADADO);assertThat(result.stats().attemptsLastMinute()).isEqualTo(12);
+        assertThat(result.level()).isEqualTo(Level.NORMAL);
+    }
+    @Test void slidingWindowsExpireOldSamplesAndHandleDuplicatesLateAndFutureResults() {
+        var history=new RollingPingHistory();
+        var old=new PingSample(1,"host","10.0.0.1",BASE+1000,null,"Tempo esgotado");
+        history.add(new PingSample(2,"host","10.0.0.1",BASE+2000,10d,null));
+        assertThat(history.add(old)).isTrue();assertThat(history.add(old)).isFalse();
+        history.add(new PingSample(3,"host","10.0.0.1",BASE+99999999,null,"Tempo esgotado"));
+        var before=analyzer.analyze(history,BASE+3600000);
+        assertThat(before.stats().attemptsLastHour()).isEqualTo(2);assertThat(before.stats().lossesLastHour()).isEqualTo(1);
+        var after=analyzer.analyze(history,BASE+3601000);
+        assertThat(after.stats().lossesLastHour()).isZero();assertThat(after.stats().attemptsLastHour()).isEqualTo(1);
+    }
+    @Test void restartReconstructionProducesTheSameClassificationAndRecovery() {
+        var original=history(603,Set.of(300,301,302),Set.of(),Set.of());
+        var restored=history(603,Set.of(300,301,302),Set.of(),Set.of());
+        assertThat(analyzer.analyze(restored,BASE+602000)).isEqualTo(analyzer.analyze(original,BASE+602000));
+        assertThat(analyzer.analyze(restored,BASE+603000).recoveryConfirmed()).isTrue();
     }
 }

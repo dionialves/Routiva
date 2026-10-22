@@ -4,7 +4,7 @@ spring:
     username: ${POSTGRES_USER:scriptping}
     password: ${POSTGRES_PASSWORD:}
   sql.init.mode: always
-  task.scheduling.pool.size: 2
+  task.scheduling.pool.size: 3
   threads.virtual.enabled: true
 server:
   address: ${SERVER_ADDRESS:127.0.0.1}
@@ -15,6 +15,6 @@ zabbix:
   password: ${ZABBIX_PASSWORD:}
   sync-ms: ${ZABBIX_SYNC_MS:60000}
 monitor:
-  interval-ms: ${PING_INTERVAL_MS:5000}
+  interval-ms: ${PING_INTERVAL_MS:1000}
   timeout-ms: ${PING_TIMEOUT_MS:2000}
   concurrency: ${PING_CONCURRENCY:64}
