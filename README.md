@@ -150,7 +150,7 @@ A coleta passa a usar **1 ping por segundo por host** como padrão (`PING_INTERV
 
 O comando `ping` precisa estar instalado/autorizado e os destinos precisam ser alcançáveis pela máquina/contêiner da aplicação. Respostas válidas são gravadas imediatamente. Perdas são confirmadas somente após o timeout; erros de execução, falhas de interpretação e interrupções do coletor ficam separados dos timeouts e não entram no denominador de perda.
 
-Os dados originais continuam no PostgreSQL. **Regra provisória:** retenção configurável, com padrão de 48 horas e limpeza ao iniciar e depois a cada 600 segundos. Registros mais antigos são removidos na próxima execução. Não há alteração no esquema do banco nem novas dependências.
+Os dados originais continuam no PostgreSQL. **Regra provisória:** retenção configurável até o máximo de 48 horas (valores superiores são limitados a 48 horas) e limpeza ao iniciar e depois a cada 600 segundos. Registros mais antigos são removidos na próxima execução. Não há alteração no esquema do banco nem novas dependências.
 
 As tabelas, colunas, filtros, ordenação e controles de atualização foram preservados. O cabeçalho permite atualizar agora ou escolher 5, 10, 15 ou 60 segundos, com preferência salva no navegador. Esse intervalo atualiza a tela; ele não muda o intervalo dos pings.
 
@@ -258,7 +258,7 @@ O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem 
 | PING_INTERVAL_MS | 1000 | Intervalo de disparo das coletas |
 | PING_TIMEOUT_MS | 2000 | Limite de espera por resposta |
 | PING_CONCURRENCY | 64 | Máximo de pings simultâneos |
-| PING_RETENTION_HOURS | 48 | Retenção provisória em horas |
+| PING_RETENTION_HOURS | 48 | Retenção em horas, limitada a no máximo 48 |
 | PING_CLEANUP_INTERVAL_SECONDS | 600 | Intervalo provisório de limpeza em segundos |
 | SERVER_ADDRESS | 127.0.0.1 | Interface de escuta da aplicação |
 | PORT | 8080 | Porta web no modo Java local |

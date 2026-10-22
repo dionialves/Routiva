@@ -34,6 +34,15 @@ class SampleStoreRetentionTests {
         assertThat(jdbc.queryForList("SELECT host_id FROM ping_sample WHERE host_id LIKE 'custom-%' ORDER BY host_id",String.class))
             .containsExactly("custom-recent");
     }
+    @Test void retentionNeverExceeds48HoursEvenWithHigherConfiguration() {
+        long now=System.currentTimeMillis();
+        insert("over-limit",now-Duration.ofHours(49).toMillis(),10d,null);
+        insert("within-limit",now-Duration.ofHours(47).toMillis(),10d,null);
+        new SampleStore(jdbc,168,600).cleanup();
+        assertThat(jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id",String.class))
+            .containsExactly("within-limit");
+    }
+
     @Test void rejectsNonPositiveRetentionOrCleanupInterval() {
         org.assertj.core.api.Assertions.assertThatThrownBy(()->new SampleStore(jdbc,0,600)).isInstanceOf(IllegalArgumentException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(()->new SampleStore(jdbc,48,0)).isInstanceOf(IllegalArgumentException.class);

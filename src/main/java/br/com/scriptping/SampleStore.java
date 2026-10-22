@@ -7,7 +7,7 @@ import java.util.*;
 @Repository
 @org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization
 public class SampleStore {
- // PROVISÓRIO: retenção configurável até a implementação da política definitiva.
+ // A retenção configurada nunca pode ultrapassar 48 horas.
  private final Duration retention;
  private final double latencyLimit;
  private final JdbcTemplate jdbc;
@@ -22,7 +22,7 @@ public class SampleStore {
   this.latencyLimit=latencyLimit;
   if(cleanupSeconds<1) throw new IllegalArgumentException("monitor.cleanup-interval-seconds deve ser positivo.");
   if(retentionHours<1) throw new IllegalArgumentException("monitor.retention-hours deve ser positivo.");
-  this.jdbc=jdbc;this.retention=Duration.ofHours(retentionHours);this.publisher=publisher;
+  this.jdbc=jdbc;this.retention=Duration.ofHours(Math.min(retentionHours,48));this.publisher=publisher;
  }
  public PingSample save(Host host,PingProbe.Result result){
   long now=System.currentTimeMillis();
