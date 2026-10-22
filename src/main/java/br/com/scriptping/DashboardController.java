@@ -161,18 +161,18 @@ public class DashboardController {
    boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
    Double hour=valid?s.hour():null, minute=valid?s.minute():null, current=valid && !stale?s.current():null;
    var display=presentation(List.of(quality),hour,minute,current);
-   String state=valid?display.state():"Sem IP válido";
-   String diagnostic=!valid?null:quality.diagnostic()+(stale?" · Coleta atrasada":s.error()!=null?" · "+s.error():"");
+   String state=host.acknowledgedIcmpProblem()?"Incidente ICMP reconhecido no Zabbix":valid?display.state():"Sem IP válido";
+   String diagnostic=host.acknowledgedIcmpProblem()?"Excluído das estatísticas do grupo":!valid?null:quality.diagnostic()+(stale?" · Coleta atrasada":s.error()!=null?" · "+s.error():"");
    if(Objects.equals(diagnostic,state)) diagnostic=null;
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
    cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),valid?host.ip():"—",String.join(", ",host.groups().stream().map(Host.Group::name).toList()),0,detail,
-       hour,minute,current,valid?display.color():"gray",state,valid?s.measuredAt():null,
-       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,valid?lossPolicy.visiblePercentage(s.lossesLastHour(),s.attemptsLastHour()):null,valid?lossPolicy.visiblePercentage(s.lossesLastMinute(),s.attemptsLastMinute()):null,valid && display.lossIssue(),diagnostic));
+       hour,minute,current,valid && !host.acknowledgedIcmpProblem()?display.color():"gray",state,valid?s.measuredAt():null,
+       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,valid?lossPolicy.visiblePercentage(s.lossesLastHour(),s.attemptsLastHour()):null,valid?lossPolicy.visiblePercentage(s.lossesLastMinute(),s.attemptsLastMinute()):null,valid && !host.acknowledgedIcmpProblem() && display.lossIssue(),diagnostic));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
     groupTotals.merge(g.id(),1,Integer::sum);
     var list=groupStats.computeIfAbsent(g.id(),k->new ArrayList<>());
-    if(valid) list.add(quality);
+    if(valid && !host.acknowledgedIcmpProblem()) list.add(quality);
    }
   }
   cards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
@@ -188,11 +188,13 @@ public class DashboardController {
    long minuteLost=list.stream().mapToLong(SampleStore.Stats::lossesLastMinute).sum();
    var display=presentation(qualities,hour,minute,current);
    String groupColor=list.isEmpty()?"gray":display.color();
-   String state=list.isEmpty()?"Sem hosts com IP válido":display.state();
+   String state=list.isEmpty()?"Sem hosts elegíveis para estatísticas":display.state();
    var worstMinute=qualities.stream().map(PacketLossAnalysis::minute).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
    var worstHour=qualities.stream().map(PacketLossAnalysis::hour).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
    String diagnostic=list.isEmpty()?null:"Pior membro · 1 min: "+worstMinute+" · 1 h: "+worstHour;
-   String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
+   long recognized=hosts.stream().filter(h->h.acknowledgedIcmpProblem() && IpAddress.isValid(h.ip()) && h.groups().stream().anyMatch(g->g.id().equals(entry.getKey()))).count();
+   long invalid=excluded-recognized;
+   String detail=total+" hosts"+(invalid>0?" · "+invalid+" sem IP válido":"")+(recognized>0?" · "+recognized+" com incidente reconhecido (excluídos)":"");
    groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,lossPolicy.visiblePercentage(lost,attempts),lossPolicy.visiblePercentage(minuteLost,minuteAttempts),display.lossIssue(),diagnostic));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));

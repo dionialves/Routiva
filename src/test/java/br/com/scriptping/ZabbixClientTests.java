@@ -29,7 +29,7 @@ class ZabbixClientTests {
             client.fetch();
             assertThat(api.logins.get()).isEqualTo(2);
             client.logout();
-            assertThat(api.methods).containsExactly("apiinfo.version", "user.login", "host.get", "host.get", "host.get", "user.login", "host.get", "user.logout");
+            assertThat(api.methods).containsExactly("apiinfo.version", "user.login", "host.get", "trigger.get", "host.get", "trigger.get", "host.get", "user.login", "host.get", "trigger.get", "user.logout");
             assertThat(api.violations).isEmpty();
         }
     }
@@ -56,12 +56,29 @@ class ZabbixClientTests {
         }
     }
 
+    @Test void importsAcknowledgedIcmpHostsAndClearsFlagOnNextSync() throws Exception {
+        try(var api=new FakeApi(false)) {
+            var client=new ZabbixClient(api.url(),"monitor","secret # $ value");
+            for(String name:List.of("High ICMP ping packet loss","ICMP ping response time is too high","Unavailable by ICMP ping","Latência alta","Perda de pacotes")) {
+                api.triggers="[{\"hosts\":[{\"hostid\":\"1\"}],\"lastEvent\":{\"acknowledged\":\"1\",\"name\":\""+name+"\"}}]";
+                assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).as(name).isTrue();
+            }
+            api.triggers="[{\"hosts\":[{\"hostid\":\"1\"}],\"lastEvent\":{\"acknowledged\":\"0\",\"name\":\"Unavailable by ICMP ping\"}}]";
+            assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).isFalse();
+            api.triggers="[{\"hosts\":[{\"hostid\":\"1\"}],\"lastEvent\":{\"acknowledged\":\"1\",\"name\":\"Disk space low\"}}]";
+            assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).isFalse();
+            api.triggers="[]";
+            assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).isFalse();
+        }
+    }
+
     private static class FakeApi implements AutoCloseable {
         final HttpServer server;
         final AtomicInteger logins = new AtomicInteger();
         final List<String> methods = new ArrayList<>();
         final List<String> violations = new ArrayList<>();
         volatile boolean expire;
+        String triggers="[]";
         final String version;
 
         FakeApi(boolean rejectLogin) throws Exception { this(rejectLogin, "7.0.0"); }
@@ -96,7 +113,8 @@ class ZabbixClientTests {
                     else if(expire) {
                         expire = false;
                         response = "{\"error\":{\"code\":-32602,\"data\":\"Session terminated, re-login, please.\"}}";
-                    } else response = legacy ? INVENTORY.replace("hostgroups", "groups") : INVENTORY;
+                    } else if(method.equals("trigger.get")) response="{\"result\":"+triggers+"}";
+                    else response = legacy ? INVENTORY.replace("hostgroups", "groups") : INVENTORY;
                 }
                 byte[] body = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");

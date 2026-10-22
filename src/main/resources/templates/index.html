@@ -40,7 +40,7 @@
       <option value="green" th:selected="${pingStatus == 'green'}">Verde · abaixo de 15 ms</option>
       <option value="yellow" th:selected="${pingStatus == 'yellow'}">Amarelo · 15 a 20 ms</option>
       <option value="red" th:selected="${pingStatus == 'red'}">Vermelho · latência, perdas ou indisponibilidade</option>
-      <option value="gray" th:selected="${pingStatus == 'gray'}" th:text="${groupPage} ? 'Cinza · sem hosts com IP válido' : 'Cinza · sem IP válido'"></option>
+      <option value="gray" th:selected="${pingStatus == 'gray'}" th:text="${groupPage} ? 'Cinza · sem hosts elegíveis' : 'Cinza · sem IP válido ou incidente reconhecido'"></option>
       <option value="neutral" th:selected="${pingStatus == 'neutral'}">Neutro · aguardando dados</option>
       <optgroup label="Situação">
         <option value="normal" th:selected="${pingStatus == 'normal'}">Normal</option>

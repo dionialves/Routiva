@@ -36,6 +36,32 @@ class TableSortingTests {
         return (List<DashboardController.Card>)result.getModelAndView().getModel().get("cards");
     }
 
+    @Test void acknowledgedHostStaysGrayAndDoesNotAffectGroupStatistics() throws Exception {
+        var group=new Host.Group("ack-group","114 - Linha Jureti 02");
+        var normal=new Host("ack-normal","Normal","10.9.0.1",List.of(group));
+        var excluded=new Host("ack-energy","114 - Monitoramento de Energia","10.9.0.2",List.of(group),true);
+        long now=System.currentTimeMillis();
+        sample(normal,now,2d,null);
+        sample(excluded,now,200d,null);
+        sample(excluded,now,null,"Sem resposta ICMP");
+        when(monitor.hosts()).thenReturn(List.of(normal,excluded));
+        var hostCards=sorted("/hosts","name","asc");
+        assertThat(hostCards).hasSize(2);
+        var gray=hostCards.stream().filter(c->c.id().equals(excluded.id())).findFirst().orElseThrow();
+        assertThat(gray.color()).isEqualTo("gray");
+        assertThat(gray.state()).contains("reconhecido");
+        var card=sorted("/grupos","name","asc").getFirst();
+        assertThat(card.hour()).isEqualTo(2d);
+        assertThat(card.lossAttempts()).isEqualTo(1);
+        assertThat(card.lostPackets()).isZero();
+        assertThat(card.members()).isEqualTo(2);
+        when(monitor.hosts()).thenReturn(List.of(excluded));
+        card=sorted("/grupos","name","asc").getFirst();
+        assertThat(card.color()).isEqualTo("gray");
+        assertThat(card.hour()).isNull();
+        assertThat(card.lossAttempts()).isZero();
+    }
+
     @Test void numericLatencySortingAndMissingValuesWorkInBothTablesAndDirections() throws Exception {
         var a=host("sort-ten","A dez","10.8.0.10");
         var b=host("sort-two","B dois","10.8.0.2");

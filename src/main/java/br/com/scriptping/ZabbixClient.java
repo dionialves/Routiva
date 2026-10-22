@@ -66,29 +66,58 @@ public class ZabbixClient {
   return data.contains("session terminated") || data.contains("not authorized") || data.contains("re-login");
  }
 
+ private JsonNode authenticatedRequest(String method,Object params) {
+  var root=request(method,params,session);
+  if(expired(root)) {
+   session=null;
+   login();
+   root=request(method,params,session);
+   if(expired(root)) session=null;
+  }
+  if(root.has("error") || !root.path("result").isArray())
+   throw new IllegalStateException("Resposta inválida da API Zabbix; verifique versão e permissões.");
+  return root.path("result");
+ }
+
+ static boolean isIcmpProblem(String name) {
+  String normalized=java.text.Normalizer.normalize(name,java.text.Normalizer.Form.NFD)
+      .replaceAll("\\p{M}","").toLowerCase(Locale.ROOT);
+  return normalized.contains("packet loss") || normalized.contains("perda de pacote")
+      || normalized.contains("perca de pacote") || normalized.contains("latency")
+      || normalized.contains("latencia") || normalized.contains("response time") && normalized.contains("icmp")
+      || normalized.contains("unavailable by icmp ping")
+      || normalized.contains("indisponivel") && normalized.contains("icmp");
+ }
+
  public synchronized List<Host> fetch() {
   detectVersion();
   if(session==null) login();
   var params=Map.of("output",List.of("hostid","host","name"),
       legacyGroups?"selectGroups":"selectHostGroups",List.of("groupid","name"),
       "selectInterfaces",List.of("ip","main","type"),"filter",Map.of("status","0"));
-  JsonNode root=request("host.get",params,session);
-  if(expired(root)) {
-   session=null;
-   login();
-   root=request("host.get",params,session);
-   if(expired(root)) session=null;
+  JsonNode inventory=authenticatedRequest("host.get",params);
+  Set<String> acknowledgedHosts=new HashSet<>();
+  if(!inventory.isEmpty()) {
+   List<String> hostIds=new ArrayList<>();
+   inventory.forEach(h->hostIds.add(h.path("hostid").asText()));
+   var triggers=authenticatedRequest("trigger.get",Map.of("output",List.of("triggerid","description"),
+       "hostids",hostIds,"filter",Map.of("value","1"),"monitored",true,
+       "selectHosts",List.of("hostid"),"selectLastEvent",List.of("acknowledged","name")));
+   for(var trigger:triggers) {
+    var event=trigger.path("lastEvent");
+    if(event.path("acknowledged").asText().equals("1")
+        && isIcmpProblem(event.path("name").asText(trigger.path("description").asText())))
+     trigger.path("hosts").forEach(h->acknowledgedHosts.add(h.path("hostid").asText()));
+   }
   }
-  if(root.has("error") || !root.path("result").isArray())
-   throw new IllegalStateException("Resposta inválida da API Zabbix; verifique versão e permissões.");
   List<Host> hosts=new ArrayList<>();
-  for(JsonNode h:root.path("result")) {
+  for(JsonNode h:inventory) {
    List<JsonNode> interfaces=new ArrayList<>(); h.path("interfaces").forEach(interfaces::add);
    interfaces.sort(Comparator.comparingInt(i -> (i.path("main").asText().equals("1")?0:2)+(i.path("type").asText().equals("1")?0:1)));
    String ip=interfaces.stream().map(i->i.path("ip").asText()).filter(s->!s.isBlank()).findFirst().orElse("");
    List<Host.Group> groups=new ArrayList<>(); for(JsonNode g:h.path(legacyGroups?"groups":"hostgroups")) groups.add(new Host.Group(g.path("groupid").asText(),g.path("name").asText()));
    if(groups.isEmpty()) groups.add(new Host.Group("ungrouped","Sem grupo"));
-   hosts.add(new Host(h.path("hostid").asText(),h.path("name").asText(h.path("host").asText()),ip,List.copyOf(groups)));
+   hosts.add(new Host(h.path("hostid").asText(),h.path("name").asText(h.path("host").asText()),ip,List.copyOf(groups),acknowledgedHosts.contains(h.path("hostid").asText())));
   } return List.copyOf(hosts);
  }
 
