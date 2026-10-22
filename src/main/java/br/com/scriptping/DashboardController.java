@@ -137,7 +137,7 @@ public class DashboardController {
   };
  }
  private record Presentation(String color,String state,boolean lossIssue) {}
- private static Presentation presentation(List<PacketLossAnalysis> results,Double hour,Double minute,Double current) {
+ private Presentation presentation(List<PacketLossAnalysis> results,Double hour,Double minute,Double current) {
   String color=color(hour,minute,current,false);
   boolean high=highLatency(hour,minute,current);
   var level=results.stream().map(PacketLossAnalysis::level).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Level.NORMAL);
@@ -158,6 +158,23 @@ public class DashboardController {
    state=historical==PacketLossAnalysis.Quality.CRITICO?"Normal · histórico crítico":historical==PacketLossAnalysis.Quality.DEGRADADO?"Normal · histórico degradado":historical==PacketLossAnalysis.Quality.ATENCAO?"Normal · histórico com atenção":"Normal";
   }
   if(high && issue)state+=" · latência alta";
+  var windowQuality=results.stream().map(r->{
+   var s=r.stats();
+   return java.util.stream.Stream.of(
+       lossPolicy.windowQuality(s.lossesEightHours(),s.attemptsEightHours()),
+       lossPolicy.windowQuality(s.lossesLastHour(),s.attemptsLastHour()),
+       lossPolicy.windowQuality(s.lossesFiveMinutes(),s.attemptsFiveMinutes()))
+       .max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
+  }).max(Comparator.naturalOrder()).orElse(PacketLossAnalysis.Quality.DADOS_INSUFICIENTES);
+  if(windowQuality==PacketLossAnalysis.Quality.CRITICO){
+   color="red";state="Crítico: perda de pacotes";issue=true;
+  } else if(windowQuality==PacketLossAnalysis.Quality.DEGRADADO || windowQuality==PacketLossAnalysis.Quality.ATENCAO){
+   if(!color.equals("red")) {
+    color="yellow";
+    state=windowQuality==PacketLossAnalysis.Quality.DEGRADADO?"Perda de pacotes: degradado":"Atenção: perda de pacotes";
+   }
+   issue=true;
+  }
   return new Presentation(color,state,issue);
  }
  private void populate(Model model) {

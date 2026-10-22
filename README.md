@@ -172,7 +172,7 @@ As janelas são móveis, com intervalo `(agora - duração, agora]`; os contador
 
 Para frequências diferentes, a quantidade equivalente é proporcional aos pings reais: `perdas × 60 / tentativas`. Por exemplo, em coleta de 5 segundos, 1 perda em 12 tentativas equivale a 5 em 60 e classifica como DEGRADADO. A classificação exige cobertura temporal mínima de 80% e pelo menos duas amostras elegíveis; sem isso retorna DADOS_INSUFICIENTES. Intervalos longos sem coleta não contam como tempo coberto. O timeout participa da margem de lacuna permitida, para não confundir uma resposta aguardando confirmação com ausência do coletor.
 
-### Qualidade histórica — 1 hora
+### Qualidade por janela — 8 horas, 1 hora e 5 minutos
 
 | Percentual real | Classificação |
 | --- | --- |
@@ -181,13 +181,13 @@ Para frequências diferentes, a quantidade equivalente é proporcional aos pings
 | De 0,1% até abaixo de 0,5% | DEGRADADO |
 | 0,5% ou mais | CRITICO |
 
-Uma classificação horária degradada/crítica **não mantém a linha como falha ativa** quando a situação recente já se recuperou. O status pode apresentar “Normal · histórico degradado”; o detalhe mostra as classificações independentes do minuto e da hora.
+A linha e o status seguem a maior gravidade entre as janelas de 8 horas, 1 hora e 5 minutos, usando os limites percentuais acima. A recuperação recente não remove o amarelo/vermelho enquanto qualquer janela permanecer acima do permitido. Grupos seguem o pior membro elegível, mantendo os percentuais agregados.
 
 ### Cores e situação atual
 
-- **Verde:** normal ou evento isolado, com latência normal. Uma perda isolada não caracteriza degradação operacional.
-- **Amarelo:** atenção/degradação recente, degradação recorrente, falha/interrupção de coleta ou latência entre 15 e 20 ms.
-- **Vermelho:** três perdas consecutivas confirmadas, seis perdas equivalentes em um minuto com dados suficientes, ou quantidade crítica confirmada proporcional à cadência configurada. Latência acima de 20 ms também continua vermelha.
+- **Verde:** perda dentro do limite nas três janelas, sem alerta operacional e com latência normal.
+- **Amarelo:** atenção/degradação em qualquer uma das três janelas, perda recente, degradação recorrente, falha/interrupção de coleta ou latência entre 15 e 20 ms.
+- **Vermelho:** perda crítica em qualquer uma das três janelas, três perdas consecutivas confirmadas, seis perdas equivalentes em um minuto com dados suficientes, ou quantidade crítica confirmada proporcional à cadência configurada. Latência acima de 20 ms também continua vermelha.
 - **Neutro:** dados insuficientes para avaliar o período recente.
 - **Cinza:** host sem IP válido; não participa da qualidade nem das médias dos grupos.
 

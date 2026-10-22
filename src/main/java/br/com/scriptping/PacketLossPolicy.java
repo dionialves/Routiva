@@ -65,6 +65,13 @@ public class PacketLossPolicy {
     public long getCacheMillis() {return cacheMillis;}
     public void setCacheMillis(long value) {this.cacheMillis=value;}
     public Double visiblePercentage(long losses,long attempts) {return attempts==0?null:100.0*losses/attempts;}
+    public PacketLossAnalysis.Quality windowQuality(long losses,long attempts) {
+        if(attempts==0)return PacketLossAnalysis.Quality.DADOS_INSUFICIENTES;
+        double percentage=100.0*losses/attempts;
+        if(percentage>=hourCriticalMinPercent)return PacketLossAnalysis.Quality.CRITICO;
+        if(percentage>=hourDegradedMinPercent)return PacketLossAnalysis.Quality.DEGRADADO;
+        return percentage>hourNormalMaxPercent?PacketLossAnalysis.Quality.ATENCAO:PacketLossAnalysis.Quality.NORMAL;
+    }
     public void validate() {
         if (minuteWindowSeconds<1 || hourWindowSeconds<minuteWindowSeconds || recurrenceBucketSeconds<1 || recoverySeconds<1 || cacheMillis<1 || minimumSamples<1 || minuteReferencePackets<1 || consecutiveCritical<1 || recurrenceBuckets<1 || recurrenceBuckets>60 || recurrenceRequiredBuckets<1 || recurrenceRequiredBuckets>recurrenceBuckets)
             throw new IllegalArgumentException("Janelas e contagens de monitor.loss precisam ser positivas e coerentes.");

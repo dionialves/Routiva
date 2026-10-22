@@ -38,15 +38,32 @@ class PacketLossThresholdTests {
             attention.id(),result(2,2,Quality.ATENCAO,Quality.ATENCAO,Level.NORMAL),
             critical.id(),result(6,6,Quality.CRITICO,Quality.DEGRADADO,Level.CRITICO)));
         for(String page:List.of("/hosts","/grupos")) {
-            assertThat(cards(page,"green")).hasSize(2);
-            assertThat(cards(page,"green")).filteredOn(c->c.name().equals("isolated")).singleElement().satisfies(c->{
+            assertThat(cards(page,"green")).isEmpty();
+            assertThat(cards(page,"yellow")).filteredOn(c->c.name().equals("isolated")).singleElement().satisfies(c->{
                 assertThat(c.lossPercentage()).isEqualTo("0,03%");assertThat(c.minuteLossPercentage()).isEqualTo("0,03%");assertThat(c.fiveMinuteLossPercentage()).isEqualTo("0,33%");
-                assertThat(c.state()).isEqualTo("Evento isolado");assertThat(c.lossTitle()).isEqualTo("1 de 3600 pings");
+                assertThat(c.state()).isEqualTo("Perda de pacotes: degradado");assertThat(c.lossTitle()).isEqualTo("1 de 3600 pings");
             });
-            assertThat(cards(page,"normal")).singleElement().satisfies(c->{assertThat(c.state()).isEqualTo("Normal · histórico degradado");assertThat(c.lossPercentage()).isEqualTo("0,11%");});
-            assertThat(cards(page,"yellow")).singleElement().satisfies(c->assertThat(c.state()).isEqualTo("Atenção: perda de pacotes"));
-            assertThat(cards(page,"red")).singleElement().satisfies(c->assertThat(c.state()).isEqualTo("Crítico: perda de pacotes"));
-            assertThat(cards(page,"packet-loss")).hasSize(2);
+            assertThat(cards(page,"normal")).isEmpty();
+            assertThat(cards(page,"yellow")).hasSize(2);
+            assertThat(cards(page,"red")).hasSize(2);
+            assertThat(cards(page,"packet-loss")).hasSize(4);
+        }
+    }
+    @Test void eachDisplayedWindowKeepsRecoveredHostsAboveTheConfiguredLimit()throws Exception {
+        var h=host("window");
+        when(monitor.hosts()).thenReturn(List.of(h));
+        for(int window=0;window<3;window++) {
+            for(long losses:new long[]{0,1,2,10}) {
+                long eight=window==0?losses:0, hour=window==1?losses:0, five=window==2?losses:0;
+                var stats=new SampleStore.Stats(10d,10d,10d,System.currentTimeMillis(),null,2000,hour,2000,hour,60,0,10d,10d,10d,2000,eight,2000,hour,2000,five);
+                var recovered=new PacketLossAnalysis(stats,Quality.NORMAL,Quality.NORMAL,0,0,0,false,Level.NORMAL,true,true,true);
+                when(analysis.analyze(anyList(),anyLong())).thenReturn(Map.of(h.id(),recovered));
+                for(String page:List.of("/hosts","/grupos")) {
+                    var card=cards(page,"all").getFirst();
+                    assertThat(card.color()).as("window %s, losses %s",window,losses).isEqualTo(losses<=1?"green":losses<10?"yellow":"red");
+                    assertThat(card.lossIssue()).isEqualTo(losses>1);
+                }
+            }
         }
     }
     @Test void aGroupsSituationUsesItsWorstMemberWhilePercentagesRemainAggregated()throws Exception {
