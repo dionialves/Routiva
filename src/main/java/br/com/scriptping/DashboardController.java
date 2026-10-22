@@ -8,12 +8,19 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 @Controller
 public class DashboardController {
- private final MonitorService monitor;private final SampleStore store;private final long staleMs;
- public DashboardController(MonitorService monitor,SampleStore store,@Value("${monitor.interval-ms}") long interval,@Value("${monitor.timeout-ms}") long timeout){this.monitor=monitor;this.store=store;staleMs=Math.max(15000,interval*3+timeout);}
- public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,int members,String detail,Double hour,Double minute,Double current,String color,String state,Long updatedAt,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,String diagnostic) {
+ private final MonitorService monitor;private final SampleStore store;private final long staleMs;private final PacketLossPolicy lossPolicy;
+ public DashboardController(MonitorService monitor,SampleStore store,PacketLossPolicy lossPolicy,@Value("${monitor.interval-ms}") long interval,@Value("${monitor.timeout-ms}") long timeout){this.monitor=monitor;this.store=store;this.lossPolicy=lossPolicy;staleMs=Math.max(15000,interval*3+timeout);}
+ public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,int members,String detail,Double hour,Double minute,Double current,String color,String state,Long updatedAt,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,Double lossPercent,Double minuteLossPercent,String diagnostic) {
   public String updated(){return time(updatedAt);}
-  public String lossPercentage(){return lossAttempts==0?"—":format(100.0*lostPackets/lossAttempts)+"%";}
-  public String minuteLossPercentage(){return minuteLossAttempts==0?"—":format(100.0*minuteLostPackets/minuteLossAttempts)+"%";}
+  public String lossPercentage(){return lossPercent==null?"—":format(lossPercent)+"%";}
+  public String minuteLossPercentage(){return minuteLossPercent==null?"—":format(minuteLossPercent)+"%";}
+  public String lossTitle(){return lossTitle(lostPackets,lossAttempts,lossPercent);}
+  public String minuteLossTitle(){return lossTitle(minuteLostPackets,minuteLossAttempts,minuteLossPercent);}
+  private static String lossTitle(long lost,long attempts,Double percent){
+   if(attempts==0) return "Sem pings nesta janela";
+   if(lost>0 && percent!=null && percent==0) return "Dentro da tolerância de perda configurada";
+   return lost+" de "+attempts+" pings";
+  }
   public String format(Double value){return value==null?"—":String.format(Locale.forLanguageTag("pt-BR"),"%.2f",value);}
  }
  public static String color(Double hour,Double minute,Double current,boolean offline){
@@ -88,8 +95,8 @@ public class DashboardController {
    case "hour" -> by(Card::hour,descending);
    case "minute" -> by(Card::minute,descending);
    case "current" -> by(Card::current,descending);
-   case "lossHour" -> by(c->c.lossAttempts()==0?null:100.0*c.lostPackets()/c.lossAttempts(),descending);
-   case "lossMinute" -> by(c->c.minuteLossAttempts()==0?null:100.0*c.minuteLostPackets()/c.minuteLossAttempts(),descending);
+   case "lossHour" -> by(Card::lossPercent,descending);
+   case "lossMinute" -> by(Card::minuteLossPercent,descending);
    case "status" -> by(c->normalize(c.state()),descending);
    case "updated" -> by(Card::updatedAt,descending);
    default -> by(c->normalize(c.name()),descending);
@@ -111,8 +118,8 @@ public class DashboardController {
    case "all" -> true;
    case "normal" -> card.state().equals("Normal");
    case "high-latency" -> highLatency(card.hour(),card.minute(),card.current());
-   case "packet-loss" -> card.lostPackets()>0;
-   case "latency-and-loss" -> card.lostPackets()>0 && highLatency(card.hour(),card.minute(),card.current());
+   case "packet-loss" -> card.lossPercent()!=null && card.lossPercent()>0;
+   case "latency-and-loss" -> card.lossPercent()!=null && card.lossPercent()>0 && highLatency(card.hour(),card.minute(),card.current());
    default -> card.color().equals(selected);
   };
  }
@@ -138,7 +145,7 @@ public class DashboardController {
    boolean valid=IpAddress.isValid(host.ip());
    boolean stale=s.measuredAt()!=null && now-s.measuredAt()>staleMs;
    boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
-   boolean loss=valid && s.lossesLastHour()>0;
+   boolean loss=valid && lossPolicy.significant(s.lossesLastHour(),s.attemptsLastHour());
    Double hour=valid?s.hour():null, minute=valid?s.minute():null, current=valid && !stale?s.current():null;
    String state=valid?healthState(hour,minute,current,loss,offline,s.measuredAt()==null,stale):"Sem IP válido";
    String diagnostic=!valid?null:stale?"Coleta atrasada":s.error();
@@ -146,7 +153,7 @@ public class DashboardController {
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
    cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),valid?host.ip():"—",String.join(", ",host.groups().stream().map(Host.Group::name).toList()),0,detail,
        hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?s.measuredAt():null,
-       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,diagnostic));
+       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,valid?lossPolicy.visiblePercentage(s.lossesLastHour(),s.attemptsLastHour()):null,valid?lossPolicy.visiblePercentage(s.lossesLastMinute(),s.attemptsLastMinute()):null,diagnostic));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
     groupTotals.merge(g.id(),1,Integer::sum);
@@ -167,13 +174,14 @@ public class DashboardController {
    long minuteAttempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastMinute).sum();
    long minuteLost=list.stream().mapToLong(SampleStore.Stats::lossesLastMinute).sum();
    boolean pending=list.stream().anyMatch(s->s.measuredAt()==null);
-   String groupColor=color(hour,minute,current,offline || lost>0);
+   boolean loss=lossPolicy.significant(lost,attempts);
+   String groupColor=color(hour,minute,current,offline || loss);
    if(list.isEmpty()) groupColor="gray";
    else if(pending && !offline && groupColor.equals("green")) groupColor="neutral";
-   String state=list.isEmpty()?"Sem hosts com IP válido":healthState(hour,minute,current,lost>0,offline,pending,stale);
+   String state=list.isEmpty()?"Sem hosts com IP válido":healthState(hour,minute,current,loss,offline,pending,stale);
    String diagnostic=offline?"Há hosts sem resposta, com falha ou coleta atrasada":null;
    String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
-   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,diagnostic));
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,lossPolicy.visiblePercentage(lost,attempts),lossPolicy.visiblePercentage(minuteLost,minuteAttempts),diagnostic));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));

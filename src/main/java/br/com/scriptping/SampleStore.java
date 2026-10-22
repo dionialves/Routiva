@@ -6,10 +6,14 @@ import java.time.*;
 import java.util.*;
 @Repository
 public class SampleStore {
- // PROVISÓRIO: retenção fixa de 48 horas até a implementação da regra definitiva.
- private static final Duration RETENTION = Duration.ofHours(48);
+ // PROVISÓRIO: retenção configurável até a implementação da política definitiva.
+ private final Duration retention;
  private final JdbcTemplate jdbc;
- public SampleStore(JdbcTemplate jdbc){this.jdbc=jdbc;}
+ public SampleStore(JdbcTemplate jdbc,@org.springframework.beans.factory.annotation.Value("${monitor.retention-hours:48}") long retentionHours,@org.springframework.beans.factory.annotation.Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds){
+  if(cleanupSeconds<1) throw new IllegalArgumentException("monitor.cleanup-interval-seconds deve ser positivo.");
+  if(retentionHours<1) throw new IllegalArgumentException("monitor.retention-hours deve ser positivo.");
+  this.jdbc=jdbc;this.retention=Duration.ofHours(retentionHours);
+ }
  public void save(Host host,PingProbe.Result result){jdbc.update("INSERT INTO ping_sample(host_id,target,measured_at,latency,error) VALUES(?,?,?,?,?)",host.id(),host.ip(),System.currentTimeMillis(),result.latency(),result.error());}
  public record Stats(Double hour,Double minute,Double current,Long measuredAt,String error,long attempts,long failures,long attemptsLastHour,long lossesLastHour,long attemptsLastMinute,long lossesLastMinute) {}
  public Map<String,Stats> stats(List<Host> hosts,long now) {
@@ -31,7 +35,7 @@ public class SampleStore {
   } return result;
  }
  private Double number(Object value){return value==null?null:((Number)value).doubleValue();}
- // PROVISÓRIO: executa ao iniciar e a cada minuto; substituir pela futura política de retenção.
- @Scheduled(fixedDelay=60000)
- public void cleanup(){jdbc.update("DELETE FROM ping_sample WHERE measured_at < ?",System.currentTimeMillis()-RETENTION.toMillis());}
+ // PROVISÓRIO: executa ao iniciar e no intervalo configurado; substituir pela futura política de retenção.
+ @Scheduled(fixedDelayString="${monitor.cleanup-interval-seconds:600}",timeUnit=java.util.concurrent.TimeUnit.SECONDS)
+ public void cleanup(){jdbc.update("DELETE FROM ping_sample WHERE measured_at < ?",System.currentTimeMillis()-retention.toMillis());}
 }

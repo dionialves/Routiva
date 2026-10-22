@@ -148,13 +148,13 @@ Clique no cabeçalho de qualquer coluna para ordenar; clique novamente para inve
 
 Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua coleta anterior tenha terminado. Até 64 pings executam em paralelo, sem sobreposição por host. Inventários grandes podem aumentar o intervalo efetivo. Os hosts precisam ser alcançáveis pela máquina que executa a aplicação. O executor suporta Linux/macOS e Windows com saída de ping em inglês ou português; outros idiomas podem exigir ajuste do parser.
 
-Resultados, falhas e horários são persistidos no PostgreSQL. **Regra provisória:** o histórico é mantido por 48 horas, até a implementação da política definitiva de retenção. A limpeza automática remove resultados com mais de 48 horas ao iniciar a aplicação e depois a cada minuto (registros podem ultrapassar o limite até a próxima execução, normalmente em até um minuto). A regra vale para respostas e falhas de todos os hosts, incluindo os removidos do inventário. O limite está fixado no código; a antiga variável `PING_RETENTION_HOURS` não é mais utilizada, mesmo que ainda exista em um `.env` anterior. Após atualizar a aplicação, dados antigos serão removidos automaticamente. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
+Resultados, falhas e horários são persistidos no PostgreSQL. **Regra provisória:** a retenção é configurável e tem padrão de 48 horas, até a implementação da política definitiva. A limpeza roda ao iniciar e, depois de cada execução, aguarda o intervalo configurado (padrão: 600 segundos, ou 10 minutos). Registros acima do limite são removidos na próxima limpeza; podem permanecer além de 48 horas durante esse intervalo. A regra abrange respostas e falhas de todos os hosts, inclusive os removidos do inventário. `PING_RETENTION_HOURS` voltou a ser utilizado: revise valores antigos no `.env`, pois eles têm prioridade sobre o padrão 48. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
 
 HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. As páginas de hosts e grupos mostram os dados em tabelas. As duas visualizações incluem as médias de 60 minutos/1 minuto, ping atual, perdas e status.
 
 As janelas são móveis e usam apenas respostas válidas; falhas nunca contam como zero. Antes de completar uma hora, a média usa os dados disponíveis. Grupos exibem a média das médias por host em cada janela, com peso igual para cada host. O atual do grupo usa os últimos pings válidos e recentes. Hosts em vários grupos participam de todos eles.
 
-- Vermelho: qualquer métrica acima de 20 ms, perda de pacote nos últimos 60 minutos, ou host sem resposta/com coleta atrasada. Grupos ficam vermelhos se qualquer membro estiver nessa condição.
+- Vermelho: qualquer métrica acima de 20 ms, percentual de perda acima da tolerância nos últimos 60 minutos, ou host sem resposta/com coleta atrasada. Nos grupos, a tolerância de perda é aplicada ao percentual agregado; hosts sem resposta ou com coleta atrasada continuam sinalizados.
 - Amarelo: qualquer métrica entre 15 e 20 ms, inclusive, sem condição vermelha.
 - Verde: todas as três métricas abaixo de 15 ms.
 - Cinza: host sem IP válido (ausente, malformado ou endereço não especificado como `0.0.0.0`/`::`). Não participa das médias, da avaliação de falhas nem da espera por dados do grupo. Um grupo sem nenhum host com IP válido fica cinza. O filtro cinza é separado de “aguardando dados”.
@@ -164,20 +164,43 @@ Uma coleta é atrasada depois do maior valor entre 15 segundos e três intervalo
 
 ## Perda de pacotes e status dos cards
 
-A janela de perda é de **60 minutos móveis**. Qualquer ping perdido dentro dela mantém o card vermelho, mesmo que o ping atual já tenha voltado a responder. O card exibe dois percentuais, lado a lado: **Perda · última hora** e **Perda · último minuto**. Cada um usa apenas os pings da respectiva janela móvel. A contagem fica disponível ao passar o mouse sobre o percentual. Sem pings elegíveis na janela, aparece `—`, em vez de uma porcentagem zero. O alerta de perda desaparece quando a última perda sai da janela; a cor ainda depende da latência e da disponibilidade das coletas.
+A janela de perda é de **60 minutos móveis**. Um percentual de perda acima da tolerância configurada nessa janela mantém o indicador vermelho, mesmo que o ping atual já tenha voltado a responder. O card exibe dois percentuais, lado a lado: **Perda · última hora** e **Perda · último minuto**. Cada um usa apenas os pings da respectiva janela móvel. A contagem fica disponível ao passar o mouse sobre o percentual. Sem pings elegíveis na janela, aparece `—`, em vez de uma porcentagem zero. O alerta de perda desaparece quando a porcentagem da hora fica dentro da tolerância; a cor ainda depende da latência e da disponibilidade das coletas.
 
 O rodapé mostra:
 
 - **Normal**: três latências abaixo de 15 ms, sem perdas recentes, com coleta disponível e recente.
 - **Latência alta**: pelo menos uma das três latências a partir de 15 ms, sem perdas; amarelo de 15 a 20 ms, vermelho acima de 20 ms.
-- **Com perda de pacotes**: pelo menos uma perda nos últimos 60 minutos, sem latência alta; vermelho.
+- **Com perda de pacotes**: percentual acima da tolerância nos últimos 60 minutos, sem latência alta; vermelho.
 - **Com latência e perda de pacotes**: as duas condições ao mesmo tempo; vermelho.
 
 “Sem IP válido”, “Aguardando dados”, “Coleta atrasada” e “Falha na coleta” continuam diferenciados. Timeout e ausência de resposta ICMP contam como perdas. Erros locais ao executar o ping e coletas interrompidas não contam como pacotes perdidos nem entram no denominador da porcentagem. O detalhe da última falha continua visível abaixo do status quando necessário. As médias de latência continuam usando apenas respostas recebidas.
 
-Nos grupos, qualquer perda de um membro com IP válido deixa o card vermelho. Para cada janela (hora e minuto), a porcentagem do grupo é o total de pacotes perdidos dividido pelo total de pings válidos para essa contagem, somando todos os membros. A avaliação de latência usa as três médias exibidas no card do grupo. Hosts sem IP válido continuam excluídos de todas essas avaliações. Grupos sem membros válidos ficam cinza.
+Nos grupos, a tolerância é comparada ao percentual agregado dos membros com IP válido. Para cada janela (hora e minuto), a porcentagem do grupo é o total de pacotes perdidos dividido pelo total de pings válidos para essa contagem, somando todos os membros. A avaliação de latência usa as três médias exibidas no card do grupo. Hosts sem IP válido continuam excluídos de todas essas avaliações. Grupos sem membros válidos ficam cinza.
 
 Os filtros de situação permitem buscar Normal, Latência alta, Com perda de pacotes e Com latência e perda de pacotes. Os filtros de latência e perda também incluem os casos em que ambas ocorrem.
+
+## Regras editáveis no application.properties
+
+O arquivo `src/main/resources/application.properties` contém:
+
+```properties
+monitor.packet-loss-ignore-percent=${PING_PACKET_LOSS_IGNORE_PERCENT:1}
+# PROVISÓRIO: parâmetros até a implementação da política definitiva de retenção.
+monitor.retention-hours=${PING_RETENTION_HOURS:48}
+monitor.cleanup-interval-seconds=${PING_CLEANUP_INTERVAL_SECONDS:600}
+```
+
+Perdas **até 1%, inclusive**, são desconsideradas por padrão. Cada percentual de hora/minuto é avaliado separadamente e exibido como `0,00%` quando está dentro da tolerância. As perdas ignoradas não aparecem nos filtros/alertas de perda nem nos contadores dos tooltips; os registros originais continuam preservados no banco. A ordenação usa o percentual exibido. A cor e o status de perda continuam baseados na janela da última hora. A tolerância não oculta indisponibilidade atual, atraso de coleta ou latência alta.
+
+Você pode editar as propriedades e reconstruir a imagem ou sobrescrever os valores no `.env`:
+
+```dotenv
+PING_PACKET_LOSS_IGNORE_PERCENT=1
+PING_RETENTION_HOURS=48
+PING_CLEANUP_INTERVAL_SECONDS=600
+```
+
+Para aplicar alterações no `.env`, execute `docker compose up -d app`; se alterar o arquivo properties, use `docker compose up -d --build app`. A próxima inicialização já executa a limpeza com a retenção configurada. A tolerância precisa estar entre 0 e 100; retenção e intervalo devem ser positivos. O parâmetro do intervalo é em **segundos**, e o de retenção em **horas**.
 
 ## Configurações no `.env`
 
@@ -195,6 +218,9 @@ Os filtros de situação permitem buscar Normal, Latência alta, Com perda de pa
 | PING_INTERVAL_MS | 5000 | Intervalo de disparo das coletas |
 | PING_TIMEOUT_MS | 2000 | Limite de espera por resposta |
 | PING_CONCURRENCY | 64 | Máximo de pings simultâneos |
+| PING_PACKET_LOSS_IGNORE_PERCENT | 1 | Tolerância percentual inclusiva para perda |
+| PING_RETENTION_HOURS | 48 | Retenção provisória em horas |
+| PING_CLEANUP_INTERVAL_SECONDS | 600 | Intervalo provisório de limpeza em segundos |
 | SERVER_ADDRESS | 127.0.0.1 | Interface de escuta da aplicação |
 | PORT | 8080 | Porta web no modo Java local |
 | APP_BIND_ADDRESS | 0.0.0.0 | Interface publicada pelo Docker; use 127.0.0.1 com Nginx local |

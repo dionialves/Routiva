@@ -34,13 +34,13 @@
 <td class="group-members" th:if="${groupPage}" th:text="${host.detail}"></td>
 <td class="host-ip" th:if="${!groupPage}" th:text="${host.ip}"></td><td class="host-groups" th:if="${!groupPage}" th:text="${host.groupNames}"></td>
 <td class="metric" th:text="${host.format(host.hour)}"></td><td class="metric" th:text="${host.format(host.minute)}"></td><td class="metric" th:text="${host.format(host.current)}"></td>
-<td class="metric" th:text="${host.lossPercentage()}" th:title="${host.lossAttempts > 0} ? ${host.lostPackets} + ' de ' + ${host.lossAttempts} + ' pings' : 'Sem pings nesta janela'"></td>
-<td class="metric" th:text="${host.minuteLossPercentage()}" th:title="${host.minuteLossAttempts > 0} ? ${host.minuteLostPackets} + ' de ' + ${host.minuteLossAttempts} + ' pings' : 'Sem pings nesta janela'"></td>
+<td class="metric" th:text="${host.lossPercentage()}" th:title="${host.lossTitle()}"></td>
+<td class="metric" th:text="${host.minuteLossPercentage()}" th:title="${host.minuteLossTitle()}"></td>
 <td class="host-state"><span class="status-label" th:text="${host.state}"></span><small th:if="${host.diagnostic != null}" th:text="${host.diagnostic}"></small></td>
 <td class="host-updated"><time th:text="${host.updated}"></time></td>
 </tr></tbody></table>
 </div>
-<p class="note">Médias calculadas com respostas válidas nas janelas móveis. Grupos exibem a média das médias de seus hosts. Perdas nos últimos 60 minutos deixam o indicador vermelho, mesmo após o ping voltar a responder. Falhas de coleta e dados atrasados também são sinalizados. Hosts sem IP válido ficam cinza e não participam das médias nem da cor do grupo.</p></th:block><th th:fragment="sortHeader(key,label,unit)" scope="col" th:classappend="${unit == 'ms' or key == 'lossHour' or key == 'lossMinute'} ? 'numeric-heading'" th:attr="aria-sort=${sort == key} ? (${direction == 'asc'} ? 'ascending' : 'descending') : 'none'">
+<p class="note">Médias calculadas com respostas válidas nas janelas móveis. Grupos exibem a média das médias de seus hosts. Perdas acima da tolerância configurada nos últimos 60 minutos deixam o indicador vermelho, mesmo após o ping voltar a responder. Falhas de coleta e dados atrasados também são sinalizados. Hosts sem IP válido ficam cinza e não participam das médias nem da cor do grupo.</p></th:block><th th:fragment="sortHeader(key,label,unit)" scope="col" th:classappend="${unit == 'ms' or key == 'lossHour' or key == 'lossMinute'} ? 'numeric-heading'" th:attr="aria-sort=${sort == key} ? (${direction == 'asc'} ? 'ascending' : 'descending') : 'none'">
 <th:block th:replace="~{dashboard :: sortHeaderContent(${key},${label},${unit})}"></th:block>
 </th>
 <th:block th:fragment="sortHeaderContent(key,label,unit)">
