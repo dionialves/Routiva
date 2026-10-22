@@ -1,0 +1,10 @@
+goos: darwin
+goarch: arm64
+pkg: routiva/collector/internal/engine
+cpu: Apple M1 Max
+BenchmarkEngine/800-10         	  100000	       546.8 ns/op	     80000 attempts	         0 skipped	     281 B/op	       4 allocs/op
+BenchmarkEngine/2000-10        	  100000	      1115 ns/op	    199999 attempts	         0 skipped	     704 B/op	      10 allocs/op
+BenchmarkEngine/5000-10        	  100000	      2986 ns/op	    500000 attempts	         0 skipped	    1760 B/op	      25 allocs/op
+BenchmarkEngine/10000-10       	  100000	      6456 ns/op	   1000000 attempts	         0 skipped	    3520 B/op	      50 allocs/op
+PASS
+ok  	routiva/collector/internal/engine	1.561s

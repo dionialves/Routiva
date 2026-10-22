@@ -16,5 +16,4 @@ zabbix:
   sync-ms: ${ZABBIX_SYNC_MS:60000}
 monitor:
   interval-ms: ${PING_INTERVAL_MS:1000}
-  timeout-ms: ${PING_TIMEOUT_MS:2000}
-  concurrency: ${PING_CONCURRENCY:64}
+  timeout-ms: ${PING_TIMEOUT_MS:1500}

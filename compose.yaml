@@ -13,15 +13,28 @@ services:
       POSTGRES_PORT: 5432
       SERVER_ADDRESS: 0.0.0.0
       PORT: 8080
+      COLLECTOR_ADDRESS: unix:///run/routiva/collector.sock
     ports:
       - "${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080"
+    volumes:
+      - collector_socket:/run/routiva
     depends_on:
+      collector:
+        condition: service_healthy
       postgres:
         condition: service_healthy
-    # Allows the unprivileged application user to send ICMP echo requests.
+    stop_grace_period: 30s
+  collector:
+    build:
+      context: .
+      dockerfile: collector/Dockerfile
+    restart: unless-stopped
+    cap_drop: [ALL]
     sysctls:
       net.ipv4.ping_group_range: "10001 10001"
-    stop_grace_period: 30s
+    volumes:
+      - collector_socket:/run/routiva
+    stop_grace_period: 15s
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -40,4 +53,5 @@ services:
       retries: 10
       start_period: 10s
 volumes:
+  collector_socket:
   postgres_data:

@@ -4,3 +4,18 @@ CREATE INDEX IF NOT EXISTS idx_ping_time ON ping_sample(measured_at);
 
 ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS latency_limit DOUBLE PRECISION NOT NULL DEFAULT 20;
 CREATE TABLE IF NOT EXISTS host_latency_policy (host_id VARCHAR(255) PRIMARY KEY, latency_limit DOUBLE PRECISION NOT NULL CHECK (latency_limit > 0));
+
+-- Nullable additions preserve all historical samples and existing queries.
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS collector_id VARCHAR(64);
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS attempt_id BIGINT;
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS batch_id BIGINT;
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS attempt_sequence BIGINT;
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS scheduled_at_ns BIGINT;
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS sent_at_ns BIGINT;
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS received_at_ns BIGINT;
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS rtt_ns BIGINT;
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS collection_status VARCHAR(32);
+ALTER TABLE ping_sample ADD COLUMN IF NOT EXISTS error_code VARCHAR(255);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ping_attempt ON ping_sample(collector_id,attempt_id);
+CREATE INDEX IF NOT EXISTS idx_ping_batch ON ping_sample(collector_id,batch_id);
+CREATE TABLE IF NOT EXISTS collector_batch (collector_id VARCHAR(64) NOT NULL,batch_id BIGINT NOT NULL,committed_at BIGINT NOT NULL,PRIMARY KEY(collector_id,batch_id));

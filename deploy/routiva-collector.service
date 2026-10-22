@@ -1,0 +1,23 @@
+[Unit]
+Description=Routiva ICMP collector
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+User=routiva
+Group=routiva
+RuntimeDirectory=routiva
+RuntimeDirectoryMode=0750
+Environment=COLLECTOR_LISTEN=unix:///run/routiva/collector.sock
+EnvironmentFile=-/etc/routiva/collector.env
+ExecStart=/usr/local/bin/routiva-collector
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+[Install]
+WantedBy=multi-user.target

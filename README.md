@@ -4,7 +4,7 @@ Monitor de latência com Java 21, Spring Boot, Thymeleaf, HTMX e PostgreSQL em D
 
 ## Executar
 
-Pré-requisitos: JDK 21, Maven 3.6.3+, Docker com Compose e comando `ping` instalado e autorizado a enviar ICMP. Você pode executar Spring e PostgreSQL em contêineres separados (veja abaixo), ou rodar Java localmente com apenas o banco em Docker.
+Pré-requisitos: JDK 21, Maven 3.6.3+, Docker com Compose e o coletor Go descrito em [Operação do coletor](docs/coletor-icmp.md). Você pode executar Spring e PostgreSQL em contêineres separados (veja abaixo), ou rodar Java localmente com apenas o banco em Docker.
 
 1. Crie sua configuração:
 
@@ -31,6 +31,7 @@ Use valores literais em uma linha. Aspas simples permitem senhas com espaços, `
 
 ```sh
 docker compose up -d --wait postgres
+# Inicie o coletor local em Linux conforme docs/coletor-icmp.md.
 mvn spring-boot:run
 ```
 
@@ -45,7 +46,7 @@ java -jar target/scriptping-1.0.0.jar
 
 ## Servidor: Spring e PostgreSQL em contêineres separados
 
-Pré-requisitos no servidor: Git, [Docker Engine](https://docs.docker.com/engine/install/) e Docker Compose v2 ou superior. Não é necessário instalar Java ou Maven no servidor; o Docker compila e testa o projeto em uma etapa de build e gera a imagem final com Java 21 e `ping` instalado.
+Pré-requisitos no servidor: Git, [Docker Engine](https://docs.docker.com/engine/install/) e Docker Compose v2 ou superior. Não é necessário instalar Java ou Maven no servidor; o Docker compila e testa o projeto em uma etapa de build e gera a imagem final com Java 21, além da imagem independente do coletor Go.
 
 ```sh
 git clone https://github.com/dionialves/Routiva.git
@@ -61,7 +62,7 @@ APP_BIND_ADDRESS=0.0.0.0
 APP_PORT=8080
 ```
 
-Inicie os dois contêineres:
+Inicie os três serviços (Java, Go e PostgreSQL):
 
 ```sh
 docker compose up -d --build --wait
@@ -73,10 +74,10 @@ Abra `http://IP_DO_SERVIDOR:8080/hosts` ou `/grupos`. Libere a porta TCP 8080 no
 
 O serviço `app` aguarda o healthcheck do PostgreSQL. Ele se conecta a `postgres:5432` pela rede interna do Compose, independentemente de `POSTGRES_HOST`/`POSTGRES_PORT` no `.env` (essas duas opções continuam servindo ao modo Java local). Dentro do contêiner, o Spring sempre escuta em `0.0.0.0:8080`; `APP_PORT` controla a porta publicada no servidor. O banco permanece acessível no servidor apenas por loopback. Seu volume `postgres_data` é preservado.
 
-O contêiner Java roda com usuário sem privilégios de administrador. O Compose permite ICMP para o grupo desse usuário por `ping_group_range`; não precisa de modo privilegiado. O servidor e a rede Docker precisam ter rota para o Zabbix e os hosts monitorados. Para verificar a saída ICMP, substitua o IP abaixo por um host da sua rede:
+Java e Go rodam sem privilégios de administrador. O Compose permite ICMP somente no serviço `collector`, por `ping_group_range`, e compartilha o Unix Domain Socket com o Java. O coletor precisa ter rota para os hosts; Java precisa alcançar o Zabbix. Para verificar a saúde e os contadores do motor:
 
 ```sh
-docker compose exec app ping -n -c 1 192.0.2.10
+docker compose exec collector routiva-collector --health
 ```
 
 A saúde da aplicação é verificada por `/actuator/health`, incluindo a conexão com o banco. Falhas ICMP de hosts aparecem nos cards e não deixam o contêiner indisponível. `restart: unless-stopped` reinicia contêineres após falha do processo ou reinício do Docker; um healthcheck com falha, sozinho, não reinicia o contêiner.
@@ -108,7 +109,7 @@ docker compose up -d --build --wait
 docker compose logs -f --tail=100 app
 ```
 
-Atualizações da aplicação preservam o banco. Para parar a aplicação, use `docker compose stop app`; para remover os dois contêineres preservando o banco, use `docker compose down`. Não use `down -v` se quiser manter os dados. Após mudar o `.env`, use `docker compose up -d` para recriar o contêiner com os novos valores; apenas `restart` não atualiza variáveis de ambiente.
+Atualizações da aplicação preservam o banco. Para parar a aplicação, use `docker compose stop app`; para remover os três contêineres preservando o banco, use `docker compose down`. Não use `down -v` se quiser manter os dados. Após mudar o `.env`, use `docker compose up -d` para recriar o contêiner com os novos valores; apenas `restart` não atualiza variáveis de ambiente.
 
 ## PostgreSQL em Docker
 
@@ -146,11 +147,11 @@ Clique no cabeçalho de qualquer coluna para ordenar; clique novamente para inve
 
 ## Coleta e apresentação da qualidade
 
-A coleta passa a usar **1 ping por segundo por host** como padrão (`PING_INTERVAL_MS=1000`). Revise o `.env` existente: valores antigos, como 5000, continuam tendo prioridade. O executor não sobrepõe pings do mesmo host e respeita o timeout e o limite de concorrência. Pings demorados ou excesso de hosts podem reduzir a frequência efetiva; os cálculos usam as amostras reais e a cobertura temporal, sem inventar pacotes durante lacunas de coleta. Ajuste concorrência e recursos do servidor para seu inventário.
+A coleta usa **1 ping por segundo por host** (`PING_INTERVAL_MS=1000`) no processo Go, com um socket ICMP compartilhado e recepção assíncrona. O intervalo é contado pelo horário planejado; timeout não bloqueia o próximo envio. O padrão de timeout é 1500 ms. Valores explícitos no `.env` continuam prevalecendo.
 
-O comando `ping` precisa estar instalado/autorizado e os destinos precisam ser alcançáveis pela máquina/contêiner da aplicação. Respostas válidas são gravadas imediatamente. Perdas são confirmadas somente após o timeout; erros de execução, falhas de interpretação e interrupções do coletor ficam separados dos timeouts e não entram no denominador de perda.
+Java sincroniza o inventário por gRPC, recebe lotes e confirma depois do commit. Filas limitadas e retransmissão em memória separam o motor da latência do banco. Não há execução de comandos externos de ping. Timeouts são perdas; erros internos e tentativas puladas ficam fora do denominador. Detalhes, limites, métricas e evidências de teste estão em [Operação do coletor](docs/coletor-icmp.md).
 
-Os dados originais continuam no PostgreSQL. **Regra provisória:** retenção configurável até o máximo de 48 horas (valores superiores são limitados a 48 horas) e limpeza ao iniciar e depois a cada 600 segundos. Registros mais antigos são removidos na próxima execução. Não há alteração no esquema do banco nem novas dependências.
+Os dados originais continuam no PostgreSQL, com novas colunas opcionais para identidade, status e horários da tentativa. A retenção permanece limitada a 48 horas e a limpeza ocorre a cada 600 segundos. A capacidade do banco e do histórico Java não está certificada para 10.000 hosts.
 
 As tabelas, colunas, filtros, ordenação e controles de atualização foram preservados. O cabeçalho permite atualizar agora ou escolher 5, 10, 15 ou 60 segundos, com preferência salva no navegador. Esse intervalo atualiza a tela; ele não muda o intervalo dos pings.
 
@@ -240,7 +241,7 @@ Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no pro
 
 O coletor grava cada resultado concluído e o encaminha ao analisador após a confirmação da escrita. Na inicialização, o histórico recente é restaurado uma vez, com leitura paginada pelo driver PostgreSQL. Depois disso, a apresentação reutiliza buffers compactos por host/IP e uma análise curta em cache, sem consultar o banco a cada atualização de tela. Eventos internos de amostra repetidos são deduplicados pelo ID persistido; amostras atrasadas são ordenadas pelo horário real e amostras futuras não entram nas janelas antes de seu horário. Alterar o IP separa os históricos. Resultados revertidos por rollback não entram no histórico em memória.
 
-O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem amostras suficientes, não se declara recuperação nem normalidade. Não existe serviço de notificações ou registro de alertas externos. Execute uma única instância coletora por banco; não há coordenação distribuída de coleta entre réplicas. Para inventários grandes, dimensione timeout, concorrência e recursos do servidor para a cadência desejada.
+O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem amostras suficientes, não se declara recuperação nem normalidade. Não existe serviço de notificações ou registro de alertas externos. Execute uma única instância coletora por banco; não há coordenação distribuída de coleta entre réplicas. Para inventários grandes, dimensione o coletor, o banco e a memória do histórico conforme os limites documentados.
 
 ## Configurações no `.env`
 
@@ -256,8 +257,8 @@ O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem 
 | POSTGRES_USER | scriptping | Usuário do banco |
 | POSTGRES_PASSWORD | obrigatório no Compose | Senha do banco |
 | PING_INTERVAL_MS | 1000 | Intervalo de disparo das coletas |
-| PING_TIMEOUT_MS | 2000 | Limite de espera por resposta |
-| PING_CONCURRENCY | 64 | Máximo de pings simultâneos |
+| PING_TIMEOUT_MS | 1500 | Limite de espera por resposta |
+| COLLECTOR_ADDRESS | unix:///run/routiva/collector.sock | Endpoint gRPC local do Go |
 | PING_RETENTION_HOURS | 48 | Retenção em horas, limitada a no máximo 48 |
 | PING_CLEANUP_INTERVAL_SECONDS | 600 | Intervalo provisório de limpeza em segundos |
 | SERVER_ADDRESS | 127.0.0.1 | Interface de escuta da aplicação |
@@ -270,7 +271,7 @@ Os intervalos precisam ser positivos. O painel consulta o banco por host e é de
 ## Testes
 
 ```sh
-mvn test
+mvn test -Dcollector.enabled=false
 ```
 
 Para validar os controles de atualização no navegador com Node.js 18 ou superior (apenas para desenvolvimento):
@@ -291,6 +292,6 @@ Clique no nome de um host para abrir `/hosts/{id}`. O painel mostra nome, IP, gr
 
 Os cálculos ficam no backend: H = respostas dentro do limite, D = respostas acima dele, P = pings sem resposta; T = H + D + P. Disponibilidade técnica = 100 × (H + D) / T; operacional = 100 × H / T. Erros internos não entram no denominador. Sem amostras válidas, os percentuais são nulos (`SEM_DADOS`). O total usa contagens de todas as amostras, nunca médias dos percentuais das janelas.
 
-O limite padrão é 20 ms e é definido nas configurações do aplicativo (maior que zero, até 60000 ms). A migração atribui 20 ms às amostras anteriores. Novas amostras guardam o limite vigente na persistência, preservando o histórico após alterações. Não há nova coleta de ping. As consultas consideram o IP atual e a retenção disponível. Os gráficos agrupam em 1 minuto (1–2 h), 5 minutos (4–12 h) ou 15 minutos (24–48 h). Janelas vazias ou com apenas falhas internas têm valores nulos; janelas parcialmente coletadas usam somente amostras válidas e não implicam cobertura integral.
+O limite padrão é 20 ms e é definido nas configurações do aplicativo (maior que zero, até 60000 ms). A migração atribui 20 ms às amostras anteriores. Novas amostras guardam o limite enviado na configuração da tentativa, preservando o histórico após alterações. Não há nova coleta de ping. As consultas consideram o IP atual e a retenção disponível. Os gráficos agrupam em 1 minuto (1–2 h), 5 minutos (4–12 h) ou 15 minutos (24–48 h). Janelas vazias ou com apenas falhas internas têm valores nulos; janelas parcialmente coletadas usam somente amostras válidas e não implicam cobertura integral.
 
 API: `GET /api/hosts/{id}/availability?hours=24`, com totais, contagens e série temporal. O limite global vem de `monitor.latency-limit-ms` (`PING_LATENCY_LIMIT_MS`, padrão 20 ms), sem ajuste por host. Cada amostra preserva o `latency_limit` vigente na coleta.
