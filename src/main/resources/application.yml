@@ -18,4 +18,3 @@ monitor:
   interval-ms: ${PING_INTERVAL_MS:5000}
   timeout-ms: ${PING_TIMEOUT_MS:2000}
   concurrency: ${PING_CONCURRENCY:64}
-  retention-hours: ${PING_RETENTION_HOURS:168}

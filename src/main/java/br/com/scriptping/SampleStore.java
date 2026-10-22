@@ -2,13 +2,14 @@ package br.com.scriptping;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.beans.factory.annotation.Value;
 import java.time.*;
 import java.util.*;
 @Repository
 public class SampleStore {
- private final JdbcTemplate jdbc; private final int retention;
- public SampleStore(JdbcTemplate jdbc,@Value("${monitor.retention-hours}") int retention){this.jdbc=jdbc; this.retention=Math.max(1,retention);}
+ // PROVISÓRIO: retenção fixa de 48 horas até a implementação da regra definitiva.
+ private static final Duration RETENTION = Duration.ofHours(48);
+ private final JdbcTemplate jdbc;
+ public SampleStore(JdbcTemplate jdbc){this.jdbc=jdbc;}
  public void save(Host host,PingProbe.Result result){jdbc.update("INSERT INTO ping_sample(host_id,target,measured_at,latency,error) VALUES(?,?,?,?,?)",host.id(),host.ip(),System.currentTimeMillis(),result.latency(),result.error());}
  public record Stats(Double hour,Double minute,Double current,Long measuredAt,String error,long attempts,long failures,long attemptsLastHour,long lossesLastHour,long attemptsLastMinute,long lossesLastMinute) {}
  public Map<String,Stats> stats(List<Host> hosts,long now) {
@@ -30,5 +31,7 @@ public class SampleStore {
   } return result;
  }
  private Double number(Object value){return value==null?null:((Number)value).doubleValue();}
- @Scheduled(fixedDelay=3600000) public void cleanup(){jdbc.update("DELETE FROM ping_sample WHERE measured_at < ?",System.currentTimeMillis()-Duration.ofHours(retention).toMillis());}
+ // PROVISÓRIO: executa ao iniciar e a cada minuto; substituir pela futura política de retenção.
+ @Scheduled(fixedDelay=60000)
+ public void cleanup(){jdbc.update("DELETE FROM ping_sample WHERE measured_at < ?",System.currentTimeMillis()-RETENTION.toMillis());}
 }

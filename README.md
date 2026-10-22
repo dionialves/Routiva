@@ -146,7 +146,7 @@ Cada página permite combinar pesquisa por nome e status de ping (todos, verde, 
 
 Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua coleta anterior tenha terminado. Até 64 pings executam em paralelo, sem sobreposição por host. Inventários grandes podem aumentar o intervalo efetivo. Os hosts precisam ser alcançáveis pela máquina que executa a aplicação. O executor suporta Linux/macOS e Windows com saída de ping em inglês ou português; outros idiomas podem exigir ajuste do parser.
 
-Resultados, falhas e horários são persistidos no PostgreSQL. A retenção padrão é de 7 dias, com limpeza a cada hora. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
+Resultados, falhas e horários são persistidos no PostgreSQL. **Regra provisória:** o histórico é mantido por 48 horas, até a implementação da política definitiva de retenção. A limpeza automática remove resultados com mais de 48 horas ao iniciar a aplicação e depois a cada minuto (registros podem ultrapassar o limite até a próxima execução, normalmente em até um minuto). A regra vale para respostas e falhas de todos os hosts, incluindo os removidos do inventário. O limite está fixado no código; a antiga variável `PING_RETENTION_HOURS` não é mais utilizada, mesmo que ainda exista em um `.env` anterior. Após atualizar a aplicação, dados antigos serão removidos automaticamente. O IP é guardado junto ao identificador para evitar misturar médias quando o destino muda.
 
 HTMX, servido localmente, atualiza o painel sem F5. O cabeçalho permite escolher 5, 10, 15 ou 60 segundos (padrão: 5 segundos) ou usar “Atualizar agora”. A escolha é salva no navegador e compartilhada entre as páginas de hosts e grupos. As atualizações preservam todos os filtros. O próximo intervalo começa após a conclusão da atualização, evitando acumular consultas quando a resposta demora. Novas medições seguem o intervalo do ping. As páginas de hosts e grupos mostram os dados em tabelas. As duas visualizações incluem as médias de 60 minutos/1 minuto, ping atual, perdas e status.
 
@@ -193,7 +193,6 @@ Os filtros de situação permitem buscar Normal, Latência alta, Com perda de pa
 | PING_INTERVAL_MS | 5000 | Intervalo de disparo das coletas |
 | PING_TIMEOUT_MS | 2000 | Limite de espera por resposta |
 | PING_CONCURRENCY | 64 | Máximo de pings simultâneos |
-| PING_RETENTION_HOURS | 168 | Retenção do histórico |
 | SERVER_ADDRESS | 127.0.0.1 | Interface de escuta da aplicação |
 | PORT | 8080 | Porta web no modo Java local |
 | APP_BIND_ADDRESS | 0.0.0.0 | Interface publicada pelo Docker; use 127.0.0.1 com Nginx local |
