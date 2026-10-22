@@ -37,7 +37,7 @@ public class SampleStore {
    Number latency=(Number)row.getObject("latency");consumer.accept(new PingSample(row.getLong("id"),row.getString("host_id"),row.getString("target"),row.getLong("measured_at"),latency==null?null:latency.doubleValue(),row.getString("error")));
   });
  }
- public record Stats(Double hour,Double minute,Double current,Long measuredAt,String error,long attempts,long failures,long attemptsLastHour,long lossesLastHour,long attemptsLastMinute,long lossesLastMinute) {}
+ public record Stats(Double hour,Double minute,Double current,Long measuredAt,String error,long attempts,long failures,long attemptsLastHour,long lossesLastHour,long attemptsLastMinute,long lossesLastMinute,Double eightHours,Double latencyHour,Double fiveMinutes,long attemptsEightHours,long lossesEightHours,long attemptsLatencyHour,long lossesLatencyHour,long attemptsFiveMinutes,long lossesFiveMinutes) {}
  // PROVISÓRIO: executa ao iniciar e no intervalo configurado; substituir pela futura política de retenção.
  @Scheduled(fixedDelayString="${monitor.cleanup-interval-seconds:600}",timeUnit=java.util.concurrent.TimeUnit.SECONDS)
  public void cleanup(){jdbc.update("DELETE FROM ping_sample WHERE measured_at < ?",System.currentTimeMillis()-retention.toMillis());}

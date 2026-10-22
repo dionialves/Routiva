@@ -9,11 +9,14 @@ import java.util.*;
 public class DashboardController {
  private final MonitorService monitor;private final PacketLossAnalysisService analysis;private final PacketLossPolicy lossPolicy;
  public DashboardController(MonitorService monitor,PacketLossAnalysisService analysis,PacketLossPolicy lossPolicy){this.monitor=monitor;this.analysis=analysis;this.lossPolicy=lossPolicy;}
- public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,int members,String detail,Double hour,Double minute,Double current,String color,String state,Long updatedAt,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,Double lossPercent,Double minuteLossPercent,boolean lossIssue,String diagnostic) {
+ // Keep the existing table field and sort keys for bookmarked URLs: hour=8 h, minute=1 h, current=5 min.
+ public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,int members,String detail,Double hour,Double minute,Double current,String color,String state,Long updatedAt,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,Double lossPercent,Double minuteLossPercent,boolean lossIssue,String diagnostic,long fiveMinuteLossAttempts,long fiveMinuteLostPackets,Double fiveMinuteLossPercent) {
   public String updated(){return time(updatedAt);}
   public String lossPercentage(){return lossPercent==null?"—":format(lossPercent)+"%";}
   public String minuteLossPercentage(){return minuteLossPercent==null?"—":format(minuteLossPercent)+"%";}
   public String lossTitle(){return lossTitle(lostPackets,lossAttempts,lossPercent);}
+  public String fiveMinuteLossPercentage(){return fiveMinuteLossPercent==null?"—":format(fiveMinuteLossPercent)+"%";}
+  public String fiveMinuteLossTitle(){return lossTitle(fiveMinuteLostPackets,fiveMinuteLossAttempts,fiveMinuteLossPercent);}
   public String minuteLossTitle(){return lossTitle(minuteLostPackets,minuteLossAttempts,minuteLossPercent);}
   private static String lossTitle(long lost,long attempts,Double percent){
    if(attempts==0) return "Sem pings nesta janela";
@@ -63,7 +66,7 @@ public class DashboardController {
   model.addAttribute("groupUnavailable",!groupId.isEmpty() && selectedGroup.isEmpty());
   model.addAttribute("selectedGroupName",groupId.isEmpty()?"":selectedGroup.map(Card::name).orElse("Grupo indisponível"));
   String search=normalize(query.strip());
-  Set<String> columns=groupPage?Set.of("name","members","hour","minute","current","lossHour","lossMinute","status","updated"):Set.of("name","ip","groups","hour","minute","current","lossHour","lossMinute","status","updated");
+  Set<String> columns=groupPage?Set.of("name","members","hour","minute","current","lossHour","lossMinute","lossFiveMinutes","status","updated"):Set.of("name","ip","groups","hour","minute","current","lossHour","lossMinute","lossFiveMinutes","status","updated");
   String sort=columns.contains(requestedSort)?requestedSort:"name";
   String direction=requestedDirection.equals("desc")?"desc":"asc";
   model.addAttribute("sort",sort);
@@ -106,6 +109,7 @@ public class DashboardController {
    case "current" -> by(Card::current,descending);
    case "lossHour" -> by(Card::lossPercent,descending);
    case "lossMinute" -> by(Card::minuteLossPercent,descending);
+   case "lossFiveMinutes" -> by(Card::fiveMinuteLossPercent,descending);
    case "status" -> by(c->normalize(c.state()),descending);
    case "updated" -> by(Card::updatedAt,descending);
    default -> by(c->normalize(c.name()),descending);
@@ -169,8 +173,7 @@ public class DashboardController {
    var s=quality.stats();
    boolean valid=IpAddress.isValid(host.ip());
    boolean stale=s.measuredAt()!=null && !quality.fresh();
-   boolean offline=s.measuredAt()!=null && (s.current()==null || stale);
-   Double hour=valid?s.hour():null, minute=valid?s.minute():null, current=valid && !stale?s.current():null;
+   Double hour=valid?s.eightHours():null, minute=valid?s.latencyHour():null, current=valid?s.fiveMinutes():null;
    var display=presentation(List.of(quality),hour,minute,current);
    String state=host.acknowledgedIcmpProblem()?"Incidente ICMP reconhecido no Zabbix":valid?display.state():"Sem IP válido";
    String diagnostic=host.acknowledgedIcmpProblem()?"Excluído das estatísticas do grupo":!valid?null:quality.diagnostic()+(stale?" · Coleta atrasada":s.error()!=null?" · "+s.error():"");
@@ -178,7 +181,7 @@ public class DashboardController {
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
    cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),valid?host.ip():"—",String.join(", ",host.groups().stream().map(Host.Group::name).toList()),0,detail,
        hour,minute,current,valid && !host.acknowledgedIcmpProblem()?display.color():"gray",state,valid?s.measuredAt():null,
-       valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,valid?lossPolicy.visiblePercentage(s.lossesLastHour(),s.attemptsLastHour()):null,valid?lossPolicy.visiblePercentage(s.lossesLastMinute(),s.attemptsLastMinute()):null,valid && !host.acknowledgedIcmpProblem() && display.lossIssue(),diagnostic));
+       valid?s.attemptsEightHours():0,valid?s.lossesEightHours():0,valid?s.attemptsLatencyHour():0,valid?s.lossesLatencyHour():0,valid?lossPolicy.visiblePercentage(s.lossesEightHours(),s.attemptsEightHours()):null,valid?lossPolicy.visiblePercentage(s.lossesLatencyHour(),s.attemptsLatencyHour()):null,valid && !host.acknowledgedIcmpProblem() && display.lossIssue(),diagnostic,valid?s.attemptsFiveMinutes():0,valid?s.lossesFiveMinutes():0,valid?lossPolicy.visiblePercentage(s.lossesFiveMinutes(),s.attemptsFiveMinutes()):null));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
     groupTotals.merge(g.id(),1,Integer::sum);
@@ -192,11 +195,13 @@ public class DashboardController {
    var qualities=groupStats.get(entry.getKey());
    var list=qualities.stream().map(PacketLossAnalysis::stats).toList();
    int total=groupTotals.get(entry.getKey()), excluded=total-list.size();
-   Double hour=avg(list,0),minute=avg(list,1),current=avg(qualities.stream().filter(PacketLossAnalysis::fresh).map(PacketLossAnalysis::stats).toList(),2);
-   long attempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastHour).sum();
-   long lost=list.stream().mapToLong(SampleStore.Stats::lossesLastHour).sum();
-   long minuteAttempts=list.stream().mapToLong(SampleStore.Stats::attemptsLastMinute).sum();
-   long minuteLost=list.stream().mapToLong(SampleStore.Stats::lossesLastMinute).sum();
+   Double hour=avg(list,0),minute=avg(list,1),current=avg(list,2);
+   long attempts=list.stream().mapToLong(SampleStore.Stats::attemptsEightHours).sum();
+   long lost=list.stream().mapToLong(SampleStore.Stats::lossesEightHours).sum();
+   long minuteAttempts=list.stream().mapToLong(SampleStore.Stats::attemptsLatencyHour).sum();
+   long minuteLost=list.stream().mapToLong(SampleStore.Stats::lossesLatencyHour).sum();
+   long fiveAttempts=list.stream().mapToLong(SampleStore.Stats::attemptsFiveMinutes).sum();
+   long fiveLost=list.stream().mapToLong(SampleStore.Stats::lossesFiveMinutes).sum();
    var display=presentation(qualities,hour,minute,current);
    String groupColor=list.isEmpty()?"gray":display.color();
    String state=list.isEmpty()?"Sem hosts elegíveis para estatísticas":display.state();
@@ -206,11 +211,11 @@ public class DashboardController {
    long recognized=hosts.stream().filter(h->h.acknowledgedIcmpProblem() && IpAddress.isValid(h.ip()) && h.groups().stream().anyMatch(g->g.id().equals(entry.getKey()))).count();
    long invalid=excluded-recognized;
    String detail=total+" hosts"+(invalid>0?" · "+invalid+" sem IP válido":"")+(recognized>0?" · "+recognized+" com incidente reconhecido (excluídos)":"");
-   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,lossPolicy.visiblePercentage(lost,attempts),lossPolicy.visiblePercentage(minuteLost,minuteAttempts),display.lossIssue(),diagnostic));
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,lossPolicy.visiblePercentage(lost,attempts),lossPolicy.visiblePercentage(minuteLost,minuteAttempts),display.lossIssue(),diagnostic,fiveAttempts,fiveLost,lossPolicy.visiblePercentage(fiveLost,fiveAttempts)));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));
  }
- private static Double avg(List<SampleStore.Stats> list,int metric){return list.stream().map(s->metric==0?s.hour():metric==1?s.minute():s.current()).filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().stream().boxed().findFirst().orElse(null);}
+ private static Double avg(List<SampleStore.Stats> list,int metric){return list.stream().map(s->metric==0?s.eightHours():metric==1?s.latencyHour():s.fiveMinutes()).filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().stream().boxed().findFirst().orElse(null);}
  private static String time(Long millis){return millis==null?"—":DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.of("America/Sao_Paulo")).format(Instant.ofEpochMilli(millis));}
 }

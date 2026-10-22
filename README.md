@@ -134,7 +134,7 @@ O inventário é carregado ao iniciar e sincronizado a cada 60 segundos. Em falh
 
 ## Páginas e filtros
 
-- `/hosts`: tabela de hosts, com uma linha por host e pesquisa pelo nome. Colunas: nome, IP, grupos, médias de 60 min/1 min, ping atual, perdas na hora/minuto, status e última coleta. A linha mantém as cores de saúde e a tabela permite rolagem horizontal em telas pequenas.
+- `/hosts`: tabela de hosts, com uma linha por host e pesquisa pelo nome. Colunas: nome, IP, médias de latência das últimas 8 horas, 1 hora e 5 minutos, perdas nas últimas 8 horas, 1 hora e 5 minutos e status. A linha mantém as cores de saúde e a tabela permite rolagem horizontal em telas pequenas.
 - `/grupos`: tabela de grupos, com nome, quantidade de hosts, latências, perdas, status e atualização. O nome do grupo é um link para seus hosts.
 - `/`: abre a página de hosts.
 
@@ -197,7 +197,7 @@ Para **recorrência**, são examinados os últimos três minutos completos do re
 
 A situação operacional de perda é mantida até cinco minutos de respostas válidas contínuas, sem nova perda, erro interno ou lacuna excessiva. A recuperação exige novas respostas que comprovem todo esse período; parar o coletor ou deixar de receber amostras não recupera o host. O percentual e a classificação histórica permanecem reais após a recuperação.
 
-Nos grupos, a cor e o status refletem o membro válido com a situação mais grave. Os percentuais da hora/minuto continuam calculados pelos totais agregados de pings, e as latências continuam sendo a média das médias dos membros. O detalhe identifica a classificação do pior membro, para não confundir a situação de um host com o percentual agregado. Grupos sem hosts válidos ficam cinza. Os filtros de perda referem-se à situação recente/operacional, sem marcar perda histórica isolada como falha ativa.
+Nos grupos, a cor e o status refletem o membro válido com a situação mais grave. Os percentuais das janelas de 8 horas, 1 hora e 5 minutos são calculados pelos totais agregados de pings, e as latências continuam sendo a média das médias dos membros. O detalhe identifica a classificação do pior membro, para não confundir a situação de um host com o percentual agregado. Grupos sem hosts válidos ficam cinza. Os filtros de perda referem-se à situação recente/operacional, sem marcar perda histórica isolada como falha ativa.
 
 ## Ajuste rápido no application.properties
 
@@ -225,7 +225,7 @@ As regras estão centralizadas em `src/main/resources/application.properties`, n
 | max-gap-multiplier | 3 | Margem de lacuna em múltiplos da cadência; considera também timeout + cadência |
 | cache-millis | 1000 | Reutilização de uma análise entre leituras do painel |
 
-As durações avançadas são configuráveis para evolução da regra; os rótulos das colunas mantêm os períodos de 1 minuto/1 hora usados nesta versão. Para ajustar a cadência use `PING_INTERVAL_MS`, não as janelas. Limites e durações inválidos impedem a inicialização, em vez de aplicar classificações incoerentes.
+As durações avançadas são configuráveis para evolução da regra; as classificações de perda continuam usando as janelas operacionais de 1 minuto/1 hora. As colunas de latência e perda usam janelas fixas de 8 horas, 1 hora e 5 minutos. Para ajustar a cadência use `PING_INTERVAL_MS`, não as janelas. Limites e durações inválidos impedem a inicialização, em vez de aplicar classificações incoerentes.
 
 A retenção provisória continua no mesmo arquivo:
 

@@ -62,6 +62,34 @@ class TableSortingTests {
         assertThat(card.lossAttempts()).isZero();
     }
 
+    @Test void bothTablesShowLatencyAndLossAcrossEightHoursOneHourAndFiveMinutes() throws Exception {
+        var host=host("windows","Janelas","10.8.7.1");
+        long now=System.currentTimeMillis();
+        sample(host,now-9*3600000L,1000d,null);
+        sample(host,now-7*3600000L,30d,null);
+        sample(host,now-6*3600000L,null,"Tempo esgotado");
+        sample(host,now-30*60000L,20d,null);
+        sample(host,now-20*60000L,null,"Tempo esgotado");
+        sample(host,now-2*60000L,10d,null);
+        sample(host,now-60000L,null,"Tempo esgotado");
+        when(monitor.hosts()).thenReturn(List.of(host));
+        for(String path:List.of("/hosts","/grupos")) {
+            var card=sorted(path,"name","asc").getFirst();
+            assertThat(card.hour()).isEqualTo(20d);
+            assertThat(card.minute()).isEqualTo(15d);
+            assertThat(card.current()).isEqualTo(10d);
+            assertThat(card.lossAttempts()).isEqualTo(6);
+            assertThat(card.lostPackets()).isEqualTo(3);
+            assertThat(card.minuteLossAttempts()).isEqualTo(4);
+            assertThat(card.minuteLostPackets()).isEqualTo(2);
+            assertThat(card.fiveMinuteLossAttempts()).isEqualTo(2);
+            assertThat(card.fiveMinuteLostPackets()).isEqualTo(1);
+            mvc.perform(get(path)).andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Média · últimas 8 h")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Perda · últimos 5 min")));
+        }
+    }
+
     @Test void numericLatencySortingAndMissingValuesWorkInBothTablesAndDirections() throws Exception {
         var a=host("sort-ten","A dez","10.8.0.10");
         var b=host("sort-two","B dois","10.8.0.2");
@@ -94,7 +122,7 @@ class TableSortingTests {
         for(int i=0;i<10;i++) sample(ten,now-1000-i,i<1?null:10d,i<1?"Tempo esgotado":null);
         when(monitor.hosts()).thenReturn(List.of(two,ten,empty));
         for(String path:List.of("/hosts","/grupos")) {
-            for(String column:List.of("lossHour","lossMinute")) {
+            for(String column:List.of("lossHour","lossMinute","lossFiveMinutes")) {
                 assertThat(sorted(path,column,"asc")).extracting(DashboardController.Card::name)
                     .containsExactly(two.name(),ten.name(),empty.name());
                 assertThat(sorted(path,column,"desc")).extracting(DashboardController.Card::name)

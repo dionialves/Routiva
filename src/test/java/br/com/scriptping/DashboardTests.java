@@ -74,7 +74,7 @@ class DashboardTests {
   Host h=new Host("render", "Servidor exemplo", "127.0.0.1", java.util.List.of(new Host.Group("g1","Produção")));
   store.save(h,new PingProbe.Result(16d,null));
   org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(h));
-  mvc.perform(get("/dashboard")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Servidor exemplo"))).andExpect(content().string(org.hamcrest.Matchers.containsString("Produção"))).andExpect(content().string(org.hamcrest.Matchers.containsString("16,00"))).andExpect(content().string(org.hamcrest.Matchers.containsString("host-row yellow")));
+  mvc.perform(get("/dashboard")).andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Servidor exemplo"))).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("host-groups")))).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Última coleta")))).andExpect(content().string(org.hamcrest.Matchers.containsString("16,00"))).andExpect(content().string(org.hamcrest.Matchers.containsString("host-row yellow")));
  }
 
  @Test void dedicatedPagesAndCombinedFiltersStayAppliedDuringPolling() throws Exception {

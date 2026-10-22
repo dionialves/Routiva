@@ -15,7 +15,8 @@ public class PacketLossAnalyzer {
         minuteMs=rules.getMinuteWindowSeconds()*1000;hourMs=rules.getHourWindowSeconds()*1000;
         bucketMs=rules.getRecurrenceBucketSeconds()*1000;recoveryMs=rules.getRecoverySeconds()*1000;
     }
-    public long lookbackMs(){return Math.max(hourMs,Math.max(recoveryMs,bucketMs*(rules.getRecurrenceBuckets()+1)));}
+    private long operationalLookbackMs(){return Math.max(hourMs,Math.max(recoveryMs,bucketMs*(rules.getRecurrenceBuckets()+1)));}
+    public long lookbackMs(){return Math.max(8*3600000L,operationalLookbackMs());}
     private class Counts {
         final long start,end;long attempts,losses,successes,all,previous=-1,coverage;double sum;
         Counts(long start,long end){this.start=start;this.end=end;}
@@ -66,11 +67,14 @@ public class PacketLossAnalyzer {
     }
     public PacketLossAnalysis analyze(RollingPingHistory history,long now) {
         Counts minute=new Counts(now-minuteMs,now),hour=new Counts(now-hourMs,now);
+        Counts eightHours=counts(history,now-8*3600000L,now),latencyHour=counts(history,now-3600000L,now),fiveMinutes=counts(history,now-300000L,now);
+        int firstIndex=0;
+        while(firstIndex<history.size() && history.time(firstIndex)<now-operationalLookbackMs())firstIndex++;
         Map<Long,Counts> buckets=new HashMap<>();
         int currentRun=0,minuteRun=0,hourRun=0,maxMinute=0,maxHour=0;
         int lastIndex=-1;
         long previousBucketKey=Long.MIN_VALUE;Counts currentBucket=null;
-        for(int i=0;i<history.size();i++) {
+        for(int i=firstIndex;i<history.size();i++) {
             long time=history.time(i);if(time>now)break;lastIndex=i;
             byte outcome=history.outcome(i);double latency=history.latency(i);
             minute.add(time,outcome,latency);hour.add(time,outcome,latency);
@@ -84,8 +88,8 @@ public class PacketLossAnalyzer {
         }
         Level level=Level.NORMAL;
         Long cleanSince=null;long previous=-1,lastSuccess=-1;
-        int run=0;long nextBucket=lastIndex<0?0:Math.floorDiv(history.time(0)-1,bucketMs)+1;
-        for(int i=0;i<=lastIndex;i++) {
+        int run=0;long nextBucket=lastIndex<0?0:Math.floorDiv(history.time(firstIndex)-1,bucketMs)+1;
+        for(int i=firstIndex;i<=lastIndex;i++) {
             long time=history.time(i);
             while(nextBucket*bucketMs<=time) {
                 if(level==Level.NORMAL && recurring(buckets,nextBucket))level=Level.DEGRADADO;
@@ -124,7 +128,7 @@ public class PacketLossAnalyzer {
         boolean fresh=last!=null && now-last.measuredAt()<=maxGap;
         boolean healthy=fresh && last.outcome()!=PingSample.ERROR;
         boolean recovered=cleanSince!=null && lastSuccess-cleanSince>=recoveryMs && fresh;
-        var stats=new SampleStore.Stats(hour.mean(),minute.mean(),last==null?null:last.latency(),last==null?null:last.measuredAt(),last==null?null:last.error(),hour.all,hour.all-hour.successes,hour.attempts,hour.losses,minute.attempts,minute.losses);
+        var stats=new SampleStore.Stats(hour.mean(),minute.mean(),last==null?null:last.latency(),last==null?null:last.measuredAt(),last==null?null:last.error(),hour.all,hour.all-hour.successes,hour.attempts,hour.losses,minute.attempts,minute.losses,eightHours.mean(),latencyHour.mean(),fiveMinutes.mean(),eightHours.attempts,eightHours.losses,latencyHour.attempts,latencyHour.losses,fiveMinutes.attempts,fiveMinutes.losses);
         return new PacketLossAnalysis(stats,minuteQuality(minute),hourQuality(hour.losses,hour.attempts,hour.enough()),currentRun,maxMinute,maxHour,recurrent,level,recovered,fresh,healthy);
     }
 }

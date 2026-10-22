@@ -22,7 +22,7 @@ class PacketLossThresholdTests {
     @MockitoBean PacketLossAnalysisService analysis;
     Host host(String id){return new Host(id,id,"10.4.0.1",List.of(new Host.Group(id+"-group",id)));}
     PacketLossAnalysis result(long hourLoss,long minuteLoss,Quality minute,Quality hour,Level level) {
-        var stats=new SampleStore.Stats(10d,10d,10d,System.currentTimeMillis(),null,3600,hourLoss,3600,hourLoss,60,minuteLoss);
+        var stats=new SampleStore.Stats(10d,10d,10d,System.currentTimeMillis(),null,3600,hourLoss,3600,hourLoss,60,minuteLoss,10d,10d,10d,3600,hourLoss,3600,hourLoss,300,minuteLoss);
         return new PacketLossAnalysis(stats,minute,hour,0,1,1,false,level,true,true,true);
     }
     @SuppressWarnings("unchecked") List<DashboardController.Card> cards(String page,String filter)throws Exception {
@@ -40,7 +40,7 @@ class PacketLossThresholdTests {
         for(String page:List.of("/hosts","/grupos")) {
             assertThat(cards(page,"green")).hasSize(2);
             assertThat(cards(page,"green")).filteredOn(c->c.name().equals("isolated")).singleElement().satisfies(c->{
-                assertThat(c.lossPercentage()).isEqualTo("0,03%");assertThat(c.minuteLossPercentage()).isEqualTo("1,67%");
+                assertThat(c.lossPercentage()).isEqualTo("0,03%");assertThat(c.minuteLossPercentage()).isEqualTo("0,03%");assertThat(c.fiveMinuteLossPercentage()).isEqualTo("0,33%");
                 assertThat(c.state()).isEqualTo("Evento isolado");assertThat(c.lossTitle()).isEqualTo("1 de 3600 pings");
             });
             assertThat(cards(page,"normal")).singleElement().satisfies(c->{assertThat(c.state()).isEqualTo("Normal · histórico degradado");assertThat(c.lossPercentage()).isEqualTo("0,11%");});
@@ -56,6 +56,6 @@ class PacketLossThresholdTests {
         when(analysis.analyze(anyList(),anyLong())).thenReturn(Map.of(a.id(),result(3,3,Quality.DEGRADADO,Quality.NORMAL,Level.CRITICO),b.id(),result(0,0,Quality.NORMAL,Quality.NORMAL,Level.NORMAL)));
         var combined=cards("/grupos","all").getFirst();
         assertThat(combined.color()).isEqualTo("red");assertThat(combined.lossPercentage()).isEqualTo("0,04%");
-        assertThat(combined.minuteLossPercentage()).isEqualTo("2,50%");assertThat(combined.lossIssue()).isTrue();
+        assertThat(combined.minuteLossPercentage()).isEqualTo("0,04%");assertThat(combined.fiveMinuteLossPercentage()).isEqualTo("0,50%");assertThat(combined.lossIssue()).isTrue();
     }
 }
