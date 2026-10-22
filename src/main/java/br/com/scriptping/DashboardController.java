@@ -67,7 +67,7 @@ public class DashboardController {
   model.addAttribute("sort",sort);
   model.addAttribute("direction",direction);
   var filtered=all.stream().filter(card->normalize(card.name()).contains(search))
-      .filter(card->matchesStatus(card,selected)).sorted(sortComparator(sort,direction.equals("desc"))).toList();
+      .filter(card->matchesStatus(card,selected)).sorted(sortComparator(sort,direction.equals("desc"))).limit(50).toList();
   model.addAttribute("cards",filtered);
   model.addAttribute("total",all.size());
   model.addAttribute("groupPage",groupPage);
