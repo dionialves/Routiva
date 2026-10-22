@@ -19,11 +19,6 @@ public class HostAvailabilityService {
   Metrics metrics(){long t=h+d+p;return new Metrics(h,d,p,t==0?null:100d*(h+d)/t,t==0?null:100d*h/t,t==0?null:100d*p/t,t==0?null:100d*d/t,h+d==0?null:sum/(h+d));}
   void add(byte outcome,Double latency,double limit){if(outcome==PingSample.SUCCESS){if(latency<=limit)h++;else d++;sum+=latency;}else if(outcome==PingSample.LOSS)p++;}
  }
- public double limit(String id){return jdbc.query("SELECT latency_limit FROM host_latency_policy WHERE host_id=?",(r,n)->r.getDouble(1),id).stream().findFirst().orElse(20d);}
- public void setLimit(String id,double limit){
-  if(!Double.isFinite(limit)||limit<=0||limit>60000)throw new IllegalArgumentException("Limite deve estar entre 0 e 60000 ms.");
-  synchronized(this){if(jdbc.update("UPDATE host_latency_policy SET latency_limit=? WHERE host_id=?",limit,id)==0) jdbc.update("INSERT INTO host_latency_policy(host_id,latency_limit) VALUES(?,?)",id,limit);}
- }
  public Report report(Host host,int hours,long now){
   if(!Set.of(1,2,4,8,12,24,48).contains(hours))throw new IllegalArgumentException("Período inválido");
   long from=now-hours*3600000L,bucket=hours<=2?60000L:hours<=12?300000L:900000L;

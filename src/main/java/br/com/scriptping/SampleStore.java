@@ -9,11 +9,17 @@ import java.util.*;
 public class SampleStore {
  // PROVISÓRIO: retenção configurável até a implementação da política definitiva.
  private final Duration retention;
+ private final double latencyLimit;
  private final JdbcTemplate jdbc;
  private final org.springframework.context.ApplicationEventPublisher publisher;
  public SampleStore(JdbcTemplate jdbc,long retentionHours,long cleanupSeconds){this(jdbc,retentionHours,cleanupSeconds,event->{});}
- @org.springframework.beans.factory.annotation.Autowired
  public SampleStore(JdbcTemplate jdbc,@org.springframework.beans.factory.annotation.Value("${monitor.retention-hours:48}") long retentionHours,@org.springframework.beans.factory.annotation.Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds,org.springframework.context.ApplicationEventPublisher publisher){
+  this(jdbc,retentionHours,cleanupSeconds,publisher,20d);
+ }
+ @org.springframework.beans.factory.annotation.Autowired
+ public SampleStore(JdbcTemplate jdbc,@org.springframework.beans.factory.annotation.Value("${monitor.retention-hours:48}") long retentionHours,@org.springframework.beans.factory.annotation.Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds,org.springframework.context.ApplicationEventPublisher publisher,@org.springframework.beans.factory.annotation.Value("${monitor.latency-limit-ms:20}") double latencyLimit){
+  if(!Double.isFinite(latencyLimit)||latencyLimit<=0||latencyLimit>60000)throw new IllegalArgumentException("monitor.latency-limit-ms deve estar entre 0 e 60000 ms.");
+  this.latencyLimit=latencyLimit;
   if(cleanupSeconds<1) throw new IllegalArgumentException("monitor.cleanup-interval-seconds deve ser positivo.");
   if(retentionHours<1) throw new IllegalArgumentException("monitor.retention-hours deve ser positivo.");
   this.jdbc=jdbc;this.retention=Duration.ofHours(retentionHours);this.publisher=publisher;
@@ -22,8 +28,8 @@ public class SampleStore {
   long now=System.currentTimeMillis();
   var key=new org.springframework.jdbc.support.GeneratedKeyHolder();
   jdbc.update(connection->{
-   var statement=connection.prepareStatement("INSERT INTO ping_sample(host_id,target,measured_at,latency,error,latency_limit) VALUES(?,?,?,?,?,COALESCE((SELECT latency_limit FROM host_latency_policy WHERE host_id=?),20))",new String[]{"id"});
-   statement.setString(1,host.id());statement.setString(2,host.ip());statement.setLong(3,now);statement.setObject(4,result.latency());statement.setString(5,result.error());statement.setString(6,host.id());return statement;
+   var statement=connection.prepareStatement("INSERT INTO ping_sample(host_id,target,measured_at,latency,error,latency_limit) VALUES(?,?,?,?,?,?)",new String[]{"id"});
+   statement.setString(1,host.id());statement.setString(2,host.ip());statement.setLong(3,now);statement.setObject(4,result.latency());statement.setString(5,result.error());statement.setDouble(6,latencyLimit);return statement;
   },key);
   var sample=new PingSample(Objects.requireNonNull(key.getKey()).longValue(),host.id(),host.ip(),now,result.latency(),result.error());
   if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()){
