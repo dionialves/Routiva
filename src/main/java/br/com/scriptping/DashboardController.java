@@ -10,7 +10,8 @@ import java.util.*;
 public class DashboardController {
  private final MonitorService monitor;private final SampleStore store;private final long staleMs;
  public DashboardController(MonitorService monitor,SampleStore store,@Value("${monitor.interval-ms}") long interval,@Value("${monitor.timeout-ms}") long timeout){this.monitor=monitor;this.store=store;staleMs=Math.max(15000,interval*3+timeout);}
- public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,String detail,Double hour,Double minute,Double current,String color,String state,String updated,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,String diagnostic) {
+ public record Card(String id,List<String> groupIds,String name,String ip,String groupNames,int members,String detail,Double hour,Double minute,Double current,String color,String state,Long updatedAt,long lossAttempts,long lostPackets,long minuteLossAttempts,long minuteLostPackets,String diagnostic) {
+  public String updated(){return time(updatedAt);}
   public String lossPercentage(){return lossAttempts==0?"—":format(100.0*lostPackets/lossAttempts)+"%";}
   public String minuteLossPercentage(){return minuteLossAttempts==0?"—":format(100.0*minuteLostPackets/minuteLossAttempts)+"%";}
   public String format(Double value){return value==null?"—":String.format(Locale.forLanguageTag("pt-BR"),"%.2f",value);}
@@ -29,18 +30,20 @@ public class DashboardController {
                     @org.springframework.web.bind.annotation.RequestParam(defaultValue="") String q,
                     @org.springframework.web.bind.annotation.RequestParam(defaultValue="all") String pingStatus,
                     @org.springframework.web.bind.annotation.RequestParam(defaultValue="") String groupId,
+                    @org.springframework.web.bind.annotation.RequestParam(defaultValue="name") String sort,
+                    @org.springframework.web.bind.annotation.RequestParam(defaultValue="asc") String direction,
                     @org.springframework.web.bind.annotation.RequestHeader(value="HX-Request",defaultValue="false") boolean partial,
                     Model model) {
   response.setHeader("Vary","HX-Request");
   boolean groupPage=request.getRequestURI().equals("/grupos");
-  prepare(model,groupPage,q,pingStatus,groupId);
+  prepare(model,groupPage,q,pingStatus,groupId,sort,direction);
   return partial?"dashboard :: content":"index";
  }
  // Preserve the former polling URL for clients that already have the page open.
- @GetMapping("/dashboard") public String fragment(Model model){prepare(model,false,"","all","");return "dashboard :: content";}
+ @GetMapping("/dashboard") public String fragment(Model model){prepare(model,false,"","all","","name","asc");return "dashboard :: content";}
 
  @SuppressWarnings("unchecked")
- private void prepare(Model model,boolean groupPage,String query,String requestedStatus,String requestedGroupId) {
+ private void prepare(Model model,boolean groupPage,String query,String requestedStatus,String requestedGroupId,String requestedSort,String requestedDirection) {
   populate(model);
   String selected=Set.of("all","green","yellow","red","neutral","gray","normal","high-latency","packet-loss","latency-and-loss").contains(requestedStatus)?requestedStatus:"all";
   String groupId=groupPage?"":requestedGroupId.strip();
@@ -53,8 +56,13 @@ public class DashboardController {
   model.addAttribute("groupUnavailable",!groupId.isEmpty() && selectedGroup.isEmpty());
   model.addAttribute("selectedGroupName",groupId.isEmpty()?"":selectedGroup.map(Card::name).orElse("Grupo indisponível"));
   String search=normalize(query.strip());
+  Set<String> columns=groupPage?Set.of("name","members","hour","minute","current","lossHour","lossMinute","status","updated"):Set.of("name","ip","groups","hour","minute","current","lossHour","lossMinute","status","updated");
+  String sort=columns.contains(requestedSort)?requestedSort:"name";
+  String direction=requestedDirection.equals("desc")?"desc":"asc";
+  model.addAttribute("sort",sort);
+  model.addAttribute("direction",direction);
   var filtered=all.stream().filter(card->normalize(card.name()).contains(search))
-      .filter(card->matchesStatus(card,selected)).toList();
+      .filter(card->matchesStatus(card,selected)).sorted(sortComparator(sort,direction.equals("desc"))).toList();
   model.addAttribute("cards",filtered);
   model.addAttribute("total",all.size());
   model.addAttribute("groupPage",groupPage);
@@ -66,6 +74,34 @@ public class DashboardController {
  private static String normalize(String value) {
   return java.text.Normalizer.normalize(value,java.text.Normalizer.Form.NFD)
       .replaceAll("\\p{M}","").toLowerCase(Locale.ROOT);
+ }
+ private static <T extends Comparable<? super T>> Comparator<Card> by(java.util.function.Function<Card,T> field,boolean descending) {
+  Comparator<T> values=Comparator.naturalOrder();
+  if(descending) values=values.reversed();
+  return Comparator.comparing(field,Comparator.nullsLast(values));
+ }
+ private static Comparator<Card> sortComparator(String column,boolean descending) {
+  Comparator<Card> comparator=switch(column) {
+   case "ip" -> by(c->ipSortKey(c.ip()),descending);
+   case "groups" -> by(c->normalize(c.groupNames()),descending);
+   case "members" -> by(Card::members,descending);
+   case "hour" -> by(Card::hour,descending);
+   case "minute" -> by(Card::minute,descending);
+   case "current" -> by(Card::current,descending);
+   case "lossHour" -> by(c->c.lossAttempts()==0?null:100.0*c.lostPackets()/c.lossAttempts(),descending);
+   case "lossMinute" -> by(c->c.minuteLossAttempts()==0?null:100.0*c.minuteLostPackets()/c.minuteLossAttempts(),descending);
+   case "status" -> by(c->normalize(c.state()),descending);
+   case "updated" -> by(Card::updatedAt,descending);
+   default -> by(c->normalize(c.name()),descending);
+  };
+  return comparator.thenComparing(c->normalize(c.name())).thenComparing(Card::id);
+ }
+ private static String ipSortKey(String ip) {
+  if(!IpAddress.isValid(ip)) return null;
+  try {
+   byte[] bytes=java.net.InetAddress.getByName(ip).getAddress();
+   return String.format(Locale.ROOT,"%02d:",bytes.length)+HexFormat.of().formatHex(bytes);
+  } catch(Exception ex) {return null;}
  }
  private static boolean highLatency(Double hour,Double minute,Double current) {
   return Arrays.asList(hour,minute,current).stream().anyMatch(v->v!=null && v>=15);
@@ -108,8 +144,8 @@ public class DashboardController {
    String diagnostic=!valid?null:stale?"Coleta atrasada":s.error();
    if(Objects.equals(diagnostic,state)) diagnostic=null;
    String detail=(valid?host.ip():"Sem IP válido")+" • "+String.join(", ",host.groups().stream().map(Host.Group::name).toList());
-   cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),valid?host.ip():"—",String.join(", ",host.groups().stream().map(Host.Group::name).toList()),detail,
-       hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?time(s.measuredAt()):"—",
+   cards.add(new Card(host.id(),host.groups().stream().map(Host.Group::id).toList(),host.name(),valid?host.ip():"—",String.join(", ",host.groups().stream().map(Host.Group::name).toList()),0,detail,
+       hour,minute,current,valid?color(hour,minute,current,offline || loss):"gray",state,valid?s.measuredAt():null,
        valid?s.attemptsLastHour():0,valid?s.lossesLastHour():0,valid?s.attemptsLastMinute():0,valid?s.lossesLastMinute():0,diagnostic));
    for(var g:host.groups()) {
     groups.put(g.id(),g);
@@ -137,7 +173,7 @@ public class DashboardController {
    String state=list.isEmpty()?"Sem hosts com IP válido":healthState(hour,minute,current,lost>0,offline,pending,stale);
    String diagnostic=offline?"Há hosts sem resposta, com falha ou coleta atrasada":null;
    String detail=total+" hosts"+(excluded>0?" · "+excluded+" sem IP válido":"");
-   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",detail,hour,minute,current,groupColor,state,time(now),attempts,lost,minuteAttempts,minuteLost,diagnostic));
+   groupCards.add(new Card(entry.getKey(),List.of(),entry.getValue().name(),"","",total,detail,hour,minute,current,groupColor,state,now,attempts,lost,minuteAttempts,minuteLost,diagnostic));
   }
   groupCards.sort(Comparator.comparing(Card::name,String.CASE_INSENSITIVE_ORDER));
   model.addAttribute("hosts",cards);model.addAttribute("groups",groupCards);model.addAttribute("status",monitor.status());model.addAttribute("lastSync",time(monitor.lastSync()));model.addAttribute("updated",time(now));

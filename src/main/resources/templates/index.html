@@ -32,7 +32,9 @@
         th:attr="hx-get=${pagePath}" hx-target="#dashboard" hx-swap="innerHTML"
         hx-trigger="submit, input changed delay:300ms from:input, change from:select"
         hx-sync="#dashboard:replace" hx-replace-url="true">
-    <div><label for="search">Pesquisar por nome</label><input id="search" type="search" name="q" th:value="${q}" placeholder="Digite o nome…" autocomplete="off"></div>
+    <input id="sort-column" type="hidden" name="sort" th:value="${sort}">
+    <input id="sort-direction" type="hidden" name="direction" th:value="${direction}">
+    <div class="search-filter"><label for="search">Pesquisar por nome</label><input id="search" type="search" name="q" th:value="${q}" placeholder="Digite o nome…" autocomplete="off"></div>
     <div><label for="ping-status">Status de ping</label><select id="ping-status" name="pingStatus">
       <option value="all" th:selected="${pingStatus == 'all'}">Todos os status</option>
       <option value="green" th:selected="${pingStatus == 'green'}">Verde · abaixo de 15 ms</option>

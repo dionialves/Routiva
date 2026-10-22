@@ -14,11 +14,17 @@
 <table class="hosts-table" th:classappend="${groupPage} ? 'groups-table'">
 <caption class="sr-only" th:text="${pageTitle} + ' com latência, perda de pacotes e status'"></caption>
 <thead><tr>
-<th scope="col" th:text="${groupPage} ? 'Grupo' : 'Host'"></th>
-<th scope="col" th:if="${groupPage}">Hosts</th>
-<th scope="col" th:if="${!groupPage}">IP</th><th scope="col" th:if="${!groupPage}">Grupos</th>
-<th scope="col" class="numeric-heading">Média · 60 min <small>ms</small></th><th scope="col" class="numeric-heading">Média · 1 min <small>ms</small></th><th scope="col" class="numeric-heading">Atual <small>ms</small></th>
-<th scope="col" class="numeric-heading">Perda · última hora</th><th scope="col" class="numeric-heading">Perda · último minuto</th><th scope="col">Status</th><th scope="col" th:text="${groupPage} ? 'Atualização' : 'Última coleta'"></th>
+<th th:replace="~{dashboard :: sortHeader('name',${groupPage} ? 'Grupo' : 'Host','')}"></th>
+<th:block th:if="${groupPage}"><th th:replace="~{dashboard :: sortHeader('members','Hosts','')}"></th></th:block>
+<th:block th:if="${!groupPage}"><th th:replace="~{dashboard :: sortHeader('ip','IP','')}"></th></th:block>
+<th:block th:if="${!groupPage}"><th th:replace="~{dashboard :: sortHeader('groups','Grupos','')}"></th></th:block>
+<th th:replace="~{dashboard :: sortHeader('hour','Média · 60 min','ms')}"></th>
+<th th:replace="~{dashboard :: sortHeader('minute','Média · 1 min','ms')}"></th>
+<th th:replace="~{dashboard :: sortHeader('current','Atual','ms')}"></th>
+<th th:replace="~{dashboard :: sortHeader('lossHour','Perda · última hora','')}"></th>
+<th th:replace="~{dashboard :: sortHeader('lossMinute','Perda · último minuto','')}"></th>
+<th th:replace="~{dashboard :: sortHeader('status','Status','')}"></th>
+<th th:replace="~{dashboard :: sortHeader('updated',${groupPage} ? 'Atualização' : 'Última coleta','')}"></th>
 </tr></thead>
 <tbody><tr class="host-row" th:each="host : ${cards}" th:classappend="${host.color}" th:attr="data-host-id=${host.id}">
 <th scope="row" class="host-name">
@@ -34,4 +40,13 @@
 <td class="host-updated"><time th:text="${host.updated}"></time></td>
 </tr></tbody></table>
 </div>
-<p class="note">Médias calculadas com respostas válidas nas janelas móveis. Grupos exibem a média das médias de seus hosts. Perdas nos últimos 60 minutos deixam o indicador vermelho, mesmo após o ping voltar a responder. Falhas de coleta e dados atrasados também são sinalizados. Hosts sem IP válido ficam cinza e não participam das médias nem da cor do grupo.</p></th:block></body></html>
+<p class="note">Médias calculadas com respostas válidas nas janelas móveis. Grupos exibem a média das médias de seus hosts. Perdas nos últimos 60 minutos deixam o indicador vermelho, mesmo após o ping voltar a responder. Falhas de coleta e dados atrasados também são sinalizados. Hosts sem IP válido ficam cinza e não participam das médias nem da cor do grupo.</p></th:block><th th:fragment="sortHeader(key,label,unit)" scope="col" th:classappend="${unit == 'ms' or key == 'lossHour' or key == 'lossMinute'} ? 'numeric-heading'" th:attr="aria-sort=${sort == key} ? (${direction == 'asc'} ? 'ascending' : 'descending') : 'none'">
+<th:block th:replace="~{dashboard :: sortHeaderContent(${key},${label},${unit})}"></th:block>
+</th>
+<th:block th:fragment="sortHeaderContent(key,label,unit)">
+<a class="sort-link" th:href="@{${pagePath}(q=${q},pingStatus=${pingStatus},groupId=${groupId},sort=${key},direction=${sort == key and direction == 'asc'} ? 'desc' : 'asc')}"
+   th:attr="data-sort=${key},data-direction=${sort == key and direction == 'asc'} ? 'desc' : 'asc',aria-label='Ordenar por ' + ${label}">
+<span th:text="${label}"></span> <span aria-hidden="true" th:text="${sort == key} ? (${direction == 'asc'} ? '↑' : '↓') : '↕'"></span><small th:if="${!unit.isEmpty()}" th:text="${unit}"></small>
+</a>
+</th:block>
+</body></html>

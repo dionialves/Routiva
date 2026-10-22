@@ -14,7 +14,7 @@ function surface(storage = new Map(), blockStorage = false) {
       setAttribute(name, value) { this.attributes[name] = value; },
     };
   }
-  const ids = ['dashboard', 'filters', 'refresh-interval', 'refresh-now', 'connection'];
+  const ids = ['dashboard', 'filters', 'refresh-interval', 'refresh-now', 'connection', 'sort-column', 'sort-direction'];
   const elements = Object.fromEntries(ids.map(id => [id, element()]));
   const document = element();
   document.body = element();
@@ -107,4 +107,23 @@ test('blocked storage and invalid saved intervals fall back to five seconds', ()
   assert.equal(invalid.delay(), 5000);
   invalid.choose(1);
   assert.equal(invalid.delay(), 5000);
+});
+
+test('clicking a column submits the current filters with the new sorting', () => {
+  const page = surface();
+  let prevented = false;
+  const link = { dataset: { sort: 'lossHour', direction: 'desc' } };
+  page.document.body.listeners.click[0]({
+    target: { closest: () => link }, button: 0,
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, true);
+  assert.equal(page['sort-column'].value, 'lossHour');
+  assert.equal(page['sort-direction'].value, 'desc');
+  assert.equal(page.requests[0].elt, page.filters);
+  assert.equal(page.requests[0].name, 'submit');
+  page.complete(true, page.filters);
+  page.tick();
+  assert.equal(page['sort-column'].value, 'lossHour');
+  assert.equal(page['sort-direction'].value, 'desc');
 });

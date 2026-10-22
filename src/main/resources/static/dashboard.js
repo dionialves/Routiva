@@ -35,6 +35,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   refreshButton.addEventListener('click', refresh);
 
+  document.body.addEventListener('click', event => {
+    const link = event.target.closest('.sort-link');
+    if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button > 0) return;
+    event.preventDefault();
+    document.getElementById('sort-column').value = link.dataset.sort;
+    document.getElementById('sort-direction').value = link.dataset.direction;
+    htmx.trigger(filters, 'submit');
+  });
+
   function isDashboardRequest(event) {
     return event.detail.elt === dashboard || event.detail.elt === filters;
   }

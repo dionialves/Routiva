@@ -142,6 +142,8 @@ Na página de grupos, clicar no nome do grupo abre `/hosts?groupId=ID`, exibindo
 
 Cada página permite combinar pesquisa por nome e status de ping (todos, verde, amarelo, vermelho, cinza ou neutro). A pesquisa ignora maiúsculas/minúsculas e acentos. Os filtros são mantidos durante a atualização automática, e os resultados acompanham as mudanças de status. A URL reflete os filtros para permitir favoritos e compartilhamento. O botão “Limpar filtros” restaura a lista completa da página. Médias de grupo sempre consideram todos os membros, independentemente da pesquisa.
 
+Clique no cabeçalho de qualquer coluna para ordenar; clique novamente para inverter crescente/decrescente. Latências, percentuais e quantidades usam valores numéricos, IPs usam ordem numérica e horários usam o instante real da coleta. Valores sem dados ficam no final em ambas as direções. A seta indica a coluna e a direção ativas. Pesquisa, filtros, atualização manual e automática preservam a ordenação, que também fica na URL.
+
 ## Coleta e painel
 
 Cada host recebe um ping ICMP a cada aproximadamente 5 segundos, desde que sua coleta anterior tenha terminado. Até 64 pings executam em paralelo, sem sobreposição por host. Inventários grandes podem aumentar o intervalo efetivo. Os hosts precisam ser alcançáveis pela máquina que executa a aplicação. O executor suporta Linux/macOS e Windows com saída de ping em inglês ou português; outros idiomas podem exigir ajuste do parser.
