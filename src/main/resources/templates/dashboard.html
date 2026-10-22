@@ -29,7 +29,7 @@
 <tbody><tr class="host-row" th:each="host : ${cards}" th:classappend="${host.color}" th:attr="data-host-id=${host.id}">
 <th scope="row" class="host-name">
 <a th:if="${groupPage}" th:href="@{/hosts(groupId=${host.id})}" th:text="${host.name}" th:attr="aria-label='Ver hosts do grupo ' + ${host.name}"></a>
-<span th:if="${!groupPage}" th:text="${host.name}"></span>
+<a th:if="${!groupPage}" th:href="@{/hosts/{id}(id=${host.id})}" th:text="${host.name}"></a>
 </th>
 <td class="group-members" th:if="${groupPage}" th:text="${host.detail}"></td>
 <td class="host-ip" th:if="${!groupPage}" th:text="${host.ip}"></td><td class="host-groups" th:if="${!groupPage}" th:text="${host.groupNames}"></td>

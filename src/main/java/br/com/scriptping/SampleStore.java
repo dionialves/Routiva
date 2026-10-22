@@ -22,8 +22,8 @@ public class SampleStore {
   long now=System.currentTimeMillis();
   var key=new org.springframework.jdbc.support.GeneratedKeyHolder();
   jdbc.update(connection->{
-   var statement=connection.prepareStatement("INSERT INTO ping_sample(host_id,target,measured_at,latency,error) VALUES(?,?,?,?,?)",new String[]{"id"});
-   statement.setString(1,host.id());statement.setString(2,host.ip());statement.setLong(3,now);statement.setObject(4,result.latency());statement.setString(5,result.error());return statement;
+   var statement=connection.prepareStatement("INSERT INTO ping_sample(host_id,target,measured_at,latency,error,latency_limit) VALUES(?,?,?,?,?,COALESCE((SELECT latency_limit FROM host_latency_policy WHERE host_id=?),20))",new String[]{"id"});
+   statement.setString(1,host.id());statement.setString(2,host.ip());statement.setLong(3,now);statement.setObject(4,result.latency());statement.setString(5,result.error());statement.setString(6,host.id());return statement;
   },key);
   var sample=new PingSample(Objects.requireNonNull(key.getKey()).longValue(),host.id(),host.ip(),now,result.latency(),result.error());
   if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()){

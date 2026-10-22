@@ -10,6 +10,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "zabbix.url=", "zabbix.username=", "zabbix.password=", "spring.datasource.username=sa", "spring.datasource.password=", "monitor.loss.minimum-coverage-ratio=0", "monitor.loss.minimum-samples=1"})
 @AutoConfigureMockMvc
 class DashboardTests {
+ @Test void rendersHostDetailsAndValidatesPeriods() throws Exception {
+  Host host=new Host("details", "Host detalhado", "127.0.0.1", java.util.List.of(new Host.Group("g1","Produção")));
+  org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(host));
+  store.save(host,new PingProbe.Result(10d,null));
+  for(int hours:new int[]{1,2,4,8,12,24,48}) mvc.perform(get("/hosts/details").param("hours",String.valueOf(hours)))
+    .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.containsString("Host detalhado")))
+    .andExpect(content().string(org.hamcrest.Matchers.containsString("window.hostReport")));
+  mvc.perform(get("/api/hosts/details/availability")).andExpect(status().isOk()).andExpect(jsonPath("$.total.operational").value(100));
+  mvc.perform(get("/hosts/details").param("hours","3")).andExpect(status().isBadRequest());
+  mvc.perform(get("/hosts/missing")).andExpect(status().isNotFound());
+ }
+
  @Autowired MockMvc mvc;
  @Autowired SampleStore store;
  @Autowired PacketLossAnalysisService analysis;

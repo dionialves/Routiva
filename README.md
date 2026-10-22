@@ -284,3 +284,13 @@ Esses testes verificam os quatro intervalos, a atualização manual, a persistê
 Os testes Java usam H2 em memória e uma API Zabbix simulada. Incluem perdas isoladas, duas perdas, perdas consecutivas, seis perdas distribuídas, recorrência em períodos completos, limites horários exatos, recuperação, falhas/lacunas do coletor, janelas incompletas, outras cadências, amostras atrasadas/duplicadas/futuras, restauração após reinício e percentuais reais na apresentação. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
 
 Referências: [user.login](https://www.zabbix.com/documentation/current/en/manual/api/reference/user/login), [API Zabbix](https://www.zabbix.com/documentation/7.0/en/manual/api), [imagem oficial PostgreSQL](https://hub.docker.com/_/postgres).
+
+### Dashboard individual e disponibilidade do host
+
+Clique no nome de um host para abrir `/hosts/{id}`. O painel mostra nome, IP, grupos, disponibilidade operacional (principal), técnica, perda, degradação e gráficos históricos. Os períodos aceitos são 1, 2, 4, 8, 12, 24 e 48 horas, contados a partir da consulta. Use “Aplicar período / atualizar” para atualizar os dados.
+
+Os cálculos ficam no backend: H = respostas dentro do limite, D = respostas acima dele, P = pings sem resposta; T = H + D + P. Disponibilidade técnica = 100 × (H + D) / T; operacional = 100 × H / T. Erros internos não entram no denominador. Sem amostras válidas, os percentuais são nulos (`SEM_DADOS`). O total usa contagens de todas as amostras, nunca médias dos percentuais das janelas.
+
+O limite padrão é 20 ms e pode ser alterado por host na própria página (maior que zero, até 60000 ms). A migração atribui 20 ms às amostras anteriores. Novas amostras guardam o limite vigente na persistência, preservando o histórico após alterações. Não há nova coleta de ping. As consultas consideram o IP atual e a retenção disponível. Os gráficos agrupam em 1 minuto (1–2 h), 5 minutos (4–12 h) ou 15 minutos (24–48 h). Janelas vazias ou com apenas falhas internas têm valores nulos; janelas parcialmente coletadas usam somente amostras válidas e não implicam cobertura integral.
+
+API: `GET /api/hosts/{id}/availability?hours=24`, com totais, contagens e série temporal. A configuração é persistida em `host_latency_policy`; cada amostra possui `latency_limit`.
