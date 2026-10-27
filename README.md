@@ -82,6 +82,87 @@ docker compose exec collector routiva-collector --health
 
 A saúde da aplicação é verificada por `/actuator/health`, incluindo a conexão com o banco. Falhas ICMP de hosts aparecem nos cards e não deixam o contêiner indisponível. `restart: unless-stopped` reinicia contêineres após falha do processo ou reinício do Docker; um healthcheck com falha, sozinho, não reinicia o contêiner.
 
+### Acompanhar o coletor e interpretar as métricas
+
+Execute na pasta do projeto, no servidor:
+
+```sh
+docker compose exec -T collector routiva-collector --health | jq
+```
+
+`docker compose exec` executa um comando dentro do serviço `collector`. A opção `-T` desativa o terminal interativo, facilitando encaminhar a saída pelo pipe (`|`). O programa `routiva-collector --health` consulta o processo Go em execução pelo socket local e retorna sua identificação e métricas em JSON; ele não inicia outro motor de coleta. O `jq` formata esse JSON com indentação e deve estar instalado no servidor, não no container. Sem `jq`, retire `| jq` para ver a saída original.
+
+Para atualizar a leitura a cada dois segundos, se `watch` estiver instalado no servidor:
+
+```sh
+watch -n 2 'docker compose exec -T collector routiva-collector --health | jq'
+```
+
+Encerre o acompanhamento com `Ctrl+C`. A consulta é uma fotografia do estado atual, não um histórico de eventos nem uma lista de lotes.
+
+| Campo | Significado e unidade |
+| --- | --- |
+| `collector_id` | Identificador desta execução do coletor. Muda quando o processo Go reinicia; junto ao ID do lote ou da tentativa, permite identificar seus registros. |
+| `protocol_version` | Versão do protocolo de comunicação entre Java e Go; atualmente `1`. Não é a versão do aplicativo. |
+| `metrics` | Objeto que reúne os indicadores abaixo. |
+
+Os contadores acumulados abaixo são reiniciados quando o processo Go reinicia. Compare leituras com o mesmo `collector_id`. Valores instantâneos e tempos da última ocorrência não são médias.
+
+| Campo em `metrics` | Significado e unidade |
+| --- | --- |
+| `ack_latency_ns` | Tempo entre o envio e o recebimento do ACK do último lote confirmado, em nanossegundos. Inclui transporte, espera e persistência no Java/banco; não é somente latência de rede. |
+| `active_hosts` | Quantidade atual de hosts configurados no agendador. |
+| `collection_errors_total` | Total acumulado de tentativas encerradas por erro interno de coleta, por exemplo falha de recepção ou encerramento do motor. Não representa perda de rede. |
+| `connections_total` | Total acumulado de sessões de coleta aceitas pelo Go, incluindo reconexões. Não conta consultas `--health` nem representa conexões simultâneas. |
+| `cpu_seconds` | Tempo acumulado de CPU do processo Go, somando usuário e sistema, em segundos. Não é percentual de CPU nem tempo desde a inicialização. |
+| `dropped_total` | Total acumulado de resultados descartados por falta de espaço no buffer de resultados ou na fila de lotes. Não é quantidade de pings sem resposta. |
+| `goroutines` | Quantidade atual de goroutines, as tarefas concorrentes do runtime Go. Não é quantidade de hosts nem de threads do sistema operacional. |
+| `heap_bytes` | Bytes atualmente alocados no heap do Go. Divida por `1048576` para MiB. Não representa toda a memória do container. |
+| `icmp_errors_total` | Total acumulado de tentativas encerradas por erro ICMP correlacionado, como destino inalcançável. Entra como perda de rede. |
+| `pending` | Quantidade atual de tentativas de ping admitidas e ainda não concluídas, podendo incluir espera de envio. Não é quantidade de lotes pendentes. |
+| `processing_latency_ns` | Atraso local entre a recepção do último evento de resposta e seu processamento pelo motor, em nanossegundos. Não é o RTT do host. |
+| `receive_errors_total` | Total acumulado de erros ao ler o socket ICMP. Uma falha pode encerrar várias tentativas e aumentar `collection_errors_total`. |
+| `replies_total` | Total acumulado de respostas válidas que concluíram tentativas com sucesso. Respostas duplicadas, tardias ou sem correspondência não aumentam esse contador. |
+| `result_buffer` | Quantidade de resultados na fila interna do motor somada aos resultados dos lotes ainda não confirmados, incluindo o lote enviado que aguarda ACK. Não inclui resultados temporariamente reunidos para formar o próximo lote. Não é uma contagem de lotes. |
+| `scheduler_lag_ns` | Último atraso observado entre o horário planejado e o processamento do agendamento, em nanossegundos. |
+| `scheduler_max_lag_ns` | Maior atraso de agendamento observado nesta execução, em nanossegundos. Pode continuar alto após um incidente já resolvido. |
+| `send_errors_total` | Total acumulado de tentativas encerradas por falha local no envio ICMP. Não é timeout do destino. |
+| `sent_total` | Total acumulado de envios ICMP concluídos sem erro local. Não conta lotes enviados nem garante resposta do destino. |
+| `skipped_total` | Total acumulado de oportunidades de coleta puladas por atraso do agendador ou limites de fila de envio/pendências. Não entra como perda de rede. |
+| `timeouts_total` | Total acumulado de tentativas expiradas sem resposta válida dentro do prazo. Entra como perda de rede. |
+
+Campos terminados em `_ns` usam nanossegundos: divida por `1000000` para milissegundos. Por exemplo, `ack_latency_ns: 126078521` equivale a aproximadamente **126,08 ms** para a última confirmação.
+
+Para exibir um resumo com nomes mais claros e unidades convertidas:
+
+```sh
+docker compose exec -T collector routiva-collector --health | jq '{
+  coletor: .collector_id,
+  hosts_monitorados: .metrics.active_hosts,
+  pings_pendentes: .metrics.pending,
+  resultados_no_buffer: .metrics.result_buffer,
+  resultados_descartados: .metrics.dropped_total,
+  ultima_confirmacao_ms: (.metrics.ack_latency_ns / 1000000),
+  pings_enviados: .metrics.sent_total,
+  respostas_recebidas: .metrics.replies_total,
+  timeouts: .metrics.timeouts_total,
+  erros_de_envio: .metrics.send_errors_total,
+  memoria_heap_MiB: (.metrics.heap_bytes / 1048576)
+}'
+```
+
+**Como interpretar o fluxo:** o Go mantém um lote enviado aguardando ACK por vez. O Java grava as amostras e o recibo em `collector_batch` na mesma transação e só depois confirma ao Go. Ao receber o ACK, o Go remove o lote da memória e pode enviar o próximo. Não há arquivo persistente de lotes ou histórico de ACKs no coletor; os recibos e amostras no PostgreSQL seguem a retenção configurada. O recibo comprova a gravação, mas não que o Go recebeu a confirmação.
+
+Compare leituras ao longo do tempo: aumento de `dropped_total` indica novos descartes; queda de `result_buffer` indica redução do acúmulo naquele intervalo. Um buffer estável, sozinho, não comprova equilíbrio, pois pode coexistir com descartes. Para calcular uma taxa, divida a diferença de um contador pelo tempo entre as consultas. A saída atual não expõe os IDs dos lotes pendentes nem separa lotes aguardando envio daqueles aguardando ACK.
+
+Para acompanhar os logs disponíveis dos dois processos:
+
+```sh
+docker compose logs -f --timestamps --tail=100 collector app
+```
+
+O Docker captura a saída dos processos; o coletor escreve em JSON. Há logs de inicialização, erros e encerramento, mas não um evento para cada lote criado, enviado ou confirmado. O projeto não configura arquivo próprio nem retenção específica desses logs. Mais detalhes sobre filas, limites e auditoria de entrega estão em [Operação do coletor](docs/coletor-icmp.md).
+
 ### Usando o Nginx instalado no mesmo servidor
 
 Se o Nginx já ocupa a porta 8080, configure no `.env`:
