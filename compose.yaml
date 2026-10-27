@@ -15,7 +15,7 @@ services:
       PORT: 8080
       COLLECTOR_ADDRESS: unix:///run/routiva/collector.sock
     ports:
-      - "${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080"
+      - '${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080'
     volumes:
       - collector_socket:/run/routiva
     depends_on:
@@ -31,7 +31,7 @@ services:
     restart: unless-stopped
     cap_drop: [ALL]
     sysctls:
-      net.ipv4.ping_group_range: "10001 10001"
+      net.ipv4.ping_group_range: '10001 10001'
     volumes:
       - collector_socket:/run/routiva
     stop_grace_period: 15s
@@ -43,11 +43,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-scriptping}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
       timeout: 5s
       retries: 10

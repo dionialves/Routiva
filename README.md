@@ -157,76 +157,36 @@ As tabelas, colunas, filtros, ordenação e controles de atualização foram pre
 
 ## Regras de perda de pacotes
 
-Os percentuais são **sempre reais**, inclusive abaixo dos limiares. A regra anterior que zerava perdas até 1% foi substituída: `PING_PACKET_LOSS_IGNORE_PERCENT` não é mais utilizado. O percentual é `perdidos / tentativas concluídas elegíveis × 100`; timeout é perda, erro interno não é. Sem tentativas elegíveis, aparece `—`. Os limites são comparados sem arredondamento; apenas a exibição é formatada. A contagem real fica no tooltip.
+A perda tem somente três níveis, aplicados às janelas móveis de **5 minutos, 1 hora e 8 horas**:
 
-As janelas são móveis, com intervalo `(agora - duração, agora]`; os contadores não reiniciam na virada do relógio. Minuto e hora são classificados de forma independente.
+| Percentual real de perda | Classificação | Cor |
+| --- | --- | --- |
+| Até **0,33%**, inclusive | NORMAL | Verde |
+| Acima de **0,33%** e abaixo de **1%** | ATENCAO | Amarelo |
+| **1% ou mais**, inclusive | CRITICO | Vermelho |
 
-### Qualidade recente — 1 minuto
+O valor exato de 1% é crítico. A cor e o status usam a maior gravidade entre as três janelas. Nos grupos, vale o pior membro elegível, enquanto os percentuais apresentados usam os totais agregados de tentativas e perdas.
 
-| Perdas equivalentes em 60 pacotes | Classificação |
-| --- | --- |
-| 0 | NORMAL |
-| 1 | EVENTO_ISOLADO |
-| 2 | ATENCAO |
-| 3 a 5 | DEGRADADO |
-| 6 ou mais | CRITICO |
+O cálculo é `perdidos / tentativas concluídas elegíveis × 100`. Timeout conta como perda; erro interno e lacuna de coleta não contam como perda nem entram no denominador. Sem tentativas elegíveis, aparece `—`. Os percentuais reais são sempre exibidos e os limites são comparados **sem arredondamento**. Por exemplo, 1 perda em 300 tentativas representa aproximadamente 0,3333% e já é atenção, mesmo que a tela mostre 0,33%.
 
-Para frequências diferentes, a quantidade equivalente é proporcional aos pings reais: `perdas × 60 / tentativas`. Por exemplo, em coleta de 5 segundos, 1 perda em 12 tentativas equivale a 5 em 60 e classifica como DEGRADADO. A classificação exige cobertura temporal mínima de 80% e pelo menos duas amostras elegíveis; sem isso retorna DADOS_INSUFICIENTES. Intervalos longos sem coleta não contam como tempo coberto. O timeout participa da margem de lacuna permitida, para não confundir uma resposta aguardando confirmação com ausência do coletor.
+Não existem mais regras especiais de perda por minuto, perdas consecutivas, recorrência, nível degradado ou espera de cinco minutos para recuperação. A classificação é recalculada pelos percentuais das janelas disponíveis. Uma janela histórica acima do limite continua mantendo o alerta até seu percentual baixar.
 
-### Qualidade por janela — 8 horas, 1 hora e 5 minutos
-
-| Percentual real | Classificação |
-| --- | --- |
-| Até 0,05%, inclusive | NORMAL |
-| Acima de 0,05% e abaixo de 0,1% | ATENCAO |
-| De 0,1% até abaixo de 0,5% | DEGRADADO |
-| 0,5% ou mais | CRITICO |
-
-A linha e o status seguem a maior gravidade entre as janelas de 8 horas, 1 hora e 5 minutos, usando os limites percentuais acima. A recuperação recente não remove o amarelo/vermelho enquanto qualquer janela permanecer acima do permitido. Grupos seguem o pior membro elegível, mantendo os percentuais agregados.
-
-### Cores e situação atual
-
-- **Verde:** perda dentro do limite nas três janelas, sem alerta operacional e com latência normal.
-- **Amarelo:** atenção/degradação em qualquer uma das três janelas, perda recente, degradação recorrente, falha/interrupção de coleta ou latência entre 15 e 20 ms.
-- **Vermelho:** perda crítica em qualquer uma das três janelas, três perdas consecutivas confirmadas, seis perdas equivalentes em um minuto com dados suficientes, ou quantidade crítica confirmada proporcional à cadência configurada. Latência acima de 20 ms também continua vermelha.
-- **Neutro:** dados insuficientes para avaliar o período recente.
-- **Cinza:** host sem IP válido; não participa da qualidade nem das médias dos grupos.
-
-A indicação operacional crítica é imediata ao confirmar a terceira perda consecutiva, mesmo durante o aquecimento da janela. Resposta válida reinicia a sequência; erro interno a interrompe. O detalhe do status inclui a maior sequência de perdas do minuto e da hora.
-
-Para **recorrência**, são examinados os últimos três minutos completos do relógio (somente esse detector usa períodos fechados). Dois desses três minutos com pelo menos duas perdas equivalentes cada, com cobertura suficiente, identificam DEGRADAÇÃO RECORRENTE. O minuto ainda incompleto não participa. Isso altera apenas a cor e o status: não há notificações, sistema de eventos ou componentes novos no dashboard.
-
-A situação operacional de perda é mantida até cinco minutos de respostas válidas contínuas, sem nova perda, erro interno ou lacuna excessiva. A recuperação exige novas respostas que comprovem todo esse período; parar o coletor ou deixar de receber amostras não recupera o host. O percentual e a classificação histórica permanecem reais após a recuperação.
-
-Nos grupos, a cor e o status refletem o membro válido com a situação mais grave. Os percentuais das janelas de 8 horas, 1 hora e 5 minutos são calculados pelos totais agregados de pings, e as latências continuam sendo a média das médias dos membros. O detalhe identifica a classificação do pior membro, para não confundir a situação de um host com o percentual agregado. Grupos sem hosts válidos ficam cinza. Os filtros de perda referem-se à situação recente/operacional, sem marcar perda histórica isolada como falha ativa.
+As regras de **latência permanecem**: abaixo de 15 ms é normal, de 15 a 20 ms é amarelo e acima de 20 ms é vermelho. A maior gravidade entre latência e perda determina a cor final. Hosts sem IP válido ou com incidente ICMP reconhecido no Zabbix ficam cinza e são excluídos das estatísticas dos grupos. Sem dados para classificação, o estado é neutro.
 
 ## Ajuste rápido no application.properties
 
-As regras estão centralizadas em `src/main/resources/application.properties`, na seção **ANÁLISE DE PERDA DE PACOTES**:
+Os dois limites que definem os três níveis estão em `src/main/resources/application.properties`:
 
-| Propriedade `monitor.loss.*` | Padrão | Finalidade |
-| --- | --- | --- |
-| minute-window-seconds | 60 | Janela móvel recente |
-| hour-window-seconds | 3600 | Janela móvel histórica |
-| minute-reference-packets | 60 | Referência para normalizar outras frequências |
-| minute-attention-losses | 2 | Início da atenção recente |
-| minute-degraded-losses | 3 | Início da degradação recente |
-| minute-critical-losses | 6 | Início da condição crítica recente |
-| hour-normal-max-percent | 0.05 | Limite normal horário inclusivo |
-| hour-degraded-min-percent | 0.1 | Início da degradação horária |
-| hour-critical-min-percent | 0.5 | Início da condição crítica horária |
-| consecutive-critical | 3 | Sequência crítica imediata |
-| recurrence-bucket-seconds | 60 | Duração dos períodos completos de recorrência |
-| recurrence-buckets | 3 | Quantos períodos completos analisar |
-| recurrence-required-buckets | 2 | Quantos períodos devem apresentar perdas |
-| recurrence-bucket-losses | 2 | Mínimo equivalente de perdas por período |
-| recovery-seconds | 300 | Tempo contínuo confirmado para recuperar |
-| minimum-coverage-ratio | 0.8 | Fração mínima de tempo coberto por amostras |
-| minimum-samples | 2 | Mínimo de amostras elegíveis |
-| max-gap-multiplier | 3 | Margem de lacuna em múltiplos da cadência; considera também timeout + cadência |
-| cache-millis | 1000 | Reutilização de uma análise entre leituras do painel |
+```properties
+# Limite superior inclusivo do nível normal.
+monitor.loss.hour-normal-max-percent=0.33
+# Limite inferior inclusivo do nível crítico.
+monitor.loss.hour-critical-min-percent=1.0
+```
 
-As durações avançadas são configuráveis para evolução da regra; as classificações de perda continuam usando as janelas operacionais de 1 minuto/1 hora. As colunas de latência e perda usam janelas fixas de 8 horas, 1 hora e 5 minutos. Para ajustar a cadência use `PING_INTERVAL_MS`, não as janelas. Limites e durações inválidos impedem a inicialização, em vez de aplicar classificações incoerentes.
+Apesar do prefixo `hour-`, os dois valores se aplicam igualmente às janelas de **5 minutos, 1 hora e 8 horas**. Atenção é o intervalo entre esses limites. O limite normal deve ser maior ou igual a zero e menor que o crítico; o crítico deve ser no máximo 100. Configurações inválidas impedem a inicialização.
+
+As demais propriedades `monitor.loss.*` controlam a coleta, o diagnóstico e o cache, sem criar outros níveis ou gatilhos de perda. Para ajustar a cadência de coleta, use `PING_INTERVAL_MS`.
 
 A retenção provisória continua no mesmo arquivo:
 
@@ -241,7 +201,7 @@ Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no pro
 
 O coletor grava cada resultado concluído e o encaminha ao analisador após a confirmação da escrita. Na inicialização, o histórico recente é restaurado uma vez, com leitura paginada pelo driver PostgreSQL. Depois disso, a apresentação reutiliza buffers compactos por host/IP e uma análise curta em cache, sem consultar o banco a cada atualização de tela. Eventos internos de amostra repetidos são deduplicados pelo ID persistido; amostras atrasadas são ordenadas pelo horário real e amostras futuras não entram nas janelas antes de seu horário. Alterar o IP separa os históricos. Resultados revertidos por rollback não entram no histórico em memória.
 
-O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem amostras suficientes, não se declara recuperação nem normalidade. Não existe serviço de notificações ou registro de alertas externos. Execute uma única instância coletora por banco; não há coordenação distribuída de coleta entre réplicas. Para inventários grandes, dimensione o coletor, o banco e a memória do histórico conforme os limites documentados.
+O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem tentativas elegíveis, a perda fica sem classificação. Não existe serviço de notificações ou registro de alertas externos. Execute uma única instância coletora por banco; não há coordenação distribuída de coleta entre réplicas. Para inventários grandes, dimensione o coletor, o banco e a memória do histórico conforme os limites documentados.
 
 ## Configurações no `.env`
 
@@ -282,7 +242,7 @@ node --test src/test/js/dashboard.test.cjs
 
 Esses testes verificam os quatro intervalos, a atualização manual, a persistência da escolha e a recuperação após erros. Node.js não é necessário para executar a aplicação ou os contêineres.
 
-Os testes Java usam H2 em memória e uma API Zabbix simulada. Incluem perdas isoladas, duas perdas, perdas consecutivas, seis perdas distribuídas, recorrência em períodos completos, limites horários exatos, recuperação, falhas/lacunas do coletor, janelas incompletas, outras cadências, amostras atrasadas/duplicadas/futuras, restauração após reinício e percentuais reais na apresentação. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
+Os testes Java usam H2 em memória e uma API Zabbix simulada. Incluem os limites percentuais exatos, remoção dos gatilhos antigos de perda, falhas/lacunas do coletor, janelas incompletas, outras cadências, amostras atrasadas/duplicadas/futuras, restauração após reinício e percentuais reais na apresentação. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
 
 Referências: [user.login](https://www.zabbix.com/documentation/current/en/manual/api/reference/user/login), [API Zabbix](https://www.zabbix.com/documentation/7.0/en/manual/api), [imagem oficial PostgreSQL](https://hub.docker.com/_/postgres).
 

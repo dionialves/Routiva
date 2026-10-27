@@ -4,6 +4,7 @@ import java.net.InetAddress;
 
 /** Validates numeric IP targets without resolving hostnames through DNS. */
 public final class IpAddress {
+
     private IpAddress() {}
 
     public static boolean isValid(String ip) {

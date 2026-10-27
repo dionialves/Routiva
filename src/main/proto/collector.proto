@@ -1,24 +1,82 @@
 syntax = "proto3";
+
 package routiva.collector.v1;
+
 option java_package = "br.com.scriptping.collector.proto";
 option java_multiple_files = true;
 option go_package = "routiva/collector/gen;pb";
+
 service Collector {
   rpc Connect(stream Command) returns (stream Batch);
   rpc Health(HealthRequest) returns (HealthReply);
 }
-message HostConfig { string host_id = 1; string target = 2; int64 interval_ms = 3; int64 timeout_ms = 4; bool enabled = 5; double latency_limit_ms = 6; }
-// A snapshot replaces the inventory atomically. Incremental changes use upsert/remove.
-message Configuration { repeated HostConfig hosts = 1; bool replace = 2; repeated string remove = 3; }
-message Ack { string collector_id = 1; uint64 batch_id = 2; }
-message Command { uint32 protocol_version = 1; oneof body { Configuration config = 2; Ack ack = 3; } }
-enum Status { STATUS_UNSPECIFIED = 0; SUCCESS = 1; TIMEOUT = 2; SEND_ERROR = 3; COLLECTION_ERROR = 4; SKIPPED = 5; ICMP_ERROR = 6; }
-message Result {
- string collector_id = 1; string host_id = 2; uint64 attempt_id = 3; uint64 sequence = 4;
- int64 scheduled_at = 5; int64 sent_at = 6; int64 received_at = 7; int64 rtt_ns = 8;
- Status status = 9; string error_code = 10; string target = 11; double latency_limit_ms = 12;
+
+message HostConfig {
+  string host_id = 1;
+  string target = 2;
+  int64 interval_ms = 3;
+  int64 timeout_ms = 4;
+  bool enabled = 5;
+  double latency_limit_ms = 6;
 }
+
+// A snapshot replaces the inventory atomically. Incremental changes use upsert/remove.
+message Configuration {
+  repeated HostConfig hosts = 1;
+  bool replace = 2;
+  repeated string remove = 3;
+}
+
+message Ack {
+  string collector_id = 1;
+  uint64 batch_id = 2;
+}
+
+message Command {
+  uint32 protocol_version = 1;
+  oneof body {
+    Configuration config = 2;
+    Ack ack = 3;
+  }
+}
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  SUCCESS = 1;
+  TIMEOUT = 2;
+  SEND_ERROR = 3;
+  COLLECTION_ERROR = 4;
+  SKIPPED = 5;
+  ICMP_ERROR = 6;
+}
+
+message Result {
+  string collector_id = 1;
+  string host_id = 2;
+  uint64 attempt_id = 3;
+  uint64 sequence = 4;
+  int64 scheduled_at = 5;
+  int64 sent_at = 6;
+  int64 received_at = 7;
+  int64 rtt_ns = 8;
+  Status status = 9;
+  string error_code = 10;
+  string target = 11;
+  double latency_limit_ms = 12;
+}
+
 // Times are Unix nanoseconds; RTT is measured with Go's monotonic clock.
-message Batch { string collector_id = 1; uint64 batch_id = 2; repeated Result results = 3; uint32 protocol_version = 4; }
+message Batch {
+  string collector_id = 1;
+  uint64 batch_id = 2;
+  repeated Result results = 3;
+  uint32 protocol_version = 4;
+}
+
 message HealthRequest {}
-message HealthReply { string collector_id = 1; uint32 protocol_version = 2; map<string, double> metrics = 3; }
+
+message HealthReply {
+  string collector_id = 1;
+  uint32 protocol_version = 2;
+  map<string, double> metrics = 3;
+}
