@@ -361,7 +361,7 @@ monitor.loss.hour-critical-min-percent=1.0
 
 Apesar do prefixo `hour-`, os dois valores se aplicam igualmente às janelas de **5 minutos, 1 hora e 8 horas**. Atenção é o intervalo entre esses limites. O limite normal deve ser maior ou igual a zero e menor que o crítico; o crítico deve ser no máximo 100. Configurações inválidas impedem a inicialização.
 
-As demais propriedades `monitor.loss.*` controlam a coleta, o diagnóstico e o cache, sem criar outros níveis ou gatilhos de perda. Para ajustar a cadência de coleta, use `PING_INTERVAL_MS`.
+As demais propriedades `monitor.loss.*` controlam a coleta e o diagnóstico, sem criar outros níveis ou gatilhos de perda. Para ajustar a cadência de coleta, use `PING_INTERVAL_MS`.
 
 A retenção provisória continua no mesmo arquivo:
 
@@ -374,7 +374,9 @@ Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no pro
 
 ### Integração e eficiência
 
-O coletor grava cada resultado concluído e o encaminha ao analisador após a confirmação da escrita. Na inicialização, o histórico recente é restaurado uma vez, com leitura paginada pelo driver PostgreSQL. Depois disso, a apresentação reutiliza buffers compactos por host/IP e uma análise curta em cache, sem consultar o banco a cada atualização de tela. Eventos internos de amostra repetidos são deduplicados pelo ID persistido; amostras atrasadas são ordenadas pelo horário real e amostras futuras não entram nas janelas antes de seu horário. Alterar o IP separa os históricos. Resultados revertidos por rollback não entram no histórico em memória.
+O coletor grava os resultados no PostgreSQL sem disparar o recálculo dos indicadores. Um processo em background, com agendamento próprio a cada 10 segundos e primeira execução na inicialização, consulta `ping_sample` para reconstruir o histórico recente por host/IP e calcular latência e perda nas janelas móveis de 5 minutos, 1 hora e 8 horas. Cada ciclo relê a janela de histórico necessária (no mínimo 8 horas), incluindo registros atrasados já confirmados no banco; registros futuros só entram quando seu horário chega. Essa leitura integral tem custo proporcional ao volume de pings da janela.
+
+A página consulta somente o último conjunto concluído de indicadores em memória: nenhum acesso à página dispara consulta de pings ou recálculo das janelas. A publicação é atômica, e leitores continuam usando os valores anteriores enquanto o próximo ciclo é processado ou se ele falhar. Antes da primeira publicação, hosts sem indicadores aparecem sem dados. Os ciclos não se sobrepõem; se um processamento exceder 10 segundos, a atualização seguinte atrasa. Alterar o IP separa os históricos. Resultados revertidos por rollback não entram nos indicadores. Os gráficos históricos de disponibilidade do detalhe do host continuam usando suas consultas específicas por período.
 
 O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem tentativas elegíveis, a perda fica sem classificação. Não existe serviço de notificações ou registro de alertas externos. Execute uma única instância coletora por banco; não há coordenação distribuída de coleta entre réplicas. Para inventários grandes, dimensione o coletor, o banco e a memória do histórico conforme os limites documentados.
 

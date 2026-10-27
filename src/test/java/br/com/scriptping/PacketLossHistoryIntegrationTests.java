@@ -36,13 +36,14 @@ class PacketLossHistoryIntegrationTests {
     PlatformTransactionManager transactions;
 
     @Test
-    void collectorUpdatesHistoryOnceAndRestartRestoresItsSituationFromSavedSamples() {
+    void backgroundRefreshAndRestartRestoreIndicatorsFromSavedPings() {
         Host host = new Host("restore", "Restore", "10.7.0.1", List.of());
         store.save(host, new PingProbe.Result(null, "Tempo esgotado"));
         store.save(host, new PingProbe.Result(null, "Tempo esgotado"));
-        PingSample third = store.save(host, new PingProbe.Result(null, "Tempo esgotado"));
-        analysis.accept(third); // Duplicate delivery must not create a fourth loss.
-        var live = analysis.analyze(List.of(host), System.currentTimeMillis()).get(host.id());
+        store.save(host, new PingProbe.Result(null, "Tempo esgotado"));
+        analysis.refresh(); // Repeated database reads must not duplicate losses.
+        analysis.refresh();
+        var live = analysis.current(List.of(host)).get(host.id());
         assertThat(live.stats().lossesLastMinute()).isEqualTo(3);
         assertThat(
             rules.windowQuality(
@@ -51,9 +52,9 @@ class PacketLossHistoryIntegrationTests {
             )
         ).isEqualTo(Quality.CRITICO);
         var restored = new PacketLossAnalysisService(store, rules, 1000, 2000);
-        restored.restore();
+        restored.refresh();
         var afterRestart = restored
-            .analyze(List.of(host), System.currentTimeMillis())
+            .current(List.of(host))
             .get(host.id());
         assertThat(
             rules.windowQuality(
@@ -73,7 +74,8 @@ class PacketLossHistoryIntegrationTests {
             status.setRollbackOnly();
             return null;
         });
-        var result = analysis.analyze(List.of(host), System.currentTimeMillis()).get(host.id());
+        analysis.refresh();
+        var result = analysis.current(List.of(host)).get(host.id());
         assertThat(result.stats().attemptsLastMinute()).isZero();
         assertThat(result.level()).isEqualTo(Level.NORMAL);
     }

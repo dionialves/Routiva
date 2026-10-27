@@ -89,7 +89,7 @@ class PacketLossThresholdTests {
         var attention = host("attention");
         var critical = host("critical");
         when(monitor.hosts()).thenReturn(List.of(isolated, history, attention, critical));
-        when(analysis.analyze(anyList(), anyLong())).thenReturn(
+        when(analysis.current(anyList())).thenReturn(
             Map.of(
                 isolated.id(),
                 result(1, 1, Quality.EVENTO_ISOLADO, Quality.NORMAL, Level.NORMAL),
@@ -164,7 +164,7 @@ class PacketLossThresholdTests {
                     true,
                     true
                 );
-                when(analysis.analyze(anyList(), anyLong())).thenReturn(Map.of(h.id(), recovered));
+                when(analysis.current(anyList())).thenReturn(Map.of(h.id(), recovered));
                 for (String page : List.of("/hosts", "/grupos")) {
                     var card = cards(page, "all").getFirst();
                     assertThat(card.color())
@@ -182,7 +182,7 @@ class PacketLossThresholdTests {
         var a = new Host("mixed-a", "A", "10.4.1.1", List.of(group));
         var b = new Host("mixed-b", "B", "10.4.1.2", List.of(group));
         when(monitor.hosts()).thenReturn(List.of(a, b));
-        when(analysis.analyze(anyList(), anyLong())).thenReturn(
+        when(analysis.current(anyList())).thenReturn(
             Map.of(
                 a.id(),
                 result(3, 3, Quality.DEGRADADO, Quality.NORMAL, Level.CRITICO),
@@ -202,7 +202,7 @@ class PacketLossThresholdTests {
     void legacyOperationalAlertsCannotOverrideNormalWindowPercentages() throws Exception {
         var h = host("legacy");
         when(monitor.hosts()).thenReturn(List.of(h));
-        when(analysis.analyze(anyList(), anyLong())).thenReturn(
+        when(analysis.current(anyList())).thenReturn(
             Map.of(h.id(), result(0, 0, Quality.CRITICO, Quality.CRITICO, Level.CRITICO))
         );
         for (String page : List.of("/hosts", "/grupos")) {

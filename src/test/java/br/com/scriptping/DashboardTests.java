@@ -35,6 +35,7 @@ class DashboardTests {
         );
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(host));
         store.save(host, new PingProbe.Result(10d, null));
+        analysis.refresh();
         for (int hours : new int[] { 1, 2, 4, 8, 12, 24, 48 })
             mvc.perform(get("/hosts/details").param("hours", String.valueOf(hours)))
                 .andExpect(status().isOk())
@@ -158,6 +159,7 @@ class DashboardTests {
             java.util.List.of(new Host.Group("g1", "Produção"))
         );
         store.save(h, new PingProbe.Result(16d, null));
+        analysis.refresh();
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(h));
         mvc.perform(get("/dashboard"))
             .andExpect(status().isOk())
@@ -205,6 +207,7 @@ class DashboardTests {
         store.save(green, new PingProbe.Result(10d, null));
         store.save(yellow, new PingProbe.Result(17d, null));
         store.save(red, new PingProbe.Result(25d, null));
+        analysis.refresh();
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(
             java.util.List.of(green, yellow, red, neutral)
         );
@@ -280,6 +283,7 @@ class DashboardTests {
                 );
         }
         store.save(green, new PingProbe.Result(null, "Tempo esgotado"));
+        analysis.refresh();
         mvc.perform(
             get("/hosts")
                 .header("HX-Request", "true")
@@ -305,6 +309,7 @@ class DashboardTests {
         var b = new Host("average-b", "Mais um host", "10.1.1.2", java.util.List.of(group));
         store.save(a, new PingProbe.Result(10d, null));
         store.save(b, new PingProbe.Result(16d, null));
+        analysis.refresh();
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(a, b));
         mvc.perform(get("/grupos").header("HX-Request", "true").param("q", "principal"))
             .andExpect(status().isOk())
@@ -337,6 +342,7 @@ class DashboardTests {
         store.save(first, new PingProbe.Result(10d, null));
         store.save(shared, new PingProbe.Result(25d, null));
         store.save(outside, new PingProbe.Result(10d, null));
+        analysis.refresh();
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(
             java.util.List.of(first, shared, outside)
         );
@@ -445,6 +451,7 @@ class DashboardTests {
         store.save(missing, new PingProbe.Result(null, "IP ausente ou inválido"));
         store.save(malformed, new PingProbe.Result(99d, null));
         store.save(failed, new PingProbe.Result(null, "Tempo esgotado"));
+        analysis.refresh();
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(
             java.util.List.of(healthy, missing, malformed, noSamples, failed, pending)
         );
@@ -551,8 +558,9 @@ class DashboardTests {
         Host h = new Host("test", "Teste", "127.0.0.1", java.util.List.of());
         store.save(h, new PingProbe.Result(10d, null));
         store.save(h, new PingProbe.Result(null, "Tempo esgotado"));
+        analysis.refresh();
         var s = analysis
-            .analyze(java.util.List.of(h), System.currentTimeMillis())
+            .current(java.util.List.of(h))
             .get("test")
             .stats();
         assertThat(s.hour()).isEqualTo(10d);

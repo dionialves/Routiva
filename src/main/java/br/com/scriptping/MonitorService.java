@@ -8,19 +8,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class MonitorService {
 
-    private final PacketLossAnalysisService analysis;
     private final ZabbixClient zabbix;
     private final CollectorClient collector;
     private volatile List<Host> hosts = List.of();
     private volatile String status = "Aguardando sincronização";
     private volatile Long lastSync;
 
-    public MonitorService(
-        ZabbixClient zabbix,
-        CollectorClient collector,
-        PacketLossAnalysisService analysis
-    ) {
-        this.analysis = analysis;
+    public MonitorService(ZabbixClient zabbix, CollectorClient collector) {
         this.zabbix = zabbix;
         this.collector = collector;
     }
@@ -33,7 +27,6 @@ public class MonitorService {
         }
         try {
             hosts = zabbix.fetch();
-            analysis.retainHosts(hosts);
             collector.synchronize(hosts);
             lastSync = System.currentTimeMillis();
             status = "Zabbix conectado";

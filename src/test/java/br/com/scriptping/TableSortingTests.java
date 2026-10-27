@@ -52,8 +52,7 @@ class TableSortingTests {
             latency,
             error
         );
-        long id = jdbc.queryForObject("SELECT MAX(id) FROM ping_sample", Long.class);
-        analysis.accept(new PingSample(id, host.id(), host.ip(), time, latency, error));
+        analysis.refresh();
     }
 
     @SuppressWarnings("unchecked")
@@ -238,8 +237,12 @@ class TableSortingTests {
         var two = host("sort-ip-two", "B dois", "10.8.2.2");
         var empty = host("sort-ip-empty", "C vazio", "");
         long now = System.currentTimeMillis();
-        sample(ten, now - 86400000, 10d, null);
+        // Keep both dates inside the eight-hour window loaded by the background job.
+        now = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.DAYS)
+            .plus(2, java.time.temporal.ChronoUnit.HOURS).toEpochMilli();
+        sample(ten, now - 4 * 3600000L, 10d, null);
         sample(two, now, 10d, null);
+        analysis.refreshAt(now);
         when(monitor.hosts()).thenReturn(List.of(ten, two, empty));
         assertThat(sorted("/hosts", "ip", "asc"))
             .extracting(DashboardController.Card::id)

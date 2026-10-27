@@ -15,7 +15,6 @@ public class PacketLossPolicy {
     private double minimumCoverageRatio = 0.8;
     private int minimumSamples = 2;
     private double maxGapMultiplier = 3;
-    private long cacheMillis = 1000;
 
     public long getMinuteWindowSeconds() {
         return minuteWindowSeconds;
@@ -73,14 +72,6 @@ public class PacketLossPolicy {
         this.maxGapMultiplier = value;
     }
 
-    public long getCacheMillis() {
-        return cacheMillis;
-    }
-
-    public void setCacheMillis(long value) {
-        this.cacheMillis = value;
-    }
-
     public Double visiblePercentage(long losses, long attempts) {
         return attempts == 0 ? null : (100.0 * losses) / attempts;
     }
@@ -98,7 +89,6 @@ public class PacketLossPolicy {
         if (
             minuteWindowSeconds < 1 ||
             hourWindowSeconds < minuteWindowSeconds ||
-            cacheMillis < 1 ||
             minimumSamples < 1
         ) {
             throw new IllegalArgumentException("Janelas e contagens de monitor.loss inválidas.");
