@@ -68,7 +68,9 @@ public class SampleStore {
         return latencyLimit;
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public PingSample save(Host host, PingProbe.Result result) {
+        lockIngestion();
         long now = System.currentTimeMillis();
         var key = new org.springframework.jdbc.support.GeneratedKeyHolder();
         jdbc.update(connection -> {
@@ -110,6 +112,7 @@ public class SampleStore {
     /** The receipt and all rows commit together. The single ingestion writer retries the same identity. */
     @org.springframework.transaction.annotation.Transactional
     public void saveBatch(br.com.scriptping.collector.proto.Batch batch) {
+        lockIngestion();
         String collector = batch.getCollectorId();
         if (
             collector.isBlank() ||
@@ -210,6 +213,39 @@ public class SampleStore {
                 }
             }
         );
+    }
+
+    private void lockIngestion() {
+        jdbc.queryForObject("SELECT id FROM ping_ingestion_guard WHERE id=1 FOR UPDATE", Integer.class);
+    }
+
+    /** Releases the ingestion lock before the potentially large history read starts. */
+    @org.springframework.transaction.annotation.Transactional(
+        propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW
+    )
+    public long committedBoundary() {
+        lockIngestion();
+        return jdbc.queryForObject("SELECT COALESCE(MAX(id),0) FROM ping_sample", Long.class);
+    }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public void readIncrement(long after, long through, long cutoff, java.util.function.Consumer<PingSample> consumer) {
+        jdbc.query(connection -> {
+            var query = connection.prepareStatement(
+                "SELECT id,host_id,target,measured_at,latency,error FROM ping_sample " +
+                "WHERE id>? AND id<=? AND measured_at>=? ORDER BY id"
+            );
+            query.setLong(1, after);
+            query.setLong(2, through);
+            query.setLong(3, cutoff);
+            query.setFetchSize(1000);
+            return query;
+        }, (org.springframework.jdbc.core.RowCallbackHandler) row -> {
+            Number latency = (Number) row.getObject("latency");
+            consumer.accept(new PingSample(row.getLong("id"), row.getString("host_id"),
+                row.getString("target"), row.getLong("measured_at"),
+                latency == null ? null : latency.doubleValue(), row.getString("error")));
+        });
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)

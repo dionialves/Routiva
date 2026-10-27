@@ -1,0 +1,29 @@
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <springProperty scope="context" name="INDICATOR_PATH" source="indicators.log.path" defaultValue="logs/indicators.log"/>
+    <springProperty scope="context" name="INDICATOR_MAX_SIZE" source="indicators.log.max-file-size" defaultValue="10MB"/>
+    <springProperty scope="context" name="INDICATOR_HISTORY" source="indicators.log.max-history" defaultValue="7"/>
+    <springProperty scope="context" name="INDICATOR_TOTAL_SIZE" source="indicators.log.total-size-cap" defaultValue="100MB"/>
+    <appender name="INDICATORS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${INDICATOR_PATH}</file>
+        <append>true</append>
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX,UTC} %-5level %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${INDICATOR_PATH}.%d{yyyy-MM-dd,UTC}.%i.gz</fileNamePattern>
+            <maxFileSize>${INDICATOR_MAX_SIZE}</maxFileSize>
+            <maxHistory>${INDICATOR_HISTORY}</maxHistory>
+            <totalSizeCap>${INDICATOR_TOTAL_SIZE}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+    <logger name="routiva.indicators" level="INFO" additivity="false">
+        <appender-ref ref="INDICATORS"/>
+    </logger>
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

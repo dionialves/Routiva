@@ -27,6 +27,48 @@ public class PacketLossAnalyzer {
         return Math.max(8 * 3600000L, hourMs);
     }
 
+    IncrementalPingHistory newIncrementalHistory() {
+        return new IncrementalPingHistory(interval, maxGap);
+    }
+
+    void advance(IncrementalPingHistory history, long now) {
+        // Deduplicate durations when configured diagnostic windows match display windows.
+        long[] durations = java.util.stream.LongStream.of(minuteMs, hourMs, 300000L, 3600000L, 8 * 3600000L)
+            .distinct().toArray();
+        history.advance(now, durations);
+    }
+
+    private Quality quality(IncrementalPingHistory.Totals totals, long duration) {
+        boolean enough = totals.attempts() >= rules.getMinimumSamples() &&
+            Math.min(1.0, totals.coverage / (double) duration) >= rules.getMinimumCoverageRatio();
+        return hourQuality(totals.losses, totals.attempts(), enough);
+    }
+
+    PacketLossAnalysis analyze(IncrementalPingHistory history, long now) {
+        var minute = history.window(now - minuteMs, now);
+        var hour = history.window(now - hourMs, now);
+        var eightHours = history.metrics(8 * 3600000L);
+        var latencyHour = history.metrics(3600000L);
+        var fiveMinutes = history.metrics(300000L);
+        // Standalone comparisons can use a freshly built history without an advance call.
+        if (eightHours == null) eightHours = history.window(now - 8 * 3600000L, now);
+        if (latencyHour == null) latencyHour = history.window(now - 3600000L, now);
+        if (fiveMinutes == null) fiveMinutes = history.window(now - 300000L, now);
+        var last = history.last();
+        boolean fresh = last != null && now - last.measuredAt() <= maxGap;
+        var stats = new SampleStore.Stats(
+            hour.mean(), minute.mean(), last == null ? null : last.latency(),
+            last == null ? null : last.measuredAt(), last == null ? null : last.error(),
+            hour.all, hour.all - hour.successes, hour.attempts(), hour.losses,
+            minute.attempts(), minute.losses, eightHours.mean(), latencyHour.mean(), fiveMinutes.mean(),
+            eightHours.attempts(), eightHours.losses, latencyHour.attempts(), latencyHour.losses,
+            fiveMinutes.attempts(), fiveMinutes.losses
+        );
+        return new PacketLossAnalysis(stats, quality(minute, minuteMs), quality(hour, hourMs),
+            history.consecutive(), minute.maxLoss, hour.maxLoss, false, Level.NORMAL, false,
+            fresh, fresh && last.outcome() != PingSample.ERROR);
+    }
+
     private class Counts {
 
         final long start, end;

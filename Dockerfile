@@ -17,15 +17,16 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 routiva \
     && useradd --uid 10001 --gid routiva --create-home routiva
-RUN mkdir -p /run/routiva \
-    && chown routiva:routiva /run/routiva
+RUN mkdir -p /run/routiva /var/log/routiva \
+    && chown routiva:routiva /run/routiva /var/log/routiva
 
 WORKDIR /app
 COPY --from=build --chown=routiva:routiva /build/target/scriptping-1.0.0.jar app.jar
 
 USER routiva
 ENV SERVER_ADDRESS=0.0.0.0 \
-    PORT=8080
+    PORT=8080 \
+    INDICATORS_LOG_PATH=/var/log/routiva/indicators.log
 
 EXPOSE 8080
 

@@ -14,10 +14,12 @@ services:
       SERVER_ADDRESS: 0.0.0.0
       PORT: 8080
       COLLECTOR_ADDRESS: unix:///run/routiva/collector.sock
+      INDICATORS_LOG_PATH: /var/log/routiva/indicators.log
     ports:
       - '${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080'
     volumes:
       - collector_socket:/run/routiva
+      - indicator_logs:/var/log/routiva
     depends_on:
       collector:
         condition: service_healthy
@@ -60,4 +62,5 @@ services:
 volumes:
   collector_socket:
   collector_logs:
+  indicator_logs:
   postgres_data:

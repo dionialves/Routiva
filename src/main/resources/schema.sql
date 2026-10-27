@@ -60,3 +60,11 @@ CREATE TABLE IF NOT EXISTS collector_batch (
     committed_at BIGINT NOT NULL,
     PRIMARY KEY (collector_id, batch_id)
 );
+
+-- All application writers acquire this row before allocating ping IDs.
+-- A reader acquires it briefly to capture a boundary containing only committed writes.
+CREATE TABLE IF NOT EXISTS ping_ingestion_guard (
+    id INTEGER PRIMARY KEY CHECK (id = 1)
+);
+INSERT INTO ping_ingestion_guard(id)
+SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM ping_ingestion_guard WHERE id = 1);
