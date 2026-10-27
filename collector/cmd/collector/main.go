@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	pb "routiva/collector/gen"
+	"routiva/collector/internal/audit"
 	"routiva/collector/internal/engine"
 	"routiva/collector/internal/server"
 	"strconv"
@@ -55,12 +56,23 @@ func health() error {
 	}
 	return json.NewEncoder(os.Stdout).Encode(r)
 }
-func run() error {
+func run() (runErr error) {
 	if len(os.Args) > 1 && os.Args[1] == "--health" {
 		return health()
 	}
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	auditLog, err := audit.Open(env("COLLECTOR_LOG_PATH", "/var/log/routiva/collector.log"), int64(number("COLLECTOR_LOG_MAX_MIB", 100))*1024*1024, number("COLLECTOR_LOG_FILES", 10))
+	if err != nil {
+		return fmt.Errorf("open collector audit log: %w", err)
+	}
+	defer auditLog.Close()
+	defer func() {
+		if runErr != nil {
+			auditLog.Event(slog.LevelError, "COLLECTOR_FAILED", "Collector failed", "error", runErr)
+		}
+	}()
+	auditLog.Event(slog.LevelInfo, "STARTING", "Collector starting", "protocol_version", 1)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	address := env("COLLECTOR_LISTEN", "unix:///run/routiva/collector.sock")
@@ -115,6 +127,7 @@ func run() error {
 		return err
 	}
 	defer listener.Close()
+	auditLog.Event(slog.LevelInfo, "SOCKET_READY", "gRPC listener ready", "address", address)
 	if network == "unix" {
 		if err = os.Chmod(endpoint, 0660); err != nil {
 			return err
@@ -124,6 +137,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("ICMP socket: %w (check ping_group_range)", err)
 	}
+	auditLog.Event(slog.LevelInfo, "ICMP_READY", "ICMP socket opened")
 	var id [16]byte
 	if _, err = rand.Read(id[:]); err != nil {
 		return err
@@ -134,16 +148,24 @@ func run() error {
 		return fmt.Errorf("COLLECTOR_BATCH_SIZE must be <=5000")
 	}
 	s := server.New(e, batchSize, number("COLLECTOR_MAX_BATCHES", 128), time.Duration(number("COLLECTOR_FLUSH_MS", 100))*time.Millisecond)
+	s.Audit = auditLog
+	auditLog.Event(slog.LevelInfo, "LIMITS", "Collector limits configured", "collector_id", e.ID, "max_batch_size", s.BatchSize, "max_batches", s.MaxBatches, "flush_ms", s.Flush.Milliseconds(), "result_buffer_capacity", cap(e.Results), "ack_timeout_ms", 30000)
 	g := grpc.NewServer(append(options, grpc.MaxRecvMsgSize(4<<20))...)
 	pb.RegisterCollectorServer(g, s)
 	engineDone := make(chan struct{})
 	go func() { e.Run(ctx); close(engineDone) }()
 	batchCtx, stopBatch := context.WithCancel(context.Background())
 	defer stopBatch()
-	go s.Run(batchCtx)
+	batchDone := make(chan struct{})
+	go func() { defer close(batchDone); s.Run(batchCtx) }()
+	defer func() { stopBatch(); <-batchDone }()
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
+		auditLog.Event(slog.LevelInfo, "SHUTDOWN_REQUESTED", "Collector shutdown requested", "collector_id", e.ID)
 		<-engineDone
+		auditLog.Event(slog.LevelInfo, "ENGINE_STOPPED", "Collection engine stopped", "collector_id", e.ID)
 		// Keep the result stream available briefly to acknowledge the final batches.
 		time.Sleep(s.Flush)
 		deadline := time.Now().Add(5 * time.Second)
@@ -152,13 +174,21 @@ func run() error {
 		}
 		if n := s.Buffered(); n > 0 {
 			slog.Warn("shutdown with unacknowledged in-memory results", "buffer_units", n)
+			auditLog.Event(slog.LevelWarn, "SHUTDOWN_UNCONFIRMED", "Unacknowledged data remains in memory", "collector_id", e.ID, "buffer_units", n)
 		}
 		stopBatch()
 		g.Stop()
 	}()
 	slog.Info("collector started", "collector_id", e.ID, "listen", address)
 	err = g.Serve(listener)
-	if ctx.Err() != nil {
+	stopping := ctx.Err() != nil
+	cancel()
+	<-shutdownDone
+	<-engineDone
+	stopBatch()
+	<-batchDone
+	auditLog.Event(slog.LevelInfo, "SHUTDOWN_COMPLETED", "Collector server stopped", "collector_id", e.ID, "remaining_buffer_units", s.Buffered(), "error", err)
+	if stopping {
 		return nil
 	}
 	return err

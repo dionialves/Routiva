@@ -8,6 +8,8 @@ User=routiva
 Group=routiva
 RuntimeDirectory=routiva
 RuntimeDirectoryMode=0750
+LogsDirectory=routiva
+LogsDirectoryMode=0750
 Environment=COLLECTOR_LISTEN=unix:///run/routiva/collector.sock
 EnvironmentFile=-/etc/routiva/collector.env
 ExecStart=/usr/local/bin/routiva-collector

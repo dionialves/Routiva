@@ -151,7 +151,7 @@ docker compose exec -T collector routiva-collector --health | jq '{
 }'
 ```
 
-**Como interpretar o fluxo:** o Go mantém um lote enviado aguardando ACK por vez. O Java grava as amostras e o recibo em `collector_batch` na mesma transação e só depois confirma ao Go. Ao receber o ACK, o Go remove o lote da memória e pode enviar o próximo. Não há arquivo persistente de lotes ou histórico de ACKs no coletor; os recibos e amostras no PostgreSQL seguem a retenção configurada. O recibo comprova a gravação, mas não que o Go recebeu a confirmação.
+**Como interpretar o fluxo:** o Go mantém um lote enviado aguardando ACK por vez. O Java grava as amostras e o recibo em `collector_batch` na mesma transação e só depois confirma ao Go. Ao receber o ACK, o Go remove o lote da memória e pode enviar o próximo. O arquivo de log registra o ciclo dos lotes e os ACKs, mas não armazena os resultados para recuperação; os recibos e amostras no PostgreSQL seguem a retenção configurada. O recibo comprova a gravação, mas não que o Go recebeu a confirmação.
 
 Compare leituras ao longo do tempo: aumento de `dropped_total` indica novos descartes; queda de `result_buffer` indica redução do acúmulo naquele intervalo. Um buffer estável, sozinho, não comprova equilíbrio, pois pode coexistir com descartes. Para calcular uma taxa, divida a diferença de um contador pelo tempo entre as consultas. A saída atual não expõe os IDs dos lotes pendentes nem separa lotes aguardando envio daqueles aguardando ACK.
 
@@ -161,7 +161,101 @@ Para acompanhar os logs disponíveis dos dois processos:
 docker compose logs -f --timestamps --tail=100 collector app
 ```
 
-O Docker captura a saída dos processos; o coletor escreve em JSON. Há logs de inicialização, erros e encerramento, mas não um evento para cada lote criado, enviado ou confirmado. O projeto não configura arquivo próprio nem retenção específica desses logs. Mais detalhes sobre filas, limites e auditoria de entrega estão em [Operação do coletor](docs/coletor-icmp.md).
+O Docker captura os logs gerais dos processos. O coletor também mantém um **arquivo sequencial de eventos por lote**, com mensagens e campos em inglês, em `/var/log/routiva/collector.log`. Não registra pings, IPs ou resultados individuais.
+
+### Arquivo de log dos lotes
+
+O arquivo permite acompanhar o caminho de cada lote: criação → envio ao Java → recebimento e validação do ACK → remoção da memória. Também registra reconexões, reenvios, descartes e o estado das filas. As mensagens são em inglês e não incluem pings individuais.
+
+O caminho `/var/log/routiva/collector.log` fica **dentro do container `collector`**, no volume `collector_logs`; não é um arquivo criado diretamente na pasta do projeto no servidor. Execute os comandos abaixo na pasta do projeto, onde está o `compose.yaml`.
+
+#### Ativar e abrir o log
+
+Após atualizar o código, reconstrua o coletor para ativar o arquivo e o volume persistente:
+
+```sh
+docker compose up -d --build --wait collector
+```
+
+A recriação reinicia o coletor: resultados ainda não confirmados em memória podem ser perdidos. Essa etapa é necessária para aplicar a implementação, não a cada consulta do log.
+
+Para abrir as últimas 100 linhas, sem continuar acompanhando:
+
+```sh
+docker compose exec -T collector tail -n 100 /var/log/routiva/collector.log
+```
+
+Para acompanhar novos eventos em tempo real, inclusive após rotação:
+
+```sh
+docker compose exec -T collector tail -n 100 -F /var/log/routiva/collector.log
+```
+
+Pressione `Ctrl+C` para sair do acompanhamento; isso não para o coletor. `-n 100` seleciona as últimas 100 linhas e `-F` continua seguindo o arquivo quando ele é substituído pela rotação.
+
+#### Consultar um lote e abrir arquivos anteriores
+
+Para consultar somente os eventos de um lote (substitua a identidade do coletor e o número):
+
+```sh
+docker compose exec -T collector cat /var/log/routiva/collector.log | grep -F 'collector_id=ID_DO_COLETOR ' | grep -E 'batch_id=123( |$)'
+```
+
+O arquivo ativo contém os eventos mais recentes. Arquivos anteriores são `collector.log.1` (o mais recente dos arquivos rotacionados), `collector.log.2` e assim por diante. Para exportar o arquivo ativo:
+
+```sh
+docker compose cp collector:/var/log/routiva/collector.log ./collector-export.log
+```
+
+Depois, abra a cópia no servidor com um editor de texto ou com `less`, se instalado:
+
+```sh
+less collector-export.log
+```
+
+No `less`, use as setas para navegar, `/ACK_RECEIVED` para pesquisar e `q` para sair. A cópia é uma fotografia do arquivo; ela não recebe novos eventos.
+
+Para listar os arquivos disponíveis e consultar as últimas linhas do arquivo anterior:
+
+```sh
+docker compose exec -T collector ls -lh /var/log/routiva
+docker compose exec -T collector tail -n 100 /var/log/routiva/collector.log.1
+```
+
+O arquivo `.1` só existe depois da primeira rotação. Se o arquivo ativo ainda não existir, confira se o serviço atualizado está em execução com `docker compose ps collector` e procure erros em `docker compose logs --tail=100 collector`.
+
+#### Entender os eventos
+
+Cada linha contém `time`, `level`, `msg`, `seq`, `event` e os campos do evento. `seq` ordena os registros da execução e reinicia com o processo. `collector_id` e `batch_id` identificam um lote; os primeiros eventos de inicialização podem ocorrer antes da criação da identidade do motor. Os horários incluem o fuso do processo, normalmente UTC no container.
+
+| Evento | Significado |
+| --- | --- |
+| `STARTING`, `SOCKET_READY`, `ICMP_READY`, `LIMITS` | Inicialização e limites configurados. |
+| `CONNECTION_ACCEPTED`, `CONNECTION_REJECTED`, `CONNECTION_CLOSED` | Abertura, rejeição ou encerramento de sessão Java. |
+| `CONFIG_RECEIVED`, `CONFIG_APPLIED`, `CONFIG_REJECTED`, `CONFIG_TIMEOUT`, `PROTOCOL_REJECTED` | Configuração e validação do protocolo, sem listar hosts. |
+| `BATCH_CREATED` | Lote formado e colocado na fila, com quantidade de resultados e motivo. |
+| `SEND_STARTED`, `SEND_COMPLETED`, `SEND_FAILED` | Início, retorno bem-sucedido do envio gRPC ou falha. `send_attempt` maior que 1 indica reenvio do mesmo lote. Envio concluído não comprova gravação no banco. |
+| `ACK_RECEIVED`, `ACK_VALIDATED`, `ACK_REJECTED`, `ACK_TIMEOUT` | Recebimento, validação, rejeição ou ausência de confirmação no prazo. `ack_ms` mede envio até validação, incluindo persistência. |
+| `BATCH_REMOVED` | Remoção do lote da memória após ACK válido. |
+| `BATCH_DROPPED` | Novo lote descartado por falta de espaço; inclui ID e quantidade. |
+| `QUEUE_STATUS` | Fotografia da fila a cada dez segundos; inclui resultados em formação, buffer do motor e descartes acumulados. |
+| `SHUTDOWN_REQUESTED`, `ENGINE_STOPPED`, `SHUTDOWN_UNCONFIRMED`, `SHUTDOWN_COMPLETED`, `COLLECTOR_FAILED` | Encerramento, dados restantes ou falha do processo. |
+
+`retained_batches` inclui o lote em voo; `waiting_to_send` exclui esse lote; `awaiting_ack` é zero ou um. `in_flight_batch_id` identifica o lote em transmissão/espera de ACK (zero se não houver). Descartes anteriores à formação de lote aparecem somente no total agregado de `QUEUE_STATUS`, pois ainda não possuem ID de lote.
+
+#### Rotação, persistência e limites
+
+O volume Docker `collector_logs` preserva os arquivos ao recriar o container ou executar `docker compose down`. `down -v` remove também esse volume. A rotação padrão usa **100 MiB por arquivo, até dez arquivos incluindo o ativo**, eliminando o mais antigo. Ajuste no `.env` e recrie o serviço:
+
+```dotenv
+COLLECTOR_LOG_MAX_MIB=100
+COLLECTOR_LOG_FILES=10
+```
+
+Fora do Compose, `COLLECTOR_LOG_PATH` permite mudar o caminho do arquivo; o diretório precisa ser gravável pelo usuário do coletor. O serviço systemd fornecido cria `/var/log/routiva` com o proprietário correto.
+
+A escrita usa uma fila limitada em memória para não bloquear a coleta por lentidão do disco. Se a fila do logger lotar ou a escrita falhar, eventos podem ser perdidos: `LOG_EVENTS_DROPPED` e `LOG_WRITE_FAILED` são avisados na saída do processo, consultável com `docker compose logs collector`. Lacunas em `seq` podem indicar eventos perdidos. Falha ao abrir o arquivo na inicialização impede a subida. Encerramento normal drena a fila de logs; uma interrupção abrupta pode perder registros recentes. O arquivo não substitui os recibos do PostgreSQL nem permite recuperar resultados descartados.
+
 
 ### Usando o Nginx instalado no mesmo servidor
 

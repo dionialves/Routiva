@@ -29,11 +29,16 @@ services:
       context: .
       dockerfile: collector/Dockerfile
     restart: unless-stopped
+    environment:
+      COLLECTOR_LOG_PATH: /var/log/routiva/collector.log
+      COLLECTOR_LOG_MAX_MIB: ${COLLECTOR_LOG_MAX_MIB:-100}
+      COLLECTOR_LOG_FILES: ${COLLECTOR_LOG_FILES:-10}
     cap_drop: [ALL]
     sysctls:
       net.ipv4.ping_group_range: '10001 10001'
     volumes:
       - collector_socket:/run/routiva
+      - collector_logs:/var/log/routiva
     stop_grace_period: 15s
   postgres:
     image: postgres:17-alpine
@@ -54,4 +59,5 @@ services:
       start_period: 10s
 volumes:
   collector_socket:
+  collector_logs:
   postgres_data:

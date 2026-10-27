@@ -7,8 +7,12 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	pb "routiva/collector/gen"
+	"routiva/collector/internal/audit"
 	"routiva/collector/internal/engine"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,6 +27,13 @@ func TestStreamingReplayAndAck(t *testing.T) {
 	defer cancel()
 	e := engine.New("boot", &silent{make(chan struct{})}, 8)
 	s := New(e, 2, 2, 5*time.Millisecond)
+	logPath := filepath.Join(t.TempDir(), "collector.log")
+	logger, err := audit.Open(logPath, 1<<20, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Audit = logger
+	defer logger.Close()
 	go e.Run(ctx)
 	go s.Run(ctx)
 	lis := bufconn.Listen(1 << 20)
@@ -77,6 +88,26 @@ func TestStreamingReplayAndAck(t *testing.T) {
 		n := len(s.batches)
 		s.mu.Unlock()
 		if n == 0 {
+			logger.Close()
+			data, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			log := string(data)
+			for _, event := range []string{"BATCH_CREATED", "SEND_STARTED", "SEND_COMPLETED", "ACK_RECEIVED", "ACK_VALIDATED", "BATCH_REMOVED"} {
+				if !strings.Contains(log, "event="+event) {
+					t.Fatalf("missing %s: %s", event, log)
+				}
+			}
+			if !strings.Contains(log, "send_attempt=2") {
+				t.Fatal("replay not logged")
+			}
+			if strings.Contains(log, "attempt_id=") || strings.Contains(log, "host_id=") {
+				t.Fatal("individual result leaked into audit")
+			}
+			if strings.Index(log, "event=ACK_VALIDATED") > strings.Index(log, "event=BATCH_REMOVED") {
+				t.Fatal("batch removed before ACK validation")
+			}
 			return
 		}
 		time.Sleep(time.Millisecond)
@@ -88,6 +119,13 @@ func TestOfflineBufferIsBounded(t *testing.T) {
 	defer cancel()
 	e := engine.New("x", nil, 10)
 	s := New(e, 1, 2, time.Millisecond)
+	logPath := filepath.Join(t.TempDir(), "collector.log")
+	logger, err := audit.Open(logPath, 1<<20, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Audit = logger
+	defer logger.Close()
 	go s.Run(ctx)
 	for i := 0; i < 10; i++ {
 		e.Results <- &pb.Result{AttemptId: uint64(i + 1)}
@@ -103,5 +141,16 @@ func TestOfflineBufferIsBounded(t *testing.T) {
 	defer s.mu.Unlock()
 	if len(s.batches) != 2 {
 		t.Fatal("buffer not bounded")
+	}
+	logger.Close()
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), "event=BATCH_DROPPED") != 8 {
+		t.Fatal("discard events missing")
+	}
+	if !strings.Contains(string(data), "reason=BATCH_LIMIT") {
+		t.Fatal("discard reason missing")
 	}
 }
