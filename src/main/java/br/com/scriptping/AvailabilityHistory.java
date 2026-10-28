@@ -156,8 +156,9 @@ final class AvailabilityHistory {
             if (latest != null) break;
         }
         // Share complete points between periods and publications. Only edge points are recut.
-        for (int hours : PERIODS) {
-            long from = now - hours * 3_600_000L;
+        for (int hours : java.util.stream.Stream.concat(PERIODS.stream(), java.util.stream.Stream.of(0)).toList()) {
+            // Internal key 0 represents the exact five-minute window.
+            long from = now - (hours == 0 ? 300_000L : hours * 3_600_000L);
             Counts total = new Counts();
             List<Point> series = new ArrayList<>();
             for (long at = Math.floorDiv(from, MINUTE) * MINUTE; at < now; at += MINUTE) {

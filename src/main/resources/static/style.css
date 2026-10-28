@@ -889,3 +889,38 @@ main.settings-page { max-width: none; margin: 0; }
   .inventory-host-row small { grid-column: 2; }
   .toast-stack { right: 16px; bottom: 16px; }
 }
+
+/* Availability dashboard */
+.availability-filters { display:flex; gap:20px; flex-wrap:wrap; margin:28px 0 20px; }
+.availability-filters label { display:flex; flex-direction:column; gap:8px; min-width:200px; color:#97a5bd; }
+.availability-filters select { padding:12px; border:1px solid #294258; border-radius:8px; background:#0d2030; color:#f8fafc; font:inherit; }
+.availability-page .card { margin-bottom:20px; }
+.availability-page .availability-grid .card { min-width:0; }
+.availability-page .availability-grid strong { font-size:30px; }
+.availability-page button { cursor:pointer; padding:9px 12px; background:#102b40; color:#e2e8f0; border:1px solid #294258; border-radius:6px; font:inherit; }
+.availability-page button:disabled { opacity:.4; cursor:default; }
+.availability-page #availability-chart svg { display:block; width:100%; min-height:180px; }
+.availability-page .hosts-table td { font-variant-numeric:tabular-nums; }
+.availability-page :focus-visible { outline:2px solid #00d1ff; outline-offset:3px; }
+@media(max-width:700px) { .availability-filters label { flex:1; min-width:160px; } .availability-page h1 { font-size:30px; } }
+.availability-page .healthy-key { color:#34d399; }
+.availability-page .technical-key { color:#00d1ff; }
+.availability-page .availability-grid strong { color:#f8fafc; }
+/* Interactive availability chart; styles are scoped to this component. */
+.availability-timeseries .availability-chart-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+.availability-timeseries .availability-chart-heading h2 { margin:0; }
+.availability-timeseries .availability-chart-heading label { display:flex; align-items:center; gap:10px; color:#b6c7da; font-size:13px; }
+.availability-timeseries select { font:inherit; color:#edf5ff; background:#0b1e2d; border:1px solid #294258; border-radius:7px; padding:10px 12px; }
+.availability-timeseries .availability-chart-legend { display:flex; gap:22px; margin:18px 0; }
+.availability-timeseries .healthy-key { color:#14B8A6; }
+.availability-timeseries .technical-key { color:#00D1FF; }
+.availability-timeseries #availability-chart { position:relative; min-height:300px; }
+.availability-timeseries #availability-chart svg { width:100%; height:auto; display:block; touch-action:pan-y; }
+.availability-timeseries .availability-gridline { stroke:#294252; stroke-opacity:.55; stroke-width:1; }
+.availability-timeseries .availability-axis { fill:#abc0d5; font-size:11px; }
+.availability-timeseries .availability-tooltip { position:absolute; pointer-events:none; z-index:2; background:#071824; border:1px solid #29485d; border-radius:9px; padding:14px; width:270px; max-width:calc(100% - 8px); color:#f1f5f9; font-size:13px; }
+.availability-timeseries .availability-tooltip[hidden] { display:none; }
+.availability-timeseries .availability-tooltip p { margin:0 0 12px; color:#b6c7da; font-size:12px; }
+.availability-timeseries .availability-tooltip div { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; }
+.availability-timeseries .availability-tooltip strong { font-size:14px; color:#f1f5f9; font-variant-numeric:tabular-nums; }
+@media(max-width:600px) { .availability-timeseries { padding:16px; } .availability-timeseries .availability-chart-heading h2 { font-size:17px; } }

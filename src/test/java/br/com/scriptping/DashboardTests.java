@@ -26,12 +26,12 @@ import org.springframework.test.web.servlet.MockMvc;
 class DashboardTests {
 
     @Test
-    void availabilityHasNavigationAndAnEmptyContentArea() throws Exception {
+    void availabilityHasNavigationFiltersAndDashboard() throws Exception {
         String html = mvc.perform(get("/disponibilidade"))
             .andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString();
         assertThat(html).contains("href=\"/hosts\"", "href=\"/grupos\"", "aria-current=\"page\"");
-        assertThat(html).contains("<main class=\"page-content availability-page\" aria-label=\"Disponibilidade\"></main>");
+        assertThat(html).contains("/availability.js", "Disponibilidade Operacional", "Disponibilidade Técnica", "Média de Latência", "value=\"2880\" selected", "Todos os hosts", "id=\"availability-hosts\"");
         assertThat(html).doesNotContain("/dashboard.js", "id=\"dashboard\"");
     }
 
@@ -58,6 +58,35 @@ class DashboardTests {
             .andExpect(jsonPath("$.total.operational").value(100));
         mvc.perform(get("/hosts/details").param("hours", "3")).andExpect(status().isBadRequest());
         mvc.perform(get("/hosts/missing")).andExpect(status().isNotFound());
+    }
+
+    @Autowired
+    AvailabilityDashboard availabilityDashboard;
+
+    @Test
+    void availabilityFiltersGroupsAndReadsOnePublishedVersion() throws Exception {
+        var first = new Host("av-a", "Host A", "127.0.0.1", java.util.List.of(new Host.Group("av-g", "Grupo A")));
+        var second = new Host("av-b", "Host B", "127.0.0.2", java.util.List.of());
+        org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(first, second));
+        var saved = store.save(first, new PingProbe.Result(10d, null));
+        store.save(second, new PingProbe.Result(null, "Tempo esgotado"));
+        IncrementalTestSupport.refreshFully(analysis, System.currentTimeMillis() + 1);
+        availabilityDashboard.refresh();
+        for (int minutes : new int[] {5, 60, 480, 1440, 2880}) {
+            mvc.perform(get("/api/availability").param("minutes", String.valueOf(minutes)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.view.hosts.length()").value(2))
+                .andExpect(jsonPath("$.view.report.total.technical").value(50));
+            mvc.perform(get("/api/availability").param("minutes", String.valueOf(minutes)).param("groupId", "av-g"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.view.hosts.length()").value(1))
+                .andExpect(jsonPath("$.view.report.total.technical").value(100));
+        }
+        mvc.perform(get("/api/availability/dashboard").param("minutes", "5").param("q", "av-a"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.view.hosts.length()").value(1))
+            .andExpect(jsonPath("$.view.hosts[0].ip").value("127.0.0.1"))
+            .andExpect(jsonPath("$.page.selectedTotal").value(2))
+            .andExpect(jsonPath("$.view.report.total.technical").value(50));
+        mvc.perform(get("/api/availability").param("minutes", "30")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/availability").param("groupId", "missing")).andExpect(status().isNotFound());
     }
 
     @Autowired

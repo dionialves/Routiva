@@ -403,6 +403,19 @@ public class PacketLossAnalysisService {
         return published.availability().getOrDefault(new Key(host.id(), host.ip()), published.emptyReports()).get(hours);
     }
 
+    public record AvailabilitySnapshot(Map<String, Map<Integer, HostAvailabilityService.Report>> hosts,
+        Map<Integer, HostAvailabilityService.Report> empty, Map<String, PacketLossAnalysis> indicators) {}
+
+    public AvailabilitySnapshot availabilitySnapshot(List<Host> hosts) {
+        var published = snapshot;
+        Map<String, Map<Integer, HostAvailabilityService.Report>> result = new HashMap<>();
+        for (Host host : hosts) result.put(host.id(), published.availability()
+            .getOrDefault(new Key(host.id(), host.ip()), published.emptyReports()));
+        Map<String, PacketLossAnalysis> indicators = new HashMap<>();
+        for (Host host : hosts) indicators.put(host.id(), published.indicators().getOrDefault(new Key(host.id(), host.ip()), empty));
+        return new AvailabilitySnapshot(Map.copyOf(result), published.emptyReports(), Map.copyOf(indicators));
+    }
+
     /** Indicators and coverage from the same immutable publication. */
     public record Current(Map<String, PacketLossAnalysis> indicators, IndicatorLoadStatus load) {}
 
