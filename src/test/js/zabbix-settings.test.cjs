@@ -28,14 +28,42 @@ async function setup() {
   ready(); await new Promise(resolve => setImmediate(resolve));
   return elements;
 }
-test('group selection cascades and shared hosts remain consistent, with partial state', async () => {
+test('groups stay independent and removing a group preserves shared hosts in another selected group', async () => {
   const el = await setup(); const list = el['#group-list'];
-  let input = list.children[0].children[0].children[0]; input.checked = true; input.fire('change');
-  assert.equal(list.children[1].children[0].children[0].checked, true);
+  const group = i => list.children[i].children[0].children[0];
+  const host = (i, j) => list.children[i].children[1].children[j].children[0];
+  function toggle(i, checked) { const input = group(i); input.checked = checked; input.fire('change'); }
+  toggle(0, true);
+  assert.equal(group(1).checked, false);
+  assert.equal(group(1).indeterminate, false);
+  assert.equal(host(1, 0).checked, false);
+  assert.equal(host(1, 0).disabled, true);
   assert.match(el['#selection-count'].textContent, /^2 hosts selecionados/);
-  input = list.children[1].children[1].children[0].children[0]; input.checked = false; input.fire('change');
-  assert.equal(list.children[0].children[0].children[0].indeterminate, true);
-  assert.equal(list.children[0].children[1].children[0].children[0].checked, false);
+  toggle(1, true);
+  toggle(0, false);
+  assert.equal(group(0).checked, false);
+  assert.equal(group(1).checked, true);
+  assert.equal(host(1, 0).checked, true);
+  assert.match(el['#selection-count'].textContent, /^1 hosts selecionados/);
+  toggle(0, true);
+  toggle(1, false);
+  assert.equal(group(0).checked, true);
+  assert.equal(host(0, 0).checked, true);
+  assert.equal(host(0, 1).checked, true);
+  toggle(0, false);
+  assert.match(el['#selection-count'].textContent, /^0 hosts selecionados/);
+});
+test('clearing a filtered group preserves hosts from another selected group', async () => {
+  const el = await setup();
+  el['#select-visible'].fire('click');
+  el['#selection-search'].value = 'producao'; el['#selection-search'].fire('input');
+  el['#clear-visible'].fire('click');
+  el['#selection-search'].value = ''; el['#selection-search'].fire('input');
+  const list = el['#group-list'];
+  assert.equal(list.children[0].children[0].children[0].checked, false);
+  assert.equal(list.children[1].children[0].children[0].checked, true);
+  assert.equal(list.children[1].children[1].children[0].children[0].checked, true);
+  assert.match(el['#selection-count'].textContent, /^1 hosts selecionados/);
 });
 test('search normalizes accents and shortcuts only change filtered hosts', async () => {
   const el = await setup(); const search = el['#selection-search'];

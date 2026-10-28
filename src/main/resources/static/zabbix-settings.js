@@ -16,13 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (text !== undefined) node.textContent = text;
     return node;
   }
-  function reconcile() {
-    groups.forEach(g => {
-      const items = members(g);
-      if (items.length) {
-        if (items.some(h => selected.has(h.id))) enabled.add(g.id); else enabled.delete(g.id);
-      }
-    });
+  function removeUnusedHosts() {
+    const eligible = new Set(groups.filter(g => enabled.has(g.id)).flatMap(g => members(g).map(h => h.id)));
+    selected.forEach(id => { if (!eligible.has(id)) selected.delete(id); });
   }
   function render() {
     const focusKey = document.activeElement?.dataset?.focusKey;
@@ -33,13 +29,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const heading = element('div', 'group-heading');
       const checkbox = element('input', ''); checkbox.type = 'checkbox'; checkbox.dataset.focusKey = `group-${group.id}`;
       checkbox.setAttribute('aria-label', `Selecionar grupo ${group.name}`);
-      checkbox.checked = items.length ? items.every(h => selected.has(h.id)) : enabled.has(group.id);
-      checkbox.indeterminate = !checkbox.checked && items.some(h => selected.has(h.id));
+      checkbox.checked = enabled.has(group.id);
+      checkbox.indeterminate = checkbox.checked && items.some(h => selected.has(h.id)) && !items.every(h => selected.has(h.id));
       checkbox.addEventListener('click', e => e.stopPropagation());
       checkbox.addEventListener('change', () => {
-        items.forEach(h => checkbox.checked ? selected.add(h.id) : selected.delete(h.id));
         checkbox.checked ? enabled.add(group.id) : enabled.delete(group.id);
-        reconcile(); render();
+        if (checkbox.checked) items.forEach(h => selected.add(h.id));
+        removeUnusedHosts(); render();
       });
       const toggle = element('button', 'group-toggle', group.name); toggle.type = 'button';
       const open = expanded.has(group.id) || !!search.value.trim();
@@ -56,8 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
       heading.append(checkbox, toggle, element('span', 'group-count', String(items.length)), chevron);
       filtered.forEach(host => {
         const row = element('label', 'inventory-host-row');
-        const input = element('input', ''); input.type = 'checkbox'; input.dataset.focusKey = `host-${group.id}-${host.id}`; input.checked = selected.has(host.id);
-        input.addEventListener('change', () => { input.checked ? selected.add(host.id) : selected.delete(host.id); reconcile(); render(); });
+        const input = element('input', ''); input.type = 'checkbox'; input.dataset.focusKey = `host-${group.id}-${host.id}`; input.checked = enabled.has(group.id) && selected.has(host.id); input.disabled = !enabled.has(group.id);
+        input.addEventListener('change', () => { input.checked ? selected.add(host.id) : selected.delete(host.id); render(); });
         row.append(input, element('span', '', host.name), element('small', '', host.ip || 'Sem IP')); body.append(row);
       });
       if (!items.length) body.append(element('p', 'group-empty', 'Nenhum host neste grupo.'));
@@ -79,10 +75,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   search.addEventListener('input', render);
   function selectVisible(checked) {
-    groups.filter(matches).forEach(g => {
-      visible(g).forEach(h => checked ? selected.add(h.id) : selected.delete(h.id));
-      if (!members(g).length) checked ? enabled.add(g.id) : enabled.delete(g.id);
-    }); reconcile(); render();
+    const matching = groups.filter(matches);
+    matching.forEach(g => {
+      if (!search.value.trim() || normalize(g.name).includes(normalize(search.value.trim()))) {
+        checked ? enabled.add(g.id) : enabled.delete(g.id);
+        if (checked) members(g).forEach(h => selected.add(h.id));
+      } else if (checked) {
+        enabled.add(g.id);
+        visible(g).forEach(h => selected.add(h.id));
+      } else if (enabled.has(g.id)) {
+        visible(g).forEach(h => selected.delete(h.id));
+      }
+    });
+    removeUnusedHosts(); render();
   }
   document.querySelector('#select-visible').addEventListener('click', () => selectVisible(true));
   document.querySelector('#clear-visible').addEventListener('click', () => selectVisible(false));
