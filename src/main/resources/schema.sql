@@ -101,3 +101,8 @@ CREATE TABLE IF NOT EXISTS analytics_checkpoint_part (
     PRIMARY KEY(checkpoint_id, sequence_no)
 );
 CREATE INDEX IF NOT EXISTS idx_checkpoint_block_reference ON analytics_checkpoint_part(block_hash);
+
+CREATE TABLE IF NOT EXISTS zabbix_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    payload TEXT NOT NULL
+);

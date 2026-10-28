@@ -12,7 +12,7 @@ import org.springframework.web.client.RestClient;
 @Component
 public class ZabbixClient {
 
-    private final String url, username, password;
+    private String url, username, password;
     private final RestClient client;
     private String session;
     private boolean versionDetected, legacyAuth, legacyGroups;
@@ -38,6 +38,41 @@ public class ZabbixClient {
                 new org.springframework.http.client.BufferingClientHttpRequestFactory(factory)
             )
             .build();
+    }
+
+    public synchronized void configure(String url, String username, String password) {
+        session = null;
+        versionDetected = false;
+        this.url = url;
+        this.username = username;
+        this.password = password;
+    }
+
+    public synchronized void testConnection() {
+        versionDetected = false;
+        detectVersion();
+        login();
+        authenticatedRequest("hostgroup.get", Map.of("output", List.of("groupid"), "limit", 1));
+    }
+
+    public synchronized List<Host.Group> groups() {
+        detectVersion();
+        if (session == null) login();
+        List<Host.Group> groups = new ArrayList<>();
+        for (var g : authenticatedRequest("hostgroup.get", Map.of("output", List.of("groupid", "name"))))
+            groups.add(new Host.Group(g.path("groupid").asText(), g.path("name").asText()));
+        groups.sort(Comparator.comparing(Host.Group::name, String.CASE_INSENSITIVE_ORDER));
+        return List.copyOf(groups);
+    }
+
+    public synchronized List<Host> discover(Set<String> groupIds) {
+        if (groupIds.isEmpty()) return List.of();
+        return fetchInventory(groupIds, null, false);
+    }
+
+    public synchronized List<Host> fetchSelected(Set<String> groupIds, Set<String> hostIds) {
+        if (groupIds.isEmpty() || hostIds.isEmpty()) return List.of();
+        return fetchInventory(groupIds, hostIds, true);
     }
 
     public boolean configured() {
@@ -131,9 +166,13 @@ public class ZabbixClient {
     }
 
     public synchronized List<Host> fetch() {
+        return fetchInventory(null, null, true);
+    }
+
+    private List<Host> fetchInventory(Set<String> groupIds, Set<String> hostIds, boolean operational) {
         detectVersion();
         if (session == null) login();
-        var params = Map.of(
+        Map<String, Object> params = new LinkedHashMap<>(Map.of(
             "output",
             List.of("hostid", "host", "name"),
             legacyGroups ? "selectGroups" : "selectHostGroups",
@@ -142,19 +181,21 @@ public class ZabbixClient {
             List.of("ip", "main", "type"),
             "filter",
             Map.of("status", "0")
-        );
+        ));
+        if (groupIds != null) params.put("groupids", groupIds);
+        if (hostIds != null) params.put("hostids", hostIds);
         JsonNode inventory = authenticatedRequest("host.get", params);
         Set<String> acknowledgedHosts = new HashSet<>();
-        if (!inventory.isEmpty()) {
-            List<String> hostIds = new ArrayList<>();
-            inventory.forEach(h -> hostIds.add(h.path("hostid").asText()));
+        if (operational && !inventory.isEmpty()) {
+            List<String> inventoryIds = new ArrayList<>();
+            inventory.forEach(h -> inventoryIds.add(h.path("hostid").asText()));
             var triggers = authenticatedRequest(
                 "trigger.get",
                 Map.of(
                     "output",
                     List.of("triggerid", "description"),
                     "hostids",
-                    hostIds,
+                    inventoryIds,
                     "filter",
                     Map.of("value", "1"),
                     "monitored",

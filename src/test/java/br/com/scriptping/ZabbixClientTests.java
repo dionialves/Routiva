@@ -105,6 +105,26 @@ class ZabbixClientTests {
         }
     }
 
+    @Test
+    void discoveryDoesNotFetchTriggersAndSyncSendsExplicitSelections() throws Exception {
+        try (var api = new FakeApi(false)) {
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            assertThat(client.discover(java.util.Set.of())).isEmpty();
+            assertThat(api.methods).isEmpty();
+            client.discover(java.util.Set.of("5"));
+            assertThat(api.methods).doesNotContain("trigger.get");
+            assertThat(api.lastHostParams.path("groupids").get(0).asText()).isEqualTo("5");
+            assertThat(api.lastHostParams.has("hostids")).isFalse();
+            client.fetchSelected(java.util.Set.of("5"), java.util.Set.of("1"));
+            assertThat(api.lastHostParams.path("groupids").get(0).asText()).isEqualTo("5");
+            assertThat(api.lastHostParams.path("hostids").get(0).asText()).isEqualTo("1");
+            assertThat(api.methods).contains("trigger.get");
+            int before = api.methods.size();
+            assertThat(client.fetchSelected(java.util.Set.of("5"), java.util.Set.of())).isEmpty();
+            assertThat(api.methods).hasSize(before);
+        }
+    }
+
     private static class FakeApi implements AutoCloseable {
 
         final HttpServer server;
@@ -112,6 +132,7 @@ class ZabbixClientTests {
         final List<String> methods = new ArrayList<>();
         final List<String> violations = new ArrayList<>();
         volatile boolean expire;
+        com.fasterxml.jackson.databind.JsonNode lastHostParams;
         String triggers = "[]";
         final String version;
 
@@ -130,6 +151,7 @@ class ZabbixClientTests {
                 var request = new ObjectMapper().readTree(exchange.getRequestBody());
                 String method = request.path("method").asText();
                 methods.add(method);
+                if (method.equals("host.get")) lastHostParams = request.path("params");
                 String authorization = exchange.getRequestHeaders().getFirst("Authorization");
                 String response;
                 if (method.equals("apiinfo.version")) {

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Integração Zabbix • TraceOne</title><link rel="stylesheet" href="/style.css"><script src="/shell.js" defer></script><script src="/zabbix-settings.js" defer></script></head>
+<body><aside th:replace="~{shell :: sidebar('settings')}"></aside><div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
+<main class="page-content settings-page" th:attr="data-synced=${lastSync != null}">
+<div class="page-heading"><div><p class="eyebrow">CONFIGURAÇÃO</p><h1>Integração Zabbix</h1><p>Configure a autenticação e escolha os grupos e hosts que deseja monitorar.</p></div></div>
+<span hidden th:if="${message}" th:text="${message}" data-notification="success"></span>
+<span hidden th:if="${error}" th:text="${error}" data-notification="error"></span>
+<section class="settings-panel"><h2>Dados de autenticação</h2>
+<form id="connection-form" class="connection-form"><input type="hidden" name="csrf" th:value="${csrf}">
+<label class="connection-url">URL da API Zabbix<input type="url" name="url" th:value="${url}" placeholder="https://zabbix.exemplo.com/api_jsonrpc.php" required></label>
+<label>Usuário<input name="username" th:value="${username}" autocomplete="username" required></label>
+<label>Senha<input type="password" name="password" autocomplete="new-password" th:placeholder="${hasPassword} ? 'Deixe em branco para manter a senha salva' : 'Informe a senha'"></label>
+<div class="settings-actions connection-url"><button type="submit">Salvar</button><button type="button" data-action="teste">Testar</button><button type="button" data-action="sincronizar">Sincronizar</button></div>
+</form><p>Salve as alterações de autenticação antes de testar ou sincronizar.</p>
+<p id="sync-status" th:text="${syncStatus}"></p><p>Última sincronização: <time id="last-sync" th:attr="data-timestamp=${lastSync}">Ainda não realizada</time></p></section>
+<section class="settings-panel" id="inventory-panel" hidden><h2>Grupos e hosts</h2><p>Selecione um grupo para marcar seus hosts. Clique na linha para expandir os detalhes.</p>
+<div class="settings-actions inventory-toolbar"><label>Pesquisar grupos ou hosts<input id="selection-search" type="search" placeholder="Nome do grupo, host ou IP"></label><button type="button" id="select-visible">Selecionar visíveis</button><button type="button" id="clear-visible">Desmarcar visíveis</button></div>
+<div class="inventory-head"><span></span><span>Nome do grupo</span><span>Quantidade de hosts</span><span></span></div><div id="group-list"></div>
+<p id="inventory-empty" hidden>Nenhum grupo ou host encontrado.</p><p id="selection-count" role="status"></p><p>Salve a seleção antes de sincronizar para importar os hosts escolhidos.</p><div class="settings-actions"><button type="button" data-action="selecao">Salvar seleção</button></div></section>
+<p id="inventory-hint">Salve a autenticação e sincronize para carregar os grupos e hosts.</p>
+</main></div></body></html>
