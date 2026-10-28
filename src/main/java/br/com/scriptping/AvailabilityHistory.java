@@ -113,6 +113,13 @@ final class AvailabilityHistory {
         }
     }
 
+    AvailabilityHistory fork() {
+        var copy = new AvailabilityHistory();
+        minutes.forEach((at, minute) -> { minute.shared = true; copy.minutes.put(at, minute); });
+        copy.checkpointHours.putAll(checkpointHours);
+        return copy;
+    }
+
     void add(PingSample sample) {
         long start = Math.floorDiv(sample.measuredAt(), MINUTE) * MINUTE;
         checkpointHours.remove(hour(start));

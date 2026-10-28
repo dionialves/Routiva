@@ -491,8 +491,8 @@ Detalhes de implementação, limites e validação: [Disponibilidade incremental
 
 ### Recuperação dos indicadores após reinício
 
-Indicadores e gráficos agora possuem checkpoints persistidos no PostgreSQL. O primeiro é salvo após concluir a carga histórica e alcançar o limite confirmado de IDs; os seguintes usam `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão: 300000 ms, cinco minutos). São mantidas duas gerações, com reutilização de blocos inalterados.
+Indicadores e gráficos agora possuem checkpoints persistidos no PostgreSQL. O primeiro é salvo já no primeiro ciclo publicado, inclusive com carga histórica parcial; os seguintes usam `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão: 300000 ms, cinco minutos). São mantidas duas gerações, com reutilização de blocos inalterados.
 
-No reinício, o app restaura o estado e consulta apenas os IDs posteriores ao cursor salvo. Sem checkpoint utilizável, o app publica primeiro os 10 mil registros mais recentes e recupera o restante em páginas, intercalando novos pings. O front identifica os resultados parciais. A primeira implantação deve concluir a carga e registrar `CHECKPOINT_SAVED`; reiniciar antes desse evento reinicia a recuperação progressiva.
+No reinício, o app restaura o estado, consulta os IDs posteriores ao cursor salvo e continua a carga histórica parcial da posição persistida. Sem checkpoint utilizável, o app publica primeiro os 10 mil registros mais recentes e recupera o restante em páginas, intercalando novos pings. O front identifica os resultados parciais. Aguarde `CHECKPOINT_SAVED` para ter um ponto durável de retomada. A assinatura v2 invalida checkpoints da versão anterior, exigindo uma nova carga progressiva na primeira atualização.
 
 Consulte [arquitetura, configuração, implantação e manutenção da carga progressiva](docs/carga-progressiva-indicadores.md) e [formato, consistência, logs e operação dos checkpoints](docs/checkpoints-indicadores.md).

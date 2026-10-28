@@ -14,6 +14,33 @@ final class IndicatorBootstrap {
         this.boundary = boundary;
     }
 
+    IndicatorBootstrap copy() {
+        var copy = new IndicatorBootstrap(boundary);
+        copy.beforeTime = beforeTime; copy.beforeId = beforeId; copy.loadedFrom = loadedFrom;
+        return copy;
+    }
+
+    byte[] checkpoint() {
+        return CheckpointCodec.encode(out -> {
+            out.writeLong(boundary); out.writeLong(beforeTime); out.writeLong(beforeId);
+            out.writeBoolean(loadedFrom != null);
+            if (loadedFrom != null) out.writeLong(loadedFrom);
+        });
+    }
+
+    static IndicatorBootstrap restore(byte[] bytes, long cursor) {
+        IndicatorBootstrap[] result = new IndicatorBootstrap[1];
+        CheckpointCodec.decode(bytes, in -> {
+            long boundary = in.readLong();
+            if (boundary < 0 || boundary > cursor) throw new java.io.IOException("Invalid bootstrap boundary");
+            var state = new IndicatorBootstrap(boundary);
+            state.beforeTime = in.readLong(); state.beforeId = in.readLong();
+            state.loadedFrom = in.readBoolean() ? in.readLong() : null;
+            result[0] = state;
+        });
+        return result[0];
+    }
+
     Long loadedFrom() { return loadedFrom; }
 
     /** Consumes at most pageSize rows, regardless of host count or their time span. */

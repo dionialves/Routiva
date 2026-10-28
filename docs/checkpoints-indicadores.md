@@ -1,6 +1,6 @@
 # Checkpoints dos indicadores e gráficos
 
-A aplicação mantém os cálculos em memória e grava um ponto de recuperação no PostgreSQL após concluir a primeira carga progressiva e alcançar o limite confirmado de IDs e, depois, a cada cinco minutos. O intervalo é configurável por `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão `300000`, mínimo `1000`). Não altera a cadência de dez segundos dos indicadores.
+A aplicação mantém os cálculos em memória e grava um ponto de recuperação no PostgreSQL já no primeiro ciclo publicado, mesmo com carga parcial, e, depois, a cada cinco minutos. O intervalo é configurável por `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão `300000`, mínimo `1000`). Não altera a cadência de dez segundos dos indicadores.
 
 ## Conteúdo e estrutura
 
@@ -10,7 +10,7 @@ A implementação usa quatro tabelas compartilhadas pelos tipos de dados, em vez
 
 - `analytics_checkpoint`: metadados e checksum do manifesto de uma geração completa.
 - `analytics_checkpoint_block`: blocos binários versionados, comprimidos com gzip e identificados por SHA-256.
-- `analytics_checkpoint_part`: manifesto ordenado que associa geração, tipo, host/IP e bloco. Os tipos são `indicator`, `last`, `availability` e `pending`.
+- `analytics_checkpoint_part`: manifesto ordenado que associa geração, tipo, host/IP e bloco. Os tipos são `indicator`, `last`, `availability`, `pending`, `progress` e `bootstrap`. Os dois últimos preservam o limite confirmado e a fronteira fixa/posição temporal da leitura histórica.
 - `analytics_checkpoint_guard`: serialização das gravações/limpezas e identidade da origem.
 
 Os indicadores preservam seus blocos compactos. Os minutos dos gráficos são agrupados por hora na persistência; a resolução exibida continua sendo de um minuto. Relatórios dos sete períodos e percentuais são reconstruídos em memória; não são duplicados no banco.
@@ -30,20 +30,20 @@ Existe custo adicional de memória para bytes comprimidos, referências e cópia
 3. Lê os blocos em fluxo e verifica seus checksums e o manifesto completo.
 4. Restaura diretamente os históricos compactos e reconstrói contadores/relatórios na referência salva.
 5. Publica o estado restaurado com sua data original, permitindo ao frontend indicar desatualização.
-6. Expira as janelas e lê somente IDs posteriores ao cursor salvo, até o novo limite confirmado.
+6. Expira as janelas, lê IDs posteriores ao cursor salvo e, quando a carga é parcial, continua a paginação histórica da posição salva.
 7. Publica indicadores e gráficos atualizados em conjunto.
 
 Amostras futuras precisam ser persistidas: seus IDs já estão incluídos no cursor, mesmo sem terem sido incorporadas aos cálculos. O checkpoint mantém essa fila para que sejam liberadas no momento correto, sem perda ou duplicação.
 
 Uma geração com payload/manifesto inválido é rejeitada e a anterior é tentada. Ausência de geração utilizável inicia a carga progressiva pelos registros mais recentes, em páginas de até 10 mil registros, com motivo no log. Falha de acesso ao banco é propagada para nova tentativa no próximo ciclo; não é confundida com ausência de checkpoint.
 
-Uma falha de ciclo preserva a publicação anterior e tenta restaurar o checkpoint antes de reconstruir dos pings. Mudança de parâmetros incompatível, relógio anterior à referência ou cursor além do limite atual impedem a reutilização. Dados já removidos pela retenção não podem ser recuperados por nenhuma das duas estratégias.
+Cada lote é aplicado atomicamente usando cópias dos índices dos hosts afetados e cópia dos blocos/minutos somente na alteração. Falha de consulta ou processamento preserva os lotes anteriores; o cursor só avança com o lote confirmado. Falha histórica permite publicar os novos registros já confirmados e repete a mesma página com espera de 1, 2, 4, 8, 16, 32 e até 60 segundos. Mudança de parâmetros incompatível, relógio anterior à referência ou cursor além do limite atual impedem a reutilização. Dados já removidos pela retenção não podem ser recuperados por nenhuma das duas estratégias.
 
 A identidade da origem protege contra reutilização de checkpoints de outra base quando a tabela de controle é reinicializada. Uma substituição manual de `ping_sample` que preserve as tabelas de checkpoint e reutilize IDs não é detectável apenas pelo cursor: nesse procedimento administrativo, também devem ser invalidados os checkpoints e renovada a identidade da origem. Backups/restaurações devem incluir as tabelas de dados e checkpoint no mesmo ponto consistente.
 
 ## Operação
 
-A primeira implantação recupera o histórico em etapas se não existir checkpoint. Dados parciais ficam disponíveis antes da conclusão; nenhum checkpoint parcial é salvo. Consulte [a estratégia de carga progressiva](carga-progressiva-indicadores.md). Aguarde `CHECKPOINT_SAVED` antes de avaliar uma reinicialização como recuperação persistida.
+A primeira implantação recupera o histórico em etapas se não existir checkpoint. Dados parciais ficam disponíveis e são persistidos antes da conclusão. A assinatura passou para v2: checkpoints anteriores são rejeitados e a primeira execução desta versão recompõe o histórico progressivamente. Consulte [a estratégia de carga progressiva](carga-progressiva-indicadores.md). Aguarde `CHECKPOINT_SAVED` antes de avaliar uma reinicialização como recuperação persistida.
 
 ```bash
 docker compose exec app tail -F /var/log/routiva/indicators.log
@@ -51,14 +51,14 @@ docker compose exec app tail -F /var/log/routiva/indicators.log
 
 Eventos principais:
 
-- `INITIAL_LOAD_STARTED`, `INITIAL_LOAD_PROGRESS`, `HISTORY_LOAD_COMPLETED`, `LOAD_PROGRESS`, `CYCLE_COMPLETED`.
+- `INITIAL_LOAD_STARTED`, `INITIAL_LOAD_PROGRESS`, `HISTORY_LOAD_COMPLETED`, `HISTORY_PAGE_FAILED`, `CYCLE_COMPLETED`.
 - `CHECKPOINT_RESTORE_STARTED`, `CHECKPOINT_RESTORE_PROGRESS`, `CHECKPOINT_RESTORED`.
 - `CHECKPOINT_REJECTED`, `CHECKPOINT_UNAVAILABLE`.
 - `CHECKPOINT_CAPTURE_STARTED`, `CHECKPOINT_CAPTURE_COMPLETED`.
 - `CHECKPOINT_WRITE_STARTED`, `CHECKPOINT_WRITE_PROGRESS`, `CHECKPOINT_SAVED`.
 - `CHECKPOINT_CAPTURE_FAILED`, `CHECKPOINT_WRITE_FAILED`.
 
-O progresso de leitura é emitido ao processar amostras, aproximadamente a cada dez segundos. Não é um heartbeat durante uma chamada de banco bloqueada. Na escrita, há progresso por etapa: codificação, blocos e manifesto. `bytes` em `CHECKPOINT_SAVED` representa os bytes comprimidos referenciados pela geração, inclusive blocos reutilizados, não apenas os bytes novos gravados.
+O progresso de leitura é emitido a cada ciclo publicado. Não é um heartbeat durante uma chamada de banco bloqueada. Na escrita, há progresso por etapa: codificação, blocos e manifesto. `bytes` em `CHECKPOINT_SAVED` representa os bytes comprimidos referenciados pela geração, inclusive blocos reutilizados, não apenas os bytes novos gravados.
 
 A captura e a restauração contam no tempo do ciclo correspondente; a escrita assíncrona tem duração própria. Os horários preservam UTC no arquivo de log.
 

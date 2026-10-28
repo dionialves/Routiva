@@ -43,6 +43,8 @@ public class PacketLossAnalysisService {
     private IndicatorBootstrap bootstrap;
     private int pageSize = 10000;
     private long confirmedBoundary;
+    private long historicalRetryAt;
+    private int historicalFailures;
 
     @org.springframework.beans.factory.annotation.Autowired
     void configureBootstrap(@Value("${indicators.bootstrap.page-size:10000}") int pageSize,
@@ -92,7 +94,7 @@ public class PacketLossAnalysisService {
         empty = analyzer.analyze(new RollingPingHistory(), 0);
         if (retentionHours < 1) throw new IllegalArgumentException("Retenção inválida");
         availabilityRetention = Math.min(48, retentionHours) * 3_600_000L;
-        compatibility = CheckpointCodec.hash(("v1|" + interval + "|" + timeout + "|" + availabilityRetention
+        compatibility = CheckpointCodec.hash(("v2|" + interval + "|" + timeout + "|" + availabilityRetention
             + "|" + rules.getMinuteWindowSeconds() + "|" + rules.getHourWindowSeconds()
             + "|" + rules.getHourNormalMaxPercent() + "|" + rules.getHourCriticalMinPercent()
             + "|" + rules.getMinimumCoverageRatio() + "|" + rules.getMinimumSamples()
@@ -107,7 +109,7 @@ public class PacketLossAnalysisService {
         refreshAt(System.currentTimeMillis());
     }
 
-    // On failure discard unpublished working state and rebuild next cycle; readers retain the snapshot.
+    // Page failures preserve committed working state; readers retain the last publication.
     synchronized void refreshAt(long now) {
         long cycle = ++cycleSequence, started = System.nanoTime();
         Cycle counts = new Cycle();
@@ -135,7 +137,6 @@ public class PacketLossAnalysisService {
             }
             boolean wasLoading = bootstrap != null;
             if (counts.initial) CYCLE_LOG.info("event=INITIAL_LOAD_STARTED run_id={} cycle={} boundary={}", runId, cycle, boundary);
-            long[] progressAt = {System.nanoTime()};
             long previousReference = evaluatedAt;
             long historyCutoff = now - analyzer.lookbackMs();
             long cutoff = now - Math.max(analyzer.lookbackMs(), availabilityRetention);
@@ -155,73 +156,51 @@ public class PacketLossAnalysisService {
             histories.values().removeIf(IncrementalPingHistory::isEmpty);
             availabilityHistories.values().forEach(history -> history.expire(now - availabilityRetention));
             availabilityHistories.values().removeIf(AvailabilityHistory::isEmpty);
+            // Expiration is committed independently of ingestion, including on a failed query.
+            evaluatedAt = now;
             counts.stage = "database_query";
             long liveThrough = cursor + Math.min((long) pageSize, boundary - cursor);
             if (liveThrough > cursor) {
+                var page = new ArrayList<PingSample>();
                 queryStarted = System.nanoTime();
-                try {
-                    store.readIncrement(cursor, liveThrough, cutoff, sample -> {
-                        long callbackStarted = System.nanoTime();
-                        counts.stage = "sample_processing";
-                        try {
-                            counts.fetched++;
-                            if (System.nanoTime() - progressAt[0] >= 10_000_000_000L) {
-                                CYCLE_LOG.info("event=LOAD_PROGRESS run_id={} cycle={} fetched={} sample_id={} boundary={} elapsed_ms={}",
-                                    runId, cycle, counts.fetched, sample.id(), boundary, elapsedMillis(started));
-                                progressAt[0] = System.nanoTime();
-                            }
-                            if (!IpAddress.isValid(sample.target()) || sample.measuredAt() < cutoff) {
-                                counts.discarded++;
-                            } else if (sample.measuredAt() > now) {
-                                future.add(sample);
-                                counts.queued++;
-                            } else {
-                                incorporate(sample, now);
-                                counts.incorporated++;
-                                if (!counts.initial && sample.measuredAt() < previousReference) counts.late++;
-                            }
-                            counts.stage = "database_query";
-                        } finally { counts.callbackNanos += System.nanoTime() - callbackStarted; }
-                    });
-                } finally {
-                    counts.queryNanos += System.nanoTime() - queryStarted - counts.callbackNanos;
-                }
+                try { store.readIncrement(cursor, liveThrough, cutoff, page::add); }
+                finally { counts.queryNanos += System.nanoTime() - queryStarted; }
+                counts.stage = "sample_processing";
+                applyPage(page, now, cutoff, counts);
+                counts.late += page.stream().filter(sample -> sample.measuredAt() >= cutoff
+                    && sample.measuredAt() < previousReference && IpAddress.isValid(sample.target())).count();
+                cursor = liveThrough;
             }
-            cursor = liveThrough;
-            if (bootstrap != null) {
-                long historicalStarted = System.nanoTime();
-                long callbacksBefore = counts.callbackNanos;
+            if (bootstrap != null && now >= historicalRetryAt) {
                 counts.stage = "historical_query";
+                var previousBootstrap = bootstrap;
+                var nextBootstrap = bootstrap.copy();
                 try {
-                    if (bootstrap.step(store, cutoff, pageSize, sample -> {
-                        long callbackStarted = System.nanoTime();
-                        counts.stage = "historical_processing";
-                        try {
-                            counts.fetched++;
-                            if (!IpAddress.isValid(sample.target()) || sample.measuredAt() < cutoff) {
-                                counts.discarded++;
-                            } else if (sample.measuredAt() > now) {
-                                future.add(sample);
-                                counts.queued++;
-                            } else {
-                                incorporate(sample, now);
-                                counts.incorporated++;
-                            }
-                        } finally { counts.callbackNanos += System.nanoTime() - callbackStarted; }
-                    })) bootstrap = null;
-                } finally {
-                    counts.queryNanos += System.nanoTime() - historicalStarted - (counts.callbackNanos - callbacksBefore);
+                    var page = new ArrayList<PingSample>();
+                    long historicalStarted = System.nanoTime();
+                    boolean complete;
+                    try { complete = nextBootstrap.step(store, cutoff, pageSize, page::add); }
+                    finally { counts.queryNanos += System.nanoTime() - historicalStarted; }
+                    counts.stage = "historical_processing";
+                    applyPage(page, now, cutoff, counts);
+                    bootstrap = complete ? null : nextBootstrap;
+                    historicalFailures = 0;
+                    historicalRetryAt = 0;
+                } catch (RuntimeException failure) {
+                    bootstrap = previousBootstrap;
+                    historicalFailures = Math.min(7, historicalFailures + 1);
+                    historicalRetryAt = now + Math.min(60000L, 1000L << (historicalFailures - 1));
+                    CYCLE_LOG.error("event=HISTORY_PAGE_FAILED run_id={} cursor={} retry_at={} stage={}",
+                        runId, cursor, historicalRetryAt, counts.stage, failure);
                 }
             }
             counts.stage = "pending_processing";
-            while (!future.isEmpty() && future.peek().measuredAt() <= now) {
-                var sample = future.remove();
-                counts.released++;
-                if (sample.measuredAt() >= cutoff) {
-                    incorporate(sample, now);
-                    counts.incorporated++;
-                } else counts.discarded++;
-            }
+            // Keep pending samples until their entire batch has committed.
+            var ready = future.stream().filter(sample -> sample.measuredAt() <= now).toList();
+            applyPage(ready, now, cutoff, counts);
+            counts.fetched -= ready.size();
+            counts.released += ready.size();
+            future.removeAll(new HashSet<>(ready));
             counts.stage = "publication";
             counts.availabilityNanos = publish(now, runId + ":" + cycle);
             if (wasLoading && bootstrap == null) CYCLE_LOG.info(
@@ -229,13 +208,12 @@ public class PacketLossAnalysisService {
             evaluatedAt = now;
             lastPublishedCycle = cycle;
         } catch (RuntimeException failure) {
-            reset();
-            recoveryAttempted = false;
+            // Queries are buffered and each page is atomic. Keep all committed pages.
             CYCLE_LOG.error(
-                "event=CYCLE_FAILED run_id={} cycle={} reference_at={} mode={} stage={} error={} fetched={} incorporated={} discarded={} total_ms={} indicators_published=false last_published_cycle={} next_cycle=recovery",
+                "event=CYCLE_FAILED run_id={} cycle={} reference_at={} mode={} stage={} error={} fetched={} incorporated={} discarded={} total_ms={} indicators_published=false last_published_cycle={} next_cycle=retry",
                 runId, cycle, java.time.Instant.ofEpochMilli(now), counts.initial ? "initial_load" : "incremental",
                 counts.stage, failure.getClass().getSimpleName(), counts.fetched, counts.incorporated,
-                counts.discarded, elapsedMillis(started), lastPublishedCycle
+                counts.discarded, elapsedMillis(started), lastPublishedCycle, failure
             );
             throw failure;
         }
@@ -287,9 +265,22 @@ public class PacketLossAnalysisService {
             CYCLE_LOG.info("event=CHECKPOINT_RESTORE_STARTED checkpoint={} cursor={}", h.id(), h.cursor());
             try {
                 long[] count = {0}, progressAt = {System.nanoTime()};
+                boolean[] progressSeen = {false}, bootstrapSeen = {false};
                 checkpoints.restore(h, part -> {
                     Key key = new Key(part.host(), part.target());
                     switch (part.kind()) {
+                        case "progress" -> CheckpointCodec.decode(part.payload(), in -> {
+                            if (progressSeen[0]) throw new java.io.IOException("Duplicate progress");
+                            progressSeen[0] = true;
+                            confirmedBoundary = in.readLong();
+                            if (confirmedBoundary < h.cursor() || confirmedBoundary > boundary)
+                                throw new java.io.IOException("Invalid confirmed boundary");
+                        });
+                        case "bootstrap" -> {
+                            if (bootstrapSeen[0]) throw new IllegalArgumentException("Duplicate bootstrap");
+                            bootstrapSeen[0] = true;
+                            bootstrap = IndicatorBootstrap.restore(part.payload(), h.cursor());
+                        }
                         case "indicator" -> histories.computeIfAbsent(key, k -> analyzer.newIncrementalHistory())
                             .restoreBlock(part.payload(), part.host(), part.target());
                         case "last" -> CheckpointCodec.decode(part.payload(), in -> {
@@ -310,6 +301,7 @@ public class PacketLossAnalysisService {
                         progressAt[0] = System.nanoTime();
                     }
                 });
+                if (!progressSeen[0]) throw new IllegalArgumentException("Missing load progress");
                 histories.values().forEach(history -> analyzer.advance(history, h.reference()));
                 cursor = h.cursor(); evaluatedAt = h.reference();
                 publish(evaluatedAt, runId + ":restored:" + h.id());
@@ -320,6 +312,9 @@ public class PacketLossAnalysisService {
                 reset();
                 checkpoints.discardInvalid(h.id());
                 CYCLE_LOG.warn("event=CHECKPOINT_REJECTED checkpoint={} reason=invalid_payload", h.id());
+            } catch (RuntimeException failure) {
+                reset();
+                throw failure;
             }
         }
         CYCLE_LOG.info("event=CHECKPOINT_UNAVAILABLE reason=no_usable_generation");
@@ -327,9 +322,15 @@ public class PacketLossAnalysisService {
 
     // Called under the cycle lock. Encoded arrays are immutable and reused until their block changes.
     synchronized AnalyticsCheckpointStore.Capture captureCheckpoint() {
-        if (evaluatedAt == Long.MIN_VALUE || bootstrap != null || cursor < confirmedBoundary)
-            throw new IllegalStateException("Cannot persist an incomplete indicator load");
+        if (evaluatedAt == Long.MIN_VALUE)
+            throw new IllegalStateException("Cannot persist an uninitialized indicator load");
         List<AnalyticsCheckpointStore.Part> parts = new ArrayList<>();
+        byte[] progress = CheckpointCodec.encode(out -> out.writeLong(confirmedBoundary));
+        parts.add(AnalyticsCheckpointStore.Part.of("progress", "", "", 0, () -> progress));
+        if (bootstrap != null) {
+            byte[] position = bootstrap.checkpoint();
+            parts.add(AnalyticsCheckpointStore.Part.of("bootstrap", "", "", 0, () -> position));
+        }
         histories.forEach((key, history) -> {
             int ordinal=0;
             for (var bytes : history.checkpointBlocks()) parts.add(AnalyticsCheckpointStore.Part.of("indicator", key.hostId(), key.target(), ordinal++, bytes));
@@ -353,7 +354,7 @@ public class PacketLossAnalysisService {
     }
 
     private void scheduleCheckpoint(long now) {
-        if (bootstrap != null || cursor < confirmedBoundary || checkpoints == null || (checkpointWrite != null && !checkpointWrite.isDone())
+        if (evaluatedAt == Long.MIN_VALUE || checkpoints == null || (checkpointWrite != null && !checkpointWrite.isDone())
             || (lastCheckpointAttempt != Long.MIN_VALUE && now - lastCheckpointAttempt < checkpointInterval)) return;
         lastCheckpointAttempt = now;
         try {
@@ -382,6 +383,38 @@ public class PacketLossAnalysisService {
         return (System.nanoTime() - started) / 1000000;
     }
 
+    /** Stage only affected histories. Readers and checkpoint capture cannot observe a partial page. */
+    private void applyPage(List<PingSample> page, long now, long cutoff, Cycle counts) {
+        Map<Key, IncrementalPingHistory> original = new HashMap<>();
+        Map<Key, AvailabilityHistory> originalAvailability = new HashMap<>();
+        List<PingSample> queued = new ArrayList<>();
+        long incorporated = 0, discarded = 0;
+        try {
+            for (PingSample sample : page) {
+                if (!IpAddress.isValid(sample.target()) || sample.measuredAt() < cutoff) { discarded++; continue; }
+                if (sample.measuredAt() > now) { queued.add(sample); continue; }
+                Key key = new Key(sample.hostId(), sample.target());
+                if (!original.containsKey(key)) {
+                    var history = histories.get(key);
+                    original.put(key, history);
+                    if (history != null) histories.put(key, history.fork());
+                    var availability = availabilityHistories.get(key);
+                    originalAvailability.put(key, availability);
+                    if (availability != null) availabilityHistories.put(key, availability.fork());
+                }
+                incorporate(sample, now);
+                incorporated++;
+            }
+        } catch (RuntimeException failure) {
+            original.forEach((key, value) -> { if (value == null) histories.remove(key); else histories.put(key, value); });
+            originalAvailability.forEach((key, value) -> { if (value == null) availabilityHistories.remove(key); else availabilityHistories.put(key, value); });
+            throw failure;
+        }
+        future.addAll(queued);
+        counts.fetched += page.size(); counts.incorporated += incorporated;
+        counts.discarded += discarded; counts.queued += queued.size();
+    }
+
     private void incorporate(PingSample sample, long now) {
         if (sample.measuredAt() >= now - availabilityRetention) {
             availabilityHistories.computeIfAbsent(new Key(sample.hostId(), sample.target()),
@@ -401,6 +434,8 @@ public class PacketLossAnalysisService {
         future.clear();
         cursor = 0;
         bootstrap = null;
+        historicalRetryAt = 0;
+        historicalFailures = 0;
         confirmedBoundary = 0;
         evaluatedAt = Long.MIN_VALUE;
     }

@@ -49,13 +49,13 @@ Cada etapa executa:
 4. Processa no máximo uma página histórica de até 10 mil registros.
 5. Libera amostras futuras cujo horário já chegou.
 6. Publica indicadores, gráficos e cobertura em um único snapshot imutável.
-7. Se a cobertura e o cursor estiverem completos, agenda o checkpoint.
+7. Agenda o checkpoint, inclusive parcial, respeitando o intervalo configurado.
 
 A continuação usa atraso fixo, padrão de um segundo **após terminar a etapa anterior**, e só trabalha enquanto houver histórico ou IDs confirmados pendentes. Também acelera a atualização após uma restauração com muitos IDs novos. Fora dessas situações, permanece a cadência normal de dez segundos.
 
 O limite do leitor novo é um intervalo de no máximo `page-size` IDs por etapa, portanto nunca contém mais que essa quantidade de linhas. Lacunas de IDs podem exigir etapas adicionais sem registros. O leitor histórico usa `LIMIT page-size`; uma etapa pode incorporar até duas páginas de dados no total, além da liberação de amostras futuras. Não há carregamento de 48 horas de objetos `PingSample` em uma lista única.
 
-A consulta histórica tem timeout de cinco segundos. Isso não estabelece um prazo rígido para o ciclo: bloqueio para obter o limite confirmado, leitura incremental, incorporação, liberação de amostras futuras e publicação também têm custo. Um ciclo lento adia os próximos porque o escritor é serial. O HTTP permanece lendo o último snapshot, sem aguardar esse escritor.
+A consulta histórica tem timeout padrão de cinco segundos, configurável por `INDICATORS_BOOTSTRAP_QUERY_TIMEOUT_SECONDS` (mínimo 1). Isso não estabelece um prazo rígido para o ciclo: bloqueio para obter o limite confirmado, leitura incremental, incorporação, liberação de amostras futuras e publicação também têm custo. Um ciclo lento adia os próximos porque o escritor é serial. O HTTP permanece lendo o último snapshot, sem aguardar esse escritor.
 
 ## Contrato de cobertura e frontend
 
@@ -78,13 +78,14 @@ O snapshot garante consistência entre metadados e resultados. `currentSnapshot(
 
 ## Persistência, reinício e falhas
 
-- Nenhuma captura é aceita enquanto o histórico estiver pendente ou o cursor novo estiver atrasado. `captureCheckpoint()` também aplica essa regra, além do agendador.
-- Ao concluir, a captura ocorre sob o bloqueio do ciclo. A escrita segue assíncrona e transacional, com blocos congelados/cópia na alteração. A atualização em memória continua durante a gravação.
-- Falha de escrita mantém os indicadores e tenta novamente respeitando o intervalo de checkpoint. Não reinicia a carga histórica.
-- Falha de leitura/processamento descarta o estado de trabalho e preserva a publicação anterior. No próximo ciclo normal, tenta restaurar um checkpoint ou reinicia pelos registros mais recentes. A idade de `evaluatedAt` permite detectar a publicação desatualizada.
-- Antes do primeiro checkpoint completo, o progresso histórico existe apenas em memória. Reiniciar nesse período perde esse progresso, por decisão explícita de persistir apenas a carga completa.
+- A captura aceita histórico parcial e atraso da leitura de novos registros. Salva as posições independentes das duas leituras e a fronteira fixa da carga histórica.
+- A captura ocorre sob o bloqueio do ciclo. A escrita segue assíncrona e transacional, com blocos congelados/cópia na alteração. A atualização em memória continua durante a gravação.
+- Falha de escrita mantém os indicadores e tenta novamente respeitando o intervalo de checkpoint.
+- As consultas são materializadas antes da incorporação. Cada lote confirma os históricos e seu cursor juntos; falha de processamento reverte apenas esse lote, incluindo amostras futuras. Os índices dos hosts afetados são copiados; os dados brutos só são copiados nos blocos/minutos alterados.
+- Falha histórica preserva os novos registros já confirmados e permite publicá-los. A mesma página é tentada após espera progressiva de 1 a 60 segundos, sem impedir a leitura dos novos registros nos ciclos seguintes.
+- Reinício retoma do último checkpoint salvo, mesmo parcial. O trabalho posterior a essa gravação precisa ser relido.
 - Recuo do relógio ou do limite de IDs invalida o estado de trabalho e provoca reconstrução. Mudanças de regras incompatíveis continuam rejeitando checkpoints antigos.
-- Não se alterou o formato persistido nem a assinatura de compatibilidade, pois um checkpoint completo tem o mesmo conteúdo e as mesmas regras anteriores.
+- A assinatura de compatibilidade passa para v2. Na primeira atualização, os checkpoints anteriores são rejeitados e ocorre uma nova carga progressiva.
 
 Para o formato, integridade, identidade de origem e restauração, consultar [Checkpoints dos indicadores e gráficos](checkpoints-indicadores.md).
 
@@ -125,7 +126,8 @@ Os logs continuam em `routiva.indicators`:
 - `HISTORY_LOAD_COMPLETED`: não resta histórico necessário; ainda conferir o cursor novo.
 - `CYCLE_COMPLETED`: ciclo concluído, com cobertura e atraso identificáveis pelos mesmos campos.
 - `CHECKPOINT_SAVED`: primeira carga durável ou atualização posterior confirmada.
-- `CYCLE_FAILED` / `CHECKPOINT_WRITE_FAILED`: distinguir reconstrução de estado e falha somente de persistência.
+- `HISTORY_PAGE_FAILED`: preserva os lotes confirmados e informa quando a página histórica será tentada novamente.
+- `CYCLE_FAILED` / `CHECKPOINT_WRITE_FAILED`: distinguir falha de ciclo com estado preservado e falha somente de persistência.
 
 Antes de concluir que a carga parou, verificar se `loaded_from` está recuando ou se páginas com horários iguais estão sendo consumidas (`fetched`), e se `cursor` acompanha `boundary`. Conferir `query_ms`, `processing_ms`, `availability_ms`, `total_ms` e `schedule_overrun`. Não há heartbeat enquanto uma consulta está bloqueada. Para avaliar tempo até o front, medir desde `INITIAL_LOAD_STARTED` até a primeira publicação parcial, não até o checkpoint.
 

@@ -64,7 +64,9 @@ final class IncrementalPingHistory {
         }
     }
 
-    private final class Block {
+    private static final class Block {
+        private final long interval, maxGap;
+        Block(long interval, long maxGap) { this.interval = interval; this.maxGap = maxGap; }
         final long[] ids = new long[BLOCK_SIZE + 1], times = new long[BLOCK_SIZE + 1];
         final double[] latencies = new double[BLOCK_SIZE + 1];
         final byte[] outcomes = new byte[BLOCK_SIZE + 1];
@@ -129,7 +131,7 @@ final class IncrementalPingHistory {
     }
 
     void restoreBlock(byte[] payload, String host, String target) {
-        Block b = new Block();
+        Block b = new Block(interval, maxGap);
         CheckpointCodec.decode(payload, in -> {
             b.size = CheckpointCodec.count(in, BLOCK_SIZE);
             if (b.size == 0) throw new java.io.IOException("Empty block");
@@ -147,6 +149,18 @@ final class IncrementalPingHistory {
             b.outcomes[i] == PingSample.SUCCESS ? b.latencies[i] : null,
             b.outcomes[i] == PingSample.LOSS ? "Tempo esgotado" : "internal", 20);
         if (last == null || new Key(sample.measuredAt(), sample.id()).compareTo(new Key(last.measuredAt(), last.id())) > 0) last = sample;
+    }
+
+    // Copy only indexes and counters; raw blocks are copied on first mutation.
+    IncrementalPingHistory fork() {
+        var copy = new IncrementalPingHistory(interval, maxGap);
+        blocks.forEach((key, block) -> { block.shared = true; copy.blocks.put(key, block); });
+        copy.last = last; copy.retained = retained; copy.evaluatedAt = evaluatedAt;
+        counters.forEach((duration, total) -> {
+            var value = new Totals(); value.append(total, interval, maxGap);
+            copy.counters.put(duration, value);
+        });
+        return copy;
     }
 
     long size() { return retained; }
@@ -189,21 +203,21 @@ final class IncrementalPingHistory {
         var entry = blocks.floorEntry(key);
         Block block;
         if (entry == null) {
-            if (blocks.isEmpty()) block = new Block();
+            if (blocks.isEmpty()) block = new Block(interval, maxGap);
             else { block = blocks.pollFirstEntry().getValue(); }
         } else {
             block = entry.getValue();
             blocks.remove(entry.getKey());
         }
         if (block.shared) {
-            Block copy = new Block(); block.copy(0, copy, block.size); copy.recompute(); block = copy;
+            Block copy = new Block(interval, maxGap); block.copy(0, copy, block.size); copy.recompute(); block = copy;
         }
         int previousSize = block.size;
         block.insert(sample);
         boolean inserted = block.size > previousSize;
         if (inserted) retained++;
         if (block.size > BLOCK_SIZE) {
-            Block right = new Block();
+            Block right = new Block(interval, maxGap);
             int midpoint = block.size / 2;
             block.copy(midpoint, right, block.size - midpoint);
             block.size = midpoint;
@@ -234,7 +248,7 @@ final class IncrementalPingHistory {
             retained -= pos;
             if (pos < first.size) {
                 if (first.shared) {
-                    Block copy = new Block(); first.copy(pos, copy, first.size-pos); first = copy;
+                    Block copy = new Block(interval, maxGap); first.copy(pos, copy, first.size-pos); first = copy;
                 } else first.copy(pos, first, first.size - pos);
                 first.recompute();
                 blocks.put(first.key(), first);

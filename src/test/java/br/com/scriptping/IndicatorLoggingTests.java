@@ -78,9 +78,9 @@ class IndicatorLoggingTests {
         assertThat(event.getLevel()).isEqualTo(Level.ERROR);
         assertThat(event.getFormattedMessage()).contains("event=CYCLE_FAILED", "cycle=2 ",
             "stage=database_boundary", "error=IllegalStateException", "last_published_cycle=1 ",
-            "indicators_published=false", "next_cycle=recovery").doesNotContain("secret database details");
+            "indicators_published=false", "next_cycle=retry").doesNotContain("secret database details");
         doReturn(1L).when(store).committedBoundary();
         service.refreshAt(now + 20000);
-        assertThat(events.list.getLast().getFormattedMessage()).contains("event=INITIAL_LOAD_COMPLETED", "cycle=3 ", "retained_pings=1 ");
+        assertThat(events.list.getLast().getFormattedMessage()).contains("event=CYCLE_COMPLETED", "cycle=3 ", "retained_pings=1 ");
     }
 }

@@ -48,6 +48,51 @@ class AnalyticsCheckpointTests {
         var capture = service.captureCheckpoint(); var h = capture.header();
         return new AnalyticsCheckpointStore.Capture(new AnalyticsCheckpointStore.Header(h.id(),h.reference(),h.cursor(),h.compatibility(),checkpoints.epoch(),h.parts(),h.manifest()), capture.parts());
     }
+    @Test void partialCheckpointResumesBothReadersAndFutureQueueWithoutReplayingHistory() {
+        for (int id=1; id<=8; id++) add(id, now-10000+id, (double) id, null, 20);
+        add(9, now+5000, 9d, null, 20);
+        var live = service(false); live.configureBootstrap(2, 1000);
+        live.refreshAt(now); // future ID 9 and historical ID 8
+        add(10, now-20000, 10d, null, 20); // late arrival belongs to live reader
+        add(11, now-1, 11d, null, 20);
+        add(12, now-2, 12d, null, 20); // live backlog remains at capture
+        live.refreshAt(now);
+        assertThat(live.loadStatus().phase()).isEqualTo("LOADING_HISTORY");
+        assertThat(live.loadStatus().liveCursor()).isEqualTo(11);
+        var saved = capture(live);
+        // Mutate the original state before serialization: capture must remain immutable.
+        BootstrapTestSupport.refreshFully(live, now+10000);
+        checkpoints.save(saved);
+        clearInvocations(samples);
+        var restarted = service(true); restarted.configureBootstrap(2, 1000);
+        restarted.refreshAt(now+10000);
+        assertThat(restarted.loadStatus().complete()).isFalse();
+        verify(samples).readIncrement(eq(11L),eq(12L),anyLong(),any());
+        verify(samples).readBootstrapPage(eq(9L),anyLong(),anyLong(),eq(now-10000+6),eq(6L),eq(2));
+        BootstrapTestSupport.refreshFully(restarted, now+10000);
+        verify(samples, never()).readBootstrapPage(anyLong(),anyLong(),anyLong(),eq(Long.MAX_VALUE),anyLong(),anyInt());
+        assertThat(restarted.current(List.of(host))).isEqualTo(live.current(List.of(host)));
+        for (int period : HostAvailabilityService.PERIODS) {
+            assertThat(restarted.availability(host, period).total()).isEqualTo(live.availability(host, period).total());
+            assertThat(restarted.availability(host, period).series()).isEqualTo(live.availability(host, period).series());
+        }
+        assertThat(restarted.availability(host, 48).total().total()).isEqualTo(12);
+    }
+
+    @Test void checkpointDuringLiveCatchupRestoresCursorWithoutStartingHistoricalLoad() {
+        var live = service(false); live.configureBootstrap(2, 1000);
+        live.refreshAt(now);
+        for (int id=1; id<=5; id++) add(id, now-1000+id, 10d, null, 20);
+        live.refreshAt(now);
+        assertThat(live.loadStatus().phase()).isEqualTo("CATCHING_UP");
+        checkpoints.save(capture(live));
+        clearInvocations(samples);
+        var restarted = service(true); restarted.configureBootstrap(2, 1000);
+        BootstrapTestSupport.refreshFully(restarted, now);
+        assertThat(restarted.availability(host, 48).total().total()).isEqualTo(5);
+        verify(samples, never()).readBootstrapPage(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
+    }
+
     @Test void restartPreservesAllPeriodsFutureSamplesLateArrivalsAndExactEdges() {
         add(1,now-47*3600000L,5d,null,3);
         add(2,now-3600000L,10d,null,20);

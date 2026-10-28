@@ -10,6 +10,15 @@ import org.springframework.stereotype.Repository;
 @org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization
 public class SampleStore {
 
+    private int bootstrapQueryTimeoutSeconds = 5;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void configureBootstrapQueryTimeout(
+        @org.springframework.beans.factory.annotation.Value("${indicators.bootstrap.query-timeout-seconds:5}") int seconds) {
+        if (seconds < 1) throw new IllegalArgumentException("Bootstrap query timeout must be positive");
+        bootstrapQueryTimeoutSeconds = seconds;
+    }
+
     // A retenção configurada nunca pode ultrapassar 48 horas.
     private final Duration retention;
     private final double latencyLimit;
@@ -262,7 +271,7 @@ public class SampleStore {
                 "AND (measured_at,id)<(?,?) ORDER BY measured_at DESC,id DESC LIMIT ?");
             query.setLong(1, from); query.setLong(2, to); query.setLong(3, boundary);
             query.setLong(4, beforeTime); query.setLong(5, beforeId); query.setInt(6, limit);
-            query.setQueryTimeout(5);
+            query.setQueryTimeout(bootstrapQueryTimeoutSeconds);
             return query;
         }, (row, index) -> {
             Number latency = (Number) row.getObject("latency");

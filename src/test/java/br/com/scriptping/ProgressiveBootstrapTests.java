@@ -41,7 +41,7 @@ class ProgressiveBootstrapTests {
         service.refreshAt(now); // latest two records, in descending measurement order
         assertThat(count()).isEqualTo(2);
         assertThat(service.loadStatus().loadedFrom()).isEqualTo(now-300000+1);
-        assertThatThrownBy(service::captureCheckpoint).isInstanceOf(IllegalStateException.class);
+        assertThat(service.captureCheckpoint()).isNotNull();
         add(4, now+1, null);
         add(5, now-500000, 40d); // new ID with an old timestamp, read by live reader only
         service.refreshAt(now+10);
@@ -78,13 +78,13 @@ class ProgressiveBootstrapTests {
         verify(store, times(1)).readBootstrapPage(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
     }
 
-    @Test void liveBacklogIsBoundedAndBlocksCheckpointUntilCaughtUp() {
+    @Test void liveBacklogIsBoundedAndAllowsPartialCheckpoint() {
         service.refreshAt(now); // empty source is complete
         for (int id=1; id<=5; id++) add(id, now+id, 10d);
         service.refreshAt(now+10);
         assertThat(count()).isEqualTo(2);
         assertThat(service.loadStatus().phase()).isEqualTo("CATCHING_UP");
-        assertThatThrownBy(service::captureCheckpoint).isInstanceOf(IllegalStateException.class);
+        assertThat(service.captureCheckpoint()).isNotNull();
         service.refreshAt(now+10);
         assertThat(count()).isEqualTo(4);
         service.refreshAt(now+10);
@@ -104,17 +104,42 @@ class ProgressiveBootstrapTests {
         assertThat(service.availability(host,48).total().lost()).isZero();
     }
 
-    @Test void failedPageKeepsPublishedSnapshotAndRetryRebuildsWithoutDuplicates() {
+    @Test void failedPagePreservesNewRowsAndRetriesSamePositionWithoutDuplicates() {
         add(1, now-1, 10d); add(2, now-400000, null);
         service.refreshAt(now);
-        var previous = service.availability(host,48);
+        add(3, now-100, 25d);
+        clearInvocations(store);
         doThrow(new IllegalStateException("query failure")).when(store)
             .readBootstrapPage(anyLong(),anyLong(),anyLong(),eq(now-400000),anyLong(),anyInt());
-        assertThatThrownBy(() -> service.refreshAt(now)).isInstanceOf(IllegalStateException.class);
-        assertThat(service.availability(host,48)).isSameAs(previous);
+        service.refreshAt(now);
+        assertThat(count()).isEqualTo(3);
+        service.refreshAt(now+500); // historical retry is delayed, new samples still flow
+        verify(store, times(1)).readBootstrapPage(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
         doCallRealMethod().when(store).readBootstrapPage(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
-        BootstrapTestSupport.refreshFully(service,now);
+        BootstrapTestSupport.refreshFully(service,now+1000);
+        assertThat(count()).isEqualTo(3);
+        verify(store, never()).readBootstrapPage(anyLong(),anyLong(),anyLong(),eq(Long.MAX_VALUE),anyLong(),anyInt());
+    }
+
+    @Test void processingFailureRollsBackExistingAndNewHostsAndPendingQueue() {
+        add(1, now-1000, 10d); add(2, now-500, 20d);
+        service.refreshAt(now);
+        var bad = spy(new PingSample(4,host.id(),host.ip(),now-2,40d,null,20));
+        doThrow(new IllegalStateException("processing failed")).when(bad).outcome();
+        var newHost = new Host("other", "Other", "10.0.0.2", List.of());
+        var partial = List.of(
+            new PingSample(3,host.id(),host.ip(),now-3,30d,null,20),
+            new PingSample(5,newHost.id(),newHost.ip(),now-3,30d,null,20),
+            new PingSample(6,host.id(),host.ip(),now+500,60d,null,20), bad);
+        doReturn(partial).when(store).readBootstrapPage(anyLong(),anyLong(),anyLong(),eq(now-1000),anyLong(),anyInt());
+        service.refreshAt(now);
         assertThat(count()).isEqualTo(2);
+        assertThat(service.availability(newHost,48).total().total()).isZero();
+        assertThat(service.loadStatus().loadedFrom()).isEqualTo(now-1000+1);
+        doCallRealMethod().when(store).readBootstrapPage(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
+        BootstrapTestSupport.refreshFully(service, now+1000);
+        assertThat(count()).isEqualTo(2); // staged future sample was not queued
+        assertThat(service.current(List.of(host)).get(host.id()).stats().fiveMinutes()).isEqualTo(15d);
     }
 
     @Test void sqlKeysetHandlesIdenticalTimestampsAndExcludesNewIds() {
@@ -126,14 +151,14 @@ class ProgressiveBootstrapTests {
         assertThat(store.readBootstrapPage(4,now-300000,now,now-1,1,2)).isEmpty();
     }
 
-    @Test void noCheckpointWriteIsScheduledForPartialHistory() {
+    @Test void checkpointWriteIsScheduledForPartialHistory() {
         add(1,now-1,10d); add(2,now-1000,20d);
         var checkpoints = mock(AnalyticsCheckpointStore.class);
         when(checkpoints.epoch()).thenReturn("epoch");
         when(checkpoints.candidates()).thenReturn(List.of());
         service.configureCheckpoints(checkpoints,300000);
         service.refreshAt(now);
-        verify(checkpoints,never()).save(any());
+        verify(checkpoints,timeout(2000)).save(any());
         assertThat(service.loadStatus().complete()).isFalse();
     }
 }
