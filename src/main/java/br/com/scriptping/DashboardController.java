@@ -49,7 +49,8 @@ public class DashboardController {
         String diagnostic,
         long fiveMinuteLossAttempts,
         long fiveMinuteLostPackets,
-        Double fiveMinuteLossPercent
+        Double fiveMinuteLossPercent,
+        PacketLossAnalysis.Quality lossQuality
     ) {
         public String updated() {
             return time(updatedAt);
@@ -162,7 +163,13 @@ public class DashboardController {
             "normal",
             "high-latency",
             "packet-loss",
-            "latency-and-loss"
+            "latency-and-loss",
+            "latency-normal",
+            "latency-warning",
+            "latency-critical",
+            "loss-normal",
+            "loss-warning",
+            "loss-critical"
         ).contains(requestedStatus)
             ? requestedStatus
             : "all";
@@ -293,7 +300,15 @@ public class DashboardController {
     }
 
     private static boolean matchesStatus(Card card, String selected) {
+        if (card.color().equals("gray") &&
+            (selected.startsWith("latency-") || selected.startsWith("loss-"))) return false;
         return switch (selected) {
+            case "latency-normal" -> color(card.hour(), card.minute(), card.current(), false).equals("green");
+            case "latency-warning" -> color(card.hour(), card.minute(), card.current(), false).equals("yellow");
+            case "latency-critical" -> color(card.hour(), card.minute(), card.current(), false).equals("red");
+            case "loss-normal" -> card.lossQuality() == PacketLossAnalysis.Quality.NORMAL;
+            case "loss-warning" -> card.lossQuality() == PacketLossAnalysis.Quality.ATENCAO;
+            case "loss-critical" -> card.lossQuality() == PacketLossAnalysis.Quality.CRITICO;
             case "all" -> true;
             case "normal" -> card.state().startsWith("Normal");
             case "high-latency" -> highLatency(card.hour(), card.minute(), card.current());
@@ -304,7 +319,9 @@ public class DashboardController {
         };
     }
 
-    private record Presentation(String color, String state, boolean lossIssue) {}
+    private record Presentation(
+        String color, String state, boolean lossIssue, PacketLossAnalysis.Quality lossQuality
+    ) {}
 
     private Presentation presentation(
         List<PacketLossAnalysis> results,
@@ -343,7 +360,7 @@ public class DashboardController {
             state = "Dados insuficientes";
         }
         if (high && issue) state += " · latência alta";
-        return new Presentation(color, state, issue);
+        return new Presentation(color, state, issue, windowQuality);
     }
 
     private void populate(Model model) {
@@ -418,7 +435,8 @@ public class DashboardController {
                               s.lossesFiveMinutes(),
                               s.attemptsFiveMinutes()
                           )
-                        : null
+                        : null,
+                    display.lossQuality()
                 )
             );
             for (var g : host.groups()) {
@@ -501,7 +519,8 @@ public class DashboardController {
                     diagnostic,
                     fiveAttempts,
                     fiveLost,
-                    lossPolicy.visiblePercentage(fiveLost, fiveAttempts)
+                    lossPolicy.visiblePercentage(fiveLost, fiveAttempts),
+                    display.lossQuality()
                 )
             );
         }

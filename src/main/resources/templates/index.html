@@ -16,7 +16,7 @@
     <main class="page-content">
       <div class="page-heading"><div><p class="eyebrow">NETWORK</p><h1 th:text="${groupPage} ? 'Grupo de host' : 'Hosts'"></h1><p th:text="${groupPage} ? 'Visão geral dos grupos da sua infraestrutura' : 'Visão geral dos hosts da sua infraestrutura'"></p></div>
       <div class="refresh-controls">
-        <div class="refresh-interval"><label for="refresh-interval">Atualização automática</label>
+        <div class="refresh-interval">
           <select id="refresh-interval" aria-label="Intervalo de atualização automática">
             <option value="5" selected>5 segundos</option>
             <option value="10">10 segundos</option>
@@ -34,16 +34,15 @@
         <div class="search-filter"><label for="search">Pesquisar por nome</label><input id="search" type="search" name="q" th:value="${q}" placeholder="Digite o nome…" autocomplete="off"></div>
         <div><label for="ping-status">Status de ping</label><select id="ping-status" name="pingStatus">
             <option value="all" th:selected="${pingStatus == 'all'}">Todos os status</option>
-            <option value="green" th:selected="${pingStatus == 'green'}">Verde · abaixo de 15 ms</option>
-            <option value="yellow" th:selected="${pingStatus == 'yellow'}">Amarelo · 15 a 20 ms</option>
-            <option value="red" th:selected="${pingStatus == 'red'}">Vermelho · latência, perdas ou indisponibilidade</option>
-            <option value="gray" th:selected="${pingStatus == 'gray'}" th:text="${groupPage} ? 'Cinza · sem hosts elegíveis' : 'Cinza · sem IP válido ou incidente reconhecido'"></option>
-            <option value="neutral" th:selected="${pingStatus == 'neutral'}">Neutro · aguardando dados</option>
-            <optgroup label="Situação">
-              <option value="normal" th:selected="${pingStatus == 'normal'}">Normal</option>
-              <option value="high-latency" th:selected="${pingStatus == 'high-latency'}">Latência alta (com ou sem perdas)</option>
-              <option value="packet-loss" th:selected="${pingStatus == 'packet-loss'}">Com perda de pacotes (com ou sem latência alta)</option>
-              <option value="latency-and-loss" th:selected="${pingStatus == 'latency-and-loss'}">Com latência e perda de pacotes</option>
+            <optgroup label="Latência">
+              <option value="latency-normal" th:selected="${pingStatus == 'latency-normal'}">Normal</option>
+              <option value="latency-warning" th:selected="${pingStatus == 'latency-warning'}">Atenção</option>
+              <option value="latency-critical" th:selected="${pingStatus == 'latency-critical'}">Crítica</option>
+            </optgroup>
+            <optgroup label="Perda de pacote">
+              <option value="loss-normal" th:selected="${pingStatus == 'loss-normal'}">Normal</option>
+              <option value="loss-warning" th:selected="${pingStatus == 'loss-warning'}">Atenção</option>
+              <option value="loss-critical" th:selected="${pingStatus == 'loss-critical'}">Crítica</option>
             </optgroup>
           </select></div>
         <div th:if="${!groupPage}"><label for="host-group">Grupo de hosts</label>
@@ -53,10 +52,8 @@
             <option th:each="group : ${groupOptions}" th:value="${group.id}" th:text="${group.name}" th:selected="${group.id == groupId}"></option>
           </select>
         </div>
-        <button type="submit">Pesquisar</button>
-        <a class="clear-filters" th:href="${pagePath}">Limpar filtros</a>
       </form>
-      <div class="legend"><span>● Menos de 15 ms</span><span>● 15 a 20 ms</span><span>● Acima de 20 ms / perdas / indisponível</span><span>● Sem IP válido</span></div>
+      <div class="legend"><span>● Normal</span><span>● Atenção</span><span>● Crítica</span></div>
       <section id="dashboard" th:attr="hx-get=${pagePath}" hx-include="#filters" hx-trigger="refresh" hx-swap="innerHTML" hx-sync="this:replace" aria-label="Resultados do monitoramento">
         <th:block th:replace="~{dashboard :: content}" />
       </section>

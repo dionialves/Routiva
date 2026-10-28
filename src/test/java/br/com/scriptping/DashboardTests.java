@@ -122,6 +122,51 @@ class DashboardTests {
     }
 
     @Test
+    void filtersLatencyAndLossIndependentlyOnBothPages() throws Exception {
+        var hosts = new java.util.ArrayList<Host>();
+        double[] latencies = { 10d, 17d, 25d };
+        for (int i = 0; i < 4; i++) {
+            var id = "separate-" + i;
+            var host = new Host(id, id, "10.5.0." + (i + 1),
+                java.util.List.of(new Host.Group(id, id)));
+            hosts.add(host);
+            if (i == 3) continue; // No measurements must not count as normal.
+            int attempts = i == 1 ? 200 : 100;
+            for (int j = 0; j < attempts; j++) {
+                store.save(host, i < 2 && j == 0
+                    ? new PingProbe.Result(null, "Tempo esgotado")
+                    : new PingProbe.Result(latencies[i], null));
+            }
+        }
+        org.mockito.Mockito.when(monitor.hosts()).thenReturn(hosts);
+        analysis.refresh();
+        var expected = java.util.Map.of(
+            "latency-normal", "separate-0",
+            "latency-warning", "separate-1",
+            "latency-critical", "separate-2",
+            "loss-normal", "separate-2",
+            "loss-warning", "separate-1",
+            "loss-critical", "separate-0"
+        );
+        for (String path : java.util.List.of("/hosts", "/grupos")) {
+            String html = mvc.perform(get(path)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+            assertThat(html).contains("<optgroup label=\"Latência\">",
+                "<optgroup label=\"Perda de pacote\">", "● Normal", "● Atenção", "● Crítica");
+            for (var entry : expected.entrySet()) {
+                mvc.perform(get(path).param("pingStatus", entry.getKey()))
+                    .andExpect(status().isOk())
+                    .andExpect(model().attribute("pingStatus", entry.getKey()))
+                    .andExpect(result -> assertThat(resultCards(result))
+                        .extracting(DashboardController.Card::id).containsExactly(entry.getValue()));
+                mvc.perform(get(path).header("HX-Request", "true")
+                        .param("pingStatus", entry.getKey()).param("q", entry.getValue()))
+                    .andExpect(status().isOk()).andExpect(cardCount(1));
+            }
+        }
+    }
+
+    @Test
     void thresholds() {
         assertThat(DashboardController.color(14.99, 1d, 2d, false)).isEqualTo("green");
         assertThat(DashboardController.color(15d, 1d, 2d, false)).isEqualTo("yellow");
@@ -468,9 +513,6 @@ class DashboardTests {
         mvc.perform(get("/hosts").param("pingStatus", "gray"))
             .andExpect(status().isOk())
             .andExpect(cardCount(3))
-            .andExpect(
-                content().string(org.hamcrest.Matchers.containsString("Cinza · sem IP válido"))
-            )
             .andExpect(result -> {
                 for (var card : resultCards(result)) {
                     assertThat(card.color()).isEqualTo("gray");
