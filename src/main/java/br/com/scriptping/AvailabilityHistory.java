@@ -7,12 +7,73 @@ import static br.com.scriptping.HostAvailabilityService.*;
 final class AvailabilityHistory {
     static final long MINUTE = 60_000L;
     private final NavigableMap<Long, Minute> minutes = new TreeMap<>();
+    private final Map<Long, java.util.function.Supplier<byte[]>> checkpointHours = new HashMap<>();
+    private static long hour(long time) { return Math.floorDiv(time, 3_600_000L) * 3_600_000L; }
+
+    List<java.util.function.Supplier<byte[]>> checkpointBlocks() {
+        List<java.util.function.Supplier<byte[]>> result = new ArrayList<>();
+        for (long at : minutes.keySet().stream().map(AvailabilityHistory::hour).distinct().toList()) {
+            result.add(checkpointHours.computeIfAbsent(at, key -> {
+                var group = new TreeMap<>(minutes.subMap(at, true, at + 3_600_000L, false));
+                group.values().forEach(m -> m.shared = true);
+                return new java.util.function.Supplier<byte[]>() {
+                    private volatile byte[] bytes;
+                    public byte[] get() {
+                        if (bytes == null) bytes = CheckpointCodec.encode(out -> {
+                            out.writeInt(group.size());
+                            for (var entry : group.entrySet()) {
+                                out.writeLong(entry.getKey()); Minute m = entry.getValue(); out.writeInt(m.size);
+                                for (int i = 0; i < m.size; i++) {
+                                    out.writeInt(m.offsets[i]); out.writeDouble(m.latencies[i]); out.writeByte(m.kinds[i]);
+                                }
+                            }
+                        });
+                        return bytes;
+                    }
+                };
+            }));
+        }
+        return result;
+    }
+
+    void restoreBlock(byte[] payload) {
+        CheckpointCodec.decode(payload, in -> {
+            int n = CheckpointCodec.count(in, 60);
+            for (int j = 0; j < n; j++) {
+                long start = in.readLong(); Minute m = new Minute();
+                m.size = CheckpointCodec.count(in, 1_000_000);
+                m.offsets = new int[Math.max(64, m.size)];
+                m.latencies = new double[m.offsets.length]; m.kinds = new byte[m.offsets.length];
+                for (int i = 0; i < m.size; i++) {
+                    int offset = m.offsets[i] = in.readInt(); double latency = m.latencies[i] = in.readDouble();
+                    byte kind = m.kinds[i] = in.readByte();
+                    if (offset < 0 || offset >= MINUTE || kind < 0 || kind > 3) throw new java.io.IOException("Invalid minute");
+                    m.latest = Math.max(m.latest, start + offset);
+                    switch (kind) {
+                        case 0 -> { m.total.h++; m.total.sum += latency; }
+                        case 1 -> { m.total.d++; m.total.sum += latency; }
+                        case 2 -> m.total.p++;
+                        default -> m.total.e++;
+                    }
+                }
+                if (minutes.putIfAbsent(start, m) != null) throw new java.io.IOException("Duplicate minute");
+                checkpointHours.put(hour(start), () -> payload);
+            }
+        });
+    }
 
     private static final class Minute {
         int[] offsets = new int[64];
         double[] latencies = new double[64];
         byte[] kinds = new byte[64]; // healthy, degraded, loss, internal error
         int size;
+        boolean shared;
+        Minute copy() {
+            Minute m = new Minute();
+            m.offsets = offsets.clone(); m.latencies = latencies.clone(); m.kinds = kinds.clone();
+            m.size = size; m.latest = latest; m.total.append(total); m.cached = cached;
+            return m;
+        }
         long latest = Long.MIN_VALUE;
         final Counts total = new Counts();
         Point cached;
@@ -54,11 +115,16 @@ final class AvailabilityHistory {
 
     void add(PingSample sample) {
         long start = Math.floorDiv(sample.measuredAt(), MINUTE) * MINUTE;
-        minutes.computeIfAbsent(start, key -> new Minute()).add(sample, start);
+        checkpointHours.remove(hour(start));
+        Minute minute = minutes.computeIfAbsent(start, key -> new Minute());
+        if (minute.shared) { minute = minute.copy(); minutes.put(start, minute); }
+        minute.add(sample, start);
     }
 
     void expire(long cutoff) {
-        minutes.headMap(Math.floorDiv(cutoff, MINUTE) * MINUTE, false).clear();
+        var expired = minutes.headMap(Math.floorDiv(cutoff, MINUTE) * MINUTE, false);
+        for (long start : expired.keySet()) checkpointHours.remove(hour(start));
+        expired.clear();
     }
 
     boolean isEmpty() { return minutes.isEmpty(); }

@@ -69,9 +69,11 @@ final class IncrementalPingHistory {
         final double[] latencies = new double[BLOCK_SIZE + 1];
         final byte[] outcomes = new byte[BLOCK_SIZE + 1];
         int size;
+        volatile byte[] checkpoint;
+        boolean shared;
         Totals totals = new Totals();
         Key key() { return new Key(times[0], ids[0]); }
-        void recompute() { totals = range(0, size); }
+        void recompute() { checkpoint = null; totals = range(0, size); }
         Totals range(int from, int to) {
             Totals result = new Totals();
             for (int i = from; i < to; i++) result.add(times[i], outcomes[i], latencies[i], interval, maxGap);
@@ -85,6 +87,7 @@ final class IncrementalPingHistory {
             target.size = count;
         }
         void insert(PingSample sample) {
+            checkpoint = null;
             int pos = size;
             Key key = new Key(sample.measuredAt(), sample.id());
             while (pos > 0 && new Key(times[pos - 1], ids[pos - 1]).compareTo(key) > 0) pos--;
@@ -106,6 +109,45 @@ final class IncrementalPingHistory {
     private final long interval, maxGap;
     private PingSample last;
     private long retained;
+
+    List<java.util.function.Supplier<byte[]>> checkpointBlocks() {
+        List<java.util.function.Supplier<byte[]>> result = new ArrayList<>();
+        for (Block b : blocks.values()) {
+            b.shared = true;
+            result.add(() -> {
+                if (b.checkpoint == null) b.checkpoint = CheckpointCodec.encode(out -> {
+                    out.writeInt(b.size);
+                    for (int i = 0; i < b.size; i++) {
+                        out.writeLong(b.ids[i]); out.writeLong(b.times[i]);
+                        out.writeDouble(b.latencies[i]); out.writeByte(b.outcomes[i]);
+                    }
+                });
+                return b.checkpoint;
+            });
+        }
+        return result;
+    }
+
+    void restoreBlock(byte[] payload, String host, String target) {
+        Block b = new Block();
+        CheckpointCodec.decode(payload, in -> {
+            b.size = CheckpointCodec.count(in, BLOCK_SIZE);
+            if (b.size == 0) throw new java.io.IOException("Empty block");
+            for (int i = 0; i < b.size; i++) {
+                b.ids[i] = in.readLong(); b.times[i] = in.readLong();
+                b.latencies[i] = in.readDouble(); b.outcomes[i] = in.readByte();
+                if (b.outcomes[i] < 0 || b.outcomes[i] > 2) throw new java.io.IOException("Invalid outcome");
+            }
+        });
+        b.recompute(); b.checkpoint = payload;
+        if (blocks.putIfAbsent(b.key(), b) != null) throw new IllegalArgumentException("Duplicate block");
+        retained += b.size;
+        int i = b.size - 1;
+        var sample = new PingSample(b.ids[i], host, target, b.times[i],
+            b.outcomes[i] == PingSample.SUCCESS ? b.latencies[i] : null,
+            b.outcomes[i] == PingSample.LOSS ? "Tempo esgotado" : "internal", 20);
+        if (last == null || new Key(sample.measuredAt(), sample.id()).compareTo(new Key(last.measuredAt(), last.id())) > 0) last = sample;
+    }
 
     long size() { return retained; }
     private long evaluatedAt = Long.MIN_VALUE;
@@ -153,6 +195,9 @@ final class IncrementalPingHistory {
             block = entry.getValue();
             blocks.remove(entry.getKey());
         }
+        if (block.shared) {
+            Block copy = new Block(); block.copy(0, copy, block.size); copy.recompute(); block = copy;
+        }
         int previousSize = block.size;
         block.insert(sample);
         boolean inserted = block.size > previousSize;
@@ -188,7 +233,9 @@ final class IncrementalPingHistory {
             while (pos < first.size && first.times[pos] <= cutoff) pos++;
             retained -= pos;
             if (pos < first.size) {
-                first.copy(pos, first, first.size - pos);
+                if (first.shared) {
+                    Block copy = new Block(); first.copy(pos, copy, first.size-pos); first = copy;
+                } else first.copy(pos, first, first.size - pos);
                 first.recompute();
                 blocks.put(first.key(), first);
                 break;
@@ -199,6 +246,11 @@ final class IncrementalPingHistory {
 
     boolean isEmpty() { return blocks.isEmpty(); }
     PingSample last() { return last; }
+    void restoreLast(PingSample sample) {
+        if (last == null || last.id() != sample.id() || last.measuredAt() != sample.measuredAt())
+            throw new IllegalArgumentException("Invalid last sample");
+        last = sample;
+    }
 
     Totals window(long start, long end) {
         Totals total = new Totals();

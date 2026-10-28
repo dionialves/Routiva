@@ -488,3 +488,11 @@ API: `GET /api/hosts/{id}/availability?hours=24`, com totais, contagens, série 
 
 
 Detalhes de implementação, limites e validação: [Disponibilidade incremental](docs/disponibilidade-incremental.md).
+
+### Recuperação dos indicadores após reinício
+
+Indicadores e gráficos agora possuem checkpoints persistidos no PostgreSQL. O primeiro é salvo após uma publicação bem-sucedida; os seguintes usam `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão: 300000 ms, cinco minutos). São mantidas duas gerações, com reutilização de blocos inalterados.
+
+No reinício, o app restaura o estado e consulta apenas os IDs posteriores ao cursor salvo. Uma carga completa continua necessária quando ainda não há checkpoint utilizável. A primeira implantação deve concluir a carga e registrar `CHECKPOINT_SAVED`; reiniciar antes desse evento ainda pode exigir carga completa.
+
+Consulte [formato, consistência, logs e operação dos checkpoints](docs/checkpoints-indicadores.md).
