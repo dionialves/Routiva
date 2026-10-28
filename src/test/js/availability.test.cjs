@@ -27,7 +27,7 @@ function surface(search = '') {
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function data(technical = 99) {
   const now = Date.now(), metrics = {technical, operational: 95, loss: 1, latency: 15};
-  return {page:{number:1,pages:2,total:21,selectedTotal:21,size:20},collectionStatus:'RECEBENDO',groups: [{id: 'g1', name: 'Grupo 1'}], view: {hosts: Array.from({length: 20}, (_, i) => ({id: String(i), name: 'Host ' + i, metrics})), report: {from: now - 300000, to: now, evaluatedAt: now, retainedFrom: now - 172800000, lastSampleAt: now - 1, total: metrics, series: [{from: now - 60000, to: now, metrics}], load: {phase: 'COMPLETE'}}}};
+  return {page:{number:1,pages:2,total:21,selectedTotal:21,size:20},collectionStatus:'RECEBENDO',groups: [{id: 'g1', name: 'Grupo 1'}], view: {hosts: Array.from({length: 20}, (_, i) => ({id: String(i), name: 'Host ' + i, metrics})), report: {from: now - 300000, to: now, evaluatedAt: now, retainedFrom: now - 172800000, lastSampleAt: now - 1, total: metrics, series: [{from: now - 300000, to: now, metrics}], load: {phase: 'COMPLETE'}}}};
 }
 test('defaults to 48 hours and all hosts; renders cards and paginates without changing totals', async () => {
   const ui = surface(); assert.match(ui.requests[0].url, /minutes=2880&groupId=&page=1/);
@@ -61,4 +61,63 @@ test('search is debounced on the server and preserves filter context', async () 
   [...ui.timers.values()].find(t=>t.ms===300).fn();
   assert.match(ui.requests[1].url,/minutes=60&groupId=g1&page=1/);
   assert.match(ui.requests[1].url,/q=10.0.0.1/);
+});
+test('availability times use report period and complementary rounded seconds', async () => {
+  const ui = surface(), report = data(99.49);
+  report.view.report.from = report.view.report.to - 48 * 3600000;
+  report.view.report.total.operational = 97.70;
+  report.view.report.series[0].from = report.view.report.from;
+  ui.respond(0, report); await flush();
+  assert.equal(ui.elements['operational-available'].textContent, '46 h 53 min 46 s');
+  assert.equal(ui.elements['operational-unavailable'].textContent, '1 h 6 min 14 s');
+  assert.equal(ui.elements['technical-available'].textContent, '47 h 45 min 19 s');
+  assert.equal(ui.elements['technical-unavailable'].textContent, '14 min 41 s');
+  ui.elements.period.value = '5'; ui.elements.period.emit('change');
+  assert.equal(ui.elements['technical-available'].textContent, '—');
+  ui.respond(1, data(100)); await flush();
+  assert.equal(ui.elements['technical-available'].textContent, '5 min');
+  assert.equal(ui.elements['technical-unavailable'].textContent, '0 s');
+});
+test('missing measurements do not become downtime and zero availability remains valid', async () => {
+  const ui = surface(), report = data(null);
+  report.view.report.total.operational = null;
+  ui.respond(0, report); await flush();
+  assert.equal(ui.elements['technical-available'].textContent, 'Sem dados');
+  assert.equal(ui.elements['technical-unavailable'].textContent, 'Sem dados');
+  assert.equal(ui.elements['operational-available'].textContent, 'Sem dados');
+  [...ui.timers.values()].find(t => t.ms === 10000).fn();
+  const zero = data(0); zero.view.report.total.operational = 0;
+  ui.respond(1, zero); await flush();
+  assert.equal(ui.elements['operational-available'].textContent, '0 s');
+  assert.equal(ui.elements['operational-unavailable'].textContent, '5 min');
+});
+test('48-hour selection ignores 47 hours without measurements', async () => {
+  const ui = surface(), payload = data(50), r = payload.view.report;
+  r.from = r.to - 48 * 3600000;
+  r.series = [
+    {from:r.from, to:r.to - 3600000, metrics:{technical:null}},
+    {from:r.to - 3600000, to:r.to, metrics:r.total}
+  ];
+  ui.respond(0, payload); await flush();
+  assert.equal(ui.elements['technical-available'].textContent, '30 min');
+  assert.equal(ui.elements['technical-unavailable'].textContent, '30 min');
+});
+test('one-hour selection clips older data without discounting covered time', async () => {
+  const ui = surface('?minutes=60'), payload = data(75), r = payload.view.report;
+  r.from = r.to - 3600000;
+  r.series = [{from:r.to - 8 * 3600000, to:r.to, metrics:r.total}];
+  ui.respond(0, payload); await flush();
+  assert.equal(ui.elements['technical-available'].textContent, '45 min');
+  assert.equal(ui.elements['technical-unavailable'].textContent, '15 min');
+});
+test('internal gaps and collection errors are excluded; lost pings count as covered time', async () => {
+  const ui = surface(), payload = data(0), r = payload.view.report;
+  r.series = [
+    {from:r.from, to:r.to - 120000, metrics:{technical:null, errors:10}},
+    {from:r.to - 120000, to:r.to - 60000, metrics:{technical:null}},
+    {from:r.to - 60000, to:r.to, metrics:r.total}
+  ];
+  ui.respond(0, payload); await flush();
+  assert.equal(ui.elements['technical-available'].textContent, '0 s');
+  assert.equal(ui.elements['technical-unavailable'].textContent, '1 min');
 });

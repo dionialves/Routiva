@@ -120,3 +120,9 @@
 
 /* Keep the shared sidebar width and contain the expanded brand within its padding. */
 .availability-dashboard .sidebar .brand-logo { max-width:100%; height:auto; aspect-ratio:212 / 59; }
+
+.metric-times { margin:16px 0 8px; padding-top:12px; border-top:1px solid #203e50; font-size:12px; }
+.metric-times > div { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:6px 0; flex-wrap:wrap; }
+.metric-times dt { color:#b5c6d8; }
+.metric-times dd { margin:0; color:#f8fafc; font-weight:600; font-variant-numeric:tabular-nums; }
+.metric-time-note { display:block; color:#b0c1d2; font-size:11px; line-height:1.5; }

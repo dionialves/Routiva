@@ -2,6 +2,28 @@
 window.AvailabilityView = (() => {
   const $ = id => document.getElementById(id);
   const format = (value, unit = '%') => value == null ? 'Sem dados' : value.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + unit;
+  function duration(seconds) {
+    const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds % 3600 / 60), rest = seconds % 60;
+    return [hours ? `${hours} h` : '', minutes ? `${minutes} min` : '', rest || (!hours && !minutes) ? `${rest} s` : ''].filter(Boolean).join(' ');
+  }
+  function times(report) {
+    // The series contains minute buckets. Empty/error-only buckets do not
+    // establish coverage; clip populated buckets to the retained query window.
+    const span = (report?.series || []).reduce((covered, point) => {
+      if (!Number.isFinite(point.metrics?.technical)) return covered;
+      const start = Math.max(point.from, report.from, report.retainedFrom ?? report.from);
+      const end = Math.min(point.to, report.to);
+      return covered + Math.max(0, end - start);
+    }, 0);
+    for (const key of ['operational', 'technical']) {
+      const percent = report?.total[key];
+      const valid = report?.evaluatedAt != null && Number.isFinite(percent) && Number.isFinite(span) && span > 0;
+      const total = Math.round(span / 1000);
+      const available = Math.round(total * Math.max(0, Math.min(100, percent)) / 100);
+      $(key + '-available').textContent = valid ? duration(available) : report ? 'Sem dados' : '—';
+      $(key + '-unavailable').textContent = valid ? duration(total - available) : report ? 'Sem dados' : '—';
+    }
+  }
   const states = {
     NORMAL:['Normal','normal'], DEGRADADO:['Atenção','warning'], CRITICO:['Crítico','critical'],
     SEM_DADOS:['Sem dados','neutral'], SEM_IP:['Sem IP válido','neutral'], RECONHECIDO:['Incidente reconhecido','neutral'],
@@ -37,5 +59,5 @@ window.AvailabilityView = (() => {
     $('previous').disabled=page.number<=1; $('next').disabled=page.number>=page.pages;
   }
   function reset() {tableVersion=null; $('availability-hosts').replaceChildren(); $('hosts-empty').hidden=true; $('previous').disabled=true; $('next').disabled=true;}
-  return {table,reset,format};
+  return {table,reset,format,times};
 })();

@@ -14,6 +14,7 @@
   function loading(value) {main.classList.toggle('is-loading',value); main.setAttribute('aria-busy',String(value));}
   function render() {
     const r=data.view.report;
+    AvailabilityView.times(r);
     for(const key of ['operational','technical','loss','latency']) $(key).textContent=AvailabilityView.format(r.total[key],key==='latency'?' ms':'%');
     $('availability-range').textContent=r.evaluatedAt?`Período: ${date(r.from)} → ${date(r.to)}`:'Aguardando a primeira publicação de indicadores.';
     $('last-measurement').textContent='Última medição: '+(r.lastSampleAt?date(r.lastSampleAt):'Sem medições');
@@ -30,7 +31,7 @@
   async function refresh(reset=false) {
     clearTimeout(timer); clearTimeout(searchTimer); controller?.abort(); controller=new AbortController(); const active=controller, current=++generation;
     $('retry').hidden=true;
-    if(reset) {$('collection-state').textContent='Aguardando indicadores';$('collection-state').dataset.state='neutral';$('last-measurement').textContent='Última medição: —';data=null;chart.clear();AvailabilityView.reset();loading(true);for(const key of ['operational','technical','loss','latency']) $(key).textContent='—';$('availability-coverage').textContent='';$('availability-range').textContent='';}
+    if(reset) {$('collection-state').textContent='Aguardando indicadores';$('collection-state').dataset.state='neutral';$('last-measurement').textContent='Última medição: —';data=null;chart.clear();AvailabilityView.reset();AvailabilityView.times(null);loading(true);for(const key of ['operational','technical','loss','latency']) $(key).textContent='—';$('availability-coverage').textContent='';$('availability-range').textContent='';}
     if(!data) {$('availability-status').textContent='Carregando indicadores…';loading(true);}
     const timeout=setTimeout(()=>active.abort(),9000);
     try {
