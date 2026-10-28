@@ -16,7 +16,7 @@ function surface(search = '') {
   const elements = new Proxy({}, {get(target, key) { return target[key] ||= new Element(); }});
   const requests = [], timers = new Map(); let serial = 0;
   const location = {search, pathname:'/disponibilidade', href: 'http://localhost/disponibilidade' + search};
-  const context = {document: {body:new Element(),addEventListener(){},createDocumentFragment:()=>new Element(),getElementById: id => elements[id], querySelector: id => elements[id], querySelectorAll: () => [], createElement: () => new Element(), createElementNS: () => new Element()}, location, history: {replaceState(a,b,url) { location.href = String(url); }}, URL, URLSearchParams, AbortController, Date, Option: Element, AvailabilityChart: { Chart: class { update() {} clear() {} } },
+  const context = {document: {body:new Element(),addEventListener(){},createDocumentFragment:()=>new Element(),getElementById: id => elements[id], querySelector: id => elements[id], querySelectorAll: () => [], createElement: tagName => Object.assign(new Element(), {tagName}), createElementNS: () => new Element()}, location, history: {replaceState(a,b,url) { location.href = String(url); }}, URL, URLSearchParams, AbortController, Date, Option: Element, AvailabilityChart: { Chart: class { update() {} clear() {} } },
     setTimeout(fn, ms) { timers.set(++serial, {fn, ms}); return serial; }, clearTimeout(id) { timers.delete(id); },
     fetch(url, options) { return new Promise((resolve, reject) => {requests.push({url, resolve, reject, options});}); }
   };
@@ -120,4 +120,13 @@ test('internal gaps and collection errors are excluded; lost pings count as cove
   ui.respond(0, payload); await flush();
   assert.equal(ui.elements['technical-available'].textContent, '0 s');
   assert.equal(ui.elements['technical-unavailable'].textContent, '1 min');
+});
+
+test('host names remain plain text without links to removed detail pages', async () => {
+  const ui = surface(); ui.respond(0, data()); await flush();
+  const row = ui.elements['availability-hosts'].children[0].children[0];
+  const name = row.children[0].children[0];
+  assert.equal(name.tagName, 'span');
+  assert.equal(name.textContent, 'Host 0');
+  assert.equal(name.href, undefined);
 });

@@ -48,8 +48,7 @@
 .availability-page .hosts-table thead th { background:#112b3c; }
 .availability-page .hosts-table thead button { padding:0; border:0; background:transparent; font-size:11px; white-space:nowrap; color:#b9cbdd; }
 .availability-page .hosts-table tbody th { text-align:left; max-width:240px; }
-.availability-page .hosts-table tbody th a { color:#b1d7ed; overflow-wrap:anywhere; text-decoration:none; }
-.availability-page .hosts-table tbody th a:hover { color:#00d1ff; text-decoration:underline; }
+.availability-page .hosts-table tbody th .availability-host-name { color:#b1d7ed; overflow-wrap:anywhere; text-decoration:none; }
 .availability-page .hosts-table tbody th small { display:block; margin-top:5px; font-size:10px; color:#8da6bc; font-weight:400; }
 .availability-page .hosts-table tbody tr:hover { background:#112b3c; }
 .host-groups { max-width:150px; color:#b0c1d2; overflow-wrap:anywhere; }
@@ -126,3 +125,19 @@
 .metric-times dt { color:#b5c6d8; }
 .metric-times dd { margin:0; color:#f8fafc; font-weight:600; font-variant-numeric:tabular-nums; }
 .metric-time-note { display:block; color:#b0c1d2; font-size:11px; line-height:1.5; }
+
+/* Uniform metric cards; details live in the browser's overlay layer. */
+.availability-page .availability-grid { grid-auto-rows:1fr; }
+.availability-grid .metric-card { display:grid; grid-template-rows:1fr auto auto; align-content:start; }
+.availability-page .metric-details-trigger { display:flex; align-items:center; gap:8px; justify-self:start; margin:18px 0 10px; padding:0; border:0; border-radius:4px; background:transparent; color:#f8fafc; cursor:pointer; text-align:left; box-shadow:none; }
+.availability-page .availability-grid .metric-details-trigger .metric-value { margin:0; }
+.metric-info { width:17px; height:17px; flex-shrink:0; color:var(--metric-color); opacity:.8; transition:opacity .12s ease; }
+.metric-details-trigger:hover .metric-info,.metric-details-trigger:focus-visible .metric-info { opacity:1; }
+.metric-details-trigger:focus-visible { outline:2px solid var(--metric-color); outline-offset:5px; }
+.metric-details { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:330px; max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px); overflow:auto; padding:16px; background:#071824; border:1px solid #29485d; border-radius:9px; box-shadow:0 8px 24px #0005; color:#f1f5f9; font-size:13px; }
+.availability-page .availability-grid .metric-details-heading { margin:0; color:#e2edf6; font-size:13px; font-weight:600; }
+.metric-details-heading strong { color:var(--metric-color); white-space:nowrap; }
+.metric-details .metric-times { margin:12px 0; }
+.metric-details .metric-times > div { flex-wrap:nowrap; gap:16px; }
+.metric-details .metric-times dd { text-align:right; }
+@media (prefers-reduced-motion:reduce) { .metric-info { transition:none; } }

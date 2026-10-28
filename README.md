@@ -474,9 +474,9 @@ Os testes Java usam H2 em memória e uma API Zabbix simulada. Incluem os limites
 
 Referências: [user.login](https://www.zabbix.com/documentation/current/en/manual/api/reference/user/login), [API Zabbix](https://www.zabbix.com/documentation/7.0/en/manual/api), [imagem oficial PostgreSQL](https://hub.docker.com/_/postgres).
 
-### Dashboard individual e disponibilidade do host
+### Disponibilidade
 
-Clique no nome de um host para abrir `/hosts/{id}`. O painel mostra nome, IP, grupos, disponibilidade operacional (principal), técnica, perda, degradação e gráficos históricos. Os períodos aceitos são 1, 2, 4, 8, 12, 24 e 48 horas, contados a partir da referência da última publicação em memória. O período padrão é 24 horas. A seleção no topo busca o relatório do novo período sem recarregar a página. Tanto a página quanto a API apenas leem relatórios prontos: abrir, recarregar ou trocar período não consulta pings nem recalcula indicadores. O navegador consulta a publicação a cada 10 segundos, sem sobreposição de requisições.
+A página `/disponibilidade` oferece somente os períodos de 5 minutos, 1 hora, 8 horas, 24 horas e 48 horas. Apenas esses relatórios são calculados e mantidos em memória, contados a partir da referência da última publicação. Os relatórios de 2, 4 e 12 horas foram removidos. As páginas de Hosts, Grupos de Hosts e detalhes individuais não estão mais disponíveis; os nomes na tabela de Disponibilidade são textos sem links. A API individual preservada aceita apenas 1, 8, 24 e 48 horas; o relatório de 5 minutos continua disponível nas APIs do dashboard com `minutes=5`. As APIs apenas leem relatórios prontos, sem consultar pings ou recalcular indicadores durante a requisição.
 
 Os cálculos ficam no backend: H = respostas dentro do limite, D = respostas acima dele, P = pings sem resposta; T = H + D + P. Disponibilidade técnica = 100 × (H + D) / T; operacional = 100 × H / T. Erros internos não entram no denominador. Sem amostras válidas, os percentuais são nulos (`SEM_DADOS`). O total usa contagens de todas as amostras, nunca médias dos percentuais das janelas.
 

@@ -17,6 +17,7 @@ window.AvailabilityView = (() => {
     }, 0);
     for (const key of ['operational', 'technical']) {
       const percent = report?.total[key];
+      $(key + '-detail-value').textContent = report ? format(percent) : '—';
       const valid = report?.evaluatedAt != null && Number.isFinite(percent) && Number.isFinite(span) && span > 0;
       const total = Math.round(span / 1000);
       const available = Math.round(total * Math.max(0, Math.min(100, percent)) / 100);
@@ -37,8 +38,8 @@ window.AvailabilityView = (() => {
     tableVersion = fingerprint;
     const fragment = document.createDocumentFragment();
     for (const row of view.hosts) {
-      const tr = document.createElement('tr'), th = document.createElement('th'), link = document.createElement('a'), ip = document.createElement('small');
-      th.scope = 'row'; link.href = '/hosts/' + encodeURIComponent(row.id); link.textContent = row.name; ip.textContent = row.ip || 'Sem IP'; th.append(link,ip); tr.append(th);
+      const tr = document.createElement('tr'), th = document.createElement('th'), name = document.createElement('span'), ip = document.createElement('small');
+      th.scope = 'row'; name.className = 'availability-host-name'; name.textContent = row.name; ip.textContent = row.ip || 'Sem IP'; th.append(name,ip); tr.append(th);
       const group = document.createElement('td'); group.textContent = (row.groups || []).map(g=>g.name).join(', ') || 'Sem grupo'; group.className='host-groups'; tr.append(group);
       for (const key of ['operational','technical','loss','latency']) {
         const td = document.createElement('td'); td.className='availability-number';

@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service;
 /** Read-only facade: requests never query samples or calculate indicators. */
 @Service
 public class HostAvailabilityService {
-    static final List<Integer> PERIODS = List.of(1, 2, 4, 8, 12, 24, 48);
+    static final List<Integer> PERIODS = List.of(1, 8, 24, 48);
     private final PacketLossAnalysisService indicators;
 
     public HostAvailabilityService(PacketLossAnalysisService indicators) {

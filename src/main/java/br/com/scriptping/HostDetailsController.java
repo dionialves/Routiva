@@ -2,7 +2,6 @@ package br.com.scriptping;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,20 +23,6 @@ public class HostDetailsController {
             .filter(h -> h.id().equals(id))
             .findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-    }
-
-    @GetMapping("/hosts/{id}")
-    public String page(
-        @PathVariable String id,
-        @RequestParam(defaultValue = "24") int hours,
-        Model model
-    ) {
-        Host host = host(id);
-        model.addAttribute("host", host);
-        model.addAttribute("hours", hours);
-        model.addAttribute("periods", new int[] { 1, 2, 4, 8, 12, 24, 48 });
-        model.addAttribute("report", report(host, hours));
-        return "host";
     }
 
     private HostAvailabilityService.Report report(Host host, int hours) {

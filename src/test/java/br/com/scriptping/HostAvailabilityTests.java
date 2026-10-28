@@ -11,6 +11,29 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 class HostAvailabilityTests {
 
     @Test
+    void publishesOnlyTheFiveDashboardPeriodsWithAndWithoutSamples() {
+        long now = 200_040_000L;
+        var history = new AvailabilityHistory();
+        for (boolean populated : new boolean[] {false, true}) {
+            if (populated) history.add(new PingSample(1, "h", "10.0.0.1", now - 1, 10d, null));
+            var reports = history.reports(now, 48 * 3_600_000L, "test", populated);
+            // Key 0 is the existing internal representation of five minutes.
+            assertThat(reports.keySet()).containsExactlyInAnyOrder(0, 1, 8, 24, 48);
+            for (var entry : reports.entrySet()) {
+                long duration = entry.getKey() == 0 ? 300_000L : entry.getKey() * 3_600_000L;
+                assertThat(entry.getValue().to() - entry.getValue().from()).isEqualTo(duration);
+                assertThat(entry.getValue().total().healthy()).isEqualTo(populated ? 1 : 0);
+            }
+        }
+        var service = new HostAvailabilityService(null);
+        var host = new Host("h", "Host", "10.0.0.1", java.util.List.of());
+        for (int hours : new int[] {2, 4, 12}) {
+            assertThatIllegalArgumentException().isThrownBy(() -> service.report(host, hours));
+        }
+    }
+
+
+    @Test
     void validatesTenThousandExampleAndPrecision() {
         var counts = new HostAvailabilityService.Counts();
         for (int i = 0; i < 9500; i++) counts.add(PingSample.SUCCESS, 20d, 20);

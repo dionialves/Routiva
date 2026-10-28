@@ -49,10 +49,13 @@ class AvailabilityCacheTests {
         when(monitor.hosts()).thenReturn(List.of(host));
         var mvc = MockMvcBuilders.standaloneSetup(new HostDetailsController(monitor, service)).build();
         for (int hours : HostAvailabilityService.PERIODS) {
-            mvc.perform(get("/hosts/h").param("hours", "" + hours)).andExpect(status().isOk());
             mvc.perform(get("/api/hosts/h/availability").param("hours", "" + hours))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.total.healthy").value(1))
                 .andExpect(jsonPath("$.bucketMillis").value(60000));
+        }
+        for (int hours : new int[] {2, 4, 12}) {
+            mvc.perform(get("/api/hosts/h/availability").param("hours", "" + hours))
+                .andExpect(status().isBadRequest());
         }
         assertThat(service.report(host, 24)).isSameAs(first);
         verifyNoInteractions(store);
