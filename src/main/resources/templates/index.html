@@ -3,18 +3,18 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${pageTitle} + ' • ScriptPing'">ScriptPing</title>
+    <title th:text="${pageTitle} + ' • TraceOne'">TraceOne</title>
     <link rel="stylesheet" href="/style.css">
     <script src="/webjars/htmx.org/2.0.4/dist/htmx.min.js" defer></script>
     <script src="/dashboard.js" defer></script>
+    <script src="/shell.js" defer></script>
   </head>
   <body>
-    <header>
-      <div>
-        <p class="eyebrow">MONITORAMENTO DE REDE</p>
-        <h1>Script<span>Ping</span></h1>
-        <p>Todos os hosts. Cada milissegundo.</p>
-      </div>
+    <aside th:replace="~{shell :: sidebar(${groupPage} ? 'groups' : 'hosts')}"></aside>
+    <div class="app-workspace">
+    <header th:replace="~{shell :: topbar}"></header>
+    <main class="page-content">
+      <div class="page-heading"><div><p class="eyebrow">NETWORK</p><h1 th:text="${groupPage} ? 'Grupo de host' : 'Hosts'"></h1><p th:text="${groupPage} ? 'Visão geral dos grupos da sua infraestrutura' : 'Visão geral dos hosts da sua infraestrutura'"></p></div>
       <div class="refresh-controls">
         <div class="refresh-interval"><label for="refresh-interval">Atualização automática</label>
           <select id="refresh-interval" aria-label="Intervalo de atualização automática">
@@ -26,12 +26,7 @@
         </div>
         <button id="refresh-now" type="button">Atualizar agora</button>
       </div>
-    </header>
-    <main>
-      <nav class="page-nav" aria-label="Páginas de monitoramento">
-        <a href="/hosts" th:classappend="${!groupPage} ? 'active'" th:attr="aria-current=${!groupPage} ? 'page' : null">Hosts</a>
-        <a href="/grupos" th:classappend="${groupPage} ? 'active'" th:attr="aria-current=${groupPage} ? 'page' : null">Grupos de hosts</a>
-      </nav>
+      </div>
       <form id="filters" class="filters" method="get" th:action="${pagePath}" th:attr="hx-get=${pagePath}" hx-target="#dashboard" hx-swap="innerHTML" hx-trigger="submit, input changed delay:300ms from:input, change from:select" hx-sync="#dashboard:replace" hx-replace-url="true">
         <input id="page-number" type="hidden" name="page" th:value="${currentPage}">
         <input id="sort-column" type="hidden" name="sort" th:value="${sort}">
@@ -67,6 +62,7 @@
       </section>
       <p id="connection" role="status"></p>
     </main>
+    </div>
 
   </body>
 </html>

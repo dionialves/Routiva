@@ -26,6 +26,16 @@ import org.springframework.test.web.servlet.MockMvc;
 class DashboardTests {
 
     @Test
+    void availabilityHasNavigationAndAnEmptyContentArea() throws Exception {
+        String html = mvc.perform(get("/disponibilidade"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        assertThat(html).contains("href=\"/hosts\"", "href=\"/grupos\"", "aria-current=\"page\"");
+        assertThat(html).contains("<main class=\"page-content availability-page\" aria-label=\"Disponibilidade\"></main>");
+        assertThat(html).doesNotContain("/dashboard.js", "id=\"dashboard\"");
+    }
+
+    @Test
     void rendersHostDetailsAndValidatesPeriods() throws Exception {
         Host host = new Host(
             "details",

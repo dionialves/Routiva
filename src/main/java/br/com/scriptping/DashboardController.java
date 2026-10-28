@@ -100,6 +100,11 @@ public class DashboardController {
         return "green";
     }
 
+    @GetMapping("/disponibilidade")
+    public String availability() {
+        return "availability";
+    }
+
     @GetMapping({ "/", "/hosts", "/grupos" })
     public String page(
         jakarta.servlet.http.HttpServletRequest request,

@@ -3,12 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title th:text="${host.name} + ' • Routiva'">Host</title>
+    <title th:text="${host.name} + ' • TraceOne'">Host</title>
     <link rel="stylesheet" href="/style.css">
     <script src="/host.js" defer></script>
+    <script src="/shell.js" defer></script>
   </head>
   <body>
-    <header>
+    <aside th:replace="~{shell :: sidebar('hosts')}"></aside>
+    <div class="app-workspace">
+    <header th:replace="~{shell :: topbar}"></header>
+    <header class="host-heading">
       <div>
         <p class="eyebrow">SAÚDE DA COMUNICAÇÃO</p>
         <h1 th:text="${host.name}"></h1>
@@ -75,5 +79,6 @@
 
       </script>
     </main>
+    </div>
   </body>
 </html>
