@@ -24,7 +24,6 @@ class IndicatorLoggingTests {
 
     @BeforeEach
     void setup() {
-        BootstrapTestSupport.pages(store, rows);
         previousLevel = logger.getLevel();
         logger.setLevel(Level.INFO);
         events.start();
@@ -51,15 +50,17 @@ class IndicatorLoggingTests {
 
     @Test
     void reportsProgressBeforeCompletionAndIncludesCoverage() {
-        service.configureBootstrap(2, 1000);
+        service.configureIncremental(2, 1000);
+        service.refreshAt(now);
+        events.list.clear();
         add(1, now - 1000); add(2, now - 3599000); add(3, now + 5000);
         service.refreshAt(now);
         assertThat(events.list.getLast().getFormattedMessage()).contains(
-            "event=INITIAL_LOAD_PROGRESS", "fetched=2 ", "pending_future=1 ", "indicators_published=true");
+            "event=CYCLE_COMPLETED", "fetched=2 ", "pending_future=0 ", "indicators_published=true");
         assertThat(events.list).noneMatch(e -> e.getFormattedMessage().contains("event=INITIAL_LOAD_COMPLETED"));
         events.list.clear();
-        BootstrapTestSupport.refreshFully(service, now + 10000);
-        assertThat(events.list).anyMatch(e -> e.getFormattedMessage().contains("event=HISTORY_LOAD_COMPLETED"));
+        IncrementalTestSupport.refreshFully(service, now + 10000);
+        assertThat(events.list).noneMatch(e -> e.getFormattedMessage().contains("HISTORY_LOAD"));
         assertThat(service.loadStatus().complete()).isTrue();
         service.refreshAt(now + 11000);
         String result = events.list.getLast().getFormattedMessage();
@@ -81,6 +82,6 @@ class IndicatorLoggingTests {
             "indicators_published=false", "next_cycle=retry").doesNotContain("secret database details");
         doReturn(1L).when(store).committedBoundary();
         service.refreshAt(now + 20000);
-        assertThat(events.list.getLast().getFormattedMessage()).contains("event=CYCLE_COMPLETED", "cycle=3 ", "retained_pings=1 ");
+        assertThat(events.list.getLast().getFormattedMessage()).contains("event=CYCLE_COMPLETED", "cycle=3 ", "retained_pings=0 ");
     }
 }

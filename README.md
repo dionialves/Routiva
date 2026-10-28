@@ -491,8 +491,8 @@ Detalhes de implementação, limites e validação: [Disponibilidade incremental
 
 ### Recuperação dos indicadores após reinício
 
-Indicadores e gráficos agora possuem checkpoints persistidos no PostgreSQL. O primeiro é salvo já no primeiro ciclo publicado, inclusive com carga histórica parcial; os seguintes usam `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão: 300000 ms, cinco minutos). São mantidas duas gerações, com reutilização de blocos inalterados.
+Indicadores e gráficos agora possuem checkpoints persistidos no PostgreSQL. O primeiro é salvo já no primeiro ciclo publicado, inclusive durante a atualização dos novos registros; os seguintes usam `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão: 300000 ms, cinco minutos). São mantidas duas gerações, com reutilização de blocos inalterados.
 
-No reinício, o app restaura o estado, consulta os IDs posteriores ao cursor salvo e continua a carga histórica parcial da posição persistida. Sem checkpoint utilizável, o app publica primeiro os 10 mil registros mais recentes e recupera o restante em páginas, intercalando novos pings. O front identifica os resultados parciais. Aguarde `CHECKPOINT_SAVED` para ter um ponto durável de retomada. A assinatura v2 invalida checkpoints da versão anterior, exigindo uma nova carga progressiva na primeira atualização.
+No reinício, o app restaura o checkpoint e consulta somente IDs posteriores ao cursor salvo. Sem checkpoint utilizável, começa vazio no limite atual de IDs e agrega apenas novos registros. Não há carga retroativa de `ping_sample`. Checkpoints v2 continuam compatíveis; uma posição histórica antiga é ignorada, preservando os dados já agregados. Aguarde `CHECKPOINT_SAVED` para ter um ponto durável de retomada.
 
-Consulte [arquitetura, configuração, implantação e manutenção da carga progressiva](docs/carga-progressiva-indicadores.md) e [formato, consistência, logs e operação dos checkpoints](docs/checkpoints-indicadores.md).
+Consulte [fluxo e configuração da coleta incremental](docs/coleta-incremental-indicadores.md) e [formato, consistência, logs e operação dos checkpoints](docs/checkpoints-indicadores.md).

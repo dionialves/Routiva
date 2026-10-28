@@ -36,7 +36,8 @@ class PacketLossHistoryIntegrationTests {
     PlatformTransactionManager transactions;
 
     @Test
-    void backgroundRefreshAndRestartRestoreIndicatorsFromSavedPings() {
+    void backgroundRefreshCollectsNewPingsAndRestartWithoutCheckpointStartsEmpty() {
+        analysis.refresh();
         Host host = new Host("restore", "Restore", "10.7.0.1", List.of());
         store.save(host, new PingProbe.Result(null, "Tempo esgotado"));
         store.save(host, new PingProbe.Result(null, "Tempo esgotado"));
@@ -56,14 +57,9 @@ class PacketLossHistoryIntegrationTests {
         var afterRestart = restored
             .current(List.of(host))
             .get(host.id());
-        assertThat(
-            rules.windowQuality(
-                afterRestart.stats().lossesFiveMinutes(),
-                afterRestart.stats().attemptsFiveMinutes()
-            )
-        ).isEqualTo(Quality.CRITICO);
-        assertThat(afterRestart.stats().lossesLastHour()).isEqualTo(3);
-        assertThat(afterRestart.consecutive()).isEqualTo(3);
+        assertThat(afterRestart.stats().attemptsFiveMinutes()).isZero();
+        assertThat(afterRestart.stats().lossesLastHour()).isZero();
+        restored.closeCheckpointWriter();
     }
 
     @Test

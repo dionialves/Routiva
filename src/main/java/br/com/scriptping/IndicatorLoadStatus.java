@@ -6,10 +6,7 @@ public record IndicatorLoadStatus(String phase, Long loadedFrom, Long evaluatedA
     public boolean complete() { return "COMPLETE".equals(phase); }
     public String description() {
         if (evaluatedAt == null) return "Carregando indicadores…";
-        if (complete()) return "Histórico carregado";
-        if ("CATCHING_UP".equals(phase)) return "Dados parciais · Atualizando registros recentes";
-        String coverage = loadedFrom == null ? "Carregando os registros mais recentes"
-            : "Histórico carregado desde " + java.time.Instant.ofEpochMilli(loadedFrom);
-        return "Dados parciais · " + coverage + " · Recuperação do histórico em andamento";
+        if (complete()) return "Indicadores atualizados";
+        return "Dados parciais · Atualizando registros recentes";
     }
 }

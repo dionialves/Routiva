@@ -158,8 +158,7 @@
     document.getElementById('retention-note').textContent = report.evaluatedAt != null && report.retainedFrom > report.from
       ? `Retenção limitada: somente dados a partir de ${time(report.retainedFrom)} podem compor este período.` : '';
     if (loading()) document.getElementById('retention-note').textContent +=
-      report.load.loadedFrom == null ? ' Carregando os registros mais recentes. Os valores ainda são parciais.' :
-        ` Histórico carregado desde ${time(report.load.loadedFrom)}. Os períodos anteriores ainda estão incompletos.`;
+      ' Atualizando registros recentes. Os valores ainda são parciais.';
     for (const id of ['availability-chart', 'loss-chart', 'latency-chart'])
       document.getElementById(id).hidden = report.evaluatedAt == null;
     if (report.evaluatedAt == null) {

@@ -26,7 +26,6 @@ class AnalyticsCheckpointTests {
         new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds);
         checkpoints = new AnalyticsCheckpointStore(jdbc, new DataSourceTransactionManager(ds));
-        BootstrapTestSupport.pages(samples, rows);
         when(samples.committedBoundary()).thenAnswer(i -> rows.stream().mapToLong(PingSample::id).max().orElse(0));
         doAnswer(i -> {
             long after=i.getArgument(0), through=i.getArgument(1), cutoff=i.getArgument(2);
@@ -39,6 +38,7 @@ class AnalyticsCheckpointTests {
     PacketLossAnalysisService service(boolean persistence) {
         var service = new PacketLossAnalysisService(samples, new PacketLossPolicy(), 1000, 2000);
         if (persistence) service.configureCheckpoints(checkpoints, 300000);
+        if (!persistence) IncrementalTestSupport.startBeforeArrivals(samples, rows, service, now);
         services.add(service); return service;
     }
     void add(long id, long time, Double latency, String error, double limit) {
@@ -48,49 +48,40 @@ class AnalyticsCheckpointTests {
         var capture = service.captureCheckpoint(); var h = capture.header();
         return new AnalyticsCheckpointStore.Capture(new AnalyticsCheckpointStore.Header(h.id(),h.reference(),h.cursor(),h.compatibility(),checkpoints.epoch(),h.parts(),h.manifest()), capture.parts());
     }
-    @Test void partialCheckpointResumesBothReadersAndFutureQueueWithoutReplayingHistory() {
-        for (int id=1; id<=8; id++) add(id, now-10000+id, (double) id, null, 20);
-        add(9, now+5000, 9d, null, 20);
-        var live = service(false); live.configureBootstrap(2, 1000);
-        live.refreshAt(now); // future ID 9 and historical ID 8
-        add(10, now-20000, 10d, null, 20); // late arrival belongs to live reader
-        add(11, now-1, 11d, null, 20);
-        add(12, now-2, 12d, null, 20); // live backlog remains at capture
-        live.refreshAt(now);
-        assertThat(live.loadStatus().phase()).isEqualTo("LOADING_HISTORY");
-        assertThat(live.loadStatus().liveCursor()).isEqualTo(11);
+    @Test void legacyPartialCheckpointKeepsAggregatesButDropsHistoricalPosition() {
+        add(1, now-1000, 10d, null, 20);
+        var live = service(false);
+        IncrementalTestSupport.refreshFully(live, now);
         var saved = capture(live);
-        // Mutate the original state before serialization: capture must remain immutable.
-        BootstrapTestSupport.refreshFully(live, now+10000);
-        checkpoints.save(saved);
+        var parts = new ArrayList<>(saved.parts());
+        parts.add(AnalyticsCheckpointStore.Part.of("bootstrap", "", "", 0,
+            () -> CheckpointCodec.encode(out -> {
+                out.writeLong(1); out.writeLong(now-1000); out.writeLong(1);
+            })));
+        var h = saved.header();
+        checkpoints.save(new AnalyticsCheckpointStore.Capture(new AnalyticsCheckpointStore.Header(
+            h.id(), h.reference(), h.cursor(), h.compatibility(), h.epoch(), parts.size(), ""), parts));
+        add(2, now-500, 20d, null, 20);
         clearInvocations(samples);
-        var restarted = service(true); restarted.configureBootstrap(2, 1000);
-        restarted.refreshAt(now+10000);
-        assertThat(restarted.loadStatus().complete()).isFalse();
-        verify(samples).readIncrement(eq(11L),eq(12L),anyLong(),any());
-        verify(samples).readBootstrapPage(eq(9L),anyLong(),anyLong(),eq(now-10000+6),eq(6L),eq(2));
-        BootstrapTestSupport.refreshFully(restarted, now+10000);
-        verify(samples, never()).readBootstrapPage(anyLong(),anyLong(),anyLong(),eq(Long.MAX_VALUE),anyLong(),anyInt());
-        assertThat(restarted.current(List.of(host))).isEqualTo(live.current(List.of(host)));
-        for (int period : HostAvailabilityService.PERIODS) {
-            assertThat(restarted.availability(host, period).total()).isEqualTo(live.availability(host, period).total());
-            assertThat(restarted.availability(host, period).series()).isEqualTo(live.availability(host, period).series());
-        }
-        assertThat(restarted.availability(host, 48).total().total()).isEqualTo(12);
+        var restored = service(true);
+        IncrementalTestSupport.refreshFully(restored, now);
+        verify(samples).readIncrement(eq(1L), eq(2L), anyLong(), any());
+        assertThat(restored.availability(host, 48).total().total()).isEqualTo(2);
+        assertThat(restored.loadStatus().complete()).isTrue();
+        assertThat(restored.captureCheckpoint().parts()).noneMatch(p -> p.kind().equals("bootstrap"));
     }
 
     @Test void checkpointDuringLiveCatchupRestoresCursorWithoutStartingHistoricalLoad() {
-        var live = service(false); live.configureBootstrap(2, 1000);
+        var live = service(false); live.configureIncremental(2, 1000);
         live.refreshAt(now);
         for (int id=1; id<=5; id++) add(id, now-1000+id, 10d, null, 20);
         live.refreshAt(now);
         assertThat(live.loadStatus().phase()).isEqualTo("CATCHING_UP");
         checkpoints.save(capture(live));
         clearInvocations(samples);
-        var restarted = service(true); restarted.configureBootstrap(2, 1000);
-        BootstrapTestSupport.refreshFully(restarted, now);
+        var restarted = service(true); restarted.configureIncremental(2, 1000);
+        IncrementalTestSupport.refreshFully(restarted, now);
         assertThat(restarted.availability(host, 48).total().total()).isEqualTo(5);
-        verify(samples, never()).readBootstrapPage(anyLong(),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
     }
 
     @Test void restartPreservesAllPeriodsFutureSamplesLateArrivalsAndExactEdges() {
@@ -99,13 +90,13 @@ class AnalyticsCheckpointTests {
         add(3,now-1000,null,"Tempo esgotado",20);
         add(4,now,40d,null,30);
         add(5,now+5000,15d,null,10);
-        var live=service(false); BootstrapTestSupport.refreshFully(live, now);
+        var live=service(false); IncrementalTestSupport.refreshFully(live, now);
         checkpoints.save(capture(live));
         add(6,now-2000,8d,null,5); // late arrival, ID after checkpoint
         add(7,now+9000,null,"internal",20);
-        BootstrapTestSupport.refreshFully(live, now+10000);
+        IncrementalTestSupport.refreshFully(live, now+10000);
         clearInvocations(samples);
-        var restarted=service(true); BootstrapTestSupport.refreshFully(restarted, now+10000);
+        var restarted=service(true); IncrementalTestSupport.refreshFully(restarted, now+10000);
         verify(samples).readIncrement(eq(5L),eq(7L),anyLong(),any());
         assertThat(restarted.current(List.of(host))).isEqualTo(live.current(List.of(host)));
         for (int period : HostAvailabilityService.PERIODS) {
@@ -117,20 +108,20 @@ class AnalyticsCheckpointTests {
     }
     @Test void capturedStateIsImmutableWhileLiveBlocksSplitExpireAndMinutesChange() {
         for (int i=1;i<=600;i++) add(i,now-600000+i*1000,10d,null,20);
-        var live=service(false); BootstrapTestSupport.refreshFully(live, now);
+        var live=service(false); IncrementalTestSupport.refreshFully(live, now);
         var captured=capture(live);
         add(601,now-500,99d,null,20);
-        BootstrapTestSupport.refreshFully(live, now+1000); // mutate a frozen indicator block before pruning
-        BootstrapTestSupport.refreshFully(live, now+9*3600000L); // prune indicator blocks and mutate availability
+        IncrementalTestSupport.refreshFully(live, now+1000); // mutate a frozen indicator block before pruning
+        IncrementalTestSupport.refreshFully(live, now+9*3600000L); // prune indicator blocks and mutate availability
         checkpoints.save(captured); // serialization occurs after live mutation
-        var restored=service(true); BootstrapTestSupport.refreshFully(restored, now+10000);
-        var baseline=service(false); BootstrapTestSupport.refreshFully(baseline, now+10000);
+        var restored=service(true); IncrementalTestSupport.refreshFully(restored, now+10000);
+        var baseline=service(false); IncrementalTestSupport.refreshFully(baseline, now+10000);
         assertThat(restored.current(List.of(host))).isEqualTo(baseline.current(List.of(host)));
         assertThat(restored.availability(host,48).series()).isEqualTo(baseline.availability(host,48).series());
     }
     @Test void keepsTwoGenerationsReusesBlocksAndRollsBackIncompleteWrites() {
         add(1,now-1000,10d,null,20);
-        var live=service(false); BootstrapTestSupport.refreshFully(live, now);
+        var live=service(false); IncrementalTestSupport.refreshFully(live, now);
         var first=capture(live); checkpoints.save(first);
         int blocks=jdbc.queryForObject("SELECT COUNT(*) FROM analytics_checkpoint_block",Integer.class);
         checkpoints.save(capture(live)); checkpoints.save(capture(live));
@@ -143,23 +134,23 @@ class AnalyticsCheckpointTests {
     }
     @Test void corruptedNewestFallsBackToPreviousGeneration() {
         add(1,now-1000,10d,null,20);
-        var live=service(false); BootstrapTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
-        add(2,now+1000,20d,null,20); BootstrapTestSupport.refreshFully(live, now+2000);
+        var live=service(false); IncrementalTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
+        add(2,now+1000,20d,null,20); IncrementalTestSupport.refreshFully(live, now+2000);
         var latest=capture(live); checkpoints.save(latest);
         jdbc.update("UPDATE analytics_checkpoint SET manifest='invalid' WHERE id=?",latest.header().id());
         clearInvocations(samples);
-        var restored=service(true); BootstrapTestSupport.refreshFully(restored, now+3000);
+        var restored=service(true); IncrementalTestSupport.refreshFully(restored, now+3000);
         verify(samples).readIncrement(eq(1L),eq(2L),anyLong(),any());
-        BootstrapTestSupport.refreshFully(live, now+3000);
+        IncrementalTestSupport.refreshFully(live, now+3000);
         assertThat(restored.current(List.of(host))).isEqualTo(live.current(List.of(host)));
     }
     @Test void noNewSamplesStillExpiresWindowsAndPreservesLastError() {
         add(1,now-299000,null,"Sem resposta ICMP",20);
-        var live=service(false); BootstrapTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
+        var live=service(false); IncrementalTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
         clearInvocations(samples);
-        var restarted=service(true); BootstrapTestSupport.refreshFully(restarted, now+10000);
+        var restarted=service(true); IncrementalTestSupport.refreshFully(restarted, now+10000);
         verify(samples, never()).readIncrement(anyLong(),anyLong(),anyLong(),any());
-        BootstrapTestSupport.refreshFully(live, now+10000);
+        IncrementalTestSupport.refreshFully(live, now+10000);
         assertThat(restarted.current(List.of(host))).isEqualTo(live.current(List.of(host)));
         assertThat(restarted.availability(host,1).series()).isEqualTo(live.availability(host,1).series());
     }
@@ -167,9 +158,9 @@ class AnalyticsCheckpointTests {
         add(1,now-1000,10d,null,20);
         var broken = mock(AnalyticsCheckpointStore.class);
         when(broken.epoch()).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("offline"));
-        var restarted=service(false); restarted.configureCheckpoints(broken,300000);
-        assertThatThrownBy(() -> BootstrapTestSupport.refreshFully(restarted, now)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
-        assertThatThrownBy(() -> BootstrapTestSupport.refreshFully(restarted, now+10000)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
+        var restarted=new PacketLossAnalysisService(samples, new PacketLossPolicy(), 1000, 2000); services.add(restarted); restarted.configureCheckpoints(broken,300000);
+        assertThatThrownBy(() -> IncrementalTestSupport.refreshFully(restarted, now)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
+        assertThatThrownBy(() -> IncrementalTestSupport.refreshFully(restarted, now+10000)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
         verify(samples, never()).readIncrement(anyLong(),anyLong(),anyLong(),any());
         verify(broken,times(2)).epoch();
     }
@@ -179,19 +170,20 @@ class AnalyticsCheckpointTests {
         when(failing.epoch()).thenReturn("epoch"); when(failing.candidates()).thenReturn(List.of());
         var written = new java.util.concurrent.CountDownLatch(1);
         doAnswer(i -> { written.countDown(); throw new IllegalStateException("disk full"); }).when(failing).save(any());
-        var live=service(false); live.configureCheckpoints(failing,300000); BootstrapTestSupport.refreshFully(live, now);
+        var live=service(false); live.configureCheckpoints(failing,300000); IncrementalTestSupport.refreshFully(live, now);
         assertThat(written.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-        add(2,now+1000,20d,null,20); BootstrapTestSupport.refreshFully(live, now+10000);
+        add(2,now+1000,20d,null,20); IncrementalTestSupport.refreshFully(live, now+10000);
         verify(samples).readIncrement(eq(1L),eq(2L),anyLong(),any());
         verify(failing,times(1)).save(any());
         assertThat(live.current(List.of(host)).get(host.id()).stats().attemptsFiveMinutes()).isEqualTo(2);
     }
-    @Test void incompatibleConfigurationFallsBackToRawHistory() {
+    @Test void incompatibleConfigurationStartsAtCurrentBoundary() {
         add(1,now-1000,10d,null,20);
-        var live=service(false); BootstrapTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
+        var live=service(false); IncrementalTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
         var restored=new PacketLossAnalysisService(samples,new PacketLossPolicy(),2000,2000);
         services.add(restored); restored.configureCheckpoints(checkpoints,300000);
-        clearInvocations(samples); BootstrapTestSupport.refreshFully(restored, now+1000);
-        verify(samples, atLeastOnce()).readBootstrapPage(eq(1L),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
+        clearInvocations(samples); IncrementalTestSupport.refreshFully(restored, now+1000);
+        verify(samples, never()).readIncrement(anyLong(),anyLong(),anyLong(),any());
+        assertThat(restored.availability(host, 48).total().total()).isZero();
     }
 }

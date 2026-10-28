@@ -38,6 +38,7 @@ class HostAvailabilityTests {
         var jdbc = new JdbcTemplate(ds);
         var indicatorStore = new SampleStore(jdbc, 48, 600);
         var indicators = new PacketLossAnalysisService(indicatorStore, new PacketLossPolicy(), 1000, 1500);
+        indicators.refreshAt(System.currentTimeMillis());
         var service = new HostAvailabilityService(indicators);
         var store = new SampleStore(jdbc, 48, 600);
         var host = new Host("availability-test", "Host", "127.0.0.1", java.util.List.of());
@@ -66,7 +67,7 @@ class HostAvailabilityTests {
             now - 1,
             1
         );
-        BootstrapTestSupport.refreshFully(indicators, now);
+        IncrementalTestSupport.refreshFully(indicators, now);
         var report = service.report(host, 48);
         assertThat(report.total().total()).isEqualTo(3);
         assertThat(report.total().healthy()).isEqualTo(1);

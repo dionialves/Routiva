@@ -10,15 +10,6 @@ import org.springframework.stereotype.Repository;
 @org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization
 public class SampleStore {
 
-    private int bootstrapQueryTimeoutSeconds = 5;
-
-    @org.springframework.beans.factory.annotation.Autowired
-    void configureBootstrapQueryTimeout(
-        @org.springframework.beans.factory.annotation.Value("${indicators.bootstrap.query-timeout-seconds:5}") int seconds) {
-        if (seconds < 1) throw new IllegalArgumentException("Bootstrap query timeout must be positive");
-        bootstrapQueryTimeoutSeconds = seconds;
-    }
-
     // A retenção configurada nunca pode ultrapassar 48 horas.
     private final Duration retention;
     private final double latencyLimit;
@@ -257,56 +248,6 @@ public class SampleStore {
                 row.getString("target"), row.getLong("measured_at"),
                 latency == null ? null : latency.doubleValue(), row.getString("error"), row.getDouble("latency_limit")));
         });
-    }
-
-    /** Bounded time-index seek for cold starts; the fixed ID boundary excludes live arrivals. */
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public List<PingSample> readBootstrapPage(long boundary, long from, long to,
-        long beforeTime, long beforeId, int limit) {
-        if (limit < 1) throw new IllegalArgumentException("Page size must be positive");
-        return jdbc.query(connection -> {
-            var query = connection.prepareStatement(
-                "SELECT id,host_id,target,measured_at,latency,error,latency_limit FROM ping_sample " +
-                "WHERE measured_at>=? AND measured_at<? AND id<=? " +
-                "AND (measured_at,id)<(?,?) ORDER BY measured_at DESC,id DESC LIMIT ?");
-            query.setLong(1, from); query.setLong(2, to); query.setLong(3, boundary);
-            query.setLong(4, beforeTime); query.setLong(5, beforeId); query.setInt(6, limit);
-            query.setQueryTimeout(bootstrapQueryTimeoutSeconds);
-            return query;
-        }, (row, index) -> {
-            Number latency = (Number) row.getObject("latency");
-            return new PingSample(row.getLong("id"), row.getString("host_id"),
-                row.getString("target"), row.getLong("measured_at"),
-                latency == null ? null : latency.doubleValue(), row.getString("error"), row.getDouble("latency_limit"));
-        });
-    }
-
-    @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public void readRecent(long cutoff, java.util.function.Consumer<PingSample> consumer) {
-        jdbc.query(
-            connection -> {
-                var query = connection.prepareStatement(
-                    "SELECT id,host_id,target,measured_at,latency,error,latency_limit FROM ping_sample WHERE measured_at>=? ORDER BY measured_at,id"
-                );
-                query.setLong(1, cutoff);
-                query.setFetchSize(1000);
-                return query;
-            },
-            (org.springframework.jdbc.core.RowCallbackHandler) row -> {
-                Number latency = (Number) row.getObject("latency");
-                consumer.accept(
-                    new PingSample(
-                        row.getLong("id"),
-                        row.getString("host_id"),
-                        row.getString("target"),
-                        row.getLong("measured_at"),
-                        latency == null ? null : latency.doubleValue(),
-                        row.getString("error"),
-                        row.getDouble("latency_limit")
-                    )
-                );
-            }
-        );
     }
 
     public record Stats(

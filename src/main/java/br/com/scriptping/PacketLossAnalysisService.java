@@ -40,25 +40,21 @@ public class PacketLossAnalysisService {
     private String compatibility, sourceEpoch;
     private long checkpointInterval = 300000, lastCheckpointAttempt = Long.MIN_VALUE;
     private boolean recoveryAttempted;
-    private IndicatorBootstrap bootstrap;
     private int pageSize = 10000;
     private long confirmedBoundary;
-    private long historicalRetryAt;
-    private int historicalFailures;
 
     @org.springframework.beans.factory.annotation.Autowired
-    void configureBootstrap(@Value("${indicators.bootstrap.page-size:10000}") int pageSize,
-        @Value("${indicators.bootstrap.delay-ms:1000}") long delayMs) {
-        if (delayMs < 1) throw new IllegalArgumentException("Bootstrap delay must be positive");
-        if (pageSize < 1 || pageSize > 100000) throw new IllegalArgumentException("Bootstrap page size must be between 1 and 100000");
+    void configureIncremental(@Value("${indicators.incremental.page-size:10000}") int pageSize,
+        @Value("${indicators.incremental.delay-ms:1000}") long delayMs) {
+        if (delayMs < 1) throw new IllegalArgumentException("Incremental delay must be positive");
+        if (pageSize < 1 || pageSize > 100000) throw new IllegalArgumentException("Incremental page size must be between 1 and 100000");
         this.pageSize = pageSize;
     }
 
-    // The same single-thread scheduler serializes live cycles and backfill work. Each turn
-    // handles new IDs first, then at most one historical page, and yields before the next turn.
-    @Scheduled(fixedDelayString = "${indicators.bootstrap.delay-ms:1000}", scheduler = "indicatorScheduler")
-    public synchronized void continueBootstrap() {
-        if (bootstrap != null || cursor < confirmedBoundary) refreshAt(System.currentTimeMillis());
+    // Drain new IDs in bounded pages between regular publication cycles.
+    @Scheduled(fixedDelayString = "${indicators.incremental.delay-ms:1000}", scheduler = "indicatorScheduler")
+    public synchronized void continueIncremental() {
+        if (cursor < confirmedBoundary) refreshAt(System.currentTimeMillis());
     }
 
     private final java.util.concurrent.ExecutorService checkpointWriter = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
@@ -132,10 +128,8 @@ public class PacketLossAnalysisService {
             confirmedBoundary = boundary;
             counts.initial = evaluatedAt == Long.MIN_VALUE;
             if (counts.initial) {
-                bootstrap = new IndicatorBootstrap(boundary);
-                cursor = boundary; // IDs through boundary are owned by the historical reader.
+                cursor = boundary; // Cold start: only IDs committed after this boundary are collected.
             }
-            boolean wasLoading = bootstrap != null;
             if (counts.initial) CYCLE_LOG.info("event=INITIAL_LOAD_STARTED run_id={} cycle={} boundary={}", runId, cycle, boundary);
             long previousReference = evaluatedAt;
             long historyCutoff = now - analyzer.lookbackMs();
@@ -171,29 +165,6 @@ public class PacketLossAnalysisService {
                     && sample.measuredAt() < previousReference && IpAddress.isValid(sample.target())).count();
                 cursor = liveThrough;
             }
-            if (bootstrap != null && now >= historicalRetryAt) {
-                counts.stage = "historical_query";
-                var previousBootstrap = bootstrap;
-                var nextBootstrap = bootstrap.copy();
-                try {
-                    var page = new ArrayList<PingSample>();
-                    long historicalStarted = System.nanoTime();
-                    boolean complete;
-                    try { complete = nextBootstrap.step(store, cutoff, pageSize, page::add); }
-                    finally { counts.queryNanos += System.nanoTime() - historicalStarted; }
-                    counts.stage = "historical_processing";
-                    applyPage(page, now, cutoff, counts);
-                    bootstrap = complete ? null : nextBootstrap;
-                    historicalFailures = 0;
-                    historicalRetryAt = 0;
-                } catch (RuntimeException failure) {
-                    bootstrap = previousBootstrap;
-                    historicalFailures = Math.min(7, historicalFailures + 1);
-                    historicalRetryAt = now + Math.min(60000L, 1000L << (historicalFailures - 1));
-                    CYCLE_LOG.error("event=HISTORY_PAGE_FAILED run_id={} cursor={} retry_at={} stage={}",
-                        runId, cursor, historicalRetryAt, counts.stage, failure);
-                }
-            }
             counts.stage = "pending_processing";
             // Keep pending samples until their entire batch has committed.
             var ready = future.stream().filter(sample -> sample.measuredAt() <= now).toList();
@@ -203,8 +174,6 @@ public class PacketLossAnalysisService {
             future.removeAll(new HashSet<>(ready));
             counts.stage = "publication";
             counts.availabilityNanos = publish(now, runId + ":" + cycle);
-            if (wasLoading && bootstrap == null) CYCLE_LOG.info(
-                "event=HISTORY_LOAD_COMPLETED run_id={} cycle={} cursor={} boundary={}", runId, cycle, cursor, boundary);
             evaluatedAt = now;
             lastPublishedCycle = cycle;
         } catch (RuntimeException failure) {
@@ -221,7 +190,7 @@ public class PacketLossAnalysisService {
         long duration = System.nanoTime() - started;
         CYCLE_LOG.info(
             "event={} run_id={} cycle={} reference_at={} hosts={} fetched={} incorporated={} late_arrivals={} future_queued={} future_released={} pending_future={} discarded={} expired_5m={} expired_1h={} expired_8h={} removed_pings={} retained_pings={} query_ms={} processing_ms={} total_ms={} schedule_overrun={} cursor={} reset_reason={} availability_hosts={} availability_buckets={} availability_ms={} indicators_published=true load_phase={} loaded_from={} target_from={} boundary={}",
-            bootstrap != null ? "INITIAL_LOAD_PROGRESS" : counts.initial ? "INITIAL_LOAD_COMPLETED" : "CYCLE_COMPLETED", runId, cycle,
+            counts.initial ? "INITIAL_LOAD_COMPLETED" : "CYCLE_COMPLETED", runId, cycle,
             java.time.Instant.ofEpochMilli(now), histories.size(), counts.fetched, counts.incorporated,
             counts.late, counts.queued, counts.released, future.size(), counts.discarded,
             counts.expired5m, counts.expired1h, counts.expired8h, counts.removed,
@@ -235,13 +204,9 @@ public class PacketLossAnalysisService {
     }
 
     private long publish(long reference, String version) {
-        Long loadedFrom = bootstrap == null
-            ? Long.valueOf(reference - Math.max(analyzer.lookbackMs(), availabilityRetention)) : bootstrap.loadedFrom();
-        if (loadedFrom != null && loadedFrom > reference) loadedFrom = null;
         IndicatorLoadStatus load = new IndicatorLoadStatus(
-            bootstrap != null ? "LOADING_HISTORY" : cursor < confirmedBoundary ? "CATCHING_UP" : "COMPLETE",
-            loadedFrom,
-            reference, reference - Math.max(analyzer.lookbackMs(), availabilityRetention), cursor, confirmedBoundary);
+            cursor < confirmedBoundary ? "CATCHING_UP" : "COMPLETE",
+            null, reference, reference - Math.max(analyzer.lookbackMs(), availabilityRetention), cursor, confirmedBoundary);
         Map<Key, PacketLossAnalysis> next = new HashMap<>();
         histories.forEach((key, history) -> next.put(key, analyzer.analyze(history, reference)));
         long availabilityStarted = System.nanoTime();
@@ -265,7 +230,7 @@ public class PacketLossAnalysisService {
             CYCLE_LOG.info("event=CHECKPOINT_RESTORE_STARTED checkpoint={} cursor={}", h.id(), h.cursor());
             try {
                 long[] count = {0}, progressAt = {System.nanoTime()};
-                boolean[] progressSeen = {false}, bootstrapSeen = {false};
+                boolean[] progressSeen = {false};
                 checkpoints.restore(h, part -> {
                     Key key = new Key(part.host(), part.target());
                     switch (part.kind()) {
@@ -276,11 +241,9 @@ public class PacketLossAnalysisService {
                             if (confirmedBoundary < h.cursor() || confirmedBoundary > boundary)
                                 throw new java.io.IOException("Invalid confirmed boundary");
                         });
-                        case "bootstrap" -> {
-                            if (bootstrapSeen[0]) throw new IllegalArgumentException("Duplicate bootstrap");
-                            bootstrapSeen[0] = true;
-                            bootstrap = IndicatorBootstrap.restore(part.payload(), h.cursor());
-                        }
+                        // Legacy checkpoints may contain an unfinished historical cursor.
+                        // Keep their aggregates and live cursor, but never resume that reader.
+                        case "bootstrap" -> { }
                         case "indicator" -> histories.computeIfAbsent(key, k -> analyzer.newIncrementalHistory())
                             .restoreBlock(part.payload(), part.host(), part.target());
                         case "last" -> CheckpointCodec.decode(part.payload(), in -> {
@@ -327,10 +290,6 @@ public class PacketLossAnalysisService {
         List<AnalyticsCheckpointStore.Part> parts = new ArrayList<>();
         byte[] progress = CheckpointCodec.encode(out -> out.writeLong(confirmedBoundary));
         parts.add(AnalyticsCheckpointStore.Part.of("progress", "", "", 0, () -> progress));
-        if (bootstrap != null) {
-            byte[] position = bootstrap.checkpoint();
-            parts.add(AnalyticsCheckpointStore.Part.of("bootstrap", "", "", 0, () -> position));
-        }
         histories.forEach((key, history) -> {
             int ordinal=0;
             for (var bytes : history.checkpointBlocks()) parts.add(AnalyticsCheckpointStore.Part.of("indicator", key.hostId(), key.target(), ordinal++, bytes));
@@ -433,9 +392,6 @@ public class PacketLossAnalysisService {
         availabilityHistories.clear();
         future.clear();
         cursor = 0;
-        bootstrap = null;
-        historicalRetryAt = 0;
-        historicalFailures = 0;
         confirmedBoundary = 0;
         evaluatedAt = Long.MIN_VALUE;
     }

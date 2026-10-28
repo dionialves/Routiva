@@ -20,7 +20,6 @@ class AvailabilityCacheTests {
     private final long now = 200_040_000L; // minute boundary
 
     AvailabilityCacheTests() {
-        BootstrapTestSupport.pages(store, rows);
         when(store.committedBoundary()).thenAnswer(i -> rows.stream().mapToLong(PingSample::id).max().orElse(0));
         feed();
     }
@@ -40,8 +39,9 @@ class AvailabilityCacheTests {
     void requestsOnlyReadPublishedReportsIncludingColdStartAndPeriodChanges() throws Exception {
         assertThat(service.report(host, 24).evaluatedAt()).isNull();
         verifyNoInteractions(store);
+        IncrementalTestSupport.startBeforeArrivals(store, rows, engine, now);
         add(now - 1, 10d, null);
-        BootstrapTestSupport.refreshFully(engine, now);
+        IncrementalTestSupport.refreshFully(engine, now);
         var first = service.report(host, 24);
         add(now + 1, null, "Tempo esgotado");
         clearInvocations(store);
@@ -56,17 +56,18 @@ class AvailabilityCacheTests {
         }
         assertThat(service.report(host, 24)).isSameAs(first);
         verifyNoInteractions(store);
-        BootstrapTestSupport.refreshFully(engine, now + 10000);
+        IncrementalTestSupport.refreshFully(engine, now + 10000);
         assertThat(service.report(host, 24).total().lost()).isEqualTo(1);
     }
 
     @Test
     void preservesSingleLossCompleteLossAndCollectionErrorsWithoutInventingLatency() {
+        IncrementalTestSupport.startBeforeArrivals(store, rows, engine, now);
         for (int i = 0; i < 59; i++) add(now - 60000 + i * 1000, 10d, null);
         add(now - 1000, null, "Tempo esgotado");
         for (int i = 0; i < 60; i++) add(now - 120000 + i * 1000, null, "Sem resposta ICMP");
         add(now - 180000, null, "Falha ao executar ping");
-        BootstrapTestSupport.refreshFully(engine, now);
+        IncrementalTestSupport.refreshFully(engine, now);
         var report = service.report(host, 1);
         var last = report.series().getLast().metrics();
         assertThat(last.latency()).isEqualTo(10);
@@ -85,12 +86,13 @@ class AvailabilityCacheTests {
 
     @Test
     void clipsExactEdgesCorrectsClosedMinutesAndExpiresWithoutNewRows() {
+        IncrementalTestSupport.startBeforeArrivals(store, rows, engine, now);
         long reference = now + 12500;
         add(reference - 3600000 - 1, 1000d, null);
         add(reference - 3600000, 10d, null);
         add(reference - 1, 20d, null);
         add(reference, null, "Tempo esgotado");
-        BootstrapTestSupport.refreshFully(engine, reference);
+        IncrementalTestSupport.refreshFully(engine, reference);
         var first = service.report(host, 1);
         assertThat(first.total().total()).isEqualTo(2);
         assertThat(first.total().latency()).isEqualTo(15);
@@ -99,20 +101,21 @@ class AvailabilityCacheTests {
         assertThat(first.series().getLast().provisional()).isTrue();
         assertThat(first.lastSampleAt()).isEqualTo(reference - 1);
         add(now - 60000, null, "Tempo esgotado"); // newly arrived closed-minute correction
-        BootstrapTestSupport.refreshFully(engine, reference + 10000);
+        IncrementalTestSupport.refreshFully(engine, reference + 10000);
         var corrected = service.report(host, 1);
         assertThat(corrected.total().lost()).isEqualTo(2);
         assertThat(corrected.total().healthy()).isEqualTo(1);
         assertThat(first.total().lost()).isZero(); // immutable previous snapshot
         assertThat(corrected.series().stream().mapToLong(p -> p.metrics().total()).sum()).isEqualTo(corrected.total().total());
-        BootstrapTestSupport.refreshFully(engine, reference + 3600001);
+        IncrementalTestSupport.refreshFully(engine, reference + 3600001);
         assertThat(service.report(host, 1).total().total()).isZero();
     }
 
     @Test
     void failuresKeepAllPreviousDataAndRebuildWithoutDuplicates() {
+        IncrementalTestSupport.startBeforeArrivals(store, rows, engine, now);
         add(now - 1, 10d, null);
-        BootstrapTestSupport.refreshFully(engine, now);
+        IncrementalTestSupport.refreshFully(engine, now);
         var before = service.report(host, 1);
         var beforeLatency = engine.current(List.of(host)).get(host.id());
         add(now + 1, null, "Tempo esgotado");
@@ -122,40 +125,43 @@ class AvailabilityCacheTests {
             assertThat(service.report(host, 1)).isSameAs(before);
             throw new IllegalStateException("failure during streaming");
         }).when(store).readIncrement(anyLong(), anyLong(), anyLong(), any());
-        assertThatThrownBy(() -> BootstrapTestSupport.refreshFully(engine, now + 10000)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> IncrementalTestSupport.refreshFully(engine, now + 10000)).isInstanceOf(IllegalStateException.class);
         assertThat(service.report(host, 1)).isSameAs(before);
         assertThat(engine.current(List.of(host)).get(host.id())).isSameAs(beforeLatency);
         feed();
-        BootstrapTestSupport.refreshFully(engine, now + 20000);
+        IncrementalTestSupport.refreshFully(engine, now + 20000);
         assertThat(service.report(host, 1).total().total()).isEqualTo(2);
         var restarted = new PacketLossAnalysisService(store, new PacketLossPolicy(), 1000, 1500);
-        BootstrapTestSupport.refreshFully(restarted, now + 20000);
-        assertThat(restarted.availability(host, 1).total()).isEqualTo(service.report(host, 1).total());
+        IncrementalTestSupport.refreshFully(restarted, now + 20000);
+        assertThat(restarted.availability(host, 1).total().total()).isZero();
         assertThat(restarted.availability(host, 1).version()).isNotEqualTo(service.report(host, 1).version());
-        BootstrapTestSupport.refreshFully(engine, now); // clock rewind reconstructs, future result remains excluded
-        assertThat(service.report(host, 1).total().total()).isEqualTo(1);
+        IncrementalTestSupport.refreshFully(engine, now); // clock rewind starts from the current boundary
+        assertThat(service.report(host, 1).total().total()).isZero();
     }
 
     @Test
     void includes48HoursWithoutGrowingLatencyHistoryAndRespectsReducedRetentionAndIp() {
+        IncrementalTestSupport.startBeforeArrivals(store, rows, engine, now);
         add(now - 47 * 3600000L, 10d, null);
         add(now - 3600000L - 1, 30d, null);
         add(now - 1, 20d, null);
         add(now + 1, null, "Tempo esgotado");
-        BootstrapTestSupport.refreshFully(engine, now);
+        IncrementalTestSupport.refreshFully(engine, now);
         assertThat(service.report(host, 48).total().total()).isEqualTo(3);
         assertThat(engine.current(List.of(host)).get(host.id()).stats().attemptsEightHours()).isEqualTo(2);
         assertThat(service.report(new Host(host.id(), "Host", "10.0.0.2", List.of()), 48).total().total()).isZero();
         var limited = new PacketLossAnalysisService(store, new PacketLossPolicy(), 1000, 1500, 1);
-        BootstrapTestSupport.refreshFully(limited, now);
+        IncrementalTestSupport.startBeforeArrivals(store, rows, limited, now);
+        IncrementalTestSupport.refreshFully(limited, now);
         assertThat(limited.availability(host, 48).total().total()).isEqualTo(1);
         assertThat(limited.availability(host, 48).retainedFrom()).isEqualTo(now - 3600000L);
-        BootstrapTestSupport.refreshFully(limited, now + 10000);
+        IncrementalTestSupport.refreshFully(limited, now + 10000);
         assertThat(limited.availability(host, 48).total().lost()).isEqualTo(1);
     }
 
     @Test
     void matchesRawReferenceAcrossAllPeriodsWithLateSamplesAndThresholdChanges() {
+        IncrementalTestSupport.startBeforeArrivals(store, rows, engine, now);
         var random = new Random(19);
         for (int i = 0; i < 3000; i++) {
             long at = now - random.nextLong(49 * 3600000L);
@@ -163,9 +169,9 @@ class AvailabilityCacheTests {
             rows.add(new PingSample(i + 1, host.id(), host.ip(), at, latency,
                 i % 10 == 0 ? "internal error" : "Tempo esgotado", i % 2 == 0 ? 20 : 80));
         }
-        BootstrapTestSupport.refreshFully(engine, now);
+        IncrementalTestSupport.refreshFully(engine, now);
         for (long reference : new long[] { now, now + 10000, now + 3600000 }) {
-            BootstrapTestSupport.refreshFully(engine, reference);
+            IncrementalTestSupport.refreshFully(engine, reference);
             for (int hours : HostAvailabilityService.PERIODS) {
                 var expected = new HostAvailabilityService.Counts();
                 rows.stream().filter(s -> s.measuredAt() >= reference - hours * 3600000L && s.measuredAt() < reference)

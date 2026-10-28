@@ -240,9 +240,12 @@ class TableSortingTests {
         // Keep both dates inside the eight-hour window loaded by the background job.
         now = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.DAYS)
             .plus(2, java.time.temporal.ChronoUnit.HOURS).toEpochMilli();
-        sample(ten, now - 4 * 3600000L, 10d, null);
-        sample(two, now, 10d, null);
-        BootstrapTestSupport.refreshFully(analysis, now);
+        analysis.refreshAt(now);
+        jdbc.update("INSERT INTO ping_sample(host_id,target,measured_at,latency) VALUES(?,?,?,?)",
+            ten.id(), ten.ip(), now - 4 * 3600000L, 10d);
+        jdbc.update("INSERT INTO ping_sample(host_id,target,measured_at,latency) VALUES(?,?,?,?)",
+            two.id(), two.ip(), now, 10d);
+        IncrementalTestSupport.refreshFully(analysis, now);
         when(monitor.hosts()).thenReturn(List.of(ten, two, empty));
         assertThat(sorted("/hosts", "ip", "asc"))
             .extracting(DashboardController.Card::id)
