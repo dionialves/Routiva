@@ -78,7 +78,7 @@
  .availability-dashboard .sidebar { width:240px; transform:translateX(-100%); }
  .availability-dashboard .app-workspace { margin-left:0; }
  .availability-dashboard .topbar { padding-left:60px; }
- .availability-dashboard .sidebar .brand-product,.availability-dashboard .sidebar .side-nav span,.availability-dashboard .sidebar .collapse-menu span { display:initial; }
+ .availability-dashboard .sidebar .brand-product,.availability-dashboard .sidebar .side-nav span { display:initial; }
  .availability-dashboard .sidebar .brand { padding:22px; }
  .availability-dashboard .sidebar .brand-logo { width:190px; }
  .availability-dashboard .sidebar .side-nav a,.availability-dashboard .sidebar .settings-menu>summary { padding:14px 18px; justify-content:flex-start; }
@@ -119,4 +119,4 @@
 @media(max-width:760px) { .availability-page .group-filter { min-width:0; width:100%; } .group-picker-panel { min-width:0; } }
 
 /* Keep the shared sidebar width and contain the expanded brand within its padding. */
-.availability-dashboard:not(.sidebar-collapsed) .sidebar .brand-logo { max-width:100%; height:auto; aspect-ratio:212 / 59; }
+.availability-dashboard .sidebar .brand-logo { max-width:100%; height:auto; aspect-ratio:212 / 59; }

@@ -60,7 +60,6 @@
   function menu(open){$('sidebar').inert=!!mobile?.matches&&!open;main.inert=open;$('mobile-menu').setAttribute('aria-label',open?'Fechar menu':'Abrir menu');document.body.classList.toggle('availability-menu-open',open);$('mobile-menu').setAttribute('aria-expanded',String(open));$('menu-backdrop').hidden=!open;}
   $('mobile-menu').addEventListener('click',()=>menu(!document.body.classList.contains('availability-menu-open')));$('menu-backdrop').addEventListener('click',()=>menu(false));
   mobile?.addEventListener('change',()=>menu(false));menu(false);
-  document.querySelector('.collapse-menu')?.addEventListener('click',()=>{if(mobile?.matches)menu(false);});
   document.addEventListener('keydown',e=>{if(e.key==='Tab'&&chart.expanded){const controls=[...panel.querySelectorAll('button,select,[tabindex="0"]')];const first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}if(e.key==='Escape'){expand(false);menu(false);}});
   document.querySelectorAll('[data-sort]').forEach(b=>b.parentElement.setAttribute('aria-sort',b.dataset.sort===sort?(direction==='asc'?'ascending':'descending'):'none'));
   refresh();
