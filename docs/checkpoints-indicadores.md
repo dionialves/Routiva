@@ -1,6 +1,6 @@
 # Checkpoints dos indicadores e gráficos
 
-A aplicação mantém os cálculos em memória e grava um ponto de recuperação no PostgreSQL após o primeiro ciclo bem-sucedido e, depois, a cada cinco minutos. O intervalo é configurável por `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão `300000`, mínimo `1000`). Não altera a cadência de dez segundos dos indicadores.
+A aplicação mantém os cálculos em memória e grava um ponto de recuperação no PostgreSQL após concluir a primeira carga progressiva e alcançar o limite confirmado de IDs e, depois, a cada cinco minutos. O intervalo é configurável por `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão `300000`, mínimo `1000`). Não altera a cadência de dez segundos dos indicadores.
 
 ## Conteúdo e estrutura
 
@@ -35,7 +35,7 @@ Existe custo adicional de memória para bytes comprimidos, referências e cópia
 
 Amostras futuras precisam ser persistidas: seus IDs já estão incluídos no cursor, mesmo sem terem sido incorporadas aos cálculos. O checkpoint mantém essa fila para que sejam liberadas no momento correto, sem perda ou duplicação.
 
-Uma geração com payload/manifesto inválido é rejeitada e a anterior é tentada. Ausência de geração utilizável causa carga completa, com motivo no log. Falha de acesso ao banco é propagada para nova tentativa no próximo ciclo; não é confundida com ausência de checkpoint.
+Uma geração com payload/manifesto inválido é rejeitada e a anterior é tentada. Ausência de geração utilizável inicia a carga progressiva pelos registros mais recentes, em páginas de até 10 mil registros, com motivo no log. Falha de acesso ao banco é propagada para nova tentativa no próximo ciclo; não é confundida com ausência de checkpoint.
 
 Uma falha de ciclo preserva a publicação anterior e tenta restaurar o checkpoint antes de reconstruir dos pings. Mudança de parâmetros incompatível, relógio anterior à referência ou cursor além do limite atual impedem a reutilização. Dados já removidos pela retenção não podem ser recuperados por nenhuma das duas estratégias.
 
@@ -43,7 +43,7 @@ A identidade da origem protege contra reutilização de checkpoints de outra bas
 
 ## Operação
 
-A primeira implantação ainda fará a carga completa se não existir checkpoint. Aguarde `CHECKPOINT_SAVED` antes de avaliar uma reinicialização como recuperação persistida.
+A primeira implantação recupera o histórico em etapas se não existir checkpoint. Dados parciais ficam disponíveis antes da conclusão; nenhum checkpoint parcial é salvo. Consulte [a estratégia de carga progressiva](carga-progressiva-indicadores.md). Aguarde `CHECKPOINT_SAVED` antes de avaliar uma reinicialização como recuperação persistida.
 
 ```bash
 docker compose exec app tail -F /var/log/routiva/indicators.log
@@ -51,7 +51,7 @@ docker compose exec app tail -F /var/log/routiva/indicators.log
 
 Eventos principais:
 
-- `INITIAL_LOAD_STARTED`, `LOAD_PROGRESS`, `INITIAL_LOAD_COMPLETED`.
+- `INITIAL_LOAD_STARTED`, `INITIAL_LOAD_PROGRESS`, `HISTORY_LOAD_COMPLETED`, `LOAD_PROGRESS`, `CYCLE_COMPLETED`.
 - `CHECKPOINT_RESTORE_STARTED`, `CHECKPOINT_RESTORE_PROGRESS`, `CHECKPOINT_RESTORED`.
 - `CHECKPOINT_REJECTED`, `CHECKPOINT_UNAVAILABLE`.
 - `CHECKPOINT_CAPTURE_STARTED`, `CHECKPOINT_CAPTURE_COMPLETED`.

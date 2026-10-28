@@ -18,6 +18,7 @@ class PacketLossCacheTests {
     );
 
     PacketLossCacheTests() {
+        BootstrapTestSupport.pages(store, rows);
         when(store.committedBoundary()).thenAnswer(invocation -> rows.stream().mapToLong(PingSample::id).max().orElse(0));
         doAnswer(invocation -> {
             long after = invocation.getArgument(0), through = invocation.getArgument(1), cutoff = invocation.getArgument(2);
@@ -42,18 +43,18 @@ class PacketLossCacheTests {
     void databaseWritesOnlyBecomeVisibleAfterBackgroundRefresh() {
         long now = 100_000_000L;
         rows.add(new PingSample(1, host.id(), host.ip(), now, 10d, null));
-        service.refreshAt(now);
+        BootstrapTestSupport.refreshFully(service, now);
         var first = current();
         rows.add(new PingSample(2, host.id(), host.ip(), now + 1000, null, "Tempo esgotado"));
         for (int i = 0; i < 10; i++) assertThat(current()).isSameAs(first);
-        verify(store, times(1)).readIncrement(anyLong(), anyLong(), anyLong(), any());
-        service.refreshAt(now + 10000);
+        verify(store, never()).readIncrement(anyLong(), anyLong(), anyLong(), any());
+        BootstrapTestSupport.refreshFully(service, now + 10000);
         assertThat(current().stats().attemptsFiveMinutes()).isEqualTo(2);
         assertThat(current().stats().lossesFiveMinutes()).isEqualTo(1);
-        service.refreshAt(now + 20000);
+        BootstrapTestSupport.refreshFully(service, now + 20000);
         assertThat(current().stats().attemptsFiveMinutes()).isEqualTo(2);
         verify(store).readIncrement(eq(1L), eq(2L), anyLong(), any());
-        verify(store, times(2)).readIncrement(anyLong(), anyLong(), anyLong(), any());
+        verify(store, times(1)).readIncrement(anyLong(), anyLong(), anyLong(), any());
     }
 
     @Test
@@ -62,18 +63,18 @@ class PacketLossCacheTests {
         rows.add(new PingSample(1, host.id(), host.ip(), now - 299000, 10d, null));
         rows.add(new PingSample(2, host.id(), host.ip(), now - 3599000, 20d, null));
         rows.add(new PingSample(3, host.id(), host.ip(), now - 28799000, null, "Tempo esgotado"));
-        service.refreshAt(now);
+        BootstrapTestSupport.refreshFully(service, now);
         assertThat(current().stats().fiveMinutes()).isEqualTo(10d);
         assertThat(current().stats().latencyHour()).isEqualTo(15d);
         assertThat(current().stats().attemptsEightHours()).isEqualTo(3);
-        service.refreshAt(now + 10000);
+        BootstrapTestSupport.refreshFully(service, now + 10000);
         assertThat(current().stats().fiveMinutes()).isNull();
         assertThat(current().stats().latencyHour()).isEqualTo(10d);
         assertThat(current().stats().lossesEightHours()).isZero();
         rows.add(new PingSample(4, host.id(), host.ip(), now - 60000, 30d, null));
-        service.refreshAt(now + 20000);
+        BootstrapTestSupport.refreshFully(service, now + 20000);
         assertThat(current().stats().fiveMinutes()).isEqualTo(30d);
-        service.refreshAt(now + 8 * 3600000L);
+        BootstrapTestSupport.refreshFully(service, now + 8 * 3600000L);
         assertThat(current().stats().attemptsEightHours()).isZero();
     }
 
@@ -81,7 +82,7 @@ class PacketLossCacheTests {
     void failedOrInProgressRefreshKeepsPreviousSnapshot() {
         long now = 100_000_000L;
         rows.add(new PingSample(1, host.id(), host.ip(), now, 10d, null));
-        service.refreshAt(now);
+        BootstrapTestSupport.refreshFully(service, now);
         var first = current();
         rows.add(new PingSample(2, host.id(), host.ip(), now, 50d, null));
         doAnswer(invocation -> {
@@ -90,17 +91,17 @@ class PacketLossCacheTests {
             assertThat(current()).isSameAs(first);
             throw new IllegalStateException("database unavailable");
         }).when(store).readIncrement(anyLong(), anyLong(), anyLong(), any());
-        assertThatThrownBy(() -> service.refreshAt(now + 10000)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> BootstrapTestSupport.refreshFully(service, now + 10000)).isInstanceOf(IllegalStateException.class);
         assertThat(current()).isSameAs(first);
         doAnswer(invocation -> {
             Consumer<PingSample> consumer = invocation.getArgument(3);
             rows.forEach(consumer);
             return null;
         }).when(store).readIncrement(anyLong(), anyLong(), anyLong(), any());
-        service.refreshAt(now + 20000);
+        BootstrapTestSupport.refreshFully(service, now + 20000);
         assertThat(current().stats().attemptsFiveMinutes()).isEqualTo(2);
         assertThat(current().stats().fiveMinutes()).isEqualTo(30d);
-        verify(store, times(2)).readIncrement(eq(0L), anyLong(), anyLong(), any());
+        verify(store, never()).readIncrement(eq(0L), anyLong(), anyLong(), any());
     }
 
     @Test
@@ -108,9 +109,9 @@ class PacketLossCacheTests {
         long now = 100_000_000L;
         rows.add(new PingSample(1, host.id(), "10.7.1.2", now, 50d, null));
         rows.add(new PingSample(2, host.id(), host.ip(), now + 1000, 10d, null));
-        service.refreshAt(now);
+        BootstrapTestSupport.refreshFully(service, now);
         assertThat(current().stats().attemptsEightHours()).isZero();
-        service.refreshAt(now + 10000);
+        BootstrapTestSupport.refreshFully(service, now + 10000);
         assertThat(current().stats().attemptsEightHours()).isEqualTo(1);
     }
 }

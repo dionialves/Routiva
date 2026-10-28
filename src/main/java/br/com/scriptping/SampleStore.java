@@ -250,6 +250,28 @@ public class SampleStore {
         });
     }
 
+    /** Bounded time-index seek for cold starts; the fixed ID boundary excludes live arrivals. */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public List<PingSample> readBootstrapPage(long boundary, long from, long to,
+        long beforeTime, long beforeId, int limit) {
+        if (limit < 1) throw new IllegalArgumentException("Page size must be positive");
+        return jdbc.query(connection -> {
+            var query = connection.prepareStatement(
+                "SELECT id,host_id,target,measured_at,latency,error,latency_limit FROM ping_sample " +
+                "WHERE measured_at>=? AND measured_at<? AND id<=? " +
+                "AND (measured_at,id)<(?,?) ORDER BY measured_at DESC,id DESC LIMIT ?");
+            query.setLong(1, from); query.setLong(2, to); query.setLong(3, boundary);
+            query.setLong(4, beforeTime); query.setLong(5, beforeId); query.setInt(6, limit);
+            query.setQueryTimeout(5);
+            return query;
+        }, (row, index) -> {
+            Number latency = (Number) row.getObject("latency");
+            return new PingSample(row.getLong("id"), row.getString("host_id"),
+                row.getString("target"), row.getLong("measured_at"),
+                latency == null ? null : latency.doubleValue(), row.getString("error"), row.getDouble("latency_limit"));
+        });
+    }
+
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public void readRecent(long cutoff, java.util.function.Consumer<PingSample> consumer) {
         jdbc.query(

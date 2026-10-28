@@ -26,6 +26,7 @@ class AnalyticsCheckpointTests {
         new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(ds);
         jdbc = new JdbcTemplate(ds);
         checkpoints = new AnalyticsCheckpointStore(jdbc, new DataSourceTransactionManager(ds));
+        BootstrapTestSupport.pages(samples, rows);
         when(samples.committedBoundary()).thenAnswer(i -> rows.stream().mapToLong(PingSample::id).max().orElse(0));
         doAnswer(i -> {
             long after=i.getArgument(0), through=i.getArgument(1), cutoff=i.getArgument(2);
@@ -53,13 +54,13 @@ class AnalyticsCheckpointTests {
         add(3,now-1000,null,"Tempo esgotado",20);
         add(4,now,40d,null,30);
         add(5,now+5000,15d,null,10);
-        var live=service(false); live.refreshAt(now);
+        var live=service(false); BootstrapTestSupport.refreshFully(live, now);
         checkpoints.save(capture(live));
         add(6,now-2000,8d,null,5); // late arrival, ID after checkpoint
         add(7,now+9000,null,"internal",20);
-        live.refreshAt(now+10000);
+        BootstrapTestSupport.refreshFully(live, now+10000);
         clearInvocations(samples);
-        var restarted=service(true); restarted.refreshAt(now+10000);
+        var restarted=service(true); BootstrapTestSupport.refreshFully(restarted, now+10000);
         verify(samples).readIncrement(eq(5L),eq(7L),anyLong(),any());
         assertThat(restarted.current(List.of(host))).isEqualTo(live.current(List.of(host)));
         for (int period : HostAvailabilityService.PERIODS) {
@@ -71,20 +72,20 @@ class AnalyticsCheckpointTests {
     }
     @Test void capturedStateIsImmutableWhileLiveBlocksSplitExpireAndMinutesChange() {
         for (int i=1;i<=600;i++) add(i,now-600000+i*1000,10d,null,20);
-        var live=service(false); live.refreshAt(now);
+        var live=service(false); BootstrapTestSupport.refreshFully(live, now);
         var captured=capture(live);
         add(601,now-500,99d,null,20);
-        live.refreshAt(now+1000); // mutate a frozen indicator block before pruning
-        live.refreshAt(now+9*3600000L); // prune indicator blocks and mutate availability
+        BootstrapTestSupport.refreshFully(live, now+1000); // mutate a frozen indicator block before pruning
+        BootstrapTestSupport.refreshFully(live, now+9*3600000L); // prune indicator blocks and mutate availability
         checkpoints.save(captured); // serialization occurs after live mutation
-        var restored=service(true); restored.refreshAt(now+10000);
-        var baseline=service(false); baseline.refreshAt(now+10000);
+        var restored=service(true); BootstrapTestSupport.refreshFully(restored, now+10000);
+        var baseline=service(false); BootstrapTestSupport.refreshFully(baseline, now+10000);
         assertThat(restored.current(List.of(host))).isEqualTo(baseline.current(List.of(host)));
         assertThat(restored.availability(host,48).series()).isEqualTo(baseline.availability(host,48).series());
     }
     @Test void keepsTwoGenerationsReusesBlocksAndRollsBackIncompleteWrites() {
         add(1,now-1000,10d,null,20);
-        var live=service(false); live.refreshAt(now);
+        var live=service(false); BootstrapTestSupport.refreshFully(live, now);
         var first=capture(live); checkpoints.save(first);
         int blocks=jdbc.queryForObject("SELECT COUNT(*) FROM analytics_checkpoint_block",Integer.class);
         checkpoints.save(capture(live)); checkpoints.save(capture(live));
@@ -97,23 +98,23 @@ class AnalyticsCheckpointTests {
     }
     @Test void corruptedNewestFallsBackToPreviousGeneration() {
         add(1,now-1000,10d,null,20);
-        var live=service(false); live.refreshAt(now); checkpoints.save(capture(live));
-        add(2,now+1000,20d,null,20); live.refreshAt(now+2000);
+        var live=service(false); BootstrapTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
+        add(2,now+1000,20d,null,20); BootstrapTestSupport.refreshFully(live, now+2000);
         var latest=capture(live); checkpoints.save(latest);
         jdbc.update("UPDATE analytics_checkpoint SET manifest='invalid' WHERE id=?",latest.header().id());
         clearInvocations(samples);
-        var restored=service(true); restored.refreshAt(now+3000);
+        var restored=service(true); BootstrapTestSupport.refreshFully(restored, now+3000);
         verify(samples).readIncrement(eq(1L),eq(2L),anyLong(),any());
-        live.refreshAt(now+3000);
+        BootstrapTestSupport.refreshFully(live, now+3000);
         assertThat(restored.current(List.of(host))).isEqualTo(live.current(List.of(host)));
     }
     @Test void noNewSamplesStillExpiresWindowsAndPreservesLastError() {
         add(1,now-299000,null,"Sem resposta ICMP",20);
-        var live=service(false); live.refreshAt(now); checkpoints.save(capture(live));
+        var live=service(false); BootstrapTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
         clearInvocations(samples);
-        var restarted=service(true); restarted.refreshAt(now+10000);
+        var restarted=service(true); BootstrapTestSupport.refreshFully(restarted, now+10000);
         verify(samples, never()).readIncrement(anyLong(),anyLong(),anyLong(),any());
-        live.refreshAt(now+10000);
+        BootstrapTestSupport.refreshFully(live, now+10000);
         assertThat(restarted.current(List.of(host))).isEqualTo(live.current(List.of(host)));
         assertThat(restarted.availability(host,1).series()).isEqualTo(live.availability(host,1).series());
     }
@@ -122,8 +123,8 @@ class AnalyticsCheckpointTests {
         var broken = mock(AnalyticsCheckpointStore.class);
         when(broken.epoch()).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("offline"));
         var restarted=service(false); restarted.configureCheckpoints(broken,300000);
-        assertThatThrownBy(() -> restarted.refreshAt(now)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
-        assertThatThrownBy(() -> restarted.refreshAt(now+10000)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
+        assertThatThrownBy(() -> BootstrapTestSupport.refreshFully(restarted, now)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
+        assertThatThrownBy(() -> BootstrapTestSupport.refreshFully(restarted, now+10000)).isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
         verify(samples, never()).readIncrement(anyLong(),anyLong(),anyLong(),any());
         verify(broken,times(2)).epoch();
     }
@@ -133,19 +134,19 @@ class AnalyticsCheckpointTests {
         when(failing.epoch()).thenReturn("epoch"); when(failing.candidates()).thenReturn(List.of());
         var written = new java.util.concurrent.CountDownLatch(1);
         doAnswer(i -> { written.countDown(); throw new IllegalStateException("disk full"); }).when(failing).save(any());
-        var live=service(false); live.configureCheckpoints(failing,300000); live.refreshAt(now);
+        var live=service(false); live.configureCheckpoints(failing,300000); BootstrapTestSupport.refreshFully(live, now);
         assertThat(written.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-        add(2,now+1000,20d,null,20); live.refreshAt(now+10000);
+        add(2,now+1000,20d,null,20); BootstrapTestSupport.refreshFully(live, now+10000);
         verify(samples).readIncrement(eq(1L),eq(2L),anyLong(),any());
         verify(failing,times(1)).save(any());
         assertThat(live.current(List.of(host)).get(host.id()).stats().attemptsFiveMinutes()).isEqualTo(2);
     }
     @Test void incompatibleConfigurationFallsBackToRawHistory() {
         add(1,now-1000,10d,null,20);
-        var live=service(false); live.refreshAt(now); checkpoints.save(capture(live));
+        var live=service(false); BootstrapTestSupport.refreshFully(live, now); checkpoints.save(capture(live));
         var restored=new PacketLossAnalysisService(samples,new PacketLossPolicy(),2000,2000);
         services.add(restored); restored.configureCheckpoints(checkpoints,300000);
-        clearInvocations(samples); restored.refreshAt(now+1000);
-        verify(samples).readIncrement(eq(0L),eq(1L),anyLong(),any());
+        clearInvocations(samples); BootstrapTestSupport.refreshFully(restored, now+1000);
+        verify(samples, atLeastOnce()).readBootstrapPage(eq(1L),anyLong(),anyLong(),anyLong(),anyLong(),anyInt());
     }
 }

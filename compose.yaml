@@ -14,6 +14,8 @@ services:
       SERVER_ADDRESS: 0.0.0.0
       PORT: 8080
       COLLECTOR_ADDRESS: unix:///run/routiva/collector.sock
+      INDICATORS_BOOTSTRAP_PAGE_SIZE: ${INDICATORS_BOOTSTRAP_PAGE_SIZE:-10000}
+      INDICATORS_BOOTSTRAP_DELAY_MS: ${INDICATORS_BOOTSTRAP_DELAY_MS:-1000}
       INDICATORS_LOG_PATH: /var/log/routiva/indicators.log
     ports:
       - '${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080'

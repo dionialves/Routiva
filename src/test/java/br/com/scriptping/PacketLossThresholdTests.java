@@ -37,6 +37,12 @@ class PacketLossThresholdTests {
     @MockitoBean
     PacketLossAnalysisService analysis;
 
+    @org.junit.jupiter.api.BeforeEach
+    void publishedView() {
+        when(analysis.currentSnapshot(anyList())).thenAnswer(i -> new PacketLossAnalysisService.Current(
+            analysis.current(i.getArgument(0)), new IndicatorLoadStatus("COMPLETE", 0L, 0L, 0, 0, 0)));
+    }
+
     Host host(String id) {
         return new Host(id, id, "10.4.0.1", List.of(new Host.Group(id + "-group", id)));
     }

@@ -19,6 +19,9 @@
   });
   const percent = (value) => number(value) + (value == null ? '' : '%');
 
+  const loading = () => report.load != null && report.load.phase !== 'COMPLETE';
+  const uncovered = (point) => loading() && (report.load.loadedFrom == null || point.from < report.load.loadedFrom);
+
   function freshness() {
     status.classList.toggle('loss-key', requestError ||
       (report.evaluatedAt != null && Date.now() - report.evaluatedAt > 30000));
@@ -26,6 +29,7 @@
     else if (renderedPeriod !== period.value) status.textContent = 'Carregando o período selecionado…';
     else if (report.evaluatedAt == null) status.textContent = 'Carregando indicadores…';
     else status.textContent = `${Date.now() - report.evaluatedAt > 30000 ? 'Publicação desatualizada · ' : ''}` +
+      `${loading() ? 'Dados parciais · Histórico em carregamento · ' : ''}` +
       `Indicadores calculados às ${time(report.evaluatedAt)} · Última medição: ${report.lastSampleAt == null ? 'sem dados' : time(report.lastSampleAt)} · Consulta a cada 10 segundos`;
   }
 
@@ -39,6 +43,7 @@
   function describe(point) {
     const m = point.metrics;
     return `${time(point.from)} — ${time(point.to)}` +
+      `${uncovered(point) ? ' · Histórico ainda não carregado integralmente; valores parciais' : ''}` +
       `${point.provisional ? ' · minuto em andamento' : point.partial ? ' · intervalo parcial' : ''}` +
       ` · ${m.healthy} saudáveis, ${m.degraded} degradados, ${m.lost} perdidos, ${m.errors} erros internos` +
       ` · Operacional: ${percent(m.operational)} · Técnica: ${percent(m.technical)}` +
@@ -148,10 +153,13 @@
       document.getElementById(key).textContent = percent(report.total[key]);
     document.getElementById('counts').textContent =
       `${report.total.healthy} saudáveis · ${report.total.degraded} degradados · ${report.total.lost} perdidos · ${report.total.errors} erros internos`;
-    document.getElementById('no-data').hidden = report.evaluatedAt == null || report.total.technical != null;
+    document.getElementById('no-data').hidden = loading() || report.evaluatedAt == null || report.total.technical != null;
     document.getElementById('date-range').textContent = report.evaluatedAt == null ? '' : `${time(report.from)} — ${time(report.to)}`;
     document.getElementById('retention-note').textContent = report.evaluatedAt != null && report.retainedFrom > report.from
       ? `Retenção limitada: somente dados a partir de ${time(report.retainedFrom)} podem compor este período.` : '';
+    if (loading()) document.getElementById('retention-note').textContent +=
+      report.load.loadedFrom == null ? ' Carregando os registros mais recentes. Os valores ainda são parciais.' :
+        ` Histórico carregado desde ${time(report.load.loadedFrom)}. Os períodos anteriores ainda estão incompletos.`;
     for (const id of ['availability-chart', 'loss-chart', 'latency-chart'])
       document.getElementById(id).hidden = report.evaluatedAt == null;
     if (report.evaluatedAt == null) {

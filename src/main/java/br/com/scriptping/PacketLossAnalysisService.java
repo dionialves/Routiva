@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-/** Publishes complete database-derived snapshots; readers never trigger analysis or SQL. */
+/** Publishes immutable snapshots with explicit coverage; readers never trigger analysis or SQL. */
 @Service
 public class PacketLossAnalysisService {
 
@@ -27,7 +27,7 @@ public class PacketLossAnalysisService {
     private final PacketLossAnalysis empty;
     private record Snapshot(Map<Key, PacketLossAnalysis> indicators,
         Map<Key, Map<Integer, HostAvailabilityService.Report>> availability,
-        Map<Integer, HostAvailabilityService.Report> emptyReports) {}
+        Map<Integer, HostAvailabilityService.Report> emptyReports, IndicatorLoadStatus load) {}
     private volatile Snapshot snapshot;
     private final long availabilityRetention;
     private final Map<Key, AvailabilityHistory> availabilityHistories = new HashMap<>();
@@ -40,6 +40,25 @@ public class PacketLossAnalysisService {
     private String compatibility, sourceEpoch;
     private long checkpointInterval = 300000, lastCheckpointAttempt = Long.MIN_VALUE;
     private boolean recoveryAttempted;
+    private IndicatorBootstrap bootstrap;
+    private int pageSize = 10000;
+    private long confirmedBoundary;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void configureBootstrap(@Value("${indicators.bootstrap.page-size:10000}") int pageSize,
+        @Value("${indicators.bootstrap.delay-ms:1000}") long delayMs) {
+        if (delayMs < 1) throw new IllegalArgumentException("Bootstrap delay must be positive");
+        if (pageSize < 1 || pageSize > 100000) throw new IllegalArgumentException("Bootstrap page size must be between 1 and 100000");
+        this.pageSize = pageSize;
+    }
+
+    // The same single-thread scheduler serializes live cycles and backfill work. Each turn
+    // handles new IDs first, then at most one historical page, and yields before the next turn.
+    @Scheduled(fixedDelayString = "${indicators.bootstrap.delay-ms:1000}", scheduler = "indicatorScheduler")
+    public synchronized void continueBootstrap() {
+        if (bootstrap != null || cursor < confirmedBoundary) refreshAt(System.currentTimeMillis());
+    }
+
     private final java.util.concurrent.ExecutorService checkpointWriter = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "checkpoint-writer"); t.setDaemon(true); return t;
     });
@@ -79,7 +98,8 @@ public class PacketLossAnalysisService {
             + "|" + rules.getMinimumCoverageRatio() + "|" + rules.getMinimumSamples()
             + "|" + rules.getMaxGapMultiplier()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         snapshot = new Snapshot(Map.of(), Map.of(), new AvailabilityHistory().reports(
-            0, availabilityRetention, runId + ":0", false));
+            0, availabilityRetention, runId + ":0", false),
+            new IndicatorLoadStatus("STARTING", null, null, 0, 0, 0));
     }
 
     @Scheduled(fixedRate = 10000, scheduler = "indicatorScheduler")
@@ -107,7 +127,13 @@ public class PacketLossAnalysisService {
                 reset();
                 counts.resetReason = "database_boundary_rewound";
             }
+            confirmedBoundary = boundary;
             counts.initial = evaluatedAt == Long.MIN_VALUE;
+            if (counts.initial) {
+                bootstrap = new IndicatorBootstrap(boundary);
+                cursor = boundary; // IDs through boundary are owned by the historical reader.
+            }
+            boolean wasLoading = bootstrap != null;
             if (counts.initial) CYCLE_LOG.info("event=INITIAL_LOAD_STARTED run_id={} cycle={} boundary={}", runId, cycle, boundary);
             long[] progressAt = {System.nanoTime()};
             long previousReference = evaluatedAt;
@@ -130,10 +156,11 @@ public class PacketLossAnalysisService {
             availabilityHistories.values().forEach(history -> history.expire(now - availabilityRetention));
             availabilityHistories.values().removeIf(AvailabilityHistory::isEmpty);
             counts.stage = "database_query";
-            if (boundary > cursor) {
+            long liveThrough = cursor + Math.min((long) pageSize, boundary - cursor);
+            if (liveThrough > cursor) {
                 queryStarted = System.nanoTime();
                 try {
-                    store.readIncrement(cursor, boundary, cutoff, sample -> {
+                    store.readIncrement(cursor, liveThrough, cutoff, sample -> {
                         long callbackStarted = System.nanoTime();
                         counts.stage = "sample_processing";
                         try {
@@ -160,6 +187,32 @@ public class PacketLossAnalysisService {
                     counts.queryNanos += System.nanoTime() - queryStarted - counts.callbackNanos;
                 }
             }
+            cursor = liveThrough;
+            if (bootstrap != null) {
+                long historicalStarted = System.nanoTime();
+                long callbacksBefore = counts.callbackNanos;
+                counts.stage = "historical_query";
+                try {
+                    if (bootstrap.step(store, cutoff, pageSize, sample -> {
+                        long callbackStarted = System.nanoTime();
+                        counts.stage = "historical_processing";
+                        try {
+                            counts.fetched++;
+                            if (!IpAddress.isValid(sample.target()) || sample.measuredAt() < cutoff) {
+                                counts.discarded++;
+                            } else if (sample.measuredAt() > now) {
+                                future.add(sample);
+                                counts.queued++;
+                            } else {
+                                incorporate(sample, now);
+                                counts.incorporated++;
+                            }
+                        } finally { counts.callbackNanos += System.nanoTime() - callbackStarted; }
+                    })) bootstrap = null;
+                } finally {
+                    counts.queryNanos += System.nanoTime() - historicalStarted - (counts.callbackNanos - callbacksBefore);
+                }
+            }
             counts.stage = "pending_processing";
             while (!future.isEmpty() && future.peek().measuredAt() <= now) {
                 var sample = future.remove();
@@ -171,7 +224,8 @@ public class PacketLossAnalysisService {
             }
             counts.stage = "publication";
             counts.availabilityNanos = publish(now, runId + ":" + cycle);
-            cursor = boundary;
+            if (wasLoading && bootstrap == null) CYCLE_LOG.info(
+                "event=HISTORY_LOAD_COMPLETED run_id={} cycle={} cursor={} boundary={}", runId, cycle, cursor, boundary);
             evaluatedAt = now;
             lastPublishedCycle = cycle;
         } catch (RuntimeException failure) {
@@ -188,8 +242,8 @@ public class PacketLossAnalysisService {
         scheduleCheckpoint(now);
         long duration = System.nanoTime() - started;
         CYCLE_LOG.info(
-            "event={} run_id={} cycle={} reference_at={} hosts={} fetched={} incorporated={} late_arrivals={} future_queued={} future_released={} pending_future={} discarded={} expired_5m={} expired_1h={} expired_8h={} removed_pings={} retained_pings={} query_ms={} processing_ms={} total_ms={} schedule_overrun={} cursor={} reset_reason={} availability_hosts={} availability_buckets={} availability_ms={} indicators_published=true",
-            counts.initial ? "INITIAL_LOAD_COMPLETED" : "CYCLE_COMPLETED", runId, cycle,
+            "event={} run_id={} cycle={} reference_at={} hosts={} fetched={} incorporated={} late_arrivals={} future_queued={} future_released={} pending_future={} discarded={} expired_5m={} expired_1h={} expired_8h={} removed_pings={} retained_pings={} query_ms={} processing_ms={} total_ms={} schedule_overrun={} cursor={} reset_reason={} availability_hosts={} availability_buckets={} availability_ms={} indicators_published=true load_phase={} loaded_from={} target_from={} boundary={}",
+            bootstrap != null ? "INITIAL_LOAD_PROGRESS" : counts.initial ? "INITIAL_LOAD_COMPLETED" : "CYCLE_COMPLETED", runId, cycle,
             java.time.Instant.ofEpochMilli(now), histories.size(), counts.fetched, counts.incorporated,
             counts.late, counts.queued, counts.released, future.size(), counts.discarded,
             counts.expired5m, counts.expired1h, counts.expired8h, counts.removed,
@@ -197,19 +251,27 @@ public class PacketLossAnalysisService {
             counts.queryNanos / 1000000, Math.max(0, duration - counts.queryNanos) / 1000000,
             duration / 1000000, duration > 10000000000L, cursor, counts.resetReason,
             availabilityHistories.size(), availabilityHistories.values().stream().mapToLong(AvailabilityHistory::bucketCount).sum(),
-            counts.availabilityNanos / 1000000
+            counts.availabilityNanos / 1000000, snapshot.load().phase(), snapshot.load().loadedFrom(),
+            snapshot.load().targetFrom(), confirmedBoundary
         );
     }
 
     private long publish(long reference, String version) {
+        Long loadedFrom = bootstrap == null
+            ? Long.valueOf(reference - Math.max(analyzer.lookbackMs(), availabilityRetention)) : bootstrap.loadedFrom();
+        if (loadedFrom != null && loadedFrom > reference) loadedFrom = null;
+        IndicatorLoadStatus load = new IndicatorLoadStatus(
+            bootstrap != null ? "LOADING_HISTORY" : cursor < confirmedBoundary ? "CATCHING_UP" : "COMPLETE",
+            loadedFrom,
+            reference, reference - Math.max(analyzer.lookbackMs(), availabilityRetention), cursor, confirmedBoundary);
         Map<Key, PacketLossAnalysis> next = new HashMap<>();
         histories.forEach((key, history) -> next.put(key, analyzer.analyze(history, reference)));
         long availabilityStarted = System.nanoTime();
         Map<Key, Map<Integer, HostAvailabilityService.Report>> reports = new HashMap<>();
         availabilityHistories.forEach((key, history) -> reports.put(key,
-            history.reports(reference, availabilityRetention, version, true)));
+            history.reports(reference, availabilityRetention, version, true, load)));
         snapshot = new Snapshot(Map.copyOf(next), Map.copyOf(reports),
-            new AvailabilityHistory().reports(reference, availabilityRetention, version, true));
+            new AvailabilityHistory().reports(reference, availabilityRetention, version, true, load), load);
         return System.nanoTime() - availabilityStarted;
     }
 
@@ -264,7 +326,9 @@ public class PacketLossAnalysisService {
     }
 
     // Called under the cycle lock. Encoded arrays are immutable and reused until their block changes.
-    AnalyticsCheckpointStore.Capture captureCheckpoint() {
+    synchronized AnalyticsCheckpointStore.Capture captureCheckpoint() {
+        if (evaluatedAt == Long.MIN_VALUE || bootstrap != null || cursor < confirmedBoundary)
+            throw new IllegalStateException("Cannot persist an incomplete indicator load");
         List<AnalyticsCheckpointStore.Part> parts = new ArrayList<>();
         histories.forEach((key, history) -> {
             int ordinal=0;
@@ -289,7 +353,7 @@ public class PacketLossAnalysisService {
     }
 
     private void scheduleCheckpoint(long now) {
-        if (checkpoints == null || (checkpointWrite != null && !checkpointWrite.isDone())
+        if (bootstrap != null || cursor < confirmedBoundary || checkpoints == null || (checkpointWrite != null && !checkpointWrite.isDone())
             || (lastCheckpointAttempt != Long.MIN_VALUE && now - lastCheckpointAttempt < checkpointInterval)) return;
         lastCheckpointAttempt = now;
         try {
@@ -336,20 +400,31 @@ public class PacketLossAnalysisService {
         availabilityHistories.clear();
         future.clear();
         cursor = 0;
+        bootstrap = null;
+        confirmedBoundary = 0;
         evaluatedAt = Long.MIN_VALUE;
     }
+
+    public IndicatorLoadStatus loadStatus() { return snapshot.load(); }
 
     public HostAvailabilityService.Report availability(Host host, int hours) {
         var published = snapshot;
         return published.availability().getOrDefault(new Key(host.id(), host.ip()), published.emptyReports()).get(hours);
     }
 
-    public Map<String, PacketLossAnalysis> current(List<Host> hosts) {
-        var available = snapshot.indicators();
+    /** Indicators and coverage from the same immutable publication. */
+    public record Current(Map<String, PacketLossAnalysis> indicators, IndicatorLoadStatus load) {}
+
+    public Current currentSnapshot(List<Host> hosts) {
+        var published = snapshot;
         Map<String, PacketLossAnalysis> result = new HashMap<>();
         for (Host host : hosts) {
-            result.put(host.id(), available.getOrDefault(new Key(host.id(), host.ip()), empty));
+            result.put(host.id(), published.indicators().getOrDefault(new Key(host.id(), host.ip()), empty));
         }
-        return result;
+        return new Current(Map.copyOf(result), published.load());
+    }
+
+    public Map<String, PacketLossAnalysis> current(List<Host> hosts) {
+        return currentSnapshot(hosts).indicators();
     }
 }

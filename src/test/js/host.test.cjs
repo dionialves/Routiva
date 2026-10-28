@@ -124,3 +124,14 @@ test('an inspected older minute stays selected when a new publication arrives', 
   ui.respond(0, { ...data, version: 'run:2' }); await pending;
   assert.equal(ui.elements['minute-selection'].value, '0');
 });
+
+test('partial history is identified and never presented as a completed empty period', () => {
+  const partial = report();
+  partial.load = { phase: 'LOADING_HISTORY', loadedFrom: null };
+  partial.total.technical = null;
+  const ui = surface(partial);
+  assert.match(ui.elements['refresh-status'].textContent, /Dados parciais/);
+  assert.match(ui.elements['retention-note'].textContent, /registros mais recentes/);
+  assert.match(ui.elements['minute-detail'].textContent, /ainda não carregado/);
+  assert.equal(ui.elements['no-data'].hidden, true);
+});

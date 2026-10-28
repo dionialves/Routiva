@@ -242,7 +242,7 @@ class TableSortingTests {
             .plus(2, java.time.temporal.ChronoUnit.HOURS).toEpochMilli();
         sample(ten, now - 4 * 3600000L, 10d, null);
         sample(two, now, 10d, null);
-        analysis.refreshAt(now);
+        BootstrapTestSupport.refreshFully(analysis, now);
         when(monitor.hosts()).thenReturn(List.of(ten, two, empty));
         assertThat(sorted("/hosts", "ip", "asc"))
             .extracting(DashboardController.Card::id)

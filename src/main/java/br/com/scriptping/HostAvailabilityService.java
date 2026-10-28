@@ -21,7 +21,12 @@ public class HostAvailabilityService {
 
     public record Point(long at, long from, long to, boolean partial, boolean provisional, Metrics metrics) {}
     public record Report(long from, long to, long bucketMillis, Metrics total, List<Point> series,
-        String version, Long evaluatedAt, Long lastSampleAt, long retainedFrom) {}
+        String version, Long evaluatedAt, Long lastSampleAt, long retainedFrom, IndicatorLoadStatus load) {
+        public Report(long from, long to, long bucketMillis, Metrics total, List<Point> series,
+            String version, Long evaluatedAt, Long lastSampleAt, long retainedFrom) {
+            this(from, to, bucketMillis, total, series, version, evaluatedAt, lastSampleAt, retainedFrom, null);
+        }
+    }
 
     static class Counts {
         long h, d, p, e;

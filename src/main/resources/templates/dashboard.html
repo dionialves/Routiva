@@ -3,6 +3,7 @@
   <body>
     <th:block th:fragment="content">
       <div class="status"><span th:text="${status}"></span><span>Sincronização: <b th:text="${lastSync}"></b> · Painel: <b th:text="${updated}"></b></span></div>
+      <p class="note" role="status" th:if="${indicatorLoad != null and !indicatorLoad.complete()}" th:text="${indicatorLoad.description()}"></p>
       <div class="section-title">
         <h2 th:text="${pageTitle}"></h2>
         <span th:text="${cards.size()} + ' de ' + ${total} + (${groupPage} ? ' grupos' : ' hosts')" role="status"></span>

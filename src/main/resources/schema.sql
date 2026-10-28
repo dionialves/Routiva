@@ -11,6 +11,9 @@ CREATE INDEX IF NOT EXISTS idx_ping_host_time ON ping_sample (host_id, target, m
 
 CREATE INDEX IF NOT EXISTS idx_ping_time ON ping_sample (measured_at);
 
+-- Keyset pagination for progressive indicator bootstrap.
+CREATE INDEX IF NOT EXISTS idx_ping_time_id ON ping_sample (measured_at, id);
+
 ALTER TABLE ping_sample
 ADD COLUMN IF NOT EXISTS latency_limit DOUBLE PRECISION NOT NULL DEFAULT 20;
 

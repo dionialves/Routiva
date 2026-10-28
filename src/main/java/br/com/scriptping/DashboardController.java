@@ -344,7 +344,9 @@ public class DashboardController {
     private void populate(Model model) {
         long now = System.currentTimeMillis();
         var hosts = monitor.hosts();
-        var analyses = analysis.current(hosts);
+        var published = analysis.currentSnapshot(hosts);
+        var analyses = published.indicators();
+        model.addAttribute("indicatorLoad", published.load());
         List<Card> cards = new ArrayList<>();
         Map<String, Host.Group> groups = new TreeMap<>();
         Map<String, List<PacketLossAnalysis>> groupStats = new HashMap<>();

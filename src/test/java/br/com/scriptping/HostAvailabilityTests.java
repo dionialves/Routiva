@@ -66,7 +66,7 @@ class HostAvailabilityTests {
             now - 1,
             1
         );
-        indicators.refreshAt(now);
+        BootstrapTestSupport.refreshFully(indicators, now);
         var report = service.report(host, 48);
         assertThat(report.total().total()).isEqualTo(3);
         assertThat(report.total().healthy()).isEqualTo(1);

@@ -131,6 +131,10 @@ final class AvailabilityHistory {
     int bucketCount() { return minutes.size(); }
 
     Map<Integer, Report> reports(long now, long retention, String version, boolean initialized) {
+        return reports(now, retention, version, initialized, null);
+    }
+
+    Map<Integer, Report> reports(long now, long retention, String version, boolean initialized, IndicatorLoadStatus load) {
         Map<Integer, Report> reports = new HashMap<>();
         long retainedFrom = now - retention;
         Long latest = null;
@@ -163,7 +167,7 @@ final class AvailabilityHistory {
                 series.add(point);
             }
             reports.put(hours, new Report(from, now, MINUTE, total.metrics(), List.copyOf(series),
-                version, initialized ? now : null, latest, retainedFrom));
+                version, initialized ? now : null, latest, retainedFrom, load));
         }
         return Map.copyOf(reports);
     }
