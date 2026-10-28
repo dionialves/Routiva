@@ -92,7 +92,8 @@ public class SampleStore {
             host.ip(),
             now,
             result.latency(),
-            result.error()
+            result.error(),
+            latencyLimit
         );
         if (
             org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()
@@ -192,7 +193,7 @@ public class SampleStore {
             now
         );
         List<PingSample> saved = jdbc.query(
-            "SELECT id,host_id,target,measured_at,latency,error FROM ping_sample WHERE collector_id=? AND batch_id=? ORDER BY measured_at,id",
+            "SELECT id,host_id,target,measured_at,latency,error,latency_limit FROM ping_sample WHERE collector_id=? AND batch_id=? ORDER BY measured_at,id",
             (rs, n) ->
                 new PingSample(
                     rs.getLong("id"),
@@ -200,7 +201,8 @@ public class SampleStore {
                     rs.getString("target"),
                     rs.getLong("measured_at"),
                     (Double) rs.getObject("latency"),
-                    rs.getString("error")
+                    rs.getString("error"),
+                    rs.getDouble("latency_limit")
                 ),
             collector,
             batch.getBatchId()
@@ -232,7 +234,7 @@ public class SampleStore {
     public void readIncrement(long after, long through, long cutoff, java.util.function.Consumer<PingSample> consumer) {
         jdbc.query(connection -> {
             var query = connection.prepareStatement(
-                "SELECT id,host_id,target,measured_at,latency,error FROM ping_sample " +
+                "SELECT id,host_id,target,measured_at,latency,error,latency_limit FROM ping_sample " +
                 "WHERE id>? AND id<=? AND measured_at>=? ORDER BY id"
             );
             query.setLong(1, after);
@@ -244,7 +246,7 @@ public class SampleStore {
             Number latency = (Number) row.getObject("latency");
             consumer.accept(new PingSample(row.getLong("id"), row.getString("host_id"),
                 row.getString("target"), row.getLong("measured_at"),
-                latency == null ? null : latency.doubleValue(), row.getString("error")));
+                latency == null ? null : latency.doubleValue(), row.getString("error"), row.getDouble("latency_limit")));
         });
     }
 
@@ -253,7 +255,7 @@ public class SampleStore {
         jdbc.query(
             connection -> {
                 var query = connection.prepareStatement(
-                    "SELECT id,host_id,target,measured_at,latency,error FROM ping_sample WHERE measured_at>=? ORDER BY measured_at,id"
+                    "SELECT id,host_id,target,measured_at,latency,error,latency_limit FROM ping_sample WHERE measured_at>=? ORDER BY measured_at,id"
                 );
                 query.setLong(1, cutoff);
                 query.setFetchSize(1000);
@@ -268,7 +270,8 @@ public class SampleStore {
                         row.getString("target"),
                         row.getLong("measured_at"),
                         latency == null ? null : latency.doubleValue(),
-                        row.getString("error")
+                        row.getString("error"),
+                        row.getDouble("latency_limit")
                     )
                 );
             }

@@ -627,9 +627,6 @@ footer time {
   font-variant-numeric: tabular-nums;
   color: var(--accent);
 }
-.primary-availability {
-  background: #12352e;
-}
 .availability-grid p {
   font-size: 13px;
 }

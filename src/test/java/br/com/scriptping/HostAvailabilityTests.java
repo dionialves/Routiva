@@ -36,7 +36,9 @@ class HostAvailabilityTests {
         );
         new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(ds);
         var jdbc = new JdbcTemplate(ds);
-        var service = new HostAvailabilityService(jdbc);
+        var indicatorStore = new SampleStore(jdbc, 48, 600);
+        var indicators = new PacketLossAnalysisService(indicatorStore, new PacketLossPolicy(), 1000, 1500);
+        var service = new HostAvailabilityService(indicators);
         var store = new SampleStore(jdbc, 48, 600);
         var host = new Host("availability-test", "Host", "127.0.0.1", java.util.List.of());
         jdbc.update(
@@ -64,7 +66,8 @@ class HostAvailabilityTests {
             now - 1,
             1
         );
-        var report = service.report(host, 48, now);
+        indicators.refreshAt(now);
+        var report = service.report(host, 48);
         assertThat(report.total().total()).isEqualTo(3);
         assertThat(report.total().healthy()).isEqualTo(1);
         assertThat(report.total().degraded()).isEqualTo(1);
@@ -82,14 +85,14 @@ class HostAvailabilityTests {
         });
         assertThat(
             service
-                .report(new Host("empty", "Empty", "127.0.0.1", java.util.List.of()), 1, now)
+                .report(new Host("empty", "Empty", "127.0.0.1", java.util.List.of()), 1)
                 .total()
                 .technical()
         ).isNull();
         assertThatThrownBy(() ->
             new SampleStore(jdbc, 48, 600, event -> {}, Double.NaN)
         ).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.report(host, 3, now)).isInstanceOf(
+        assertThatThrownBy(() -> service.report(host, 3)).isInstanceOf(
             IllegalArgumentException.class
         );
     }

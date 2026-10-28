@@ -68,7 +68,7 @@ class IndicatorLoggingTests {
             "expired_8h=1 ", "removed_pings=1 ", "retained_pings=4 ", "indicators_published=true");
         service.current(List.of(new Host("h", "Host", "10.0.0.1", List.of())));
         assertThat(events.list).hasSize(2);
-        for (String field : List.of("query_ms", "processing_ms", "total_ms")) {
+        for (String field : List.of("query_ms", "processing_ms", "total_ms", "availability_ms", "availability_buckets", "availability_hosts")) {
             assertThat(result).containsPattern(field + "=\\d+");
         }
         service.refreshAt(now + 11000);

@@ -6,8 +6,13 @@ public record PingSample(
     String target,
     long measuredAt,
     Double latency,
-    String error
+    String error,
+    double latencyLimit
 ) {
+    public PingSample(long id, String hostId, String target, long measuredAt, Double latency, String error) {
+        this(id, hostId, target, measuredAt, latency, error, 20d);
+    }
+
     public static final byte SUCCESS = 0,
         LOSS = 1,
         ERROR = 2;

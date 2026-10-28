@@ -34,8 +34,8 @@ class DashboardTests {
             java.util.List.of(new Host.Group("g1", "Produção"))
         );
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(host));
-        store.save(host, new PingProbe.Result(10d, null));
-        analysis.refresh();
+        var saved = store.save(host, new PingProbe.Result(10d, null));
+        analysis.refreshAt(saved.measuredAt() + 1);
         for (int hours : new int[] { 1, 2, 4, 8, 12, 24, 48 })
             mvc.perform(get("/hosts/details").param("hours", String.valueOf(hours)))
                 .andExpect(status().isOk())
