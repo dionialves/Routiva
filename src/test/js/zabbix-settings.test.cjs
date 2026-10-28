@@ -10,7 +10,7 @@ class Element {
   addEventListener(name, fn) { this.listeners[name] = fn; }
   fire(name) { return this.listeners[name]?.({ preventDefault() {}, stopPropagation() {} }); }
 }
-async function setup() {
+async function setup(extraHosts = 0) {
   const ids = ['connection-form', 'selection-search', 'group-list', 'inventory-panel', 'inventory-hint', 'inventory-empty', 'selection-count', 'select-visible', 'clear-visible', 'last-sync'];
   const elements = Object.fromEntries(ids.map(id => [`#${id}`, new Element()]));
   elements['.settings-page'] = new Element(); elements['.settings-page'].dataset.synced = 'true';
@@ -20,10 +20,13 @@ async function setup() {
     { id: '1', name: 'Compartilhado', ip: '10.0.0.1', groups: [groupA, groupB] },
     { id: '2', name: 'Servidor', ip: '10.0.0.2', groups: [groupA] }
   ], selectedHosts: [], selectedGroups: [] };
+  for (let i = 0; i < extraHosts; i++) inventory.hosts.push({ id: `extra-${i}`, name: `Host ${i}`, ip: '', groups: [groupA] });
+  const save = new Element(); save.dataset.action = 'selecao'; elements.save = save;
+  elements.requests = [];
   let ready;
-  const document = { querySelector: key => elements[key], querySelectorAll: () => [], createElement: () => new Element(), addEventListener: (_, fn) => { ready = fn; } };
+  const document = { querySelector: key => elements[key], querySelectorAll: () => [save], createElement: () => new Element(), addEventListener: (_, fn) => { ready = fn; } };
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/zabbix-settings.js', 'utf8'), {
-    document, window: { notify() {} }, fetch: async () => ({ ok: true, json: async () => inventory }), FormData
+    document, window: { notify() {} }, fetch: async (url, options) => { elements.requests.push({ url, options }); return { ok: true, json: async () => options ? { message: 'Salvo' } : inventory }; }, FormData, URLSearchParams
   });
   ready(); await new Promise(resolve => setImmediate(resolve));
   return elements;
@@ -75,4 +78,18 @@ test('search normalizes accents and shortcuts only change filtered hosts', async
   assert.equal(el['#group-list'].children[0].children[1].children[1].children[0].checked, true);
   const heading = el['#group-list'].children[0].children[0]; heading.fire('click');
   assert.equal(heading.children[1].attributes['aria-expanded'], 'true');
+});
+
+test('saving a large selection uses URL encoding and preserves every host and CSRF token', async () => {
+  const el = await setup(200);
+  el['#select-visible'].fire('click');
+  el.save.fire('click');
+  await new Promise(resolve => setImmediate(resolve));
+  const request = el.requests.find(r => r.url.endsWith('/api/selecao'));
+  assert.equal(request.options.method, 'POST');
+  assert.ok(request.options.body instanceof URLSearchParams);
+  const data = new URLSearchParams(request.options.body.toString());
+  assert.equal(data.get('csrf'), 'token');
+  assert.deepEqual(data.getAll('groups'), ['a', 'b']);
+  assert.deepEqual(data.getAll('hosts'), ['1', '2', ...Array.from({ length: 200 }, (_, i) => `extra-${i}`)]);
 });

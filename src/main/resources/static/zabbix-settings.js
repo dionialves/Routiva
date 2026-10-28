@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function action(name) {
     if (busy) { window.notify('Aguarde a conclusão da operação em andamento.'); return; }
     busy = true;
-    const data = name === 'conexao' ? new FormData(form) : new FormData();
+    const data = name === 'conexao' ? new URLSearchParams(new FormData(form)) : new URLSearchParams();
     if (name !== 'conexao') data.set('csrf', form.elements.csrf.value);
     if (name === 'selecao') { enabled.forEach(id => data.append('groups', id)); selected.forEach(id => data.append('hosts', id)); }
     form.setAttribute('aria-busy', 'true');
