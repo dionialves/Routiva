@@ -192,42 +192,19 @@ public class SampleStore {
             batch.getBatchId(),
             now
         );
-        List<PingSample> saved = jdbc.query(
-            "SELECT id,host_id,target,measured_at,latency,error,latency_limit FROM ping_sample WHERE collector_id=? AND batch_id=? ORDER BY measured_at,id",
-            (rs, n) ->
-                new PingSample(
-                    rs.getLong("id"),
-                    rs.getString("host_id"),
-                    rs.getString("target"),
-                    rs.getLong("measured_at"),
-                    (Double) rs.getObject("latency"),
-                    rs.getString("error"),
-                    rs.getDouble("latency_limit")
-                ),
-            collector,
-            batch.getBatchId()
-        );
-        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-            new org.springframework.transaction.support.TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    for (var sample : saved) publisher.publishEvent(sample);
-                }
-            }
-        );
     }
 
     private void lockIngestion() {
         jdbc.queryForObject("SELECT id FROM ping_ingestion_guard WHERE id=1 FOR UPDATE", Integer.class);
     }
 
-    /** Releases the ingestion lock before the potentially large history read starts. */
+    /** Capture only committed IDs; release the writer guard before aggregation begins. */
     @org.springframework.transaction.annotation.Transactional(
         propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW
     )
     public long committedBoundary() {
         lockIngestion();
-        return jdbc.queryForObject("SELECT COALESCE(MAX(id),0) FROM ping_sample", Long.class);
+        return jdbc.queryForObject("SELECT GREATEST(COALESCE(MAX(id),0), (SELECT cursor_id FROM ping_aggregation_progress WHERE id=1)) FROM ping_sample", Long.class);
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -278,11 +255,14 @@ public class SampleStore {
         fixedDelayString = "${monitor.cleanup-interval-seconds:600}",
         timeUnit = java.util.concurrent.TimeUnit.SECONDS
     )
+    @org.springframework.transaction.annotation.Transactional
     public void cleanup() {
+        long cursor = jdbc.queryForObject("SELECT cursor_id FROM ping_aggregation_progress WHERE id=1 FOR UPDATE", Long.class);
         jdbc.update(
-            "DELETE FROM ping_sample WHERE measured_at < ?",
-            System.currentTimeMillis() - retention.toMillis()
+            "DELETE FROM ping_sample WHERE measured_at < ? AND id <= ?",
+            System.currentTimeMillis() - retention.toMillis(), cursor
         );
+        jdbc.update("DELETE FROM ping_minute WHERE minute_at < ?", Math.floorDiv(System.currentTimeMillis() - retention.toMillis(), 60000L) * 60000L);
         jdbc.update(
             "DELETE FROM collector_batch WHERE committed_at < ?",
             System.currentTimeMillis() - retention.toMillis()

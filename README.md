@@ -326,7 +326,7 @@ A coleta usa **1 ping por segundo por host** (`PING_INTERVAL_MS=1000`) no proces
 
 Java sincroniza o inventário por gRPC, recebe lotes e confirma depois do commit. Filas limitadas e retransmissão em memória separam o motor da latência do banco. Não há execução de comandos externos de ping. Timeouts são perdas; erros internos e tentativas puladas ficam fora do denominador. Detalhes, limites, métricas e evidências de teste estão em [Operação do coletor](docs/coletor-icmp.md).
 
-Os dados originais continuam no PostgreSQL, com novas colunas opcionais para identidade, status e horários da tentativa. A retenção permanece limitada a 48 horas e a limpeza ocorre a cada 600 segundos. A capacidade do banco e do histórico Java não está certificada para 10.000 hosts.
+Os dados originais continuam no PostgreSQL, com novas colunas opcionais para identidade, status e horários da tentativa. A retenção permanece limitada a 48 horas e a limpeza ocorre a cada 600 segundos, preservando os pings ainda não agregados. A capacidade do banco e das consultas agregadas não está certificada para 10.000 hosts.
 
 As tabelas, colunas, filtros, ordenação e controles de atualização foram preservados. O cabeçalho permite atualizar agora ou escolher 5, 10, 15 ou 60 segundos, com preferência salva no navegador. Esse intervalo atualiza a tela; ele não muda o intervalo dos pings.
 
@@ -372,60 +372,25 @@ monitor.cleanup-interval-seconds=${PING_CLEANUP_INTERVAL_SECONDS:600}
 
 Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no properties, reconstrua a imagem: `docker compose up -d --build --wait app`. Para alterar só o `.env`, recrie o serviço com `docker compose up -d app`.
 
-### Integração e eficiência
+### Agregação persistida e consultas dos indicadores
 
-O coletor grava os resultados no PostgreSQL sem disparar o recálculo dos indicadores. Um processo em background, com agendamento próprio a cada 10 segundos e primeira execução na inicialização, carrega inicialmente o histórico necessário (no mínimo 8 horas) e depois consulta apenas IDs novos de `ping_sample`. O histórico permanece em blocos compactos por host/IP. As somas de latência e contagens de respostas/perdas de cada janela são incrementadas pelas entradas e decrementadas pelas saídas. Os diagnósticos de cobertura e sequências de perda reutilizam resumos dos blocos, inspecionando registros individuais somente nas bordas ou nos blocos modificados.
+O coletor persiste os pings brutos em `ping_sample`. A cada 60 segundos, o banco agrega os novos IDs em `ping_minute`, por host/IP/minuto, mantendo contagens de respostas normais, respostas acima do limite, perdas, erros internos e soma das latências. O Java não mantém histórico bruto em memória.
 
-Cada ciclo captura um limite de IDs confirmados: os escritores da aplicação e a captura desse limite usam a linha de `ping_ingestion_guard` com `FOR UPDATE`. Isso serializa a alocação dos IDs até o commit, evitando perder uma transação que termine depois com ID menor. A captura libera o bloqueio antes da leitura do histórico. A consulta incremental usa `id > cursor AND id <= limite AND measured_at >= início`, com transferência em blocos de 1.000 registros. Escritas externas diretas devem respeitar o mesmo protocolo; IDs não podem ser reutilizados ou registros existentes alterados durante a execução.
+O cursor em `ping_aggregation_progress` e os resumos são atualizados na mesma transação. Lotes podem contribuir para o mesmo minuto, e pings atrasados corrigem minutos anteriores. Em atraso de seis horas ou reinício, a agregação retoma o cursor e drena os lotes pendentes sem esperar um minuto entre eles. A limpeza preserva pings ainda não processados.
 
-Pings atrasados entram nas janelas correspondentes ao horário da medição. Registros futuros ficam pendentes em memória até seu horário chegar; registros vencidos são descartados. As janelas expiram mesmo sem novas gravações. Em falha parcial, o conjunto publicado é preservado, o estado de trabalho é descartado e o ciclo seguinte reconstrói o histórico do banco antes de retomar o cursor incremental. Reinício ou retrocesso do relógio também provocam reconstrução.
+As APIs consultam somente os resumos persistidos para o período e grupo solicitados, sem cache de indicadores ou publicação antecipada de todos os períodos. As séries são agrupadas diretamente no banco. As médias usam a soma de latências dividida pelo total de respostas. Os períodos terminam em minutos completos; o minuto em andamento não é apresentado.
 
-A página consulta somente o último conjunto concluído de indicadores em memória: nenhum acesso à página dispara consulta de pings ou recálculo das janelas. A publicação é atômica, e leitores continuam usando os valores anteriores enquanto o próximo ciclo é processado ou se ele falhar. Antes da primeira publicação, hosts sem indicadores aparecem sem dados. Os ciclos não se sobrepõem; se um processamento exceder 10 segundos, a atualização seguinte atrasa. Alterar o IP separa os históricos. Resultados revertidos por rollback não entram nos indicadores. O detalhe do host participa da mesma publicação: sua carga inicial alcança a retenção configurada (até 48 horas), e os gráficos e totais são preparados em memória no mesmo ciclo. O histórico bruto de latência/perda mantém sua janela própria; a disponibilidade retém contribuições compactas por minuto para preservar as bordas exatas dos períodos móveis.
+A primeira execução agrega automaticamente o histórico bruto ainda disponível. Checkpoints antigos são ignorados, sem excluir suas tabelas. A interface informa processamento pendente e o limite consolidado. Consulte [agregação por minuto, consistência, migração e operação](docs/agregacao-por-minuto.md).
 
-O estado visual é reconstruído com o histórico disponível ao reiniciar. Sem tentativas elegíveis, a perda fica sem classificação. Não existe serviço de notificações ou registro de alertas externos. Execute uma única instância coletora por banco; não há coordenação distribuída de coleta entre réplicas. Para inventários grandes, dimensione o coletor, o banco e a memória do histórico conforme os limites documentados.
+### Log da agregação
 
-### Log dos ciclos de indicadores
+O arquivo é `logs/indicators.log` localmente ou `/var/log/routiva/indicators.log` no Compose. Eventos atuais: `MINUTE_BATCH_COMMITTED`, `MINUTE_AGGREGATION_COMPLETED` e `MINUTE_AGGREGATION_FAILED`. Cada lote informa cursor, limite confirmado, pings e resumos tratados. Não há logs por ping.
 
-Cada ciclo concluído ou com falha gera uma linha em inglês, com timestamp UTC. O arquivo local padrão é `logs/indicators.log`. No Compose, fica em `/var/log/routiva/indicators.log`, no volume persistente `indicator_logs` do serviço `app`.
-
-```bash
-# Execução local
-tail -F logs/indicators.log
-
-# Docker Compose
-docker compose exec app tail -F /var/log/routiva/indicators.log
+```sh
+docker compose exec -T app tail -F /var/log/routiva/indicators.log
 ```
 
-Eventos: `INITIAL_LOAD_COMPLETED`, `CYCLE_COMPLETED` e `CYCLE_FAILED`. `run_id` identifica uma execução do serviço e `cycle` cresce durante essa execução, incluindo ciclos que falharam. `reference_at` é o horário de referência dos cálculos; o timestamp da linha é o horário do registro. Não são emitidos logs por ping ou por consulta da página.
-
-Exemplo ilustrativo de um ciclo concluído e de uma falha (valores fictícios):
-
-```text
-2026-10-27T17:00:10.205Z INFO  event=CYCLE_COMPLETED run_id=8c85a18e-338b-4f85-9b19-6c0c5b14f458 cycle=2 reference_at=2026-10-27T17:00:10Z hosts=700 fetched=7000 incorporated=7000 late_arrivals=0 future_queued=0 future_released=0 pending_future=0 discarded=0 expired_5m=7000 expired_1h=7000 expired_8h=7000 removed_pings=7000 retained_pings=20160000 query_ms=120 processing_ms=85 total_ms=205 schedule_overrun=false cursor=20167000 reset_reason=none indicators_published=true
-2026-10-27T17:00:23.000Z ERROR event=CYCLE_FAILED run_id=8c85a18e-338b-4f85-9b19-6c0c5b14f458 cycle=3 reference_at=2026-10-27T17:00:20Z mode=incremental stage=database_query error=DataAccessResourceFailureException fetched=0 incorporated=0 discarded=0 total_ms=3000 indicators_published=false last_published_cycle=2 next_cycle=initial_load
-```
-
-No ciclo concluído do exemplo, entraram 7.000 pings e saíram definitivamente outros 7.000, mantendo 20.160.000 registros no histórico ativo. Na falha, a página continua usando os indicadores publicados no ciclo 2.
-
-| Campo | Significado |
-|---|---|
-| `hosts` | Quantidade de pares host/IP com histórico ativo |
-| `fetched` | Registros entregues pela consulta incremental, inclusive na carga inicial |
-| `incorporated` | Registros incorporados ao histórico ativo, incluindo futuros liberados neste ciclo |
-| `late_arrivals` | Entre os recém-consultados e incorporados, medições anteriores à referência do ciclo passado; zero na carga inicial |
-| `future_queued`, `future_released`, `pending_future` | Entradas na fila futura, saídas da fila e tamanho final da fila |
-| `discarded` | Registros lidos ou liberados da fila que foram rejeitados por IP inválido ou janela vencida |
-| `expired_5m`, `expired_1h`, `expired_8h` | Registros que saíram de cada janela; não devem ser somados como remoções da memória |
-| `removed_pings`, `retained_pings` | Remoções definitivas por expiração e quantidade final do histórico ativo, sem a fila futura |
-| `query_ms` | Tempo da captura do limite e da consulta SQL, descontado o processamento dos registros no Java |
-| `processing_ms`, `total_ms` | Demais operações do ciclo e duração total, antes da escrita da linha de log |
-| `schedule_overrun` | Indica que o processamento ultrapassou 10 segundos |
-| `cursor`, `reset_reason` | Último ID confirmado e motivo de reconstrução por relógio ou limite do banco |
-| `indicators_published` | Se o ciclo publicou um conjunto completo de indicadores |
-
-Contagens representam registros de ping, inclusive erros internos; as fórmulas de latência e perda continuam excluindo esses erros. `incorporated` pode superar `fetched` quando pings futuros são liberados. Registros já excluídos pelo filtro SQL não entram em `discarded`. Em falha, os contadores são parciais e não representam publicação: `last_published_cycle` identifica o último resultado disponível e `next_cycle=initial_load` indica reconstrução. O campo `error` contém somente o nome da classe da exceção, sem mensagens SQL ou credenciais.
-
-A rotação ocorre diariamente ou ao atingir 10 MB. Os arquivos antigos são comprimidos, com retenção de 7 dias e limite total de 100 MB para arquivos arquivados; o arquivo ativo é adicional. A limpeza ocorre nas rotações e na inicialização. Os limites são configuráveis por `INDICATORS_LOG_MAX_FILE_SIZE`, `INDICATORS_LOG_MAX_HISTORY` e `INDICATORS_LOG_TOTAL_SIZE_CAP`. `INDICATORS_LOG_PATH` permite mudar o caminho local; o Compose fixa o caminho dentro do volume. O diretório deve permitir escrita pelo usuário da aplicação. Falhas de escrita são sinalizadas pelo mecanismo de logging, mas o arquivo não é um registro transacional dos pings.
+A rotação continua diária ou por tamanho, configurável pelas variáveis `INDICATORS_LOG_*`.
 
 ## Configurações no `.env`
 
@@ -443,6 +408,8 @@ A rotação ocorre diariamente ou ao atingir 10 MB. Os arquivos antigos são com
 | PING_INTERVAL_MS | 1000 | Intervalo de disparo das coletas |
 | PING_TIMEOUT_MS | 1500 | Limite de espera por resposta |
 | COLLECTOR_ADDRESS | unix:///run/routiva/collector.sock | Endpoint gRPC local do Go |
+| INDICATORS_AGGREGATION_INTERVAL_MS | 60000 | Intervalo entre ciclos de agregação |
+| INDICATORS_AGGREGATION_PAGE_SIZE | 10000 | Máximo de pings por transação de agregação |
 | INDICATORS_LOG_PATH | logs/indicators.log | Caminho local; no Compose é fixado em /var/log/routiva/indicators.log |
 | INDICATORS_LOG_MAX_FILE_SIZE | 10MB | Tamanho para rotação de cada arquivo |
 | INDICATORS_LOG_MAX_HISTORY | 7 | Retenção dos arquivos arquivados, em dias |
@@ -454,7 +421,7 @@ A rotação ocorre diariamente ou ao atingir 10 MB. Os arquivos antigos são com
 | APP_BIND_ADDRESS | 0.0.0.0 | Interface publicada pelo Docker; use 127.0.0.1 com Nginx local |
 | APP_PORT | 8080 | Porta do servidor publicada pelo contêiner Spring |
 
-Os intervalos precisam ser positivos. O painel lê os indicadores em memória; o processo em background realiza a carga inicial e as consultas incrementais ao banco. A capacidade para inventários grandes depende de validação de carga. Não possui autenticação e escuta apenas localmente por padrão. Para acesso em rede, configure `SERVER_ADDRESS` e um proxy com autenticação e HTTPS conforme seu ambiente.
+Os intervalos precisam ser positivos. O painel calcula o período solicitado a partir dos resumos no banco; o processo em background agrega os novos pings em lotes transacionais. A capacidade para inventários grandes depende de validação de carga. Não possui autenticação e escuta apenas localmente por padrão. Para acesso em rede, configure `SERVER_ADDRESS` e um proxy com autenticação e HTTPS conforme seu ambiente.
 
 ## Testes
 
@@ -470,29 +437,21 @@ node --test src/test/js/*.test.cjs
 
 Esses testes verificam os quatro intervalos do painel, a atualização manual, a persistência da escolha e a recuperação após erros, além do polling de 10 segundos do detalhe, troca de período, descarte de respostas antigas e representação de perdas. Node.js não é necessário para executar a aplicação ou os contêineres.
 
-Os testes Java usam H2 em memória e uma API Zabbix simulada. Incluem os limites percentuais exatos, remoção dos gatilhos antigos de perda, falhas/lacunas do coletor, janelas incompletas, outras cadências, amostras atrasadas/duplicadas/futuras, restauração após reinício e percentuais reais na apresentação. Cobrem limites das cores, persistência de falhas, médias sem zeros artificiais, renderização com/sem hosts, HTMX local, login por usuário/senha, reutilização/renovação da sessão, logout, credenciais inválidas e leitura do `.env`. A integração real exige PostgreSQL disponível, acesso ao seu Zabbix e conectividade ICMP.
+Os testes Java usam H2 em memória e uma API Zabbix simulada. A agregação e as consultas também podem ser testadas em PostgreSQL isolado, conforme [o guia de validação](docs/agregacao-por-minuto.md). A cobertura inclui seis horas pendentes, reinício entre lotes, rollback, consumidores concorrentes, minutos divididos entre lotes, pings atrasados, limites históricos, média ponderada, proteção da retenção e consultas sem pings brutos ou checkpoints. Os testes da interface preservam filtros, paginação e sinalização de processamento pendente. A integração operacional ainda exige acesso ao Zabbix e conectividade ICMP.
 
 Referências: [user.login](https://www.zabbix.com/documentation/current/en/manual/api/reference/user/login), [API Zabbix](https://www.zabbix.com/documentation/7.0/en/manual/api), [imagem oficial PostgreSQL](https://hub.docker.com/_/postgres).
 
 ### Disponibilidade
 
-A página `/disponibilidade` oferece somente os períodos de 5 minutos, 1 hora, 8 horas, 24 horas e 48 horas. Apenas esses relatórios são calculados e mantidos em memória, contados a partir da referência da última publicação. Os relatórios de 2, 4 e 12 horas foram removidos. As páginas de Hosts, Grupos de Hosts e detalhes individuais não estão mais disponíveis; os nomes na tabela de Disponibilidade são textos sem links. A API individual preservada aceita apenas 1, 8, 24 e 48 horas; o relatório de 5 minutos continua disponível nas APIs do dashboard com `minutes=5`. As APIs apenas leem relatórios prontos, sem consultar pings ou recalcular indicadores durante a requisição.
+A página `/disponibilidade` oferece somente os períodos de 5 minutos, 1 hora, 8 horas, 24 horas e 48 horas. Os relatórios são calculados sob demanda, sem cache, a partir dos resumos persistidos e do limite de minutos completos consolidado. Os relatórios de 2, 4 e 12 horas foram removidos. As páginas de Hosts, Grupos de Hosts e detalhes individuais não estão mais disponíveis; os nomes na tabela de Disponibilidade são textos sem links. A API individual preservada aceita apenas 1, 8, 24 e 48 horas; o relatório de 5 minutos continua disponível nas APIs do dashboard com `minutes=5`. As APIs calculam os totais e séries a partir de `ping_minute`, sem consultar pings brutos.
 
 Os cálculos ficam no backend: H = respostas dentro do limite, D = respostas acima dele, P = pings sem resposta; T = H + D + P. Disponibilidade técnica = 100 × (H + D) / T; operacional = 100 × H / T. Erros internos não entram no denominador. Sem amostras válidas, os percentuais são nulos (`SEM_DADOS`). O total usa contagens de todas as amostras, nunca médias dos percentuais das janelas.
 
-O limite padrão é 20 ms e é definido nas configurações do aplicativo (maior que zero, até 60000 ms). A migração atribui 20 ms às amostras anteriores. Novas amostras guardam o limite enviado na configuração da tentativa, preservando o histórico após alterações. Não há nova coleta de ping. As consultas consideram o IP atual e a retenção disponível. Os gráficos agrupam em minutos fixos em todos os períodos, inclusive 48 horas. O minuto atual é provisório e atualizado no mesmo ponto a cada publicação. As bordas são recortadas ao período móvel exato; minutos encerrados podem ser corrigidos por amostras atrasadas. Janelas vazias ou com apenas falhas internas têm valores nulos; janelas parcialmente coletadas usam somente amostras válidas e não implicam cobertura integral.
+O limite padrão é 20 ms e é definido nas configurações do aplicativo (maior que zero, até 60000 ms). A migração atribui 20 ms às amostras anteriores. Novas amostras guardam o limite enviado na configuração da tentativa, preservando o histórico após alterações. Não há nova coleta de ping. As consultas consideram o IP atual e a retenção disponível. Os gráficos agrupam em minutos fixos em todos os períodos, inclusive 48 horas. O minuto atual é excluído. As bordas são alinhadas ao minuto; minutos encerrados podem ser corrigidos por amostras atrasadas. Janelas vazias ou com apenas falhas internas têm valores nulos; janelas parcialmente coletadas usam somente amostras válidas e não implicam cobertura integral.
 
-Perdas recebem marcadores vermelhos no gráfico de latência, mesmo quando a média está normal. Perda total interrompe a curva de latência; ausência de dados recebe marcador cinza. Clique nos gráficos ou use o controle de minutos com as setas para consultar contagens, percentuais e erros internos. A página informa separadamente o horário do cálculo e o da última medição, a retenção limitada e publicações com mais de 30 segundos. Falhas de consulta preservam os valores visíveis.
+Perdas recebem marcadores vermelhos no gráfico de latência, mesmo quando a média está normal. Perda total interrompe a curva de latência; ausência de dados recebe marcador cinza. Clique nos gráficos ou use o controle de minutos com as setas para consultar contagens, percentuais e erros internos. A página informa separadamente o horário do cálculo e o da última medição, a retenção limitada e processamentos com mais de três minutos. Falhas de consulta preservam os valores visíveis.
 
 API: `GET /api/hosts/{id}/availability?hours=24`, com totais, contagens, série temporal de 60 segundos, `version`, `evaluatedAt`, `lastSampleAt` e `retainedFrom`. Os pontos incluem `at`, `from`, `to`, `partial` e `provisional`; `metrics.errors` informa erros internos separados das perdas. A resposta usa `Cache-Control: no-store`. O limite global vem de `monitor.latency-limit-ms` (`PING_LATENCY_LIMIT_MS`, padrão 20 ms), sem ajuste por host. Cada amostra preserva o `latency_limit` vigente na coleta.
 
 
-Detalhes de implementação, limites e validação: [Disponibilidade incremental](docs/disponibilidade-incremental.md).
-
-### Recuperação dos indicadores após reinício
-
-Indicadores e gráficos agora possuem checkpoints persistidos no PostgreSQL. O primeiro é salvo já no primeiro ciclo publicado, inclusive durante a atualização dos novos registros; os seguintes usam `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão: 300000 ms, cinco minutos). São mantidas duas gerações, com reutilização de blocos inalterados.
-
-No reinício, o app restaura o checkpoint e consulta somente IDs posteriores ao cursor salvo. Sem checkpoint utilizável, começa vazio no limite atual de IDs e agrega apenas novos registros. Não há carga retroativa de `ping_sample`. Checkpoints v2 continuam compatíveis; uma posição histórica antiga é ignorada, preservando os dados já agregados. Aguarde `CHECKPOINT_SAVED` para ter um ponto durável de retomada.
-
-Consulte [fluxo e configuração da coleta incremental](docs/coleta-incremental-indicadores.md) e [formato, consistência, logs e operação dos checkpoints](docs/checkpoints-indicadores.md).
+Detalhes de implementação, limites, migração e validação: [Agregação por minuto](docs/agregacao-por-minuto.md).

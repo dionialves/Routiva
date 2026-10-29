@@ -1,3 +1,5 @@
+> Documento histórico da arquitetura anterior. A implementação atual usa [resumos persistidos por minuto](agregacao-por-minuto.md), sem históricos brutos em memória ou checkpoints.
+
 # Proposta: disponibilidade incremental no detalhe do host
 
 Status: primeira etapa implementada em 28/10/2026. Este documento preserva a análise e as decisões da proposta; consulte [implementação e validação](disponibilidade-incremental.md) para o comportamento entregue. A transmissão de deltas permanece uma evolução opcional.

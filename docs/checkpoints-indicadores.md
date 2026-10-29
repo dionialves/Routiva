@@ -1,3 +1,5 @@
+> Documento histórico da arquitetura anterior. A implementação atual usa [resumos persistidos por minuto](agregacao-por-minuto.md), sem históricos brutos em memória ou checkpoints.
+
 # Checkpoints dos indicadores e gráficos
 
 A aplicação mantém os cálculos em memória e grava um ponto de recuperação no PostgreSQL já no primeiro ciclo publicado, mesmo com carga parcial, e, depois, a cada cinco minutos. O intervalo é configurável por `INDICATORS_CHECKPOINT_INTERVAL_MS` (padrão `300000`, mínimo `1000`). Não altera a cadência de dez segundos dos indicadores.

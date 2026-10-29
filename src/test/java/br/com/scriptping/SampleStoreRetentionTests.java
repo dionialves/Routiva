@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest(
     properties = {
+        "indicators.aggregation.initial-delay-ms=3600000",
         "spring.datasource.url=jdbc:h2:mem:retention;DB_CLOSE_DELAY=-1",
         "zabbix.url=",
         "zabbix.username=",
@@ -39,6 +40,7 @@ class SampleStoreRetentionTests {
         insert("old-failure", now - Duration.ofHours(48).toMillis() - 5000, null, "Tempo esgotado");
         insert("recent-response", now - Duration.ofHours(48).toMillis() + 60000, 12d, null);
         insert("recent-failure", now - 1000, null, "Tempo esgotado");
+        markProcessed();
         store.cleanup();
         assertThat(
             jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class)
@@ -50,6 +52,7 @@ class SampleStoreRetentionTests {
         long now = System.currentTimeMillis();
         insert("custom-old", now - Duration.ofHours(3).toMillis(), 10d, null);
         insert("custom-recent", now - Duration.ofHours(1).toMillis(), 10d, null);
+        markProcessed();
         new SampleStore(jdbc, 2, 600).cleanup();
         assertThat(
             jdbc.queryForList(
@@ -64,6 +67,7 @@ class SampleStoreRetentionTests {
         long now = System.currentTimeMillis();
         insert("over-limit", now - Duration.ofHours(49).toMillis(), 10d, null);
         insert("within-limit", now - Duration.ofHours(47).toMillis(), 10d, null);
+        markProcessed();
         new SampleStore(jdbc, 168, 600).cleanup();
         assertThat(
             jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class)
@@ -78,6 +82,10 @@ class SampleStoreRetentionTests {
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
             new SampleStore(jdbc, 48, 0)
         ).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private void markProcessed() {
+        jdbc.update("UPDATE ping_aggregation_progress SET cursor_id=(SELECT COALESCE(MAX(id),0) FROM ping_sample) WHERE id=1");
     }
 
     private void insert(String hostId, long at, Double latency, String error) {

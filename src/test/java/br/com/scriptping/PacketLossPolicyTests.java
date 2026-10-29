@@ -18,21 +18,20 @@ class PacketLossPolicyTests {
 
     @Test
     void hourlyLimitsUseExactUnroundedPercentages() {
-        var engine = new PacketLossAnalyzer(new PacketLossPolicy(), 1000, 2000);
-        assertThat(engine.hourQuality(33, 10000, true)).isEqualTo(Quality.NORMAL);
-        assertThat(engine.hourQuality(330001, 100000000, true)).isEqualTo(Quality.ATENCAO);
-        assertThat(engine.hourQuality(999, 100000, true)).isEqualTo(Quality.ATENCAO);
-        assertThat(engine.hourQuality(1, 100, true)).isEqualTo(Quality.CRITICO);
-        assertThat(engine.hourQuality(2, 100, true)).isEqualTo(Quality.CRITICO);
-        assertThat(engine.hourQuality(0, 0, true)).isEqualTo(Quality.DADOS_INSUFICIENTES);
-        assertThat(engine.hourQuality(1, 1000, false)).isEqualTo(Quality.DADOS_INSUFICIENTES);
+        var engine = new PacketLossPolicy();
+        assertThat(engine.windowQuality(33, 10000)).isEqualTo(Quality.NORMAL);
+        assertThat(engine.windowQuality(330001, 100000000)).isEqualTo(Quality.ATENCAO);
+        assertThat(engine.windowQuality(999, 100000)).isEqualTo(Quality.ATENCAO);
+        assertThat(engine.windowQuality(1, 100)).isEqualTo(Quality.CRITICO);
+        assertThat(engine.windowQuality(2, 100)).isEqualTo(Quality.CRITICO);
+        assertThat(engine.windowQuality(0, 0)).isEqualTo(Quality.DADOS_INSUFICIENTES);
     }
 
     @Test
     void limitsAreConfigurableAndValidated() {
         var rules = new PacketLossPolicy();
         rules.setHourNormalMaxPercent(.05);
-        assertThat(new PacketLossAnalyzer(rules, 1000, 2000).hourQuality(1, 1000, true)).isEqualTo(
+        assertThat(rules.windowQuality(1, 1000)).isEqualTo(
             Quality.ATENCAO
         );
         rules.setMinimumCoverageRatio(2);

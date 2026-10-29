@@ -72,35 +72,32 @@ CREATE TABLE IF NOT EXISTS ping_ingestion_guard (
 INSERT INTO ping_ingestion_guard(id)
 SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM ping_ingestion_guard WHERE id = 1);
 
--- Checkpoint rows are visible only after their complete manifest commits.
-CREATE TABLE IF NOT EXISTS analytics_checkpoint_guard (
-    id INTEGER PRIMARY KEY CHECK (id = 1), epoch VARCHAR(36)
+-- Durable progress and additive minute summaries. Existing checkpoint tables are
+-- intentionally left untouched on upgrades, but are no longer created or read.
+CREATE TABLE IF NOT EXISTS ping_aggregation_progress (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    cursor_id BIGINT NOT NULL DEFAULT 0,
+    boundary_id BIGINT NOT NULL DEFAULT 0,
+    processed_at BIGINT,
+    complete_through BIGINT NOT NULL DEFAULT 0
 );
-INSERT INTO analytics_checkpoint_guard(id)
-SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM analytics_checkpoint_guard WHERE id=1);
-CREATE TABLE IF NOT EXISTS analytics_checkpoint (
-    id VARCHAR(36) PRIMARY KEY,
-    reference_at BIGINT NOT NULL,
-    cursor_id BIGINT NOT NULL,
-    compatibility VARCHAR(64) NOT NULL,
-    epoch VARCHAR(36) NOT NULL,
-    part_count INTEGER NOT NULL,
-    manifest VARCHAR(64) NOT NULL
-);
-CREATE TABLE IF NOT EXISTS analytics_checkpoint_block (
-    hash VARCHAR(64) PRIMARY KEY, payload BYTEA NOT NULL
-);
-CREATE TABLE IF NOT EXISTS analytics_checkpoint_part (
-    checkpoint_id VARCHAR(36) NOT NULL REFERENCES analytics_checkpoint(id) ON DELETE CASCADE,
-    sequence_no INTEGER NOT NULL,
-    kind VARCHAR(16) NOT NULL,
+INSERT INTO ping_aggregation_progress(id)
+SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM ping_aggregation_progress WHERE id=1);
+
+CREATE TABLE IF NOT EXISTS ping_minute (
     host_id VARCHAR(255) NOT NULL,
     target VARCHAR(255) NOT NULL,
-    ordinal_no INTEGER NOT NULL,
-    block_hash VARCHAR(64) NOT NULL REFERENCES analytics_checkpoint_block(hash),
-    PRIMARY KEY(checkpoint_id, sequence_no)
+    minute_at BIGINT NOT NULL,
+    total_pings BIGINT NOT NULL,
+    healthy BIGINT NOT NULL,
+    degraded BIGINT NOT NULL,
+    lost BIGINT NOT NULL,
+    errors BIGINT NOT NULL,
+    latency_sum DOUBLE PRECISION NOT NULL,
+    last_sample_at BIGINT NOT NULL,
+    PRIMARY KEY(host_id, target, minute_at)
 );
-CREATE INDEX IF NOT EXISTS idx_checkpoint_block_reference ON analytics_checkpoint_part(block_hash);
+CREATE INDEX IF NOT EXISTS idx_ping_minute_time ON ping_minute(minute_at);
 
 CREATE TABLE IF NOT EXISTS zabbix_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),

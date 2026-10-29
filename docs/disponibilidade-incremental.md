@@ -1,3 +1,5 @@
+> Documento histórico da arquitetura anterior. A implementação atual usa [resumos persistidos por minuto](agregacao-por-minuto.md), sem históricos brutos em memória ou checkpoints.
+
 # Disponibilidade em memória
 
 Implementado em 28/10/2026 a partir da proposta de disponibilidade incremental.

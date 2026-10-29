@@ -1,3 +1,5 @@
+> Documento histórico da arquitetura anterior. A implementação atual usa [resumos persistidos por minuto](agregacao-por-minuto.md), sem históricos brutos em memória ou checkpoints.
+
 # Coleta incremental dos indicadores
 
 O serviço agrega novos registros em memória e salva checkpoints. Não consulta páginas históricas nem reconstrói o estado a partir de medições antigas de `ping_sample`.

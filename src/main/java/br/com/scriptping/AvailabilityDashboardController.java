@@ -14,12 +14,9 @@ public class AvailabilityDashboardController {
         @RequestParam(defaultValue = "") String groupId) {
         if (!AvailabilityDashboard.MINUTES.contains(minutes))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Período inválido");
-        var publication = dashboard.current();
-        var periods = publication.views().get(groupId);
-        if (periods == null && !groupId.isEmpty() && !publication.views().isEmpty())
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo indisponível");
+        var result = dashboard.query(minutes, groupId);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-            .body(new Response(publication.groups(), periods == null ? null : periods.get(minutes)));
+            .body(new Response(result.groups(), result.view()));
     }
 
     public record Page(int number, int pages, int total, int selectedTotal, int size) {}

@@ -130,3 +130,20 @@ test('host names remain plain text without links to removed detail pages', async
   assert.equal(name.textContent, 'Host 0');
   assert.equal(name.href, undefined);
 });
+
+test('minute aggregation shows consolidation and pending backlog without claiming fresh collection', async () => {
+  const ui=surface(), payload=data();
+  payload.view.report.load.phase='CATCHING_UP';
+  payload.view.report.to=Math.floor(Date.now()/60000)*60000;
+  ui.respond(0,payload);await flush();
+  assert.equal(ui.elements['collection-state'].textContent,'Processando histórico pendente');
+  assert.match(ui.elements['availability-status'].textContent,/Dados consolidados até/);
+  assert.match(ui.elements['availability-coverage'].textContent,/dados ainda são parciais/);
+});
+
+test('normal minute aggregation interval is not treated as an outdated ten-second publication', async () => {
+  const ui=surface(), payload=data();
+  payload.view.report.evaluatedAt=Date.now()-90000;
+  ui.respond(0,payload);await flush();
+  assert.equal(ui.elements['collection-state'].textContent,'Coleta recebendo medições');
+});

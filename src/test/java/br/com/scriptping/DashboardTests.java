@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {
+        "indicators.aggregation.initial-delay-ms=3600000",
         "spring.datasource.url=jdbc:h2:mem:test;DB_CLOSE_DELAY=-1",
         "zabbix.url=",
         "zabbix.username=",
@@ -50,14 +51,14 @@ class DashboardTests {
     AvailabilityDashboard availabilityDashboard;
 
     @Test
-    void availabilityFiltersGroupsAndReadsOnePublishedVersion() throws Exception {
+    void availabilityFiltersGroupsAndReadsMinuteSummaries() throws Exception {
         var first = new Host("av-a", "Host A", "127.0.0.1", java.util.List.of(new Host.Group("av-g", "Grupo A")));
         var second = new Host("av-b", "Host B", "127.0.0.2", java.util.List.of());
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(first, second));
         var saved = store.save(first, new PingProbe.Result(10d, null));
         store.save(second, new PingProbe.Result(null, "Tempo esgotado"));
-        IncrementalTestSupport.refreshFully(analysis, System.currentTimeMillis() + 1);
-        availabilityDashboard.refresh();
+        jdbc.update("UPDATE ping_sample SET measured_at=measured_at-60000");
+        aggregation.aggregate();
         for (int minutes : new int[] {5, 60, 480, 1440, 2880}) {
             mvc.perform(get("/api/availability").param("minutes", String.valueOf(minutes)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.view.hosts.length()").value(2))
@@ -82,7 +83,10 @@ class DashboardTests {
     SampleStore store;
 
     @Autowired
-    PacketLossAnalysisService analysis;
+    MinuteAggregationService aggregation;
+
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     MonitorService monitor;
@@ -92,15 +96,12 @@ class DashboardTests {
         Host h = new Host("test", "Teste", "127.0.0.1", java.util.List.of());
         store.save(h, new PingProbe.Result(10d, null));
         store.save(h, new PingProbe.Result(null, "Tempo esgotado"));
-        analysis.refresh();
-        var s = analysis
-            .current(java.util.List.of(h))
-            .get("test")
-            .stats();
-        assertThat(s.hour()).isEqualTo(10d);
-        assertThat(s.minute()).isEqualTo(10d);
-        assertThat(s.current()).isNull();
-        assertThat(s.failures()).isEqualTo(1);
-        assertThat(s.attempts()).isEqualTo(2);
+        jdbc.update("UPDATE ping_sample SET measured_at=measured_at-60000 WHERE host_id='test'");
+        aggregation.aggregate();
+        var result = availabilityDashboard.query(5, "");
+        var summaries = jdbc.queryForMap("SELECT SUM(total_pings) AS total, SUM(lost) AS lost, SUM(latency_sum) AS latency FROM ping_minute WHERE host_id='test'");
+        assertThat(((Number)summaries.get("total")).longValue()).isEqualTo(2);
+        assertThat(((Number)summaries.get("lost")).longValue()).isEqualTo(1);
+        assertThat(((Number)summaries.get("latency")).doubleValue()).isEqualTo(10d);
     }
 }

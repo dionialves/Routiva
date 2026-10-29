@@ -3,7 +3,7 @@ package br.com.scriptping;
 import java.util.*;
 import org.springframework.stereotype.Service;
 
-/** Read-only facade: requests never query samples or calculate indicators. */
+/** Queries persisted minute summaries; raw samples are never loaded for requests. */
 @Service
 public class HostAvailabilityService {
     static final List<Integer> PERIODS = List.of(1, 8, 24, 48);
@@ -16,6 +16,8 @@ public class HostAvailabilityService {
     public record Metrics(long healthy, long degraded, long lost, Double technical,
         Double operational, Double loss, Double degradation, Double latency, long errors) {
         public long total() { return healthy + degraded + lost; }
+        @com.fasterxml.jackson.annotation.JsonProperty("totalPings")
+        public long totalPings() { return total() + errors; }
         public String state() { return total() == 0 ? "SEM_DADOS" : "COM_DADOS"; }
     }
 
