@@ -380,7 +380,7 @@ O cursor em `ping_aggregation_progress` e os resumos são atualizados na mesma t
 
 As APIs consultam somente os resumos persistidos para o período e grupo solicitados, sem cache de indicadores ou publicação antecipada de todos os períodos. As séries são agrupadas diretamente no banco. As médias usam a soma de latências dividida pelo total de respostas. Os períodos terminam em minutos completos; o minuto em andamento não é apresentado.
 
-A primeira execução agrega automaticamente o histórico bruto ainda disponível. Checkpoints antigos são ignorados, sem excluir suas tabelas. A interface informa processamento pendente e o limite consolidado. Consulte [agregação por minuto, consistência, migração e operação](docs/agregacao-por-minuto.md).
+A primeira execução agrega automaticamente o histórico bruto ainda disponível. As cinco tabelas antigas de checkpoints e limites por host são excluídas automaticamente na inicialização; os pings, resumos, progresso, recibos e configurações são preservados. A interface informa processamento pendente e o limite consolidado. Consulte [agregação por minuto, consistência, migração e operação](docs/agregacao-por-minuto.md).
 
 ### Log da agregação
 

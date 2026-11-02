@@ -37,7 +37,7 @@ O esquema cria `ping_minute` e `ping_aggregation_progress` automaticamente. Na p
 
 A limpeza respeita a retenção configurada, limitada a 48 horas, mas só apaga pings cujo ID já foi processado. Isso protege atrasos de seis horas ou mais. Uma parada prolongada da agregação pode aumentar o uso de disco; monitore os eventos de falha e o cursor. Resumos vencidos também são removidos. Os IDs permanecem monotônicos mesmo quando todos os pings já processados foram limpos.
 
-As tabelas `analytics_checkpoint*` existentes são ignoradas e preservadas para possibilitar retorno à versão anterior. Não são criadas em bancos novos. Não execute exclusão dessas tabelas durante a primeira implantação. O código, tarefas e configurações de checkpoint foram removidos; sua exclusão física pode ser feita separadamente após validar a migração e o plano de retorno.
+Na inicialização, `schema.sql` exclui automaticamente as cinco tabelas aposentadas: `analytics_checkpoint_part`, `analytics_checkpoint`, `analytics_checkpoint_block`, `analytics_checkpoint_guard` e `host_latency_policy`. A exclusão usa `IF EXISTS`, na ordem das dependências e sem `CASCADE`; pode ser repetida sem afetar as seis tabelas ativas. Os checkpoints antigos e limites por host são excluídos definitivamente. O limite atual permanece em cada amostra (`ping_sample.latency_limit`).
 
 Na implantação, execute apenas uma versão da aplicação por banco. Não mantenha simultaneamente uma versão antiga cuja limpeza não protege os pings pendentes.
 

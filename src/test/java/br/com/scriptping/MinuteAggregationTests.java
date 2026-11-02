@@ -111,14 +111,33 @@ class MinuteAggregationTests extends MinuteTestSupport {
         drain(1);drain(1);
         assertThat(count("total_pings")).isEqualTo(2);assertThat(count("lost")).isEqualTo(1);
     }
-    @Test void schemaUpgradeIsIdempotentAndPreservesExistingCheckpointTables() {
-        jdbc.execute("CREATE TABLE analytics_checkpoint_legacy (id INTEGER)");
-        jdbc.update("INSERT INTO analytics_checkpoint_legacy VALUES (123)");
+    @Test void schemaUpgradeRemovesRetiredTablesAndPreservesActiveDataOnRepeatedStarts() {
+        jdbc.execute("CREATE TABLE analytics_checkpoint_guard (id INTEGER PRIMARY KEY)");
+        jdbc.execute("CREATE TABLE analytics_checkpoint (id VARCHAR(36) PRIMARY KEY)");
+        jdbc.execute("CREATE TABLE analytics_checkpoint_block (hash VARCHAR(64) PRIMARY KEY)");
+        jdbc.execute("CREATE TABLE analytics_checkpoint_part (checkpoint_id VARCHAR(36) REFERENCES analytics_checkpoint(id), block_hash VARCHAR(64) REFERENCES analytics_checkpoint_block(hash))");
+        jdbc.execute("CREATE TABLE host_latency_policy (host_id VARCHAR(255) PRIMARY KEY, latency_limit DOUBLE PRECISION NOT NULL)");
+        jdbc.update("INSERT INTO analytics_checkpoint_guard VALUES (1)");
+        jdbc.update("INSERT INTO analytics_checkpoint VALUES ('old-checkpoint')");
+        jdbc.update("INSERT INTO analytics_checkpoint_block VALUES ('old-block')");
+        jdbc.update("INSERT INTO analytics_checkpoint_part VALUES ('old-checkpoint','old-block')");
+        jdbc.update("INSERT INTO host_latency_policy VALUES ('a',20)");
         insert(end-10000,10d,null);drain(1);
-        new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("schema.sql")).execute(ds);
-        drain(1);
+        jdbc.update("INSERT INTO collector_batch VALUES ('collector',1,?)",now);
+        jdbc.update("INSERT INTO zabbix_settings VALUES (1,'saved-settings')");
+        var progress=summaries.progress();
+        var schema=new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("schema.sql"));
+        schema.execute(ds);schema.execute(ds);
+        for(String name:List.of("analytics_checkpoint_part","analytics_checkpoint","analytics_checkpoint_block","analytics_checkpoint_guard","host_latency_policy")) {
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE LOWER(table_name)=?",Long.class,name)).as(name).isZero();
+        }
         assertThat(count("total_pings")).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT id FROM analytics_checkpoint_legacy",Integer.class)).isEqualTo(123);
+        assertThat(summaries.progress()).isEqualTo(progress);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample",Long.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch",Long.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT payload FROM zabbix_settings WHERE id=1",String.class)).isEqualTo("saved-settings");
+        assertThat(jdbc.queryForObject("SELECT id FROM ping_ingestion_guard",Integer.class)).isEqualTo(1);
+        drain(1);assertThat(count("total_pings")).isEqualTo(1);
     }
     @Test void scheduledWorkerDrainsAllPagesAndLogsCommittedProgress() {
         for(int i=0;i<10;i++)insert(end-60000,10d,null);

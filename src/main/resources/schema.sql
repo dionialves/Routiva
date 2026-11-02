@@ -17,11 +17,6 @@ CREATE INDEX IF NOT EXISTS idx_ping_time_id ON ping_sample (measured_at, id);
 ALTER TABLE ping_sample
 ADD COLUMN IF NOT EXISTS latency_limit DOUBLE PRECISION NOT NULL DEFAULT 20;
 
-CREATE TABLE IF NOT EXISTS host_latency_policy (
-    host_id VARCHAR(255) PRIMARY KEY,
-    latency_limit DOUBLE PRECISION NOT NULL CHECK (latency_limit > 0)
-);
-
 -- Nullable additions preserve all historical samples and existing queries.
 ALTER TABLE ping_sample
 ADD COLUMN IF NOT EXISTS collector_id VARCHAR(64);
@@ -72,8 +67,7 @@ CREATE TABLE IF NOT EXISTS ping_ingestion_guard (
 INSERT INTO ping_ingestion_guard(id)
 SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM ping_ingestion_guard WHERE id = 1);
 
--- Durable progress and additive minute summaries. Existing checkpoint tables are
--- intentionally left untouched on upgrades, but are no longer created or read.
+-- Durable progress and additive minute summaries.
 CREATE TABLE IF NOT EXISTS ping_aggregation_progress (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     cursor_id BIGINT NOT NULL DEFAULT 0,
@@ -103,3 +97,11 @@ CREATE TABLE IF NOT EXISTS zabbix_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     payload TEXT NOT NULL
 );
+
+-- Retired tables: drop dependents first, without CASCADE, preserving active data.
+-- Idempotent on fresh databases and on subsequent application starts.
+DROP TABLE IF EXISTS analytics_checkpoint_part;
+DROP TABLE IF EXISTS analytics_checkpoint;
+DROP TABLE IF EXISTS analytics_checkpoint_block;
+DROP TABLE IF EXISTS analytics_checkpoint_guard;
+DROP TABLE IF EXISTS host_latency_policy;
