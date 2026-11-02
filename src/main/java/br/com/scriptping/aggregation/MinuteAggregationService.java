@@ -1,8 +1,9 @@
-package br.com.scriptping;
+package br.com.scriptping.aggregation;
 
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import br.com.scriptping.SampleStore;
 
 /** One bounded SQL aggregation per transaction; drain backlog without a minute wait. */
 @Service

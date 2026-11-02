@@ -7,6 +7,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.core.io.ClassPathResource;
+import br.com.scriptping.aggregation.MinuteAggregationStore;
 
 abstract class MinuteTestSupport {
     DriverManagerDataSource ds;

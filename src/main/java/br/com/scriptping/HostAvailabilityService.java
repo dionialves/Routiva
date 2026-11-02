@@ -30,10 +30,10 @@ public class HostAvailabilityService {
         }
     }
 
-    static class Counts {
-        long h, d, p, e;
-        double sum;
-        Metrics metrics() {
+    public static class Counts {
+        public long h, d, p, e;
+        public double sum;
+        public Metrics metrics() {
             long t = h + d + p;
             return new Metrics(h, d, p, t == 0 ? null : 100d * (h + d) / t,
                 t == 0 ? null : 100d * h / t, t == 0 ? null : 100d * p / t,

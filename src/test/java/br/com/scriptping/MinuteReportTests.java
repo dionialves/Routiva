@@ -3,6 +3,7 @@ package br.com.scriptping;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
+import br.com.scriptping.aggregation.MinuteAggregationStore;
 
 class MinuteReportTests extends MinuteTestSupport {
     @Test void weightedMeansExactMinuteBoundariesEmptyMinutesAndErrors() {

@@ -4,6 +4,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
+import br.com.scriptping.aggregation.MinuteAggregationService;
+import br.com.scriptping.aggregation.MinuteAggregationStore;
 
 class MinuteAggregationTests extends MinuteTestSupport {
     @Test void splitsOneMinuteAcrossBatchesAndUsesHistoricalLatencyLimits() {

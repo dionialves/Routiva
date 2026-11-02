@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.aggregation;
 
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,14 +11,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 @org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization
 public class MinuteAggregationStore {
     static final long MINUTE = 60_000L;
-    record Key(String host, String target) {}
+    public record Key(String host, String target) {}
     public record Progress(long cursor, long boundary, Long processedAt, long completeThrough) {}
     public record Batch(long cursor, long boundary, long rows, int summaries) {}
-    record Summary(String host, String target, long minute, long total, long healthy,
+    public record Summary(String host, String target, long minute, long total, long healthy,
                    long degraded, long lost, long errors, double sum, long last) {
-        Key key() { return new Key(host, target); }
-        HostAvailabilityService.Metrics metrics() {
-            var c = new HostAvailabilityService.Counts();
+        public Key key() { return new Key(host, target); }
+        public br.com.scriptping.HostAvailabilityService.Metrics metrics() {
+            var c = new br.com.scriptping.HostAvailabilityService.Counts();
             c.h=healthy; c.d=degraded; c.p=lost; c.e=errors; c.sum=sum;
             return c.metrics();
         }
@@ -80,7 +80,7 @@ public class MinuteAggregationStore {
     private Summary read(java.sql.ResultSet r, String host, String target, long minute) throws java.sql.SQLException {
         return new Summary(host,target,minute,r.getLong("total_pings"),r.getLong("healthy"),r.getLong("degraded"),r.getLong("lost"),r.getLong("errors"),r.getDouble("latency_sum"),r.getLong("last_sample_at"));
     }
-    Map<Key,Summary> totals(long from,long to,List<Host> hosts) {
+    public Map<Key,Summary> totals(long from,long to,List<br.com.scriptping.Host> hosts) {
         if(hosts.isEmpty()) return Map.of();
         var args=new ArrayList<Object>(List.of(from,to));
         String filter=filter(hosts,args);
@@ -89,7 +89,7 @@ public class MinuteAggregationStore {
             (org.springframework.jdbc.core.RowCallbackHandler)r->{ var s=read(r,r.getString("host_id"),r.getString("target"),0);result.put(s.key(),s); },args.toArray());
         return result;
     }
-    Map<Long,Summary> series(long from,long to,List<Host> hosts) {
+    public Map<Long,Summary> series(long from,long to,List<br.com.scriptping.Host> hosts) {
         if(hosts.isEmpty()) return Map.of();
         var args=new ArrayList<Object>(List.of(from,to));
         String filter=filter(hosts,args);
@@ -98,7 +98,7 @@ public class MinuteAggregationStore {
             (org.springframework.jdbc.core.RowCallbackHandler)r->{long at=r.getLong("minute_at");result.put(at,read(r,"","",at));},args.toArray());
         return result;
     }
-    private String filter(List<Host> hosts,List<Object> args) {
+    private String filter(List<br.com.scriptping.Host> hosts,List<Object> args) {
         var clauses=new ArrayList<String>();
         for(var h:hosts) {clauses.add("(host_id=? AND target=?)");args.add(h.id());args.add(h.ip());}
         return String.join(" OR ",clauses);
