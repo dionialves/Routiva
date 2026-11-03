@@ -5,17 +5,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
-import br.com.scriptping.aggregation.MinuteAggregationStore;
+import br.com.scriptping.aggregation.MinuteAggregationService;
+import br.com.scriptping.aggregation.MinuteAggregationRepository.Key;
+import br.com.scriptping.aggregation.MinuteAggregationRepository.Summary;
 import static br.com.scriptping.HostAvailabilityService.*;
 
 /** Request-scoped calculations from persisted minute summaries. No history or report cache. */
 @Service
 public class PacketLossAnalysisService {
-    private final MinuteAggregationStore store;
+    private final MinuteAggregationService store;
     private final PacketLossPolicy policy;
     private final long retention;
     private final long freshness;
-    public PacketLossAnalysisService(MinuteAggregationStore store,PacketLossPolicy policy,
+    public PacketLossAnalysisService(MinuteAggregationService store,PacketLossPolicy policy,
         @Value("${monitor.retention-hours:48}") long retentionHours,
         @Value("${indicators.aggregation.interval-ms:60000}") long aggregationInterval) {
         if(retentionHours<1 || aggregationInterval<1) throw new IllegalArgumentException("Invalid aggregation interval or retention");
@@ -24,7 +26,7 @@ public class PacketLossAnalysisService {
         this.freshness=aggregationInterval+120000L;
     }
     private static final Metrics EMPTY=new Counts().metrics();
-    private static Metrics metrics(MinuteAggregationStore.Summary s) { return s==null?EMPTY:s.metrics(); }
+    private static Metrics metrics(Summary s) { return s==null?EMPTY:s.metrics(); }
 
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
     public AvailabilityDashboard.View view(List<Host> hosts,int minutes) {
@@ -38,7 +40,7 @@ public class PacketLossAnalysisService {
         var load=new IndicatorLoadStatus(phase,null,progress.processedAt(),retainedFrom,progress.cursor(),progress.boundary());
         String version=progress.cursor()+":"+reference;
         var selected=store.totals(Math.max(from,retainedFrom),reference,hosts);
-        Map<Integer,Map<MinuteAggregationStore.Key,MinuteAggregationStore.Summary>> windows=new HashMap<>();
+        Map<Integer,Map<Key,Summary>> windows=new HashMap<>();
         windows.put(minutes,selected);
         for(int window:List.of(5,60,480)) windows.computeIfAbsent(window,
             n->store.totals(Math.max(reference-n*60000L,retainedFrom),reference,hosts));
@@ -56,7 +58,7 @@ public class PacketLossAnalysisService {
             progress.processedAt(),latest,retainedFrom,load);
         var rows=new ArrayList<AvailabilityDashboard.Row>();
         for(var host:hosts) {
-            var key=new MinuteAggregationStore.Key(host.id(),host.ip());
+            var key=new Key(host.id(),host.ip());
             var s=selected.get(key);
             var recent=windows.get(5).get(key);
             boolean fresh=recent!=null && now-recent.last()<=freshness;
@@ -81,7 +83,7 @@ public class PacketLossAnalysisService {
         }
         return new AvailabilityDashboard.View(report,List.copyOf(rows));
     }
-    private static void append(Counts c,MinuteAggregationStore.Summary s) {
+    private static void append(Counts c,Summary s) {
         if(s==null)return;
         c.h+=s.healthy();c.d+=s.degraded();c.p+=s.lost();c.e+=s.errors();c.sum+=s.sum();
     }

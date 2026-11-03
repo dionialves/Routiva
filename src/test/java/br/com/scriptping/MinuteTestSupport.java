@@ -7,13 +7,14 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.core.io.ClassPathResource;
-import br.com.scriptping.aggregation.MinuteAggregationStore;
+import br.com.scriptping.aggregation.MinuteAggregationRepository;
+import br.com.scriptping.aggregation.MinuteAggregationService;
 
 abstract class MinuteTestSupport {
     DriverManagerDataSource ds;
     JdbcTemplate jdbc;
     DataSourceTransactionManager manager;
-    MinuteAggregationStore summaries;
+    MinuteAggregationService summaries;
     SampleStore samples;
     PacketLossAnalysisService queries;
     String postgresSchema;
@@ -31,7 +32,7 @@ abstract class MinuteTestSupport {
         }
         new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(ds);
         jdbc=new JdbcTemplate(ds);manager=new DataSourceTransactionManager(ds);
-        summaries=new MinuteAggregationStore(jdbc,manager);
+        summaries=new MinuteAggregationService(new MinuteAggregationRepository(jdbc,manager));
         samples=new SampleStore(jdbc,48,600);
         queries=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),48,60000);
     }

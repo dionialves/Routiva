@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
-import br.com.scriptping.aggregation.MinuteAggregationService;
+import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 
 @SpringBootTest(
     properties = {
@@ -84,7 +84,7 @@ class DashboardTests {
     SampleStore store;
 
     @Autowired
-    MinuteAggregationService aggregation;
+    MinuteAggregationScheduled aggregation;
 
     @Autowired
     org.springframework.jdbc.core.JdbcTemplate jdbc;

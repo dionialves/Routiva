@@ -3,7 +3,8 @@ package br.com.scriptping;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
-import br.com.scriptping.aggregation.MinuteAggregationStore;
+import br.com.scriptping.aggregation.MinuteAggregationRepository;
+import br.com.scriptping.aggregation.MinuteAggregationService;
 
 class MinuteReportTests extends MinuteTestSupport {
     @Test void weightedMeansExactMinuteBoundariesEmptyMinutesAndErrors() {
@@ -26,7 +27,7 @@ class MinuteReportTests extends MinuteTestSupport {
     }
     @Test void queryingAnotherPeriodAndRestartNeedNoCheckpointOrWarmup() {
         insert(end-2*3600000L,12d,null);insert(end-10000,8d,null);drain(10);
-        var restarted=new PacketLossAnalysisService(new MinuteAggregationStore(jdbc,manager),new PacketLossPolicy(),48,60000);
+        var restarted=new PacketLossAnalysisService(new MinuteAggregationService(new MinuteAggregationRepository(jdbc,manager)),new PacketLossPolicy(),48,60000);
         assertThat(restarted.viewAt(List.of(host),60,now).report().total().latency()).isEqualTo(8);
         assertThat(restarted.viewAt(List.of(host),480,now).report().total().latency()).isEqualTo(10);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE LOWER(table_name) LIKE 'analytics_checkpoint%'",Long.class)).isZero();

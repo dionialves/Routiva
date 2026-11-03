@@ -5,7 +5,8 @@ import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 import br.com.scriptping.aggregation.MinuteAggregationService;
-import br.com.scriptping.aggregation.MinuteAggregationStore;
+import br.com.scriptping.aggregation.MinuteAggregationRepository;
+import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 
 class MinuteAggregationTests extends MinuteTestSupport {
     @Test void splitsOneMinuteAcrossBatchesAndUsesHistoricalLatencyLimits() {
@@ -31,7 +32,7 @@ class MinuteAggregationTests extends MinuteTestSupport {
         long b=boundary();
         summaries.aggregate(b,7,now);
         assertThat(summaries.progress().completeThrough()).isZero();
-        summaries=new MinuteAggregationStore(jdbc,manager); // Simulate process restart: no in-memory state.
+        summaries=new MinuteAggregationService(new MinuteAggregationRepository(jdbc,manager));
         drain(7);
         assertThat(count("total_pings")).isEqualTo(360);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_minute",Long.class)).isEqualTo(360);
@@ -147,7 +148,7 @@ class MinuteAggregationTests extends MinuteTestSupport {
         var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
         appender.start();logger.addAppender(appender);
         try {
-            new MinuteAggregationService(samples,summaries,3).aggregate();
+            new MinuteAggregationScheduled(samples,summaries,3).aggregate();
             assertThat(count("total_pings")).isEqualTo(10);
             assertThat(appender.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)).anyMatch(s->s.contains("MINUTE_AGGREGATION_COMPLETED"));
         } finally {logger.detachAppender(appender);}
