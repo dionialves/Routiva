@@ -1,0 +1,51 @@
+name: Functional tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn --batch-mode test -Dcollector.enabled=false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: java-test-results
+          path: |
+            target/surefire-reports
+            target/site/jacoco
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test src/test/js/*.test.cjs
+  collector:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: collector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: collector/go.mod
+          cache-dependency-path: collector/go.sum
+      - name: Enable loopback ICMP test
+        run: sudo sysctl -w 'net.ipv4.ping_group_range=0 2147483647'
+      - run: go test -race -count=1 -timeout=120s -coverprofile=coverage.out ./...
+        env:
+          ROUTIVA_REAL_ICMP: '1'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: collector-coverage
+          path: collector/coverage.out

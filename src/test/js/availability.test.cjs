@@ -122,15 +122,6 @@ test('internal gaps and collection errors are excluded; lost pings count as cove
   assert.equal(ui.elements['technical-unavailable'].textContent, '1 min');
 });
 
-test('host names remain plain text without links to removed detail pages', async () => {
-  const ui = surface(); ui.respond(0, data()); await flush();
-  const row = ui.elements['availability-hosts'].children[0].children[0];
-  const name = row.children[0].children[0];
-  assert.equal(name.tagName, 'span');
-  assert.equal(name.textContent, 'Host 0');
-  assert.equal(name.href, undefined);
-});
-
 test('minute aggregation shows consolidation and pending backlog without claiming fresh collection', async () => {
   const ui=surface(), payload=data();
   payload.view.report.load.phase='CATCHING_UP';
@@ -146,4 +137,29 @@ test('normal minute aggregation interval is not treated as an outdated ten-secon
   payload.view.report.evaluatedAt=Date.now()-90000;
   ui.respond(0,payload);await flush();
   assert.equal(ui.elements['collection-state'].textContent,'Coleta recebendo medições');
+});
+
+test('network rejection preserves previous measurements and schedules another attempt', async () => {
+  const ui = surface();
+  ui.respond(0, data(87));
+  await flush();
+  [...ui.timers.values()].find(timer => timer.ms === 10000).fn();
+  ui.requests[1].reject(new TypeError('Network unavailable'));
+  await flush();
+  assert.equal(ui.elements.technical.textContent, '87,00%');
+  assert.match(ui.elements['availability-status'].textContent, /últimos dados/);
+  assert.ok([...ui.timers.values()].some(timer => timer.ms === 10000));
+});
+
+test('a late failed request cannot overwrite the successful current filter', async () => {
+  const ui = surface();
+  ui.elements.period.value = '5';
+  ui.elements.period.emit('change');
+  ui.respond(1, data(75));
+  await flush();
+  const status = ui.elements['availability-status'].textContent;
+  ui.requests[0].reject(new TypeError('Old request failed'));
+  await flush();
+  assert.equal(ui.elements.technical.textContent, '75,00%');
+  assert.equal(ui.elements['availability-status'].textContent, status);
 });

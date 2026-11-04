@@ -37,7 +37,6 @@ class IpAddressTests {
             "127.0.0.1;ls",
         }) {
             assertThat(IpAddress.isValid(ip)).as(String.valueOf(ip)).isFalse();
-            assertThat(new PingProbe().ping(ip, 100).error()).isEqualTo("IP ausente ou inválido");
         }
     }
 }

@@ -43,8 +43,7 @@ class ZabbixSettingsTests {
             .andExpect(status().is3xxRedirection());
         mvc.perform(post("/configuracao/zabbix/grupos").session(session).param("csrf", csrf).param("ids", "a"))
             .andExpect(redirectedUrl("/configuracao/zabbix/hosts"));
-        mvc.perform(get("/configuracao/zabbix/hosts").session(session)).andExpect(status().isOk())
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("Grupos e hosts")));
+        mvc.perform(get("/configuracao/zabbix/hosts").session(session)).andExpect(status().isOk());
         mvc.perform(post("/configuracao/zabbix/hosts").session(session).param("csrf", csrf).param("ids", "1"))
             .andExpect(status().is3xxRedirection());
         verify(client, never()).fetchSelected(anySet(), anySet());

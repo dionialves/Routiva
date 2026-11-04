@@ -125,6 +125,63 @@ class ZabbixClientTests {
         }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"5.0.0", "garbage", "7", ""})
+    void unsupportedOrMalformedVersionStopsBeforeLogin(String version) throws Exception {
+        try (var api = new FakeApi(false, version)) {
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            assertThatIllegalStateException().isThrownBy(client::fetch).withMessageContaining("Versão");
+            assertThat(api.methods).containsExactly("apiinfo.version");
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"6.0.32", "6.2.0", "6.4.0", "7.0.0"})
+    void authenticationAndGroupSelectorsFollowVersionBoundaries(String version) throws Exception {
+        try (var api = new FakeApi(false, version)) {
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            assertThat(client.fetch().getFirst().groups()).extracting(Host.Group::id).containsExactly("5", "6");
+            assertThat(api.lastHostParams.has(version.startsWith("6.0") ? "selectGroups" : "selectHostGroups")).isTrue();
+            assertThat(api.violations).isEmpty();
+        }
+    }
+
+    @Test
+    void repeatedSessionExpirationRetriesOnlyOnceAndAllowsLaterRecovery() throws Exception {
+        try (var api = new FakeApi(false)) {
+            api.alwaysExpire = true;
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            assertThatIllegalStateException().isThrownBy(client::fetch);
+            assertThat(api.logins.get()).isEqualTo(2);
+            api.alwaysExpire = false;
+            assertThat(client.fetch()).hasSize(1);
+            assertThat(api.logins.get()).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void absentInterfacesAndGroupsHaveExplicitFallbacks() throws Exception {
+        try (var api = new FakeApi(false)) {
+            api.inventory = "{\"result\":[{\"hostid\":\"h\",\"host\":\"fallback-name\"}]}";
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            var host = client.fetch().getFirst();
+            assertThat(host.name()).isEqualTo("fallback-name");
+            assertThat(host.ip()).isEmpty();
+            assertThat(host.groups()).containsExactly(new Host.Group("ungrouped", "Sem grupo"));
+        }
+    }
+
+    @Test
+    void groupsAreSortedAndConnectionTestChecksReadPermissions() throws Exception {
+        try (var api = new FakeApi(false)) {
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            client.testConnection();
+            assertThat(api.methods).containsExactly("apiinfo.version", "user.login", "hostgroup.get");
+            assertThat(client.groups()).extracting(Host.Group::name).containsExactly("alpha", "Zulu");
+            assertThat(api.logins.get()).isEqualTo(1);
+        }
+    }
+
     private static class FakeApi implements AutoCloseable {
 
         final HttpServer server;
@@ -132,6 +189,8 @@ class ZabbixClientTests {
         final List<String> methods = new ArrayList<>();
         final List<String> violations = new ArrayList<>();
         volatile boolean expire;
+        volatile boolean alwaysExpire;
+        String inventory = INVENTORY;
         com.fasterxml.jackson.databind.JsonNode lastHostParams;
         String triggers = "[]";
         final String version;
@@ -172,7 +231,7 @@ class ZabbixClientTests {
                         ? "{\"error\":{\"data\":\"Login failed\"}}"
                         : "{\"result\":\"session-" + number + "\"}";
                 } else {
-                    boolean legacy = version.equals("6.0.32");
+                    boolean legacy = version.startsWith("6.0.") || version.startsWith("6.2.");
                     if (legacy) {
                         if (
                             authorization != null ||
@@ -182,7 +241,7 @@ class ZabbixClientTests {
                                 .equals("session-" + logins.get())
                         ) violations.add("Invalid legacy session");
                         if (
-                            method.equals("host.get") &&
+                            method.equals("host.get") && version.startsWith("6.0.") &&
                             (!request.path("params").has("selectGroups") ||
                                 request.path("params").has("selectHostGroups"))
                         ) violations.add("Invalid legacy groups selector");
@@ -191,13 +250,14 @@ class ZabbixClientTests {
                         request.has("auth")
                     ) violations.add("Invalid session");
                     if (method.equals("user.logout")) response = "{\"result\":true}";
-                    else if (expire) {
+                    else if (expire || alwaysExpire) {
                         expire = false;
                         response =
                             "{\"error\":{\"code\":-32602,\"data\":\"Session terminated, re-login, please.\"}}";
                     } else if (method.equals("trigger.get")) response =
                         "{\"result\":" + triggers + "}";
-                    else response = legacy ? INVENTORY.replace("hostgroups", "groups") : INVENTORY;
+                    else if (method.equals("hostgroup.get")) response = "{\"result\":[{\"groupid\":\"2\",\"name\":\"Zulu\"},{\"groupid\":\"1\",\"name\":\"alpha\"}]}";
+                    else response = version.startsWith("6.0.") ? inventory.replace("hostgroups", "groups") : inventory;
                 }
                 byte[] body = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");

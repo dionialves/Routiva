@@ -125,6 +125,30 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.13</version>
+        <configuration>
+          <includes>
+            <include>br/com/scriptping/**</include>
+          </includes>
+          <excludes>
+            <exclude>br/com/scriptping/collector/proto/**</exclude>
+            <exclude>**/*$Hibernate*</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution>
+            <goals><goal>prepare-agent</goal></goals>
+          </execution>
+          <execution>
+            <id>coverage-report</id>
+            <phase>test</phase>
+            <goals><goal>report</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>
