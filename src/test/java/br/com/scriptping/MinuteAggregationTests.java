@@ -4,8 +4,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
-import br.com.scriptping.aggregation.MinuteAggregationService;
-import br.com.scriptping.aggregation.MinuteAggregationRepository;
 import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 
 class MinuteAggregationTests extends MinuteTestSupport {
@@ -32,7 +30,7 @@ class MinuteAggregationTests extends MinuteTestSupport {
         long b=boundary();
         summaries.aggregate(b,7,now);
         assertThat(summaries.progress().completeThrough()).isZero();
-        summaries=new MinuteAggregationService(new MinuteAggregationRepository(jdbc,manager));
+        startAggregation();
         drain(7);
         assertThat(count("total_pings")).isEqualTo(360);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_minute",Long.class)).isEqualTo(360);
@@ -61,6 +59,38 @@ class MinuteAggregationTests extends MinuteTestSupport {
         }
         assertThat(count("total_pings")).isEqualTo(50);
     }
+    @Test void committedBoundaryWaitsForIngestionToCommit() throws Exception {
+        try (var pool = Executors.newSingleThreadExecutor();
+             var writer = ds.getConnection()) {
+            writer.setAutoCommit(false);
+            try (var sql = writer.createStatement()) {
+                sql.executeQuery("SELECT id FROM ping_ingestion_guard WHERE id=1 FOR UPDATE").close();
+            }
+            try (var insert = writer.prepareStatement(
+                "INSERT INTO ping_sample(host_id,target,measured_at,latency) VALUES(?,?,?,?)")) {
+                insert.setString(1, host.id());
+                insert.setString(2, host.ip());
+                insert.setLong(3, end - 10000);
+                insert.setDouble(4, 10);
+                insert.executeUpdate();
+            }
+
+            var started = new CountDownLatch(1);
+            var captured = pool.submit(() -> {
+                started.countDown();
+                return boundary();
+            });
+            try {
+                assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+                assertThatThrownBy(() -> captured.get(150, TimeUnit.MILLISECONDS))
+                    .isInstanceOf(TimeoutException.class);
+            } finally {
+                writer.commit();
+            }
+            assertThat(captured.get(5, TimeUnit.SECONDS))
+                .isEqualTo(jdbc.queryForObject("SELECT MAX(id) FROM ping_sample", Long.class));
+        }
+    }
     @Test void idGapsAndDeletionAfterAggregationDoNotResetProgress() {
         jdbc.execute("ALTER TABLE ping_sample ALTER COLUMN id RESTART WITH 1000000");
         insert(end-10000,10d,null);drain(2);
@@ -76,13 +106,14 @@ class MinuteAggregationTests extends MinuteTestSupport {
         assertThat(summaries.totals(end-60000,end,List.of(host)).values().iterator().next().lost()).isZero();
         assertThat(summaries.totals(end-60000,end,List.of(changed)).values().iterator().next().lost()).isEqualTo(1);
     }
-    @Test void pendingRowsSurviveRetentionUntilAggregated() {
+    @Test void retentionDeletesOnlyProcessedRawSamplesAndKeepsTheirSummaries() {
         long old=System.currentTimeMillis()-49*3600000L;
         insert(old,10d,null);
-        samples.cleanup();
+        retention.cleanup();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample",Long.class)).isEqualTo(1);
-        drain(10);samples.cleanup();
+        drain(10);retention.cleanup();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample",Long.class)).isZero();
+        assertThat(count("total_pings")).isEqualTo(1);
     }
     @Test void nonFiniteAndNegativeLatenciesFollowRawOutcomeSemantics() {
         insert(end-1000,Double.NaN,null);
@@ -148,7 +179,7 @@ class MinuteAggregationTests extends MinuteTestSupport {
         var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
         appender.start();logger.addAppender(appender);
         try {
-            new MinuteAggregationScheduled(samples,summaries,3).aggregate();
+            new MinuteAggregationScheduled(summaries,3).aggregate();
             assertThat(count("total_pings")).isEqualTo(10);
             assertThat(appender.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)).anyMatch(s->s.contains("MINUTE_AGGREGATION_COMPLETED"));
         } finally {logger.detachAppender(appender);}

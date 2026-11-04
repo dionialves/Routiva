@@ -5,19 +5,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import br.com.scriptping.SampleStore;
 
-/** One bounded SQL aggregation per transaction; drain backlog without a minute wait. */
+/** Drain the committed backlog, with one transaction per batch. */
 @Service
 public class MinuteAggregationScheduled {
 
     private static final Logger LOG = LoggerFactory.getLogger("routiva.indicators");
-    private final SampleStore samples;
     private final MinuteAggregationService summaries;
     private final int pageSize;
 
     public MinuteAggregationScheduled(
-        SampleStore samples,
         MinuteAggregationService summaries,
         @Value("${indicators.aggregation.page-size:10000}")
         int pageSize
@@ -27,7 +24,6 @@ public class MinuteAggregationScheduled {
                 "Aggregation page size must be between 1 and 100000"
             );
 
-        this.samples = samples;
         this.summaries = summaries;
         this.pageSize = pageSize;
     }
@@ -42,9 +38,9 @@ public class MinuteAggregationScheduled {
 
         try {
             long reference = System.currentTimeMillis();
-            long boundary = samples.committedBoundary();
+            long boundary = summaries.committedBoundary();
 
-            MinuteAggregationRepository.Batch batch;
+            MinuteAggregationService.Batch batch;
 
             do {
                 batch = summaries.aggregate(boundary, pageSize, reference);

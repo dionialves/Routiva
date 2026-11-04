@@ -3,8 +3,6 @@ package br.com.scriptping;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
-import br.com.scriptping.aggregation.MinuteAggregationRepository;
-import br.com.scriptping.aggregation.MinuteAggregationService;
 
 class MinuteReportTests extends MinuteTestSupport {
     @Test void weightedMeansExactMinuteBoundariesEmptyMinutesAndErrors() {
@@ -27,7 +25,8 @@ class MinuteReportTests extends MinuteTestSupport {
     }
     @Test void queryingAnotherPeriodAndRestartNeedNoCheckpointOrWarmup() {
         insert(end-2*3600000L,12d,null);insert(end-10000,8d,null);drain(10);
-        var restarted=new PacketLossAnalysisService(new MinuteAggregationService(new MinuteAggregationRepository(jdbc,manager)),new PacketLossPolicy(),48,60000);
+        startAggregation();
+        var restarted=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),48,60000);
         assertThat(restarted.viewAt(List.of(host),60,now).report().total().latency()).isEqualTo(8);
         assertThat(restarted.viewAt(List.of(host),480,now).report().total().latency()).isEqualTo(10);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE LOWER(table_name) LIKE 'analytics_checkpoint%'",Long.class)).isZero();
@@ -38,6 +37,26 @@ class MinuteReportTests extends MinuteTestSupport {
         assertThat(queries.viewAt(List.of(host,b),5,now).report().total().latency()).isEqualTo(20);
         assertThat(queries.viewAt(List.of(host),5,now).report().total().operational()).isEqualTo(100);
         assertThat(queries.viewAt(List.of(),5,now).report().total().technical()).isNull();
+    }
+    @Test void largeHostSelectionMatchesOnlyExactHostAndTargetPairs() {
+        var other = new Host("b", "Host B", "127.0.0.2", List.of());
+        var crossedA = new Host(host.id(), host.name(), other.ip(), List.of());
+        var crossedB = new Host(other.id(), other.name(), host.ip(), List.of());
+        insert(end - 10000, 10d, null);
+        insert(other, end - 10000, 20d, null, 20);
+        insert(crossedA, end - 10000, 90d, null, 20);
+        insert(crossedB, end - 10000, 100d, null, 20);
+        drain(10);
+
+        var selected = new ArrayList<>(List.of(host, other));
+        for (int i = 0; i < 600; i++) {
+            selected.add(new Host("missing-" + i, "Missing", host.ip(), List.of()));
+        }
+        var totals = summaries.totals(end - 60000, end, selected);
+        var series = summaries.series(end - 60000, end, selected);
+        assertThat(totals).hasSize(2);
+        assertThat(series.get(end - 60000).total()).isEqualTo(2);
+        assertThat(series.get(end - 60000).sum()).isEqualTo(30d);
     }
     @Test void backlogAndStaleDataRemainExplicit() {
         insert(end-60000,10d,null);insert(end-30000,10d,null);

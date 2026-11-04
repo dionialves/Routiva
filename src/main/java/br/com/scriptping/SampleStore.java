@@ -3,10 +3,9 @@ package br.com.scriptping;
 import java.time.*;
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Component;
 
-@Repository
+@Component
 @org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization
 public class SampleStore {
 
@@ -130,7 +129,7 @@ public class SampleStore {
             ) > 0
         ) return;
         long now = System.currentTimeMillis(),
-            cutoff = now - retention.toMillis();
+            cutoff = retentionCutoff(now);
         List<Object[]> rows = new ArrayList<>();
         for (var r : batch.getResultsList()) {
             if (
@@ -198,15 +197,6 @@ public class SampleStore {
         jdbc.queryForObject("SELECT id FROM ping_ingestion_guard WHERE id=1 FOR UPDATE", Integer.class);
     }
 
-    /** Capture only committed IDs; release the writer guard before aggregation begins. */
-    @org.springframework.transaction.annotation.Transactional(
-        propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW
-    )
-    public long committedBoundary() {
-        lockIngestion();
-        return jdbc.queryForObject("SELECT GREATEST(COALESCE(MAX(id),0), (SELECT cursor_id FROM ping_aggregation_progress WHERE id=1)) FROM ping_sample", Long.class);
-    }
-
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public void readIncrement(long after, long through, long cutoff, java.util.function.Consumer<PingSample> consumer) {
         jdbc.query(connection -> {
@@ -250,22 +240,15 @@ public class SampleStore {
         long lossesFiveMinutes
     ) {}
 
-    // PROVISÓRIO: executa ao iniciar e no intervalo configurado; substituir pela futura política de retenção.
-    @Scheduled(
-        fixedDelayString = "${monitor.cleanup-interval-seconds:600}",
-        timeUnit = java.util.concurrent.TimeUnit.SECONDS
-    )
-    @org.springframework.transaction.annotation.Transactional
-    public void cleanup() {
-        long cursor = jdbc.queryForObject("SELECT cursor_id FROM ping_aggregation_progress WHERE id=1 FOR UPDATE", Long.class);
+    public long retentionCutoff(long now) {
+        return now - retention.toMillis();
+    }
+
+    public void deleteExpiredSamplesAndReceipts(long cutoff, long processedCursor) {
         jdbc.update(
             "DELETE FROM ping_sample WHERE measured_at < ? AND id <= ?",
-            System.currentTimeMillis() - retention.toMillis(), cursor
+            cutoff, processedCursor
         );
-        jdbc.update("DELETE FROM ping_minute WHERE minute_at < ?", Math.floorDiv(System.currentTimeMillis() - retention.toMillis(), 60000L) * 60000L);
-        jdbc.update(
-            "DELETE FROM collector_batch WHERE committed_at < ?",
-            System.currentTimeMillis() - retention.toMillis()
-        );
+        jdbc.update("DELETE FROM collector_batch WHERE committed_at < ?", cutoff);
     }
 }

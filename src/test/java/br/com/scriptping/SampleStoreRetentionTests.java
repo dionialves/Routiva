@@ -3,6 +3,7 @@ package br.com.scriptping;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
+import br.com.scriptping.aggregation.MinuteRetention;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,7 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class SampleStoreRetentionTests {
 
     @Autowired
-    SampleStore store;
+    MinuteRetention retention;
 
     @Autowired
     JdbcTemplate jdbc;
@@ -41,7 +42,7 @@ class SampleStoreRetentionTests {
         insert("recent-response", now - Duration.ofHours(48).toMillis() + 60000, 12d, null);
         insert("recent-failure", now - 1000, null, "Tempo esgotado");
         markProcessed();
-        store.cleanup();
+        retention.cleanup();
         assertThat(
             jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class)
         ).containsExactly("recent-failure", "recent-response");
@@ -53,7 +54,7 @@ class SampleStoreRetentionTests {
         insert("custom-old", now - Duration.ofHours(3).toMillis(), 10d, null);
         insert("custom-recent", now - Duration.ofHours(1).toMillis(), 10d, null);
         markProcessed();
-        new SampleStore(jdbc, 2, 600).cleanup();
+        retention.cleanup(new SampleStore(jdbc, 2, 600).retentionCutoff(now));
         assertThat(
             jdbc.queryForList(
                 "SELECT host_id FROM ping_sample WHERE host_id LIKE 'custom-%' ORDER BY host_id",
@@ -68,7 +69,7 @@ class SampleStoreRetentionTests {
         insert("over-limit", now - Duration.ofHours(49).toMillis(), 10d, null);
         insert("within-limit", now - Duration.ofHours(47).toMillis(), 10d, null);
         markProcessed();
-        new SampleStore(jdbc, 168, 600).cleanup();
+        retention.cleanup(new SampleStore(jdbc, 168, 600).retentionCutoff(now));
         assertThat(
             jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class)
         ).containsExactly("within-limit");

@@ -6,8 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
 import br.com.scriptping.aggregation.MinuteAggregationService;
-import br.com.scriptping.aggregation.MinuteAggregationRepository.Key;
-import br.com.scriptping.aggregation.MinuteAggregationRepository.Summary;
+import br.com.scriptping.aggregation.MinuteAggregationService.Key;
+import br.com.scriptping.aggregation.MinuteAggregationService.Summary;
 import static br.com.scriptping.HostAvailabilityService.*;
 
 /** Request-scoped calculations from persisted minute summaries. No history or report cache. */

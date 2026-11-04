@@ -11,14 +11,6 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 public class ScriptPingApplication {
 
     @Bean
-    public ThreadPoolTaskScheduler indicatorScheduler() {
-        var scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(1);
-        scheduler.setThreadNamePrefix("indicators-");
-        return scheduler;
-    }
-
-    @Bean
     public ThreadPoolTaskScheduler taskScheduler() {
         var scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(1);
