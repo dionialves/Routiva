@@ -1,5 +1,7 @@
 package br.com.scriptping;
 
+import br.com.scriptping.ingestion.SampleIngestionService;
+
 import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -46,11 +48,12 @@ abstract class MinuteTestSupport {
         }
         context = new AnnotationConfigApplicationContext();
         context.register(TransactionConfiguration.class, MinuteAggregationService.class, MinuteRetention.class);
-        context.registerBean(SampleStore.class, () -> new SampleStore(jdbc, 48, 600));
+        context.register(SampleIngestionService.class);
+        context.registerBean(JdbcTemplate.class, () -> jdbc);
         context.registerBean("entityManagerFactory", LocalContainerEntityManagerFactoryBean.class, () -> {
             var factory = new LocalContainerEntityManagerFactoryBean();
             factory.setDataSource(ds);
-            factory.setPackagesToScan(MinuteAggregationService.class.getPackageName());
+            factory.setPackagesToScan(MinuteAggregationService.class.getPackageName(), SampleIngestionService.class.getPackageName());
             factory.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
             factory.setJpaPropertyMap(Map.of("hibernate.jdbc.batch_size", 50));
             return factory;
@@ -62,7 +65,7 @@ abstract class MinuteTestSupport {
         retention = context.getBean(MinuteRetention.class);
     }
 
-    @EnableJpaRepositories(basePackageClasses = MinuteAggregationService.class)
+    @EnableJpaRepositories(basePackageClasses = {MinuteAggregationService.class, SampleIngestionService.class})
     @EnableTransactionManagement
     static class TransactionConfiguration {}
 

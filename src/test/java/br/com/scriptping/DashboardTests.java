@@ -56,9 +56,8 @@ class DashboardTests {
         var first = new Host("av-a", "Host A", "127.0.0.1", java.util.List.of(new Host.Group("av-g", "Grupo A")));
         var second = new Host("av-b", "Host B", "127.0.0.2", java.util.List.of());
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(first, second));
-        var saved = store.save(first, new PingProbe.Result(10d, null));
-        store.save(second, new PingProbe.Result(null, "Tempo esgotado"));
-        jdbc.update("UPDATE ping_sample SET measured_at=measured_at-60000");
+        insertSample(first, 10d, null);
+        insertSample(second, null, "Tempo esgotado");
         aggregation.aggregate();
         for (int minutes : new int[] {5, 60, 480, 1440, 2880}) {
             mvc.perform(get("/api/availability").param("minutes", String.valueOf(minutes)))
@@ -81,9 +80,6 @@ class DashboardTests {
     MockMvc mvc;
 
     @Autowired
-    SampleStore store;
-
-    @Autowired
     MinuteAggregationScheduled aggregation;
 
     @Autowired
@@ -95,14 +91,20 @@ class DashboardTests {
     @Test
     void persistsFailuresWithoutTurningThemIntoZero() {
         Host h = new Host("test", "Teste", "127.0.0.1", java.util.List.of());
-        store.save(h, new PingProbe.Result(10d, null));
-        store.save(h, new PingProbe.Result(null, "Tempo esgotado"));
-        jdbc.update("UPDATE ping_sample SET measured_at=measured_at-60000 WHERE host_id='test'");
+        insertSample(h, 10d, null);
+        insertSample(h, null, "Tempo esgotado");
         aggregation.aggregate();
         var result = availabilityDashboard.query(5, "");
         var summaries = jdbc.queryForMap("SELECT SUM(total_pings) AS total, SUM(lost) AS lost, SUM(latency_sum) AS latency FROM ping_minute WHERE host_id='test'");
         assertThat(((Number)summaries.get("total")).longValue()).isEqualTo(2);
         assertThat(((Number)summaries.get("lost")).longValue()).isEqualTo(1);
         assertThat(((Number)summaries.get("latency")).doubleValue()).isEqualTo(10d);
+    }
+
+    private void insertSample(Host host, Double latency, String error) {
+        jdbc.update(
+            "INSERT INTO ping_sample(host_id,target,measured_at,latency,error,latency_limit) VALUES(?,?,?,?,?,?)",
+            host.id(), host.ip(), System.currentTimeMillis() - 60000, latency, error, 20d
+        );
     }
 }

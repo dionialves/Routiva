@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import br.com.scriptping.Host;
-import br.com.scriptping.PingSample;
+import br.com.scriptping.ingestion.PingSample;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;

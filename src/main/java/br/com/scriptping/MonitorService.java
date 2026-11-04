@@ -1,5 +1,7 @@
 package br.com.scriptping;
 
+import br.com.scriptping.ingestion.CollectorClient;
+
 import java.net.URI;
 import java.util.*;
 import org.springframework.stereotype.Service;

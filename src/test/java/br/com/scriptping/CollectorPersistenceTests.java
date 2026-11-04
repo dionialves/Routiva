@@ -1,5 +1,9 @@
 package br.com.scriptping;
 
+import br.com.scriptping.ingestion.PingSample;
+
+import br.com.scriptping.ingestion.SampleIngestionService;
+
 import static org.assertj.core.api.Assertions.*;
 
 import br.com.scriptping.collector.proto.*;
@@ -22,7 +26,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 class CollectorPersistenceTests {
 
     @Autowired
-    SampleStore store;
+    SampleIngestionService store;
 
     @Autowired
     JdbcTemplate jdbc;

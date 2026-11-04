@@ -1,5 +1,9 @@
 package br.com.scriptping;
 
+import br.com.scriptping.ingestion.CollectorBatchRepository;
+import br.com.scriptping.ingestion.SampleIngestionService;
+import br.com.scriptping.ingestion.SampleIngestionRepository;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
@@ -29,6 +33,12 @@ class SampleStoreRetentionTests {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    SampleIngestionRepository repository;
+
+    @Autowired
+    CollectorBatchRepository receipts;
+
     @org.junit.jupiter.api.BeforeEach
     void clearSamples() {
         jdbc.update("DELETE FROM ping_sample");
@@ -54,7 +64,7 @@ class SampleStoreRetentionTests {
         insert("custom-old", now - Duration.ofHours(3).toMillis(), 10d, null);
         insert("custom-recent", now - Duration.ofHours(1).toMillis(), 10d, null);
         markProcessed();
-        retention.cleanup(new SampleStore(jdbc, 2, 600).retentionCutoff(now));
+        retention.cleanup(new SampleIngestionService(repository, receipts, 2, 600, 20d).retentionCutoff(now));
         assertThat(
             jdbc.queryForList(
                 "SELECT host_id FROM ping_sample WHERE host_id LIKE 'custom-%' ORDER BY host_id",
@@ -69,7 +79,7 @@ class SampleStoreRetentionTests {
         insert("over-limit", now - Duration.ofHours(49).toMillis(), 10d, null);
         insert("within-limit", now - Duration.ofHours(47).toMillis(), 10d, null);
         markProcessed();
-        retention.cleanup(new SampleStore(jdbc, 168, 600).retentionCutoff(now));
+        retention.cleanup(new SampleIngestionService(repository, receipts, 168, 600, 20d).retentionCutoff(now));
         assertThat(
             jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class)
         ).containsExactly("within-limit");
@@ -78,10 +88,10 @@ class SampleStoreRetentionTests {
     @Test
     void rejectsNonPositiveRetentionOrCleanupInterval() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-            new SampleStore(jdbc, 0, 600)
+            new SampleIngestionService(repository, receipts, 0, 600, 20d)
         ).isInstanceOf(IllegalArgumentException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-            new SampleStore(jdbc, 48, 0)
+            new SampleIngestionService(repository, receipts, 48, 0, 20d)
         ).isInstanceOf(IllegalArgumentException.class);
     }
 

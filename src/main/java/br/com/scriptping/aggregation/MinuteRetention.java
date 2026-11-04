@@ -2,7 +2,7 @@ package br.com.scriptping.aggregation;
 
 import java.util.concurrent.TimeUnit;
 
-import br.com.scriptping.SampleStore;
+import br.com.scriptping.ingestion.SampleIngestionService;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,10 +10,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MinuteRetention {
 
-    private final SampleStore samples;
+    private final SampleIngestionService samples;
     private final MinuteAggregationRepository repository;
 
-    MinuteRetention(SampleStore samples, MinuteAggregationRepository repository) {
+    MinuteRetention(SampleIngestionService samples, MinuteAggregationRepository repository) {
         this.samples = samples;
         this.repository = repository;
     }

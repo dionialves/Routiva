@@ -1,4 +1,4 @@
-package br.com.scriptping.aggregation;
+package br.com.scriptping.ingestion;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

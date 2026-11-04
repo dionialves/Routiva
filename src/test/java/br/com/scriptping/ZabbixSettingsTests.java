@@ -1,5 +1,7 @@
 package br.com.scriptping;
 
+import br.com.scriptping.ingestion.CollectorClient;
+
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;

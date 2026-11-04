@@ -1,5 +1,9 @@
 package br.com.scriptping;
 
+import br.com.scriptping.ingestion.SampleIngestionService;
+
+import br.com.scriptping.ingestion.CollectorClient;
+
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -27,7 +31,7 @@ class CollectorClientTests {
         var writesAtAck = new AtomicInteger();
         var callbackThreads = ConcurrentHashMap.<Thread>newKeySet();
         var writerThreads = ConcurrentHashMap.<Thread>newKeySet();
-        var store = mock(SampleStore.class);
+        var store = mock(SampleIngestionService.class);
         doAnswer(invocation -> {
             writerThreads.add(Thread.currentThread());
             if (calls.incrementAndGet() == 1) {

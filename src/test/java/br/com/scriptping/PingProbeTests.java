@@ -1,5 +1,7 @@
 package br.com.scriptping;
 
+import br.com.scriptping.ingestion.PingSample;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;

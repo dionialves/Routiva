@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.ingestion;
 
 public record PingSample(
     long id,

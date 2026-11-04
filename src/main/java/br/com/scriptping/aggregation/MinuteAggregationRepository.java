@@ -2,7 +2,7 @@ package br.com.scriptping.aggregation;
 
 import java.util.List;
 
-import br.com.scriptping.PingSample;
+import br.com.scriptping.ingestion.PingSample;
 import br.com.scriptping.aggregation.MinuteAggregationService.Summary;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
@@ -27,7 +27,7 @@ interface MinuteAggregationRepository extends JpaRepository<PingMinute, MinuteKe
     AggregationProgress lockProgress();
 
     @Query("""
-        select new br.com.scriptping.PingSample(
+        select new br.com.scriptping.ingestion.PingSample(
             s.id, s.hostId, s.target, s.measuredAt, s.latency, s.error, s.latencyLimit)
         from PingSampleRow s where s.id > :after and s.id <= :through order by s.id
         """)

@@ -1,7 +1,7 @@
 package br.com.scriptping;
 
 public record PacketLossAnalysis(
-    SampleStore.Stats stats,
+    Stats stats,
     Quality minute,
     Quality hour,
     int consecutive,
@@ -13,6 +13,29 @@ public record PacketLossAnalysis(
     boolean fresh,
     boolean collectorHealthy
 ) {
+    public record Stats(
+        Double hour,
+        Double minute,
+        Double current,
+        Long measuredAt,
+        String error,
+        long attempts,
+        long failures,
+        long attemptsLastHour,
+        long lossesLastHour,
+        long attemptsLastMinute,
+        long lossesLastMinute,
+        Double eightHours,
+        Double latencyHour,
+        Double fiveMinutes,
+        long attemptsEightHours,
+        long lossesEightHours,
+        long attemptsLatencyHour,
+        long lossesLatencyHour,
+        long attemptsFiveMinutes,
+        long lossesFiveMinutes
+    ) {}
+
     public enum Quality {
         DADOS_INSUFICIENTES,
         NORMAL,

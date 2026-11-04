@@ -1,5 +1,7 @@
-package br.com.scriptping;
+package br.com.scriptping.ingestion;
 
+import br.com.scriptping.Host;
+import br.com.scriptping.IpAddress;
 import br.com.scriptping.collector.proto.*;
 import io.grpc.ManagedChannel;
 import io.grpc.netty.GrpcSslContexts;
@@ -28,7 +30,7 @@ public class CollectorClient implements HealthIndicator {
 
     private record Delivery(Batch batch, long generation) {}
 
-    private final SampleStore store;
+    private final SampleIngestionService store;
     private final String address, ca, cert, key, executable;
     private final long interval, timeout;
     private final boolean enabled;
@@ -50,7 +52,7 @@ public class CollectorClient implements HealthIndicator {
     private long nextConnect;
 
     public CollectorClient(
-        SampleStore store,
+        SampleIngestionService store,
         @Value("${collector.address:unix:///run/routiva/collector.sock}") String address,
         @Value("${collector.tls-ca:}") String ca,
         @Value("${collector.tls-cert:}") String cert,
