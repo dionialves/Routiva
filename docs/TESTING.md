@@ -26,9 +26,9 @@ Os caminhos Java abaixo são relativos a `src/test/java/br/com/scriptping`; Java
 | Classificação de medições | `PingSampleTests`, `PacketLossPolicyTests` | Zero válido, timeout, falha interna, NaN/infinito/negativos, limites percentuais exatos |
 | Conexão Zabbix | `ZabbixClientTests` | Login, sessão reutilizada/expirada, renovação limitada, versões 6.0/6.2/6.4/7, versão inválida, credenciais rejeitadas |
 | Inventário remoto | `ZabbixClientTests` | Seleções explícitas, grupos ordenados, interface prioritária, host sem interface/grupo, problemas ICMP reconhecidos |
-| Configuração persistida | `ZabbixSettingsTests`, `ZabbixSettingsPersistenceTests` | Restauração, valores iniciais, dados corrompidos, falha de escrita sem publicar estado não salvo |
-| Autorização de coleta | `MonitorServiceTests`, `ZabbixSettingsTests` | Interseção host/grupo, metadados filtrados, remoção de autorização, senha preservada, troca de servidor limpa inventário |
-| Sincronização manual | `MonitorServiceTests`, `ApiContractTests` | Sem consulta no início, conexão não configurada, falha preserva inventário/data, recuperação, autenticação antes da sincronização |
+| Configuração persistida | `ZabbixSettingsTests`, `ZabbixSettingsPersistenceTests`, `ZabbixSettingsRepositoryTests` | Restauração, valores iniciais, dados corrompidos, compatibilidade com JSON existente, inserção/atualização via JPA, falha de escrita sem publicar estado não salvo |
+| Autorização de coleta | `ZabbixServiceTests`, `ZabbixSettingsTests` | Interseção host/grupo, metadados filtrados, remoção de autorização, senha preservada, troca de servidor limpa inventário |
+| Sincronização manual | `ZabbixServiceTests`, `ApiContractTests` | Sem consulta no início, conexão não configurada, falha preserva inventário/data, recuperação, autenticação antes da sincronização |
 | APIs de configuração | `ApiContractTests`, `ZabbixSettingsTests` | CSRF ausente/inválido/de outra sessão, ação desconhecida, validação antes de gravar, mensagem segura para erro inesperado |
 | API de histórico do host | `ApiContractTests` | Períodos aceitos, padrão 24h, período inválido/não numérico/overflow, host desconhecido, ausência de cache, ausência de dados |
 | Dashboard | `DashboardTests`, `AvailabilityDashboardTests`, `DashboardBehaviorTests` | Grupos, períodos, paginação, totais globais, busca com acentos, ordenação com zero/nulo/empates, coleta parcial/sem dados/carregando |

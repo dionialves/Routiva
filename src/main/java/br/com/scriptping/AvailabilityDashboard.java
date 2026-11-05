@@ -1,5 +1,7 @@
 package br.com.scriptping;
 
+import br.com.scriptping.zabbix.ZabbixService;
+
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
@@ -10,13 +12,13 @@ import static br.com.scriptping.HostAvailabilityService.*;
 @Service
 public class AvailabilityDashboard {
     static final List<Integer> MINUTES=java.util.stream.Stream.concat(AvailabilityPeriod.OPTIONS.stream().map(AvailabilityPeriod::minutes), java.util.stream.Stream.of(480)).toList();
-    private final MonitorService monitor;
+    private final ZabbixService monitor;
     private final PacketLossAnalysisService analysis;
     public record Row(String id,String name,Metrics metrics,String ip,List<Host.Group> groups,
         String status,boolean fresh,boolean collectorHealthy) {}
     public record View(Report report,List<Row> hosts) {}
     public record Result(List<Host.Group> groups,View view) {}
-    public AvailabilityDashboard(MonitorService monitor,PacketLossAnalysisService analysis) {
+    public AvailabilityDashboard(ZabbixService monitor,PacketLossAnalysisService analysis) {
         this.monitor=monitor;this.analysis=analysis;
     }
     public Result query(int minutes,String groupId) {

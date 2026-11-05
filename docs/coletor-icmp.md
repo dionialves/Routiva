@@ -2,7 +2,7 @@
 
 ## Diagnóstico e decisão de integração
 
-Routiva usa Java 21, Spring Boot 3.5.7, JDBC e PostgreSQL (H2 nos testes). `MonitorService` carrega hosts e grupos pelo `ZabbixClient`; não há cadastro local independente. Antes desta implementação, `tick()` criava uma tarefa Java e um subprocesso `ping` para cada tentativa. Um conjunto `running` impedia sobreposição por host, e o semáforo incluía espera pelo banco. O intervalo efetivo aumentava quando timeout superava a cadência.
+Routiva usa Java 21, Spring Boot 3.5.7, JDBC e PostgreSQL (H2 nos testes). `ZabbixService` carrega hosts e grupos pelo `ZabbixClient`; não há cadastro local independente. Antes desta implementação, `tick()` criava uma tarefa Java e um subprocesso `ping` para cada tentativa. Um conjunto `running` impedia sobreposição por host, e o semáforo incluía espera pelo banco. O intervalo efetivo aumentava quando timeout superava a cadência.
 
 `SampleStore` grava `ping_sample` e publica `PingSample` depois do commit. `PacketLossAnalysisService`, `RollingPingHistory`, `PacketLossAnalyzer` e `HostAvailabilityService` alimentam as APIs, cores, percentuais e gráficos existentes. Foram preservados esses consumidores e a publicação pós-commit. Nenhum arquivo de frontend foi alterado.
 

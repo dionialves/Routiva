@@ -1,5 +1,6 @@
-package br.com.scriptping;
+package br.com.scriptping.zabbix;
 
+import br.com.scriptping.Host;
 import br.com.scriptping.ingestion.CollectorClient;
 
 import java.net.URI;
@@ -7,13 +8,13 @@ import java.util.*;
 import org.springframework.stereotype.Service;
 
 @Service
-public class MonitorService {
+public class ZabbixService {
     private final ZabbixClient zabbix;
     private final CollectorClient collector;
     private final ZabbixSettings settings;
     private volatile String status = "Aguardando sincronização manual";
 
-    public MonitorService(ZabbixClient zabbix, CollectorClient collector, ZabbixSettings settings) {
+    public ZabbixService(ZabbixClient zabbix, CollectorClient collector, ZabbixSettings settings) {
         this.zabbix = zabbix;
         this.collector = collector;
         this.settings = settings;

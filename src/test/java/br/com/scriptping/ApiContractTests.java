@@ -1,5 +1,10 @@
 package br.com.scriptping;
 
+import br.com.scriptping.zabbix.ZabbixClient;
+import br.com.scriptping.zabbix.ZabbixSettings;
+import br.com.scriptping.zabbix.ZabbixSettingsController;
+import br.com.scriptping.zabbix.ZabbixService;
+
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,7 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** HTTP contracts: validation, authorization, payload and failure responses; no markup assertions. */
 class ApiContractTests {
-    private final MonitorService monitor = mock(MonitorService.class);
+    private final ZabbixService monitor = mock(ZabbixService.class);
     private final PacketLossAnalysisService analysis = mock(PacketLossAnalysisService.class);
     private final ZabbixClient client = mock(ZabbixClient.class);
     private final ZabbixSettings settings = mock(ZabbixSettings.class);

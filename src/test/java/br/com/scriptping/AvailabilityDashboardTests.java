@@ -1,5 +1,7 @@
 package br.com.scriptping;
 
+import br.com.scriptping.zabbix.ZabbixService;
+
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
@@ -7,7 +9,7 @@ import static org.mockito.Mockito.*;
 
 class AvailabilityDashboardTests extends MinuteTestSupport {
     @Test void queriesOnlyRequestedGroupAndPeriodAndRejectsUnknownFilters() {
-        var monitor=mock(MonitorService.class);
+        var monitor=mock(ZabbixService.class);
         var analysis=mock(PacketLossAnalysisService.class);
         var other=new Host("b","Other","127.0.0.2",List.of());
         when(monitor.hosts()).thenReturn(List.of(host,other));

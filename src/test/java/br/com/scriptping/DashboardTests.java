@@ -1,5 +1,7 @@
 package br.com.scriptping;
 
+import br.com.scriptping.zabbix.ZabbixService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -88,7 +90,7 @@ class DashboardTests {
     org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     @org.springframework.test.context.bean.override.mockito.MockitoBean
-    MonitorService monitor;
+    ZabbixService monitor;
 
     @Test
     void persistsFailuresWithoutTurningThemIntoZero() {

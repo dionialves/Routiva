@@ -1,4 +1,6 @@
-package br.com.scriptping;
+package br.com.scriptping.zabbix;
+
+import br.com.scriptping.Host;
 
 import jakarta.servlet.http.HttpSession;
 import java.util.*;
@@ -14,8 +16,8 @@ import org.springframework.http.HttpStatus;
 public class ZabbixSettingsController {
     private final ZabbixSettings settings;
     private final ZabbixClient client;
-    private final MonitorService monitor;
-    public ZabbixSettingsController(ZabbixSettings settings, ZabbixClient client, MonitorService monitor) {
+    private final ZabbixService monitor;
+    public ZabbixSettingsController(ZabbixSettings settings, ZabbixClient client, ZabbixService monitor) {
         this.settings = settings; this.client = client; this.monitor = monitor;
     }
 

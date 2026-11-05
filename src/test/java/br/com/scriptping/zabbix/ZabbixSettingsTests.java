@@ -1,5 +1,6 @@
-package br.com.scriptping;
+package br.com.scriptping.zabbix;
 
+import br.com.scriptping.Host;
 import br.com.scriptping.ingestion.CollectorClient;
 
 import static org.assertj.core.api.Assertions.*;
@@ -20,8 +21,8 @@ import org.springframework.mock.web.MockHttpSession;
 class ZabbixSettingsTests {
     @Autowired MockMvc mvc;
     @Autowired ZabbixSettings settings;
-    @Autowired MonitorService monitor;
-    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired ZabbixService monitor;
+    @Autowired ZabbixSettingsRepository repository;
     @Autowired com.fasterxml.jackson.databind.ObjectMapper mapper;
     @MockitoBean ZabbixClient client;
     @MockitoBean CollectorClient collector;
@@ -50,7 +51,7 @@ class ZabbixSettingsTests {
         mvc.perform(post("/configuracao/zabbix/sincronizar").session(session).param("csrf", csrf)).andExpect(status().is3xxRedirection());
         assertThat(monitor.hosts()).extracting(Host::id).containsExactly("1");
         assertThat(monitor.hosts().getFirst().groups()).containsExactly(a);
-        var restored = new ZabbixSettings(jdbc, mapper, "", "", "");
+        var restored = new ZabbixSettings(repository, mapper, "", "", "");
         assertThat(restored.current().hosts()).containsExactly("1");
         assertThat(restored.current().inventory()).isEqualTo(monitor.hosts());
         mvc.perform(get("/configuracao/zabbix").session(session)).andExpect(status().isOk())
@@ -90,6 +91,6 @@ class ZabbixSettingsTests {
     }
 
     @Test void synchronizationHasNoScheduledTrigger() throws Exception {
-        assertThat(MonitorService.class.getMethod("sync").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class)).isNull();
+        assertThat(ZabbixService.class.getMethod("sync").getAnnotation(org.springframework.scheduling.annotation.Scheduled.class)).isNull();
     }
 }
