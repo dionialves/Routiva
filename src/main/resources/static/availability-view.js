@@ -7,9 +7,9 @@ window.AvailabilityView = (() => {
     return [hours ? `${hours} h` : '', minutes ? `${minutes} min` : '', rest || (!hours && !minutes) ? `${rest} s` : ''].filter(Boolean).join(' ');
   }
   function times(report) {
-    // The series contains minute buckets. Empty/error-only buckets do not
-    // establish coverage; clip populated buckets to the retained query window.
-    const span = (report?.series || []).reduce((covered, point) => {
+    // Server coverage counts observed host-minutes, never entire coarse buckets.
+    // Legacy responses retain their minute-based calculation.
+    const span = report?.observedMillis ?? (report?.series || []).reduce((covered, point) => {
       if (!Number.isFinite(point.metrics?.technical)) return covered;
       const start = Math.max(point.from, report.from, report.retainedFrom ?? report.from);
       const end = Math.min(point.to, report.to);

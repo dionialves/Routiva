@@ -105,3 +105,22 @@ DROP TABLE IF EXISTS analytics_checkpoint;
 DROP TABLE IF EXISTS analytics_checkpoint_block;
 DROP TABLE IF EXISTS analytics_checkpoint_guard;
 DROP TABLE IF EXISTS host_latency_policy;
+
+-- Rebuildable accelerators; ping_minute remains the durable source of truth.
+CREATE TABLE IF NOT EXISTS ping_rollup (
+    host_id VARCHAR(255) NOT NULL,
+    target VARCHAR(255) NOT NULL,
+    resolution BIGINT NOT NULL,
+    bucket_at BIGINT NOT NULL,
+    total_pings BIGINT NOT NULL,
+    healthy BIGINT NOT NULL,
+    degraded BIGINT NOT NULL,
+    lost BIGINT NOT NULL,
+    errors BIGINT NOT NULL,
+    latency_sum DOUBLE PRECISION NOT NULL,
+    last_sample_at BIGINT NOT NULL,
+    valid_minutes BIGINT NOT NULL,
+    PRIMARY KEY(host_id, target, resolution, bucket_at)
+);
+CREATE INDEX IF NOT EXISTS idx_ping_rollup_time ON ping_rollup(resolution, bucket_at);
+ALTER TABLE ping_aggregation_progress ADD COLUMN IF NOT EXISTS rollups_ready BOOLEAN NOT NULL DEFAULT FALSE;

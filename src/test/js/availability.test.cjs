@@ -14,6 +14,7 @@ function surface(search = '') {
     emit(name) { this.listeners[name]?.({preventDefault() {}}); }
   }
   const elements = new Proxy({}, {get(target, key) { return target[key] ||= new Element(); }});
+  elements.period.options = ['5','15','30','60','180','360','720','1440','2880','10080','43200','129600','259200','525600','1051200'].map(value=>({value}));
   const requests = [], timers = new Map(); let serial = 0;
   const location = {search, pathname:'/disponibilidade', href: 'http://localhost/disponibilidade' + search};
   const context = {document: {body:new Element(),addEventListener(){},createDocumentFragment:()=>new Element(),getElementById: id => elements[id], querySelector: id => elements[id], querySelectorAll: () => [], createElement: tagName => Object.assign(new Element(), {tagName}), createElementNS: () => new Element()}, location, history: {replaceState(a,b,url) { location.href = String(url); }}, URL, URLSearchParams, AbortController, Date, Option: Element, AvailabilityChart: { Chart: class { update() {} clear() {} } },
@@ -163,3 +164,15 @@ test('a late failed request cannot overwrite the successful current filter', asy
   assert.equal(ui.elements.technical.textContent, '75,00%');
   assert.equal(ui.elements['availability-status'].textContent, status);
 });
+
+ test('annual links use server grouping and measured coverage instead of a whole month', async () => {
+  const ui = surface('?minutes=525600'), payload = data(50), r = payload.view.report;
+  assert.match(ui.requests[0].url, /minutes=525600/);
+  r.grouping='Mensal'; r.observedMillis=120000;
+  r.from=r.to-365*86400000;
+  r.series=[{from:r.from,to:r.to,metrics:r.total}];
+  ui.respond(0,payload); await flush();
+  assert.equal(ui.elements['chart-granularity'].children[0].textContent,'Agrupamento: Mensal');
+  assert.equal(ui.elements['technical-available'].textContent,'1 min');
+  assert.equal(ui.elements['technical-unavailable'].textContent,'1 min');
+ });

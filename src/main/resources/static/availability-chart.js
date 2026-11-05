@@ -4,6 +4,8 @@
   const NS = 'http://www.w3.org/2000/svg';
   const colors = { technical: '#00D1FF', operational: '#14B8A6' };
   function aggregate(report, minutes) {
+    if (report.grouping) return report.series.map(p => ({...p, ...p.metrics,
+      totalPings: p.metrics.totalPings ?? ((p.metrics.healthy||0)+(p.metrics.degraded||0)+(p.metrics.lost||0)+(p.metrics.errors||0))}));
     const step = minutes * 60000, buckets = new Map();
     for (let at = Math.floor(report.from / step) * step; at < report.to; at += step)
       buckets.set(at, { from: Math.max(at, report.from), to: Math.min(at + step, report.to), healthy: 0, degraded: 0, lost: 0 });
@@ -78,14 +80,18 @@
         node('text', {x: left - 10, y: y(value) + 4, 'text-anchor': 'end', class: 'availability-axis'}, value + '%');
       }
       const count = Math.max(2, Math.min(8, Math.floor((right - left) / 125) + 1, Math.floor((report.to - report.from) / 60000) + 1));
-      const tickFormat = new Intl.DateTimeFormat('pt-BR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+      const longRange = report.to - report.from > 2 * 86400000;
+      const monthly = report.grouping === 'Mensal';
+      const tickFormat = new Intl.DateTimeFormat('pt-BR', {timeZone:'America/Sao_Paulo',
+        ...(monthly ? {month:'short',year:'numeric'} : longRange ? {day:'2-digit',month:'2-digit'}
+          : {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})});
       for (let i = 0; i < count; i++) {
         const at = report.from + (report.to - report.from) * i / (count - 1);
         node('line', {x1: x(at), x2: x(at), y1: top, y2: bottom, class: 'availability-gridline', 'stroke-dasharray': '3 5'});
-        const label = node('text', {x: x(at), y: height - 23, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'availability-axis'}, width >= 400 ? tickFormat.format(at) : '');
-        if (width < 400) {
-          node('tspan', {x:x(at), dy:0}, new Date(at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit'}), label);
-          node('tspan', {x:x(at), dy:14}, new Date(at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'}), label);
+        const label = node('text', {x: x(at), y: height - 23, 'text-anchor': i === 0 ? 'start' : i === count - 1 ? 'end' : 'middle', class: 'availability-axis'}, width >= 400 || longRange ? tickFormat.format(at) : '');
+        if (width < 400 && !longRange) {
+          node('tspan', {x:x(at), dy:0}, new Date(at).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',timeZone:'America/Sao_Paulo'}), label);
+          node('tspan', {x:x(at), dy:14}, new Date(at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}), label);
         }
       }
       const operational = paths(points, 'operational', x, y, bottom);
@@ -127,7 +133,8 @@
         this.index = index; this.selection = {at: p.from, px, py};
         const at = x((p.from + p.to) / 2);
         guide.setAttribute('x1', at); guide.setAttribute('x2', at); focus.setAttribute('visibility', 'visible');
-        time.textContent = `${new Date(p.from).toLocaleString('pt-BR')} – ${new Date(p.to).toLocaleTimeString('pt-BR')}`;
+        const date = at => new Date(at).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo'});
+        time.textContent = `${date(p.from)} – ${date(p.to)}${p.partial ? ' · Intervalo parcial' : ''}${p.totalPings != null ? ' · '+p.totalPings.toLocaleString('pt-BR')+' medições' : ''}`;
         for (const key of ['technical', 'operational']) {
           values[key].textContent = p[key] == null ? 'Sem dados' : p[key].toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
           dots[key].setAttribute('visibility', p[key] == null ? 'hidden' : 'visible');

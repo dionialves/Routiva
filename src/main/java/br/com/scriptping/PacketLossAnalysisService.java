@@ -15,14 +15,13 @@ import static br.com.scriptping.HostAvailabilityService.*;
 public class PacketLossAnalysisService {
     private final MinuteAggregationService store;
     private final PacketLossPolicy policy;
-    private final long retention;
     private final long freshness;
     public PacketLossAnalysisService(MinuteAggregationService store,PacketLossPolicy policy,
         @Value("${monitor.retention-hours:48}") long retentionHours,
         @Value("${indicators.aggregation.interval-ms:60000}") long aggregationInterval) {
         if(retentionHours<1 || aggregationInterval<1) throw new IllegalArgumentException("Invalid aggregation interval or retention");
         policy.validate();
-        this.store=store;this.policy=policy;this.retention=Math.min(48,retentionHours)*3600000L;
+        this.store=store;this.policy=policy;
         this.freshness=aggregationInterval+120000L;
     }
     private static final Metrics EMPTY=new Counts().metrics();
@@ -35,27 +34,37 @@ public class PacketLossAnalysisService {
     AvailabilityDashboard.View viewAt(List<Host> hosts,int minutes,long now) {
         var progress=store.progress();
         long reference=progress.completeThrough()>0?progress.completeThrough():Math.floorDiv(now,60000)*60000;
-        long from=reference-minutes*60000L, retainedFrom=reference-retention;
+        var period=AvailabilityPeriod.of(minutes);
+        long from=period.from(reference), retainedFrom=store.earliest(hosts,reference);
         String phase=progress.processedAt()==null?"STARTING":progress.cursor()<progress.boundary()?"CATCHING_UP":"COMPLETE";
         var load=new IndicatorLoadStatus(phase,null,progress.processedAt(),retainedFrom,progress.cursor(),progress.boundary());
-        String version=progress.cursor()+":"+reference;
-        var selected=store.totals(Math.max(from,retainedFrom),reference,hosts);
-        Map<Integer,Map<Key,Summary>> windows=new HashMap<>();
-        windows.put(minutes,selected);
-        for(int window:List.of(5,60,480)) windows.computeIfAbsent(window,
-            n->store.totals(Math.max(reference-n*60000L,retainedFrom),reference,hosts));
-        // SQL returns at most one row per minute, regardless of the number of selected hosts.
-        var buckets=store.series(Math.max(from,retainedFrom),reference,hosts);
+        String version=progress.cursor()+":"+reference+":"+minutes+":"+hosts.stream()
+            .map(h->h.id()+"@"+h.ip()).sorted().collect(java.util.stream.Collectors.joining(","));
+        var selected=new HashMap<Key,Summary>();
         var series=new ArrayList<Point>();
         var total=new Counts(); Long latest=null;
-        for(long at=from;at<reference;at+=60000) {
-            var s=buckets.get(at); var m=metrics(s);
-            append(total,s);
-            if(s!=null) latest=latest==null?s.last():Math.max(latest,s.last());
-            series.add(new Point(at,at,at+60000,false,false,m));
+        long validHostMinutes=0;
+        boolean accelerated=store.historyReady();
+        for(var interval:period.intervals(from,reference)) {
+            var result=store.historicalTotals(interval.from(),interval.to(),hosts,accelerated);
+            var bucket=new Counts();
+            validHostMinutes+=result.validHostMinutes();
+            for(var entry:result.totals().entrySet()) {
+                var summary=entry.getValue();
+                selected.merge(entry.getKey(),summary,MinuteAggregationService::combine);
+                append(bucket,summary);
+                latest=latest==null?summary.last():Math.max(latest,summary.last());
+            }
+            total.append(bucket);
+            series.add(new Point(interval.from(),interval.from(),interval.to(),interval.partial(),false,bucket.metrics()));
         }
-        var report=new Report(from,reference,60000,total.metrics(),List.copyOf(series),version,
-            progress.processedAt(),latest,retainedFrom,load);
+        Map<Integer,Map<Key,Summary>> windows=new HashMap<>();
+        for(int window:List.of(5,60,480)) windows.put(window,
+            store.totals(reference-window*60000L,reference,hosts));
+        long hostCount=hosts.stream().map(h->new Key(h.id(),h.ip())).distinct().count();
+        long observedMillis=hostCount==0?0:validHostMinutes*60000L/hostCount;
+        var report=new Report(from,reference,period.bucketMinutes()*60000L,total.metrics(),List.copyOf(series),version,
+            progress.processedAt(),latest,retainedFrom,load,period.grouping(),observedMillis);
         var rows=new ArrayList<AvailabilityDashboard.Row>();
         for(var host:hosts) {
             var key=new Key(host.id(),host.ip());

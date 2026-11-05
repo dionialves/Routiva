@@ -29,7 +29,15 @@ class DashboardTests {
 
     @Test
     void availabilityRouteIsAccessible() throws Exception {
-        mvc.perform(get("/disponibilidade")).andExpect(status().isOk());
+        String html = mvc.perform(get("/disponibilidade")).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        var matcher = java.util.regex.Pattern.compile("<select id=\"period\"[^>]*>(.*?)</select>",
+            java.util.regex.Pattern.DOTALL).matcher(html);
+        assertThat(matcher.find()).isTrue();
+        String options = matcher.group(1);
+        assertThat(java.util.regex.Pattern.compile("<option\\s").matcher(options).results().count()).isEqualTo(15);
+        assertThat(options).contains("value=\"1051200\">Últimos 2 anos</option>");
+        assertThat(options).contains("value=\"2880\" selected=\"selected\"");
     }
 
     @Test
@@ -53,7 +61,7 @@ class DashboardTests {
         insertSample(first, 10d, null);
         insertSample(second, null, "Tempo esgotado");
         aggregation.aggregate();
-        for (int minutes : new int[] {5, 60, 480, 1440, 2880}) {
+        for (int minutes : AvailabilityDashboard.MINUTES) {
             mvc.perform(get("/api/availability").param("minutes", String.valueOf(minutes)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.view.hosts.length()").value(2))
                 .andExpect(jsonPath("$.view.report.total.technical").value(50));
@@ -66,7 +74,7 @@ class DashboardTests {
             .andExpect(jsonPath("$.view.hosts[0].ip").value("127.0.0.1"))
             .andExpect(jsonPath("$.page.selectedTotal").value(2))
             .andExpect(jsonPath("$.view.report.total.technical").value(50));
-        mvc.perform(get("/api/availability").param("minutes", "30")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/availability").param("minutes", "31")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/availability").param("groupId", "missing")).andExpect(status().isNotFound());
     }
 

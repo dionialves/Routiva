@@ -46,6 +46,8 @@ class MinuteAggregationTests extends MinuteTestSupport {
         jdbc.execute("ALTER TABLE ping_aggregation_progress ADD CONSTRAINT fail_progress CHECK(cursor_id=0)");
         assertThatThrownBy(()->summaries.aggregate(b,10,now)).isInstanceOf(RuntimeException.class);
         assertThat(count("total_pings")).isZero();assertThat(summaries.progress().cursor()).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_rollup", Long.class)).isZero();
+        assertThat(summaries.historyReady()).isFalse();
         jdbc.execute("ALTER TABLE ping_aggregation_progress DROP CONSTRAINT fail_progress");
         drain(10);drain(10);
         assertThat(count("total_pings")).isEqualTo(1);
@@ -58,6 +60,8 @@ class MinuteAggregationTests extends MinuteTestSupport {
             for(var job:jobs)job.get();
         }
         assertThat(count("total_pings")).isEqualTo(50);
+        assertThat(summaries.historicalTotals(end-86400000L,end,List.of(host),true))
+            .isEqualTo(summaries.historicalTotals(end-86400000L,end,List.of(host),false));
     }
     @Test void committedBoundaryWaitsForIngestionToCommit() throws Exception {
         try (var pool = Executors.newSingleThreadExecutor();

@@ -17,7 +17,7 @@ class AvailabilityDashboardTests extends MinuteTestSupport {
         assertThat(controller.data(5,"g").getBody().view().hosts()).hasSize(1);
         verify(analysis).view(List.of(host),5);
         verifyNoMoreInteractions(analysis);
-        assertThatThrownBy(()->controller.data(30,"")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThatThrownBy(()->controller.data(31,"")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         assertThatThrownBy(()->controller.data(5,"missing")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
     @Test void paginationSearchAndSortKeepFullSelectionTotals() {

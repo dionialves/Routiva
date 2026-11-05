@@ -2,7 +2,7 @@
 
 ## Fluxo
 
-O coletor grava os pings em `ping_sample`. A aplicação não mantém histórico bruto em memória. Um processo agendado agrega novos IDs no PostgreSQL a cada 60 segundos e grava `ping_minute`. As requisições calculam somente o período e grupo solicitados a partir dessa tabela. Não existe cache de indicadores nem recuperação por checkpoint.
+O coletor grava os pings em `ping_sample`. A aplicação não mantém histórico bruto em memória. Um processo agendado agrega novos IDs no PostgreSQL a cada 60 segundos e grava `ping_minute`. As requisições calculam somente o período e grupo solicitados a partir dessa tabela e das consolidações auxiliares de hora/dia em `ping_rollup`. Não existe cache de indicadores nem recuperação por checkpoint.
 
 Cada resumo é identificado por `(host_id, target, minute_at)`. O minuto é UTC, definido pelo horário da medição, em intervalo semiaberto `[início, início + 60000)`. Contém `total_pings`, `healthy`, `degraded`, `lost`, `errors`, `latency_sum` e `last_sample_at`. Respostas acima do `latency_limit` da própria amostra são degradadas. Timeout e erro ICMP contam como perda; erros internos ficam separados. Total bruto = saudáveis + degradados + perdas + erros. O denominador dos percentuais exclui erros internos.
 
@@ -14,18 +14,18 @@ Média = soma das latências / quantidade de respostas. Nunca se faz média simp
 
 1. Capturar o limite de IDs confirmados sob `ping_ingestion_guard`, usando uma transação curta. Todos os escritores devem respeitar esse bloqueio antes de alocar IDs; gravações externas e reutilização/alteração de IDs não são suportadas.
 2. Selecionar até `INDICATORS_AGGREGATION_PAGE_SIZE` novos IDs até esse limite. A seleção não filtra por horário: seis horas pendentes continuam elegíveis.
-3. Agrupar o intervalo em SQL, sem trazer pings individuais ao Java.
-4. Somar as contribuições nos resumos existentes ou criar os ausentes.
-5. Atualizar o cursor na mesma transação. `FOR UPDATE` na linha de progresso serializa consumidores e limpeza. Rollback desfaz resumos e cursor juntos; repetir um lote não duplica valores.
+3. Ler a página de pings e agrupar suas contribuições por minuto.
+4. Somar as contribuições nos resumos existentes ou criar os ausentes; atualizar também as consolidações por hora/dia.
+5. Atualizar o cursor na mesma transação. `FOR UPDATE` na linha de progresso serializa consumidores e limpeza. Rollback desfaz resumos, consolidações e cursor juntos; repetir um lote não duplica valores.
 6. Continuar imediatamente com o próximo lote até alcançar o limite capturado. Depois aguardar o intervalo configurado. Novos IDs posteriores ao limite ficam para a próxima execução.
 
 Um minuto pode receber contribuições de muitos lotes. Pings atrasados corrigem o resumo do seu minuto original. O resumo do minuto atual também pode estar persistido, mas as consultas excluem minutos ainda abertos. Não há fila de pings futuros em memória.
 
-As consultas usam uma transação `REPEATABLE_READ`, incluindo progresso, totais e série, para não misturar versões de lotes. O agrupamento de totais é por host/IP e o da série por minuto diretamente em SQL. O backend não cria uma série de 48 horas por host apenas para somar o gráfico do grupo.
+As consultas usam uma transação `REPEATABLE_READ`, incluindo progresso, totais e série, para não misturar versões de lotes. O agrupamento de totais é por host/IP. A série usa os intervalos definidos por `AvailabilityPeriod`, com somas no banco e percentuais calculados no servidor. O navegador recebe apenas os pontos finais, sem carregar todos os minutos.
 
 ## Atualização e precisão
 
-Períodos suportados: 5 min, 1 h, 8 h, 24 h e 48 h. O período termina no limite consolidado de minutos completos, ancorado na captura do limite de IDs da execução concluída. Durante recuperação, o limite completo anterior é preservado e `load.phase=CATCHING_UP`. Antes da primeira execução concluída, os resultados são explicitamente parciais. A interface mostra o horário consolidado e o processamento pendente/desatualizado.
+Períodos suportados: 5, 15 e 30 min; 1, 3, 6 e 12 h; 1, 2, 7 e 30 dias; 3 e 6 meses; 1 e 2 anos. A API mantém compatibilidade com consultas antigas de 8 horas. O período termina no limite consolidado de minutos completos, ancorado na captura do limite de IDs da execução concluída. Durante recuperação, o limite completo anterior é preservado e `load.phase=CATCHING_UP`. Antes da primeira execução concluída, os resultados são explicitamente parciais. A interface mostra o horário consolidado e o processamento pendente/desatualizado.
 
 As bordas são alinhadas ao minuto, não a uma janela móvel exata ao segundo. A atualização pode levar aproximadamente dois minutos com o intervalo padrão. Resultados atrasados podem corrigir minutos antigos.
 
@@ -35,7 +35,7 @@ O status de coleta considera a última medição nos resumos recentes, com toler
 
 O esquema cria `ping_minute` e `ping_aggregation_progress` automaticamente. Na primeira execução o cursor começa em zero e agrega todos os pings ainda disponíveis no banco, em lotes. Não precisa de backfill manual. Dados brutos já excluídos não podem ser recuperados de checkpoints antigos por esta implementação.
 
-A limpeza respeita a retenção configurada, limitada a 48 horas, mas só apaga pings cujo ID já foi processado. Isso protege atrasos de seis horas ou mais. Uma parada prolongada da agregação pode aumentar o uso de disco; monitore os eventos de falha e o cursor. Resumos vencidos também são removidos. Os IDs permanecem monotônicos mesmo quando todos os pings já processados foram limpos.
+A limpeza respeita a retenção configurada, limitada a 48 horas, mas só apaga pings cujo ID já foi processado. Isso protege atrasos de seis horas ou mais. Uma parada prolongada da agregação pode aumentar o uso de disco; monitore os eventos de falha e o cursor. Os resumos por minuto e as consolidações por hora/dia não expiram. O limite de retenção das amostras brutas não limita as consultas históricas. Os IDs permanecem monotônicos mesmo quando todos os pings já processados foram limpos.
 
 Na inicialização, `schema.sql` exclui automaticamente as cinco tabelas aposentadas: `analytics_checkpoint_part`, `analytics_checkpoint`, `analytics_checkpoint_block`, `analytics_checkpoint_guard` e `host_latency_policy`. A exclusão usa `IF EXISTS`, na ordem das dependências e sem `CASCADE`; pode ser repetida sem afetar as seis tabelas ativas. Os checkpoints antigos e limites por host são excluídos definitivamente. O limite atual permanece em cada amostra (`ping_sample.latency_limit`).
 
@@ -75,10 +75,32 @@ mvn test -Dcollector.enabled=false
 node --test src/test/js/*.test.cjs
 ```
 
-As suítes `MinuteAggregationTests`, `MinuteReportTests` e `AvailabilityDashboardTests` usam H2 por padrão. Para repetir no PostgreSQL, use um banco **exclusivo de testes**, usuário `postgres` e senha `routiva-test-only`:
+As suítes `MinuteAggregationTests`, `MinuteReportTests`, `HistoricalAvailabilityTests` e `AvailabilityDashboardTests` usam H2 por padrão. Para repetir no PostgreSQL, use um banco **exclusivo de testes**, usuário `postgres` e senha `routiva-test-only`:
 
 ```sh
-ROUTIVA_TEST_JDBC_URL=jdbc:postgresql://127.0.0.1:PORTA/postgres mvn -Dtest=MinuteAggregationTests,MinuteReportTests,AvailabilityDashboardTests test
+ROUTIVA_TEST_JDBC_URL=jdbc:postgresql://127.0.0.1:PORTA/postgres mvn -Dtest=MinuteAggregationTests,MinuteReportTests,HistoricalAvailabilityTests,AvailabilityDashboardTests test
 ```
 
 Cada teste cria e remove seu próprio esquema. Cobertura: lotes no mesmo minuto, seis horas pendentes, reinício, rollback, concorrência, IDs com lacunas, atraso, troca de IP, retenção protegida, limites históricos, média ponderada, períodos alinhados, paginação e consultas sem dados brutos.
+
+## Períodos e agrupamentos do gráfico
+
+| Período | Agrupamento |
+|---|---|
+| 5, 15 e 30 minutos | 1 minuto |
+| 1 hora | 2 minutos |
+| 3 horas | 5 minutos |
+| 6 horas | 10 minutos |
+| 12 horas | 15 minutos |
+| 1 dia | 30 minutos |
+| 2 dias | 1 hora |
+| 7 dias | 4 horas |
+| 30 dias | 1 dia |
+| 3 e 6 meses | 1 semana |
+| 1 e 2 anos | 1 mês |
+
+Meses/anos são subtraídos no calendário de `America/Sao_Paulo`, com semanas iniciadas na segunda-feira. Dias e meses do gráfico começam à meia-noite nesse fuso. Os extremos são recortados ao período pedido e marcados como parciais; uma janela anual pode conter 13 pontos. Intervalos sem tentativas válidas permanecem sem dados. A chave `minutes` das URLs permanece compatível; para períodos de meses/anos, seu valor identifica uma opção, não uma duração fixa em minutos.
+
+`ping_rollup` mantém contagens e somas por host/IP em horas e dias UTC. As consultas combinam dias completos, horas completas e minutos nas bordas, sem sobreposição. O primeiro ciclo após a atualização preenche essas consolidações a partir dos minutos existentes, dentro da transação de agregação; pode demorar em bases grandes. O indicador `rollups_ready` só é confirmado com o backfill concluído. Antes disso, as consultas usam os minutos. Reinícios não refazem o backfill já confirmado. Novas contribuições, inclusive atrasadas, atualizam minutos e consolidações na mesma transação. Nenhum resumo por minuto é descartado.
+
+`observedMillis` representa a média de minutos com tentativas válidas por host selecionado. As durações dos detalhes dos cartões são estimativas calculadas sobre essa cobertura, e não sobre toda a duração de um ponto semanal/mensal. Os percentuais continuam ponderados pela quantidade de pings. A indicação de início do histórico é baseada no primeiro resumo disponível dos hosts selecionados, não em um corte artificial de 48 horas.

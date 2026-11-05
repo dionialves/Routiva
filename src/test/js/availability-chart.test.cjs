@@ -54,3 +54,17 @@ test('pointer, touch, keyboard and exit control shared tooltip', () => {
   assert.equal(chart.report.to,2880*60000);
   delete global.document;
 });
+
+test('server calendar buckets preserve boundaries, gaps, partial flags and weighted values', () => {
+  const report = {grouping:'Mensal',from:Date.UTC(2024,0,15),to:Date.UTC(2024,2,1),series:[
+    {from:Date.UTC(2024,0,15),to:Date.UTC(2024,1,1),partial:true,metrics:{healthy:1,degraded:1,lost:2,technical:50,operational:25,totalPings:4}},
+    {from:Date.UTC(2024,1,1),to:Date.UTC(2024,2,1),partial:false,metrics:{technical:null,operational:null,totalPings:0}}
+  ]};
+  const points = aggregate(report,1);
+  assert.equal(points.length,2);
+  assert.equal(points[0].from,report.from);
+  assert.equal(points[0].partial,true);
+  assert.equal(points[0].technical,50);
+  assert.equal(points[1].technical,null);
+  assert.equal(points[1].to,report.to);
+});

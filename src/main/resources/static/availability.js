@@ -1,20 +1,31 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id), main=document.querySelector('.availability-page');
-  const params=new URLSearchParams(location.search), periods=['5','60','480','1440','2880'];
-  $('period').value=periods.includes(params.get('minutes'))?params.get('minutes'):'2880';
+  const params=new URLSearchParams(location.search), periods=Array.from($('period').options,option=>option.value);
+  const periodStorageKey = 'routiva.availability.period';
+  let savedPeriod;
+  try { savedPeriod = localStorage.getItem(periodStorageKey); } catch {}
+  const requestedPeriod = params.get('minutes') === '480' ? '720' : params.get('minutes');
+  $('period').value = periods.includes(requestedPeriod) ? requestedPeriod
+    : periods.includes(savedPeriod) ? savedPeriod : '2880';
+  function savePeriod() {
+    try { localStorage.setItem(periodStorageKey, $('period').value); } catch {}
+  }
+  savePeriod();
   let group=params.get('groupId')||'', page=Math.max(1,Number(params.get('page'))||1), sort=params.get('sort')||'name', direction=params.get('direction')==='desc'?'desc':'asc';
   $('host-search').value=params.get('q')||'';
   if(group){$('group').add(new Option('Grupo selecionado',group));$('group').value=group;window.availabilityGroupPicker?.sync();}
   let data=null, controller, generation=0, timer, searchTimer, groupVersion;
   const chart=new AvailabilityChart.Chart($('availability-chart'),$('chart-granularity'));
-  const date=at=>new Date(at).toLocaleString('pt-BR');
+  const date=at=>new Date(at).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo'});
   function query() {return new URLSearchParams({minutes:$('period').value,groupId:group,page:String(page),sort,direction,q:$('host-search').value});}
   function url() {history.replaceState(null,'',location.pathname+'?'+query());}
   function loading(value) {main.classList.toggle('is-loading',value); main.setAttribute('aria-busy',String(value));}
   function render() {
     const r=data.view.report;
     AvailabilityView.times(r);
+    $('chart-granularity').replaceChildren(new Option('Agrupamento: '+(r.grouping||'Automático'),'auto'));
+    $('chart-granularity').value='auto';
     for(const key of ['operational','technical','loss','latency']) $(key).textContent=AvailabilityView.format(r.total[key],key==='latency'?' ms':'%');
     $('availability-range').textContent=r.evaluatedAt?`Período: ${date(r.from)} → ${date(r.to)}`:'Aguardando a primeira publicação de indicadores.';
     $('last-measurement').textContent='Última medição: '+(r.lastSampleAt?date(r.lastSampleAt):'Sem medições');
@@ -50,7 +61,7 @@
     } finally {clearTimeout(timeout);if(current===generation)timer=setTimeout(()=>refresh(),10000);}
   }
   document.querySelector('.availability-filters').addEventListener('submit',e=>e.preventDefault());
-  for(const id of ['period','group'])$(id).addEventListener('change',()=>{group=$('group').value;page=1;url();refresh(true);});
+  for(const id of ['period','group'])$(id).addEventListener('change',()=>{if(id==='period')savePeriod();group=$('group').value;page=1;url();refresh(true);});
   $('host-search').addEventListener('input',()=>{clearTimeout(searchTimer);clearTimeout(timer);controller?.abort();generation++;searchTimer=setTimeout(()=>{page=1;url();refresh();},300);});
   document.querySelectorAll('[data-sort]').forEach(button=>button.addEventListener('click',()=>{direction=sort===button.dataset.sort&&direction==='asc'?'desc':'asc';sort=button.dataset.sort;page=1;document.querySelectorAll('[data-sort]').forEach(b=>b.parentElement.setAttribute('aria-sort',b===button?(direction==='asc'?'ascending':'descending'):'none'));url();refresh();}));
   $('previous').addEventListener('click',()=>{page=Math.max(1,page-1);url();refresh();});$('next').addEventListener('click',()=>{page++;url();refresh();});$('retry').addEventListener('click',()=>refresh());

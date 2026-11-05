@@ -35,8 +35,10 @@ public class MinuteAggregationService {
     }
 
     private final MinuteAggregationRepository repository;
+    private final HistoricalAggregation history;
 
-    public MinuteAggregationService(MinuteAggregationRepository repository) {
+    public MinuteAggregationService(MinuteAggregationRepository repository, org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        this.history = new HistoricalAggregation(jdbc);
         this.repository = repository;
     }
 
@@ -59,6 +61,7 @@ public class MinuteAggregationService {
 
         var checkpoint = repository.lockProgress();
         Progress previous = checkpoint.snapshot();
+        history.initialize();
         if (boundary < previous.cursor()) {
             return new Batch(previous.cursor(), previous.boundary(), 0, 0);
         }
@@ -79,6 +82,7 @@ public class MinuteAggregationService {
                 existing.put(stored.getId(), stored);
             }
         }
+        history.add(contributions, existing);
         var additions = new ArrayList<PingMinute>();
         contributions.forEach((key, contribution) -> {
             var stored = existing.get(key);
@@ -121,6 +125,14 @@ public class MinuteAggregationService {
         return result;
     }
 
+    public record HistoricalResult(Map<Key, Summary> totals, long validHostMinutes) {}
+    public HistoricalResult historicalTotals(long from, long to, List<Host> hosts, boolean accelerated) {
+        var result = history.totals(from, to, hosts, accelerated);
+        return new HistoricalResult(result.totals(), result.validHostMinutes());
+    }
+    public boolean historyReady() { return history.ready(); }
+    public long earliest(List<Host> hosts, long fallback) { return history.earliest(hosts, fallback); }
+
     private List<HostTarget> keys(List<Host> hosts) {
         return hosts.stream().map(host -> new HostTarget(host.id(), host.ip())).distinct().toList();
     }
@@ -140,7 +152,7 @@ public class MinuteAggregationService {
             latency, sample.measuredAt());
     }
 
-    private static Summary combine(Summary left, Summary right) {
+    public static Summary combine(Summary left, Summary right) {
         return new Summary(left.host(), left.target(), left.minute(),
             left.total() + right.total(), left.healthy() + right.healthy(),
             left.degraded() + right.degraded(), left.lost() + right.lost(),
