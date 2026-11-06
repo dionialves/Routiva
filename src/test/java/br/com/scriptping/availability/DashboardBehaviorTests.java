@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;

@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
 
 /** Coverage of a published snapshot, not a guarantee that the collector produced every ping. */
 public record IndicatorLoadStatus(String phase, Long loadedFrom, Long evaluatedAt,

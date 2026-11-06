@@ -1,4 +1,6 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
+
+import br.com.scriptping.Host;
 
 import br.com.scriptping.zabbix.ZabbixService;
 
@@ -6,7 +8,7 @@ import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
-import static br.com.scriptping.HostAvailabilityService.*;
+import static br.com.scriptping.availability.HostAvailabilityService.*;
 
 /** Queries only the requested group and period. No background publication or cache. */
 @Service

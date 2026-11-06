@@ -1,4 +1,7 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
+
+import br.com.scriptping.Host;
+import br.com.scriptping.IpAddress;
 
 import java.util.*;
 import org.springframework.stereotype.Service;
@@ -8,7 +11,7 @@ import org.springframework.transaction.annotation.Isolation;
 import br.com.scriptping.aggregation.MinuteAggregationService;
 import br.com.scriptping.aggregation.MinuteAggregationService.Key;
 import br.com.scriptping.aggregation.MinuteAggregationService.Summary;
-import static br.com.scriptping.HostAvailabilityService.*;
+import static br.com.scriptping.availability.HostAvailabilityService.*;
 
 /** Request-scoped calculations from persisted minute summaries. No history or report cache. */
 @Service

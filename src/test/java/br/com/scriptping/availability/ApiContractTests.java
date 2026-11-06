@@ -1,4 +1,6 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
+
+import br.com.scriptping.Host;
 
 import br.com.scriptping.zabbix.ZabbixClient;
 import br.com.scriptping.zabbix.ZabbixSettings;

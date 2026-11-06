@@ -1,6 +1,6 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
 
-import static br.com.scriptping.PacketLossAnalysis.Quality;
+import static br.com.scriptping.availability.PacketLossAnalysis.Quality;
 import static org.assertj.core.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;

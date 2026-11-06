@@ -1,4 +1,6 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
+
+import br.com.scriptping.Host;
 
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.*;

@@ -23,8 +23,8 @@ public class MinuteAggregationService {
     public record Summary(String host, String target, long minute, long total, long healthy,
                    long degraded, long lost, long errors, double sum, long last) {
         public Key key() { return new Key(host, target); }
-        public br.com.scriptping.HostAvailabilityService.Metrics metrics() {
-            var c = new br.com.scriptping.HostAvailabilityService.Counts();
+        public br.com.scriptping.availability.HostAvailabilityService.Metrics metrics() {
+            var c = new br.com.scriptping.availability.HostAvailabilityService.Counts();
             c.h = healthy;
             c.d = degraded;
             c.p = lost;

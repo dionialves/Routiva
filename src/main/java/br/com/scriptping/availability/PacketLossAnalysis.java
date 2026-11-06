@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
 
 public record PacketLossAnalysis(
     Stats stats,

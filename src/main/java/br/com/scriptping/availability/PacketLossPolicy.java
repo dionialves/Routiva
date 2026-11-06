@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.availability;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
