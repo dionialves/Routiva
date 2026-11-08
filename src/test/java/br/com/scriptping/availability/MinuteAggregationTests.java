@@ -147,6 +147,7 @@ class MinuteAggregationTests extends MinuteTestSupport {
         assertThatThrownBy(()->summaries.aggregate(boundary(),1,now)).isInstanceOf(RuntimeException.class);
         assertThat(count("total_pings")).isEqualTo(1);
         assertThat(count("lost")).isZero();
+        assertThat(jdbc.queryForObject("SELECT COALESCE(SUM(lost),0) FROM availability_change",Long.class)).isZero();
         jdbc.execute("ALTER TABLE ping_aggregation_progress DROP CONSTRAINT fail_update");
         drain(1);drain(1);
         assertThat(count("total_pings")).isEqualTo(2);assertThat(count("lost")).isEqualTo(1);
@@ -166,6 +167,8 @@ class MinuteAggregationTests extends MinuteTestSupport {
         jdbc.update("INSERT INTO collector_batch VALUES ('collector',1,?)",now);
         jdbc.update("INSERT INTO zabbix_settings VALUES (1,'saved-settings')");
         var progress=summaries.progress();
+        long pendingChanges=jdbc.queryForObject("SELECT COUNT(*) FROM availability_change",Long.class);
+        long acknowledged=jdbc.queryForObject("SELECT floor_revision FROM availability_change_state WHERE id=1",Long.class);
         var schema=new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator(new org.springframework.core.io.ClassPathResource("schema.sql"));
         schema.execute(ds);schema.execute(ds);
         for(String name:List.of("analytics_checkpoint_part","analytics_checkpoint","analytics_checkpoint_block","analytics_checkpoint_guard","host_latency_policy")) {
@@ -173,6 +176,8 @@ class MinuteAggregationTests extends MinuteTestSupport {
         }
         assertThat(count("total_pings")).isEqualTo(1);
         assertThat(summaries.progress()).isEqualTo(progress);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM availability_change",Long.class)).isEqualTo(pendingChanges);
+        assertThat(jdbc.queryForObject("SELECT floor_revision FROM availability_change_state WHERE id=1",Long.class)).isEqualTo(acknowledged);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample",Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch",Long.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT payload FROM zabbix_settings WHERE id=1",String.class)).isEqualTo("saved-settings");
@@ -185,14 +190,7 @@ class MinuteAggregationTests extends MinuteTestSupport {
         var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
         appender.start();logger.addAppender(appender);
         try {
-            var cache=org.mockito.Mockito.mock(AvailabilitySnapshotCache.class);
-            org.mockito.Mockito.doAnswer(call -> {
-                assertThat(summaries.progress().cursor()).isEqualTo(boundary());
-                assertThat(count("total_pings")).isEqualTo(10);
-                return null;
-            }).when(cache).refresh();
-            new MinuteAggregationScheduled(summaries,cache,3).aggregate();
-            org.mockito.Mockito.verify(cache).refresh();
+            new MinuteAggregationScheduled(summaries,3).aggregate();
             assertThat(count("total_pings")).isEqualTo(10);
             assertThat(appender.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)).anyMatch(s->s.contains("MINUTE_AGGREGATION_COMPLETED"));
         } finally {logger.detachAppender(appender);}

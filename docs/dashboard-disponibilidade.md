@@ -1,52 +1,85 @@
 # Dashboard de disponibilidade
 
-## Publicação em segundo plano
+## Agregação e publicação independentes
 
-O job `MinuteAggregationScheduled` roda a cada 60 segundos por padrão, configurado por
-`indicators.aggregation.interval-ms` / `INDICATORS_AGGREGATION_INTERVAL_MS`.
-O agendador possui uma thread e o job é sincronizado: execuções não se sobrepõem.
-Cada ciclo drena a ingestão até um limite confirmado e, depois de concluir as transações
-de agregação, chama `AvailabilitySnapshotCache.refresh()`.
+`MinuteAggregationScheduled` continua consolidando pings em minutos, horas e dias,
+com `indicatorScheduler` exclusivo. Não chama mais o publicador do dashboard.
+O intervalo da agregação continua em `INDICATORS_AGGREGATION_INTERVAL_MS`.
 
-`PacketLossAnalysisService.build()` lê os resumos em uma transação `REPEATABLE_READ`,
-preparando todos os hosts e períodos em uma mesma versão. A base são os resumos incrementais
-por minuto, hora e dia. O snapshot guarda contagens, soma de latências, última amostra e
-minutos válidos, por host/IP atual e intervalo. Não guarda apenas percentuais, para permitir
-combinações ponderadas de qualquer grupo.
+`AvailabilitySnapshotCache.refresh()` possui seu próprio `availabilityScheduler`, com
+uma thread, execução sincronizada e intervalo de 60 segundos **após concluir** cada ciclo.
+Configuração: `INDICATORS_AVAILABILITY_INTERVAL_MS` (60000) e
+`INDICATORS_AVAILABILITY_INITIAL_DELAY_MS` (0). Não há execuções sobrepostas nem uma fila
+de publicações atrasadas. Uma publicação lenta não ocupa a thread da agregação.
+Ambos ainda compartilham os recursos físicos do banco: separar threads não elimina disputa de I/O.
 
-O início do histórico é obtido em **uma única consulta com os pares host/IP**, em vez de
-uma chamada SQL por host. Ela usa MIN correlacionado com o índice de host/IP/tempo,
-evita agrupar e percorrer todo o histórico de minutos de dois anos.
-Os intervalos de cada período são repartidos entre minuto, hora e dia, sem sobreposição.
-O SQL agrupa por intervalo e host: **até três consultas por período**, independentemente
-do número de hosts e pontos. As bordas usam resoluções menores, respeitando os limites
-exatos do período e o calendário de São Paulo. Janelas curtas usam somente minutos.
-Uma consulta adicional de cinco minutos determina saúde/atualidade da coleta, separada
-da classificação histórica. Não há mais consultas de 1h e 8h para classificar uma seleção.
+`PacketLossAnalysisService.advance()` captura progresso, diário e resumos em uma mesma
+transação `REPEATABLE_READ`. A referência temporal é `complete_through`; o cursor de
+alterações pode incluir lotes confirmados de um ciclo ainda em recuperação. Nunca são
+incluídas amostras posteriores ao fim do período consolidado.
 
-A geração dos relatórios ainda é refeita no job a cada ciclo, usando os resumos incrementais
-já existentes. Não existe invalidação incremental de pontos de relatórios; isso evita
-ignorar correções recebidas tardiamente para intervalos antigos.
+## Atualização incremental
 
-## Persistência, cache e reinício
+A mesma transação que grava os resumos também grava `availability_change`: revisão
+(cursor do lote), host/IP, minuto, contagens adicionais, soma de latências, última amostra
+e incremento de cobertura. Um minuto com erros que recebe sua primeira tentativa válida
+ganha cobertura uma única vez. Rollback da agregação também desfaz as entradas do diário.
 
-`AvailabilitySnapshotRepository` codifica a geração inteira em JSON comprimido com gzip
-(base64 na coluna TEXT). A tabela `availability_snapshot` mantém somente a última versão
-completa, com versão de formato e horário de construção. Substituir essa linha é uma
-transação independente: falha no INSERT também desfaz o DELETE.
+A versão persistida já contém os pontos por host/período e a revisão consumida
+(`load.liveCursor`); não é necessário guardar todos os minutos de dois anos em memória.
+A atualização reutiliza esses pontos e:
 
-Somente após o commit o cache troca uma referência `volatile` para a nova geração imutável.
-Consultas em andamento continuam na geração anterior. Falha de cálculo ou persistência
-preserva a última versão em memória e no banco. O snapshot não tem TTL de remoção:
-dados antigos continuam consultáveis, acompanhados do horário de consolidação.
+1. Aplica contribuições do diário posteriores à revisão anterior, inclusive chegadas tardias.
+2. Descarta pontos que saíram completamente da janela.
+3. Subtrai a faixa expirada dos pontos que continuam parcialmente na janela.
+4. Soma as faixas que entraram e preserva os demais pontos.
+5. Recompõe totais e última medição a partir dos poucos pontos de cada host/período.
 
-Na inicialização, o cache restaura a última geração antes de atender requisições.
-Esse carregamento não precisa acessar o histórico nem depender do inventário remoto.
-Versão ausente, incompatível ou corrompida deixa o dashboard em carregamento até o próximo
-ciclo conseguir publicar. A falha é registrada; não há reconstrução disparada pelo HTTP.
+As leituras de faixas são compartilhadas por todos os hosts e períodos: a nova faixa
+final geralmente é a mesma para os 16 períodos. Um ciclo normal lê apenas as bordas que
+mudaram, em vez de reler 24h ou dois anos. Os pontos mantêm contagens e somas, não apenas
+percentuais, preservando médias ponderadas e cobertura. A saúde da coleta usa os cinco
+minutos do próprio cache atualizado, sem outra consulta histórica.
 
-O cache pertence ao processo Java. Em instalações com múltiplas instâncias, cada instância
-possui seu próprio cache e job; coordenação distribuída não faz parte desta implementação.
+Os limites seguem `AvailabilityPeriod` e São Paulo, incluindo semanas, meses, anos e
+encurtamento de fevereiro. O cálculo também trata quando a subtração de meses faz o início
+da janela recuar. Dados retirados das janelas **não são apagados do histórico**.
+Se a última medição sair da janela, a recomposição usa a maior data dos pontos restantes;
+uma janela vazia volta a ter valores nulos, sem inventar indisponibilidade.
+
+Novos hosts/IPs carregam seu próprio histórico uma vez; os demais reutilizam a base.
+Remoções deixam de participar da próxima geração. Alterações de nome/grupo e limiares de
+classificação são aplicadas sobre os dados reutilizados.
+
+## Persistência, recuperação e limpeza do diário
+
+`AvailabilitySnapshotRepository` mantém JSON comprimido com gzip/base64 em
+`availability_snapshot`. A substituição do payload, a confirmação da revisão em
+`availability_change_state.floor_revision` e a exclusão das alterações consumidas
+ocorrem na **mesma transação**. Alterações mais novas que a revisão capturada ficam no diário
+para o próximo ciclo. A revisão confirmada não pode recuar.
+
+Depois do commit, o cache troca uma referência `volatile` pela nova geração imutável.
+Leitores em andamento continuam na geração anterior. Falha no cálculo ou na gravação
+preserva a versão anterior e o diário não confirmado; repetir não duplica contribuições.
+
+No reinício, a última geração é restaurada antes do atendimento HTTP. O ciclo seguinte
+retoma sua revisão. O formato de snapshot anterior continua legível. Na primeira atualização
+após esta migração, se o snapshot for anterior ao início do diário, haverá uma reconstrução
+controlada, mantendo os dados anteriores disponíveis ao front.
+
+Reconstrução completa fica restrita a: primeira geração, checkpoint incompatível/perdido,
+revisão anterior ao diário disponível, inconsistência de contadores ou recuperação com mais
+de 200 mil pares host/IP/minuto alterados. Esse limite evita replay sem limite de memória.
+A reconstrução usa os aceleradores por hora/dia e limites temporais explícitos no SQL;
+ainda pode ser custosa, mas não ocupa o agendador da agregação.
+
+Sem geração salva, o front permanece no skeleton até a primeira publicação. Snapshot antigo
+não expira por TTL: continua disponível com horário e sinalização de atraso.
+
+O cache pertence ao processo Java. Coordenação de publicadores em múltiplas instâncias
+não faz parte deste desenho; a revisão monotônica impede uma gravação mais antiga de
+substituir uma revisão já confirmada por outro publicador.
 
 ## Contrato HTTP e front
 
@@ -126,13 +159,14 @@ hora e 365 mil resumos diários para dois anos. São aceleradores sintéticos; o
 materializa dois anos de pings/minutos brutos. Mede geração dos 16 períodos, persistência,
 restauração, tamanho comprimido, diferença aproximada de heap após GC e combinação em memória.
 Os índices de host/IP/tempo e resolução/tempo existentes atendem às novas consultas.
-O resultado local não substitui EXPLAIN ANALYZE e teste de concorrência em PostgreSQL com
-o volume e o hardware da implantação.
+O resultado local não substitui medição no hardware da implantação. O benchmark de PostgreSQL
+abaixo usa schema isolado e executa também EXPLAIN ANALYZE de uma consulta curta.
 
-Logs: `AVAILABILITY_PUBLISHED` (versão, hosts, períodos, bytes comprimidos, duração),
+Logs: `AVAILABILITY_INCREMENTAL` (revisões, alterações, novos hosts, faixas lidas e pontos
+reutilizados), `AVAILABILITY_REBUILD` (motivo), `AVAILABILITY_PUBLISHED` (versão, hosts, períodos, bytes comprimidos, duração),
 `AVAILABILITY_RESTORED`, `AVAILABILITY_REFRESH_FAILED` e `AVAILABILITY_RESTORE_FAILED`.
 
-### Medição local em 08/11/2026
+### Medição anterior à atualização incremental, em 08/11/2026
 
 Java 21, H2, carga acima, execução explícita do benchmark:
 
@@ -151,3 +185,43 @@ medição exata do tamanho isolado do cache. A combinação medida alterna 24 ho
 não representa latência HTTP completa. O custo da primeira agregação/backfill dos dados
 brutos fica fora dessa medição. Na suíte padrão o benchmark é ignorado por ser uma carga
 opcional; foi executado explicitamente para esta medição.
+
+### Medição incremental local (H2)
+
+Na mesma carga sintética de 500 hosts, com 500 novas medições por ciclo, os três ciclos
+incrementais, incluindo compressão e persistência, levaram **987, 916 e 880 ms**.
+Foram reutilizados de 239 mil a 242 mil pontos por ciclo, com 13–14 faixas históricas lidas.
+O cálculo inicial permaneceu separado (21.264 ms). Valores de H2 não são previsão para PostgreSQL.
+
+### Carga opcional de PostgreSQL
+
+Use um PostgreSQL **de testes**, com usuário `postgres`, banco acessível e senha
+`routiva-test-only`. A suíte cria e remove um schema próprio; não apontar para produção.
+O teste materializa 4,5 milhões de resumos por minuto, aceleradores e dois anos de resumos
+diários, e compara cinco ciclos incrementais com o cálculo completo de todos os períodos.
+Imprime duração inicial, ciclos incrementais e plano de uma consulta de um minuto.
+
+```sh
+ROUTIVA_TEST_JDBC_URL=jdbc:postgresql://127.0.0.1:55432/postgres \
+  mvn test -Dcollector.enabled=false -Dtest=AvailabilityPostgresBenchmarkTests \
+  -Davailability.postgres-benchmark=true
+```
+
+`AvailabilityIncrementalTests` e os testes de agregação/cache também aceitam essa URL para
+validar transações, cobertura e equivalência em PostgreSQL. A suíte padrão mantém os testes
+de carga opcionais desabilitados.
+
+### Medição incremental em PostgreSQL 17.11 (08/11/2026)
+
+Executado em container temporário local, com 4,5 milhões de resumos por minuto,
+500 hosts e dois anos de resumos diários. A preparação inicial dos 16 períodos levou
+**5.129 ms**. Os cinco ciclos incrementais, incluindo compressão e persistência, levaram
+**1.067, 897, 1.013, 931 e 954 ms**. Cada ciclo recebeu novas medições de 500 hosts;
+o terceiro também recebeu uma correção de 100 dias atrás. O resultado final dos 16 períodos
+foi comparado ao cálculo completo. A consulta curta de um minuto usou o índice temporal
+e levou 0,362 ms no EXPLAIN ANALYZE da mesma execução.
+
+São medições locais em carga sintética, sem concorrência de ingestão contínua e sem
+representar o hardware de produção. A montagem inicial dos aceleradores e a agregação
+dos novos pings não entram no tempo do publicador. Testes funcionais separados em PostgreSQL
+cobrem concorrência, rollback da agregação, diário, retomada e equivalência de calendários.

@@ -36,9 +36,11 @@ public class MinuteAggregationService {
 
     private final MinuteAggregationRepository repository;
     private final HistoricalAggregation history;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     public MinuteAggregationService(MinuteAggregationRepository repository, org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.history = new HistoricalAggregation(jdbc);
+        this.jdbc = jdbc;
         this.repository = repository;
     }
 
@@ -82,6 +84,8 @@ public class MinuteAggregationService {
                 existing.put(stored.getId(), stored);
             }
         }
+        long through = samples.isEmpty() ? boundary : samples.getLast().id();
+        recordChanges(through, contributions, existing);
         history.add(contributions, existing);
         var additions = new ArrayList<PingMinute>();
         contributions.forEach((key, contribution) -> {
@@ -94,13 +98,48 @@ public class MinuteAggregationService {
         });
         repository.saveAll(additions);
 
-        long through = samples.isEmpty() ? boundary : samples.getLast().id();
         long complete = through == boundary
             ? Math.max(previous.completeThrough(), minuteAt(now))
             : previous.completeThrough();
         long processedAt = previous.processedAt() == null ? now : Math.max(now, previous.processedAt());
         checkpoint.setProgress(new Progress(through, boundary, processedAt, complete));
         return new Batch(through, boundary, samples.size(), contributions.size());
+    }
+
+    private void recordChanges(long revision, Map<MinuteKey, Summary> contributions,
+        Map<MinuteKey, PingMinute> existing) {
+        var arguments = new ArrayList<Object[]>();
+        contributions.forEach((key, s) -> {
+            var before = existing.get(key);
+            boolean wasValid = before != null && before.snapshot().metrics().total() > 0;
+            long valid = !wasValid && s.metrics().total() > 0 ? 1 : 0;
+            arguments.add(new Object[]{revision, s.host(), s.target(), s.minute(), s.healthy(),
+                s.degraded(), s.lost(), s.errors(), s.sum(), s.last(), valid});
+        });
+        if (!arguments.isEmpty()) jdbc.batchUpdate("""
+            INSERT INTO availability_change(revision,host_id,target,minute_at,healthy,degraded,lost,
+                errors,latency_sum,last_sample_at,valid_minutes) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            """, arguments);
+    }
+
+    public record Change(Summary delta, long validMinutes) {}
+    public record ChangeSet(long floor, List<Change> changes, boolean truncated) {}
+
+    /** Bounded replay; a very old/missing checkpoint falls back to a controlled rebuild. */
+    public ChangeSet changesSince(long after, long through) {
+        long floor = jdbc.queryForObject("SELECT floor_revision FROM availability_change_state WHERE id=1", Long.class);
+        if (after < floor) return new ChangeSet(floor, List.of(), false);
+        var rows = jdbc.query("""
+            SELECT host_id,target,minute_at,SUM(healthy),SUM(degraded),SUM(lost),SUM(errors),
+                SUM(latency_sum),MAX(last_sample_at),SUM(valid_minutes)
+            FROM availability_change WHERE revision>? AND revision<=?
+            GROUP BY host_id,target,minute_at LIMIT 200001
+            """, (rs, row) -> {
+                long h=rs.getLong(4), d=rs.getLong(5), l=rs.getLong(6), e=rs.getLong(7);
+                return new Change(new Summary(rs.getString(1),rs.getString(2),rs.getLong(3),
+                    h+d+l+e,h,d,l,e,rs.getDouble(8),rs.getLong(9)),rs.getLong(10));
+            }, after, through);
+        return new ChangeSet(floor, List.copyOf(rows), rows.size()>200000);
     }
 
     public Map<Key, Summary> totals(long from, long to, List<Host> hosts) {

@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.server.ResponseStatusException;
 
 /** HTTP readers capture exactly one generation and never access storage or the builder. */
@@ -50,12 +51,14 @@ public class AvailabilitySnapshotCache {
         }
     }
 
-    /** Called only by the aggregation job, after its completed transaction has committed. */
+    /** Independent scheduler: database reads never run on the aggregation thread. */
+    @Scheduled(fixedDelayString="${indicators.availability.interval-ms:60000}",
+        initialDelayString="${indicators.availability.initial-delay-ms:0}", scheduler="availabilityScheduler")
     public synchronized void refresh() {
         long started=System.nanoTime();
         try {
-            var snapshot=builder.build(List.copyOf(monitor.hosts()));
-            if (snapshot.load().evaluatedAt()==null) return;
+            var snapshot=builder.advance(List.copyOf(monitor.hosts()), current==null ? null : current.snapshot);
+            if (snapshot==null || snapshot.load().evaluatedAt()==null) return;
             var next=new Generation(snapshot);
             var encoded=repository.encode(snapshot);
             repository.save(snapshot, encoded); // Proxy returns only after the durable commit.

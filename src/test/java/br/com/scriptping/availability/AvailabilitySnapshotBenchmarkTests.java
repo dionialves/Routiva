@@ -67,6 +67,23 @@ class AvailabilitySnapshotBenchmarkTests extends MinuteTestSupport {
         started=System.nanoTime();
         for(int i=0;i<100;i++) restored.view(i%2==0?1440:1051200,hosts.subList(0,250));
         long combineMicros=(System.nanoTime()-started)/1000/100;
+        var incrementalTimes=new ArrayList<Long>();
+        var previous=restored;
+        for (int cycle=1;cycle<=3;cycle++) {
+            jdbc.update("""
+                INSERT INTO ping_sample(host_id,target,measured_at,latency,latency_limit)
+                SELECT 'bench-'||X,'10.0.'||CAST(FLOOR(X/256.0) AS INT)||'.'||MOD(X,256),?,10,20
+                FROM SYSTEM_RANGE(1,500)
+                """,end+(cycle-1)*60000L+1000);
+            summaries.aggregate(boundary(),1000,now+cycle*60000L);
+            started=System.nanoTime();
+            previous=queries.advanceAt(hosts,previous,now+cycle*60000L);
+            repository.save(previous,repository.encode(previous));
+            incrementalTimes.add((System.nanoTime()-started)/1_000_000);
+        }
+        assertThat(previous.view(1440,hosts).report().total().healthy()).isEqualTo(500L*((1440-3)*58+3));
+        assertThat(incrementalTimes).allSatisfy(ms -> assertThat(ms).isLessThan(60000));
+        System.out.println("AVAILABILITY_INCREMENTAL_BENCHMARK cycles_ms="+incrementalTimes);
         System.out.printf("AVAILABILITY_BENCHMARK hosts=500 periods=%d build_ms=%d persist_ms=%d restore_ms=%d gzip_bytes=%d combine_250_hosts_us=%d select_count=%d heap_delta_bytes=%d%n",
             snapshot.periods().size(),buildMillis,persistMillis,restoreMillis,encoded.bytes(),combineMicros,selectCount,heapDelta);
     }

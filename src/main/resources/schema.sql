@@ -133,3 +133,27 @@ CREATE TABLE IF NOT EXISTS availability_snapshot (
     built_at BIGINT NOT NULL,
     payload TEXT NOT NULL
 );
+
+-- Additive corrections committed with minute summaries; revision is the ingestion cursor.
+CREATE TABLE IF NOT EXISTS availability_change (
+    revision BIGINT NOT NULL,
+    host_id VARCHAR(255) NOT NULL,
+    target VARCHAR(255) NOT NULL,
+    minute_at BIGINT NOT NULL,
+    healthy BIGINT NOT NULL,
+    degraded BIGINT NOT NULL,
+    lost BIGINT NOT NULL,
+    errors BIGINT NOT NULL,
+    latency_sum DOUBLE PRECISION NOT NULL,
+    last_sample_at BIGINT NOT NULL,
+    valid_minutes BIGINT NOT NULL,
+    PRIMARY KEY(revision, host_id, target, minute_at)
+);
+CREATE TABLE IF NOT EXISTS availability_change_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    floor_revision BIGINT NOT NULL
+);
+-- Existing snapshots older than this floor require one controlled rebuild on upgrade.
+INSERT INTO availability_change_state(id,floor_revision)
+SELECT 1,cursor_id FROM ping_aggregation_progress
+WHERE id=1 AND NOT EXISTS (SELECT 1 FROM availability_change_state WHERE id=1);

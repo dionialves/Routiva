@@ -14,4 +14,11 @@ class AggregationSchedulingConfiguration {
         scheduler.setThreadNamePrefix("indicators-");
         return scheduler;
     }
+    @Bean
+    ThreadPoolTaskScheduler availabilityScheduler() {
+        var scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("availability-");
+        return scheduler;
+    }
 }

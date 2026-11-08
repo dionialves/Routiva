@@ -18,7 +18,7 @@ class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
         var monitor=mock(ZabbixService.class);
         var repository=spy(new AvailabilitySnapshotRepository(jdbc, new ObjectMapper()));
         when(monitor.hosts()).thenReturn(List.of(host, other));
-        when(builder.build(anyList())).thenReturn(queries.buildAt(List.of(host, other), AvailabilityDashboard.MINUTES, now));
+        when(builder.advance(anyList(),nullable(AvailabilitySnapshot.class))).thenReturn(queries.buildAt(List.of(host, other), AvailabilityDashboard.MINUTES, now));
         var cache=new AvailabilitySnapshotCache(builder, repository, monitor);
         assertThat(cache.query(5, "g").view()).isNull();
         cache.refresh();
@@ -48,13 +48,13 @@ class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
         var monitor=mock(ZabbixService.class);
         var repository=spy(new AvailabilitySnapshotRepository(jdbc, new ObjectMapper()));
         when(monitor.hosts()).thenReturn(List.of(host));
-        when(builder.build(anyList())).thenReturn(queries.buildAt(List.of(host), AvailabilityDashboard.MINUTES, now));
+        when(builder.advance(anyList(),nullable(AvailabilitySnapshot.class))).thenReturn(queries.buildAt(List.of(host), AvailabilityDashboard.MINUTES, now));
         var cache=new AvailabilitySnapshotCache(builder, repository, monitor);
         cache.refresh();
         var previous=cache.query(5, "").view();
         insert(end-30000, null, "Tempo esgotado"); drain(10);
         var next=queries.buildAt(List.of(host), AvailabilityDashboard.MINUTES, now);
-        when(builder.build(anyList())).thenReturn(next);
+        when(builder.advance(anyList(),nullable(AvailabilitySnapshot.class))).thenReturn(next);
         doAnswer(call -> {
             assertThat(cache.query(5, "").view()).isSameAs(previous);
             throw new IllegalStateException("simulated database failure");
@@ -66,9 +66,41 @@ class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
         cache.refresh();
         assertThat(cache.query(5, "").view().report().total().technical()).isEqualTo(50d);
         assertThat(repository.load().version()).isEqualTo(next.version());
-        when(builder.build(anyList())).thenThrow(new IllegalStateException("simulated calculation failure"));
+        when(builder.advance(anyList(),nullable(AvailabilitySnapshot.class))).thenThrow(new IllegalStateException("simulated calculation failure"));
         cache.refresh();
         assertThat(cache.query(5, "").view().report().total().technical()).isEqualTo(50d);
+    }
+
+    @Test void slowPublisherDoesNotBlockAggregationOrCacheReaders() throws Exception {
+        insert(end-60000,10d,null); drain(10);
+        var builder=mock(PacketLossAnalysisService.class);
+        var monitor=mock(ZabbixService.class);
+        var repository=new AvailabilitySnapshotRepository(jdbc,new ObjectMapper());
+        when(monitor.hosts()).thenReturn(List.of(host));
+        var initial=queries.buildAt(List.of(host),AvailabilityDashboard.MINUTES,now);
+        when(builder.advance(anyList(),nullable(AvailabilitySnapshot.class))).thenReturn(initial);
+        var cache=new AvailabilitySnapshotCache(builder,repository,monitor);
+        cache.refresh();
+        var previous=cache.query(5, "").view();
+        var started=new java.util.concurrent.CountDownLatch(1);
+        var release=new java.util.concurrent.CountDownLatch(1);
+        when(builder.advance(anyList(),nullable(AvailabilitySnapshot.class))).thenAnswer(call -> {
+            started.countDown();
+            if (!release.await(10,java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+            return initial;
+        });
+        try (var pool=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var publishing=pool.submit(cache::refresh);
+            try {
+                assertThat(started.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                insert(end-30000,null,"Tempo esgotado");
+                pool.submit(() -> new br.com.scriptping.aggregation.MinuteAggregationScheduled(summaries,100).aggregate())
+                    .get(5,java.util.concurrent.TimeUnit.SECONDS);
+                assertThat(count("lost")).isEqualTo(1);
+                assertThat(cache.query(5, "").view()).isSameAs(previous);
+            } finally { release.countDown(); }
+            publishing.get(5,java.util.concurrent.TimeUnit.SECONDS);
+        }
     }
 
     @Test void periodClassificationDoesNotUseOtherWindowsOrCurrentAcknowledgement() {
@@ -104,7 +136,7 @@ class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
         assertThat(cache.query(1440, "").view()).isNull();
         insert(end-60000, 10d, null); drain(10);
         when(monitor.hosts()).thenReturn(List.of(host));
-        when(builder.build(anyList())).thenReturn(queries.buildAt(List.of(host),AvailabilityDashboard.MINUTES,now));
+        when(builder.advance(anyList(),nullable(AvailabilitySnapshot.class))).thenReturn(queries.buildAt(List.of(host),AvailabilityDashboard.MINUTES,now));
         cache.refresh();
         assertThat(cache.query(1440, "").view().report().total().technical()).isEqualTo(100d);
     }

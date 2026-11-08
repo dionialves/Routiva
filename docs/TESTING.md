@@ -36,6 +36,9 @@ Os caminhos Java abaixo são relativos a `src/test/java/br/com/scriptping`; Java
 | Agregação por minuto | `MinuteAggregationTests` | Limites temporais, páginas, atraso, reinício, concorrência, cursor transacional, atualização de minuto já consolidado, troca de IP, esquema idempotente |
 | Relatórios e indicadores | `MinuteReportTests` | Média ponderada, lacunas, grupos, pares host/IP exatos, backlog, dados antigos, correção por chegada tardia |
 | Retenção | `SampleStoreRetentionTests`, `MinuteAggregationTests` | Corte temporal, configurações inválidas, teto de 48h, exclusão somente após processamento, resumos preservados |
+| Disponibilidade incremental | `AvailabilityIncrementalTests` | Equivalência dos 16 períodos com cálculo completo; entrada/expiração, correções tardias, cobertura, mês/ano/semana, IP/inventário, reinício e confirmação limitada à revisão capturada |
+| Independência da agregação | `AvailabilitySnapshotCacheTests` | Publicador ocupado não bloqueia agregação nem leitores; falhas preservam versão e diário |
+| Carga PostgreSQL (opcional) | `AvailabilityPostgresBenchmarkTests` | 4,5 milhões de minutos, 500 hosts, dois anos de resumos diários, cinco ciclos, equivalência e EXPLAIN ANALYZE |
 | Cache persistido de disponibilidade | `AvailabilitySnapshotCacheTests`, `DashboardTests` | Restauração dos períodos, leituras sem banco, publicação após persistência, rollback da substituição, falhas preservam versão anterior, classificação no período |
 | Consultas históricas agrupadas | `HistoricalAvailabilityTests` | Equivalência com resumos por minuto, bordas de calendário, resoluções por hora/dia, cobertura |
 | Carga de disponibilidade (opcional) | `AvailabilitySnapshotBenchmarkTests` | 500 hosts, 24h de minutos, 2 anos de resumos diários, duração e tamanho de geração/restauração |

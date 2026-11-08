@@ -32,9 +32,15 @@ public class AvailabilitySnapshotRepository {
 
     @Transactional(propagation=Propagation.REQUIRES_NEW)
     public void save(AvailabilitySnapshot snapshot, Encoded encoded) {
+        long revision=snapshot.load().liveCursor();
+        long floor=jdbc.queryForObject("SELECT floor_revision FROM availability_change_state WHERE id=1 FOR UPDATE", Long.class);
+        if (revision<floor) throw new IllegalStateException("Availability revision moved backwards");
         jdbc.update("DELETE FROM availability_snapshot WHERE id=1");
         jdbc.update("INSERT INTO availability_snapshot(id,format_version,built_at,payload) VALUES(1,?,?,?)",
             snapshot.format(), snapshot.builtAt(), encoded.payload());
+        // Checkpoint, published payload and journal acknowledgement commit together.
+        jdbc.update("DELETE FROM availability_change WHERE revision<=?", revision);
+        jdbc.update("UPDATE availability_change_state SET floor_revision=? WHERE id=1", revision);
     }
 
     public AvailabilitySnapshot load() {

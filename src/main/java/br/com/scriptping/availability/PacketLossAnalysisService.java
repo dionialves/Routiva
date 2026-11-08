@@ -32,6 +32,43 @@ public class PacketLossAnalysisService {
         return buildAt(hosts, AvailabilityDashboard.MINUTES, System.currentTimeMillis());
     }
 
+    @Transactional(readOnly=true, isolation=Isolation.REPEATABLE_READ)
+    public AvailabilitySnapshot advance(List<Host> hosts, AvailabilitySnapshot previous) {
+        return advanceAt(hosts, previous, System.currentTimeMillis());
+    }
+
+    AvailabilitySnapshot advanceAt(List<Host> hosts, AvailabilitySnapshot previous, long now) {
+        hosts=hosts.stream().map(h -> new Host(h.id(),h.name(),h.ip(),List.copyOf(h.groups()),h.acknowledgedIcmpProblem())).toList();
+        var log=org.slf4j.LoggerFactory.getLogger("routiva.indicators");
+        var progress=store.progress();
+        if (progress.processedAt()==null || progress.completeThrough()==0) return null;
+        if (previous==null || previous.to()>progress.completeThrough()
+            || previous.load().liveCursor()>progress.cursor()
+            || !previous.periods().keySet().containsAll(AvailabilityDashboard.MINUTES)) {
+            log.info("event=AVAILABILITY_REBUILD reason=missing_or_incompatible_checkpoint hosts={}",hosts.size());
+            return buildAt(hosts,AvailabilityDashboard.MINUTES,now);
+        }
+        var changes=store.changesSince(previous.load().liveCursor(),progress.cursor());
+        if (previous.load().liveCursor()<changes.floor() || changes.truncated()) {
+            log.info("event=AVAILABILITY_REBUILD reason=journal_gap_or_replay_limit cursor={} floor={}",previous.load().liveCursor(),changes.floor());
+            return buildAt(hosts,AvailabilityDashboard.MINUTES,now);
+        }
+        var old=new HashMap<String,Host>();
+        previous.hosts().forEach(h -> old.put(h.id(),h));
+        var added=hosts.stream().filter(h -> !old.containsKey(h.id()) || !Objects.equals(old.get(h.id()).ip(),h.ip())).toList();
+        var seed=added.isEmpty()?null:buildAt(added,AvailabilityDashboard.MINUTES,now);
+        var update=new AvailabilityIncrementalUpdate(store,hosts,changes.changes(),this::status,freshness);
+        try {
+            var next=update.apply(previous,seed,progress,now);
+            log.info("event=AVAILABILITY_INCREMENTAL from_revision={} to_revision={} changes={} new_hosts={} range_reads={} reused_points={}",
+                previous.load().liveCursor(),progress.cursor(),changes.changes().size(),added.size(),update.rangeReads(),update.reusedPoints());
+            return next;
+        } catch (AvailabilityIncrementalUpdate.InvalidState e) {
+            log.warn("event=AVAILABILITY_REBUILD reason=inconsistent_counters");
+            return buildAt(hosts,AvailabilityDashboard.MINUTES,now);
+        }
+    }
+
     AvailabilitySnapshot buildAt(List<Host> hosts, List<Integer> minutes, long now) {
         hosts = hosts.stream().map(h -> new Host(h.id(), h.name(), h.ip(), List.copyOf(h.groups()), h.acknowledgedIcmpProblem())).toList();
         var progress=store.progress();

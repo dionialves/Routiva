@@ -18,6 +18,7 @@ import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 @SpringBootTest(
     properties = {
         "indicators.aggregation.initial-delay-ms=3600000",
+        "indicators.availability.initial-delay-ms=3600000",
         "spring.datasource.url=jdbc:h2:mem:test;DB_CLOSE_DELAY=-1",
         "zabbix.url=",
         "zabbix.username=",
@@ -65,6 +66,7 @@ class DashboardTests {
         insertSample(first, 10d, null);
         insertSample(second, null, "Tempo esgotado");
         aggregation.aggregate();
+        cache.refresh();
         for (int minutes : AvailabilityDashboard.MINUTES) {
             mvc.perform(get("/api/availability").param("minutes", String.valueOf(minutes)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.view.hosts.length()").value(2))
@@ -100,12 +102,16 @@ class DashboardTests {
         insertSample(h, 10d, null);
         insertSample(h, null, "Tempo esgotado");
         aggregation.aggregate();
+        cache.refresh();
         var result = availabilityDashboard.query(5, "");
         var summaries = jdbc.queryForMap("SELECT SUM(total_pings) AS total, SUM(lost) AS lost, SUM(latency_sum) AS latency FROM ping_minute WHERE host_id='test'");
         assertThat(((Number)summaries.get("total")).longValue()).isEqualTo(2);
         assertThat(((Number)summaries.get("lost")).longValue()).isEqualTo(1);
         assertThat(((Number)summaries.get("latency")).doubleValue()).isEqualTo(10d);
     }
+
+    @Autowired
+    AvailabilitySnapshotCache cache;
 
     @Autowired
     AvailabilitySnapshotRepository snapshots;
@@ -116,16 +122,23 @@ class DashboardTests {
         org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(h));
         insertSample(h,10d,null);
         aggregation.aggregate();
+        cache.refresh();
         var previous=snapshots.load();
         assertThat(previous).isNotNull();
         var invalid=new AvailabilitySnapshot(previous.format(), "invalid", -1, previous.to(),
             previous.load(), previous.hosts(), previous.periods());
         var payload=snapshots.encode(invalid);
+        insertSample(h,null,"Tempo esgotado");
+        aggregation.aggregate(); // New changes must survive a failed publication transaction.
+        long changes=jdbc.queryForObject("SELECT COUNT(*) FROM availability_change",Long.class);
+        long floor=jdbc.queryForObject("SELECT floor_revision FROM availability_change_state WHERE id=1",Long.class);
         jdbc.execute("ALTER TABLE availability_snapshot ADD CONSTRAINT snapshot_positive_time CHECK (built_at>=0)");
         try {
             org.assertj.core.api.Assertions.assertThatThrownBy(() -> snapshots.save(invalid,payload))
                 .isInstanceOf(org.springframework.dao.DataAccessException.class);
             assertThat(snapshots.load().version()).isEqualTo(previous.version());
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM availability_change",Long.class)).isEqualTo(changes);
+            assertThat(jdbc.queryForObject("SELECT floor_revision FROM availability_change_state WHERE id=1",Long.class)).isEqualTo(floor);
             assertThat(availabilityDashboard.query(5, "").view().hosts().getFirst().id()).isEqualTo(h.id());
         } finally {
             jdbc.execute("ALTER TABLE availability_snapshot DROP CONSTRAINT snapshot_positive_time");

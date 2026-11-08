@@ -158,7 +158,9 @@ final class HistoricalAggregation {
                 + "SUM(lost),SUM(errors),SUM(latency_sum),MAX(last_sample_at),SUM(coverage) FROM ("
                 + "SELECT CASE" + cases + " END AS interval_id,host_id,target,total_pings,healthy,degraded,"
                 + "lost,errors,latency_sum,last_sample_at," + coverage + " AS coverage FROM " + table
-                + " WHERE (" + ranges + ")" + (resolution == 60_000L ? "" : " AND resolution=" + resolution)
+                + " WHERE " + time + ">=" + selected.stream().mapToLong(Segment::from).min().orElseThrow()
+                + " AND " + time + "<" + selected.stream().mapToLong(Segment::to).max().orElseThrow()
+                + " AND (" + ranges + ")" + (resolution == 60_000L ? "" : " AND resolution=" + resolution)
                 + " AND (" + filter + ")) selected GROUP BY interval_id,host_id,target";
             jdbc.query(sql, rs -> {
                 var summary = new Summary(rs.getString(2), rs.getString(3), 0, rs.getLong(4),
@@ -172,7 +174,7 @@ final class HistoricalAggregation {
     private String hostFilter(List<Host> hosts, List<Object> args) {
         var keys = hosts.stream().map(h -> new Key(h.id(), h.ip())).distinct().toList();
         keys.forEach(k -> { args.add(k.host()); args.add(k.target()); });
-        return String.join(" OR ", Collections.nCopies(keys.size(), "(host_id=? AND target=?)"));
+        return "(host_id,target) IN (" + String.join(",", Collections.nCopies(keys.size(), "(?,?)")) + ")";
     }
 
     Map<Key, Long> earliestByHost(List<Host> hosts) {
