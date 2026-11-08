@@ -66,6 +66,26 @@ class CollectorPersistenceTests {
         assertThat(jdbc.queryForObject("SELECT SUM(total_pings) FROM ping_rollup WHERE host_id='retry' AND resolution=3600000",Long.class)).isEqualTo(3);
         assertThat(jdbc.queryForObject("SELECT SUM(healthy+degraded+lost) FROM availability_change WHERE host_id='retry'",Long.class)).isEqualTo(3);
     }
+    @Test void keepsFirstAttemptAcrossMultiRowInserts() {
+        String collector = "multirow";
+        long at = System.currentTimeMillis();
+        var first = result(collector, 1, Status.SUCCESS, at, 10);
+        var duplicate = first.toBuilder().setStatus(Status.TIMEOUT).build();
+        var batch = Batch.newBuilder().setCollectorId(collector).setBatchId(1)
+            .setProtocolVersion(1).addResults(first).addResults(duplicate);
+        for (int attempt = 2; attempt <= 500; attempt++) {
+            batch.addResults(result(collector, attempt, Status.SUCCESS, at, 10));
+        }
+        batch.addResults(duplicate);
+        store.saveBatch(batch.build());
+
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE collector_id=?",
+            Long.class, collector)).isEqualTo(500);
+        assertThat(jdbc.queryForObject(
+            "SELECT collection_status FROM ping_sample WHERE collector_id=? AND attempt_id=1",
+            String.class, collector)).isEqualTo("SUCCESS");
+    }
+
     @Test void mergesBatchesAndPreservesExtremesAndThreshold() {
         long at=Math.floorDiv(System.currentTimeMillis(),60000)*60000;
         var r=result("merge",1,Status.SUCCESS,at,30).toBuilder().setLatencyLimitMs(35).build();
