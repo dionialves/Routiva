@@ -36,6 +36,9 @@ Os caminhos Java abaixo são relativos a `src/test/java/br/com/scriptping`; Java
 | Agregação por minuto | `MinuteAggregationTests` | Limites temporais, páginas, atraso, reinício, concorrência, cursor transacional, atualização de minuto já consolidado, troca de IP, esquema idempotente |
 | Relatórios e indicadores | `MinuteReportTests` | Média ponderada, lacunas, grupos, pares host/IP exatos, backlog, dados antigos, correção por chegada tardia |
 | Retenção | `SampleStoreRetentionTests`, `MinuteAggregationTests` | Corte temporal, configurações inválidas, teto de 48h, exclusão somente após processamento, resumos preservados |
+| Cache persistido de disponibilidade | `AvailabilitySnapshotCacheTests`, `DashboardTests` | Restauração dos períodos, leituras sem banco, publicação após persistência, rollback da substituição, falhas preservam versão anterior, classificação no período |
+| Consultas históricas agrupadas | `HistoricalAvailabilityTests` | Equivalência com resumos por minuto, bordas de calendário, resoluções por hora/dia, cobertura |
+| Carga de disponibilidade (opcional) | `AvailabilitySnapshotBenchmarkTests` | 500 hosts, 24h de minutos, 2 anos de resumos diários, duração e tamanho de geração/restauração |
 | Atualização do dashboard no navegador | `availability.test.cjs` | Parâmetros, busca com debounce, abortar/ignorar resposta antiga, erro HTTP/rede, recuperação, duração medida sem inventar indisponibilidade |
 | Agregação e interação do gráfico | `availability-chart.test.cjs` | Contagens ponderadas, intervalos vazios, ausência de interpolação através de lacunas, consulta por toque/teclado |
 | Seleção de grupos | `group-picker.test.cjs` | Busca com acentos, confirmação explícita, Escape, resultado vazio, teclado, atualização do inventário, mesma seleção sem novo evento |

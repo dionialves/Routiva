@@ -10,19 +10,16 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class AvailabilityDashboardTests extends MinuteTestSupport {
-    @Test void queriesOnlyRequestedGroupAndPeriodAndRejectsUnknownFilters() {
-        var monitor=mock(ZabbixService.class);
-        var analysis=mock(PacketLossAnalysisService.class);
-        var other=new Host("b","Other","127.0.0.2",List.of());
-        when(monitor.hosts()).thenReturn(List.of(host,other));
-        when(analysis.view(List.of(host),5)).thenReturn(queries.viewAt(List.of(host),5,now));
-        var dashboard=new AvailabilityDashboard(monitor,analysis);
+    @Test void queriesOnlyPublishedCache() {
+        var cache=mock(AvailabilitySnapshotCache.class);
+        var result=new AvailabilityDashboard.Result(host.groups(), queries.viewAt(List.of(host),5,now));
+        when(cache.query(5,"g")).thenReturn(result);
+        var dashboard=new AvailabilityDashboard(cache);
         var controller=new AvailabilityDashboardController(dashboard);
         assertThat(controller.data(5,"g").getBody().view().hosts()).hasSize(1);
-        verify(analysis).view(List.of(host),5);
-        verifyNoMoreInteractions(analysis);
+        verify(cache).query(5,"g");
         assertThatThrownBy(()->controller.data(31,"")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
-        assertThatThrownBy(()->controller.data(5,"missing")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        verifyNoMoreInteractions(cache);
     }
     @Test void paginationSearchAndSortKeepFullSelectionTotals() {
         var report=queries.viewAt(List.of(),5,now).report();

@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** HTTP contracts: validation, authorization, payload and failure responses; no markup assertions. */
 class ApiContractTests {
     private final ZabbixService monitor = mock(ZabbixService.class);
-    private final PacketLossAnalysisService analysis = mock(PacketLossAnalysisService.class);
+    private final AvailabilitySnapshotCache cache = mock(AvailabilitySnapshotCache.class);
     private final ZabbixClient client = mock(ZabbixClient.class);
     private final ZabbixSettings settings = mock(ZabbixSettings.class);
     private final Host host = new Host("h", "Router", "10.0.0.1", List.of());
@@ -31,42 +31,43 @@ class ApiContractTests {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-            new HostDetailsController(monitor, new HostAvailabilityService(analysis)),
+            new HostDetailsController(new HostAvailabilityService(cache)),
             new ZabbixSettingsController(settings, client, monitor)).build();
         when(monitor.hosts()).thenReturn(List.of(host));
     }
 
     @ParameterizedTest
     @ValueSource(ints = {1, 8, 24, 48})
-    void supportedHostPeriodsReturnDataWithoutCaching(int hours) throws Exception {
+    void supportedHostPeriodsReturnCachedDataWithBrowserCachingDisabled(int hours) throws Exception {
         var metrics = new HostAvailabilityService.Counts().metrics();
         var report = new HostAvailabilityService.Report(0, 60000, 60000, metrics, List.of(), "v1", 60000L, null, 0);
-        when(analysis.availability(host, hours)).thenReturn(report);
+        when(cache.host(host.id(), hours*60)).thenReturn(report);
         mvc.perform(get("/api/hosts/h/availability").param("hours", String.valueOf(hours)))
             .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
             .andExpect(jsonPath("$.version").value("v1"))
             .andExpect(jsonPath("$.total.totalPings").value(0))
             .andExpect(jsonPath("$.total.technical").isEmpty());
-        verify(analysis).availability(host, hours);
+        verify(cache).host(host.id(), hours*60);
     }
 
     @Test
     void missingPeriodDefaultsTo24Hours() throws Exception {
         mvc.perform(get("/api/hosts/h/availability")).andExpect(status().isOk());
-        verify(analysis).availability(host, 24);
+        verify(cache).host(host.id(), 1440);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"0", "-1", "2", "49", "abc", "2147483648"})
     void invalidHostPeriodNeverQueriesStorage(String hours) throws Exception {
         mvc.perform(get("/api/hosts/h/availability").param("hours", hours)).andExpect(status().isBadRequest());
-        verifyNoInteractions(analysis);
+        verifyNoInteractions(cache);
     }
 
     @Test
     void unknownHostReturns404WithoutReadingHistory() throws Exception {
+        when(cache.host("unknown", 1440)).thenThrow(new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND));
         mvc.perform(get("/api/hosts/unknown/availability")).andExpect(status().isNotFound());
-        verifyNoInteractions(analysis);
+        verify(cache).host("unknown", 1440);
     }
 
     @ParameterizedTest

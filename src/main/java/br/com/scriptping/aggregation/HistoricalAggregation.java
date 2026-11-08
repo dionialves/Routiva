@@ -117,13 +117,84 @@ final class HistoricalAggregation {
         return valid[0];
     }
 
-    long earliest(List<Host> hosts, long fallback) {
-        long earliest = fallback;
-        for (Host host : hosts) {
-            Long value = jdbc.queryForObject("SELECT MIN(minute_at) FROM ping_minute WHERE host_id=? AND target=?",
-                Long.class, host.id(),host.ip());
-            if (value != null) earliest = Math.min(earliest,value);
+    record Segment(int index, long from, long to, long resolution) {}
+
+    /** At most three queries per period, regardless of host or chart interval count. */
+    List<MinuteAggregationService.HistoricalBucket> buckets(
+        List<br.com.scriptping.availability.AvailabilityPeriod.Interval> intervals,
+        List<Host> hosts, boolean accelerated) {
+        var result = new ArrayList<MinuteAggregationService.HistoricalBucket>();
+        if (hosts.isEmpty() || intervals.isEmpty()) return result;
+        var segments = new ArrayList<Segment>();
+        for (int index = 0; index < intervals.size(); index++) {
+            var interval = intervals.get(index);
+            long at = interval.from();
+            while (at < interval.to()) {
+                long resolution = accelerated && at % DAY == 0 && interval.to() - at >= DAY ? DAY
+                    : accelerated && at % HOUR == 0 && interval.to() - at >= HOUR ? HOUR : 60_000L;
+                long end = resolution == DAY ? Math.floorDiv(interval.to(), DAY) * DAY
+                    : resolution == HOUR ? Math.min(Math.floorDiv(interval.to(), HOUR) * HOUR,
+                        (Math.floorDiv(at, DAY) + 1) * DAY)
+                    : accelerated ? Math.min(interval.to(), (Math.floorDiv(at, HOUR) + 1) * HOUR) : interval.to();
+                segments.add(new Segment(index, at, end, resolution));
+                at = end;
+            }
         }
-        return earliest;
+        for (long resolution : new long[]{60_000L, HOUR, DAY}) {
+            var selected = segments.stream().filter(s -> s.resolution() == resolution).toList();
+            if (selected.isEmpty()) continue;
+            String time = resolution == 60_000L ? "minute_at" : "bucket_at";
+            String table = resolution == 60_000L ? "ping_minute" : "ping_rollup";
+            String coverage = resolution == 60_000L
+                ? "CASE WHEN healthy+degraded+lost>0 THEN 1 ELSE 0 END" : "valid_minutes";
+            // Boundaries come only from server-generated calendar intervals, never request text.
+            String cases = selected.stream().map(s -> " WHEN " + time + ">=" + s.from()
+                + " AND " + time + "<" + s.to() + " THEN " + s.index()).collect(java.util.stream.Collectors.joining());
+            String ranges = selected.stream().map(s -> "(" + time + ">=" + s.from()
+                + " AND " + time + "<" + s.to() + ")").collect(java.util.stream.Collectors.joining(" OR "));
+            var args = new ArrayList<Object>();
+            String filter = hostFilter(hosts, args);
+            String sql = "SELECT interval_id,host_id,target,SUM(total_pings),SUM(healthy),SUM(degraded),"
+                + "SUM(lost),SUM(errors),SUM(latency_sum),MAX(last_sample_at),SUM(coverage) FROM ("
+                + "SELECT CASE" + cases + " END AS interval_id,host_id,target,total_pings,healthy,degraded,"
+                + "lost,errors,latency_sum,last_sample_at," + coverage + " AS coverage FROM " + table
+                + " WHERE (" + ranges + ")" + (resolution == 60_000L ? "" : " AND resolution=" + resolution)
+                + " AND (" + filter + ")) selected GROUP BY interval_id,host_id,target";
+            jdbc.query(sql, rs -> {
+                var summary = new Summary(rs.getString(2), rs.getString(3), 0, rs.getLong(4),
+                    rs.getLong(5), rs.getLong(6), rs.getLong(7), rs.getLong(8), rs.getDouble(9), rs.getLong(10));
+                result.add(new MinuteAggregationService.HistoricalBucket(rs.getInt(1), summary, rs.getLong(11)));
+            }, args.toArray());
+        }
+        return result;
+    }
+
+    private String hostFilter(List<Host> hosts, List<Object> args) {
+        var keys = hosts.stream().map(h -> new Key(h.id(), h.ip())).distinct().toList();
+        keys.forEach(k -> { args.add(k.host()); args.add(k.target()); });
+        return String.join(" OR ", Collections.nCopies(keys.size(), "(host_id=? AND target=?)"));
+    }
+
+    Map<Key, Long> earliestByHost(List<Host> hosts) {
+        var result = new HashMap<Key, Long>();
+        if (hosts.isEmpty()) return result;
+        var args = new ArrayList<Object>();
+        var keys = hosts.stream().map(h -> new Key(h.id(), h.ip())).distinct().toList();
+        keys.forEach(k -> { args.add(k.host()); args.add(k.target()); });
+        String values = String.join(",", Collections.nCopies(keys.size(),
+            "(CAST(? AS VARCHAR(255)),CAST(? AS VARCHAR(255)))"));
+        // One round trip, with an indexed MIN lookup per endpoint. A GROUP BY over the
+        // full two-year minute history would otherwise scan every retained minute.
+        jdbc.query("SELECT selected.host_id,selected.target,(SELECT MIN(m.minute_at) FROM ping_minute m"
+            + " WHERE m.host_id=selected.host_id AND m.target=selected.target) FROM (VALUES "
+            + values + ") AS selected(host_id,target)", rs -> {
+                Long first = rs.getObject(3, Long.class);
+                if (first != null) result.put(new Key(rs.getString(1), rs.getString(2)), first);
+            }, args.toArray());
+        return Map.copyOf(result);
+    }
+
+    long earliest(List<Host> hosts, long fallback) {
+        return earliestByHost(hosts).values().stream().mapToLong(Long::longValue).min().orElse(fallback);
     }
 }

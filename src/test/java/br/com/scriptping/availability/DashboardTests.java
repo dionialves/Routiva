@@ -107,6 +107,31 @@ class DashboardTests {
         assertThat(((Number)summaries.get("latency")).doubleValue()).isEqualTo(10d);
     }
 
+    @Autowired
+    AvailabilitySnapshotRepository snapshots;
+
+    @Test
+    void failedSnapshotReplacementRollsBackDeletionAndRetainsPublishedVersion() {
+        var h=new Host("rollback-host", "Rollback", "127.0.0.4", java.util.List.of());
+        org.mockito.Mockito.when(monitor.hosts()).thenReturn(java.util.List.of(h));
+        insertSample(h,10d,null);
+        aggregation.aggregate();
+        var previous=snapshots.load();
+        assertThat(previous).isNotNull();
+        var invalid=new AvailabilitySnapshot(previous.format(), "invalid", -1, previous.to(),
+            previous.load(), previous.hosts(), previous.periods());
+        var payload=snapshots.encode(invalid);
+        jdbc.execute("ALTER TABLE availability_snapshot ADD CONSTRAINT snapshot_positive_time CHECK (built_at>=0)");
+        try {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> snapshots.save(invalid,payload))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+            assertThat(snapshots.load().version()).isEqualTo(previous.version());
+            assertThat(availabilityDashboard.query(5, "").view().hosts().getFirst().id()).isEqualTo(h.id());
+        } finally {
+            jdbc.execute("ALTER TABLE availability_snapshot DROP CONSTRAINT snapshot_positive_time");
+        }
+    }
+
     private void insertSample(Host host, Double latency, String error) {
         jdbc.update(
             "INSERT INTO ping_sample(host_id,target,measured_at,latency,error,latency_limit) VALUES(?,?,?,?,?,?)",

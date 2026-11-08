@@ -67,6 +67,35 @@ class HistoricalAvailabilityTests extends MinuteTestSupport {
         assertThat(summaries.historicalTotals(old-60000,end,List.of(host),true)).isEqualTo(source);
     }
 
+    @Test void groupedBucketsMatchSourceAcrossAllPeriodsAndStorageResolutions() {
+        var other = new Host("b", "Other", "127.0.0.2", List.of());
+        long start = AvailabilityPeriod.of(1051200).from(end);
+        for (long at : new long[]{start-60000, start, end-100*86400000L, end-7*86400000L,
+            end-86400000L, end-3600000L, end-60000, end}) {
+            insert(at,10d,null);
+            insert(other,at,null,"Tempo esgotado",20);
+        }
+        drain(100);
+        var hosts=List.of(host,other);
+        for (var option : AvailabilityPeriod.OPTIONS) {
+            var intervals=option.intervals(option.from(end),end);
+            var grouped=summaries.historicalBuckets(intervals,hosts,true);
+            for (int index=0; index<intervals.size(); index++) {
+                var interval=intervals.get(index);
+                var expected=summaries.historicalTotals(interval.from(),interval.to(),hosts,false);
+                var actual=new HashMap<br.com.scriptping.aggregation.MinuteAggregationService.Key,
+                    br.com.scriptping.aggregation.MinuteAggregationService.Summary>();
+                long covered=0;
+                for (var bucket : grouped) if (bucket.index()==index) {
+                    actual.merge(bucket.summary().key(),bucket.summary(),br.com.scriptping.aggregation.MinuteAggregationService::combine);
+                    covered+=bucket.validHostMinutes();
+                }
+                assertThat(actual).isEqualTo(expected.totals());
+                assertThat(covered).isEqualTo(expected.validHostMinutes());
+            }
+        }
+    }
+
     @Test void calendarMonthsLeapYearsAndMondayWeeksUseSaoPaulo() {
         long leap = ZonedDateTime.of(2024,2,29,13,17,0,0,AvailabilityPeriod.ZONE).toInstant().toEpochMilli();
         var year = AvailabilityPeriod.of(525600);

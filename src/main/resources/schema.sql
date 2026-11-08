@@ -124,3 +124,12 @@ CREATE TABLE IF NOT EXISTS ping_rollup (
 );
 CREATE INDEX IF NOT EXISTS idx_ping_rollup_time ON ping_rollup(resolution, bucket_at);
 ALTER TABLE ping_aggregation_progress ADD COLUMN IF NOT EXISTS rollups_ready BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Last fully built dashboard generation, compressed JSON (gzip/base64).
+-- Database replacement commits before the in-memory generation is published.
+CREATE TABLE IF NOT EXISTS availability_snapshot (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    format_version INTEGER NOT NULL,
+    built_at BIGINT NOT NULL,
+    payload TEXT NOT NULL
+);

@@ -1,9 +1,5 @@
 package br.com.scriptping.availability;
 
-import br.com.scriptping.Host;
-
-import br.com.scriptping.zabbix.ZabbixService;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
@@ -12,26 +8,15 @@ import org.springframework.web.server.ResponseStatusException;
 @Controller
 public class HostDetailsController {
 
-    private final ZabbixService monitor;
     private final HostAvailabilityService availability;
 
-    public HostDetailsController(ZabbixService monitor, HostAvailabilityService availability) {
-        this.monitor = monitor;
+    public HostDetailsController(HostAvailabilityService availability) {
         this.availability = availability;
     }
 
-    private Host host(String id) {
-        return monitor
-            .hosts()
-            .stream()
-            .filter(h -> h.id().equals(id))
-            .findFirst()
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-    }
-
-    private HostAvailabilityService.Report report(Host host, int hours) {
+    private HostAvailabilityService.Report report(String id, int hours) {
         try {
-            return availability.report(host, hours);
+            return availability.report(id, hours);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
@@ -45,6 +30,6 @@ public class HostDetailsController {
     ) {
         return org.springframework.http.ResponseEntity.ok()
             .cacheControl(org.springframework.http.CacheControl.noStore())
-            .body(report(host(id), hours));
+            .body(report(id, hours));
     }
 }

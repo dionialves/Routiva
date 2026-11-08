@@ -1,5 +1,6 @@
 package br.com.scriptping.aggregation;
 
+import br.com.scriptping.availability.AvailabilitySnapshotCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,9 +14,11 @@ public class MinuteAggregationScheduled {
     private static final Logger LOG = LoggerFactory.getLogger("routiva.indicators");
     private final MinuteAggregationService summaries;
     private final int pageSize;
+    private final AvailabilitySnapshotCache availability;
 
     public MinuteAggregationScheduled(
         MinuteAggregationService summaries,
+        AvailabilitySnapshotCache availability,
         @Value("${indicators.aggregation.page-size:10000}")
         int pageSize
     ) {
@@ -25,11 +28,12 @@ public class MinuteAggregationScheduled {
             );
 
         this.summaries = summaries;
+        this.availability = availability;
         this.pageSize = pageSize;
     }
 
     @Scheduled(
-        fixedDelayString = "${indicators.aggregation.interval-ms:60000}",
+        fixedRateString = "${indicators.aggregation.interval-ms:60000}",
         initialDelayString = "${indicators.aggregation.initial-delay-ms:0}",
         scheduler = "indicatorScheduler"
     )
@@ -54,6 +58,8 @@ public class MinuteAggregationScheduled {
                 );
 
             } while (batch.cursor() < boundary && !Thread.currentThread().isInterrupted());
+
+            if (batch.cursor() == boundary && !Thread.currentThread().isInterrupted()) availability.refresh();
 
             LOG.info(
                 "event=MINUTE_AGGREGATION_COMPLETED cursor={} boundary={} total_ms={}",

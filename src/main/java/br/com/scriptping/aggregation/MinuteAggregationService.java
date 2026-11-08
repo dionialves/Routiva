@@ -130,6 +130,14 @@ public class MinuteAggregationService {
         var result = history.totals(from, to, hosts, accelerated);
         return new HistoricalResult(result.totals(), result.validHostMinutes());
     }
+    public record HistoricalBucket(int index, Summary summary, long validHostMinutes) {}
+    public List<HistoricalBucket> historicalBuckets(
+        List<br.com.scriptping.availability.AvailabilityPeriod.Interval> intervals,
+        List<Host> hosts, boolean accelerated) {
+        return history.buckets(intervals, hosts, accelerated);
+    }
+    public Map<Key, Long> earliestByHost(List<Host> hosts) { return history.earliestByHost(hosts); }
+
     public boolean historyReady() { return history.ready(); }
     public long earliest(List<Host> hosts, long fallback) { return history.earliest(hosts, fallback); }
 

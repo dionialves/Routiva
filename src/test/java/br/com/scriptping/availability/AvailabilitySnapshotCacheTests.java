@@ -1,0 +1,111 @@
+package br.com.scriptping.availability;
+
+import br.com.scriptping.Host;
+import br.com.scriptping.zabbix.ZabbixService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.*;
+import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
+    @Test void persistsRestoresEveryPeriodAndServesAllHttpSelectionsWithoutStorage() {
+        var other=new Host("b", "Produção B", "127.0.0.2", List.of(new Host.Group("other", "Outro")));
+        insert(end-60000, 10d, null);
+        insert(other, end-60000, null, "Tempo esgotado", 20);
+        drain(10);
+        var builder=mock(PacketLossAnalysisService.class);
+        var monitor=mock(ZabbixService.class);
+        var repository=spy(new AvailabilitySnapshotRepository(jdbc, new ObjectMapper()));
+        when(monitor.hosts()).thenReturn(List.of(host, other));
+        when(builder.build(anyList())).thenReturn(queries.buildAt(List.of(host, other), AvailabilityDashboard.MINUTES, now));
+        var cache=new AvailabilitySnapshotCache(builder, repository, monitor);
+        assertThat(cache.query(5, "g").view()).isNull();
+        cache.refresh();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM availability_snapshot", Integer.class)).isEqualTo(1);
+        var restored=new AvailabilitySnapshotCache(builder, repository, monitor);
+        restored.restore();
+        clearInvocations(builder, repository, monitor);
+        for (int minutes : AvailabilityDashboard.MINUTES) {
+            var original=cache.query(minutes, "").view();
+            assertThat(restored.query(minutes, "").view()).isEqualTo(original);
+            assertThat(original.report().total().technical()).isEqualTo(50d);
+            assertThat(restored.query(minutes, "g").view().report().total().technical()).isEqualTo(100d);
+        }
+        var controller=new AvailabilityDashboardController(new AvailabilityDashboard(restored));
+        var response=controller.dashboard(1440, "", "producao", "technical", "desc", 99).getBody();
+        assertThat(response.page()).isEqualTo(new AvailabilityDashboardController.Page(1,1,1,2,20));
+        assertThat(response.view().hosts().getFirst().id()).isEqualTo("b");
+        assertThat(response.view().report().total().technical()).isEqualTo(50d);
+        assertThat(new HostAvailabilityService(restored).report(host.id(),24).total().technical()).isEqualTo(100d);
+        assertThatThrownBy(() -> restored.query(5, "missing")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        verifyNoInteractions(builder, repository, monitor);
+    }
+
+    @Test void publicationWaitsForPersistenceAndFailuresKeepPreviousMemoryAndDatabaseVersion() {
+        insert(end-60000, 10d, null); drain(10);
+        var builder=mock(PacketLossAnalysisService.class);
+        var monitor=mock(ZabbixService.class);
+        var repository=spy(new AvailabilitySnapshotRepository(jdbc, new ObjectMapper()));
+        when(monitor.hosts()).thenReturn(List.of(host));
+        when(builder.build(anyList())).thenReturn(queries.buildAt(List.of(host), AvailabilityDashboard.MINUTES, now));
+        var cache=new AvailabilitySnapshotCache(builder, repository, monitor);
+        cache.refresh();
+        var previous=cache.query(5, "").view();
+        insert(end-30000, null, "Tempo esgotado"); drain(10);
+        var next=queries.buildAt(List.of(host), AvailabilityDashboard.MINUTES, now);
+        when(builder.build(anyList())).thenReturn(next);
+        doAnswer(call -> {
+            assertThat(cache.query(5, "").view()).isSameAs(previous);
+            throw new IllegalStateException("simulated database failure");
+        }).when(repository).save(any(), any());
+        cache.refresh();
+        assertThat(cache.query(5, "").view()).isSameAs(previous);
+        assertThat(repository.load().version()).isEqualTo(previous.report().version().split(":")[0]);
+        doCallRealMethod().when(repository).save(any(), any());
+        cache.refresh();
+        assertThat(cache.query(5, "").view().report().total().technical()).isEqualTo(50d);
+        assertThat(repository.load().version()).isEqualTo(next.version());
+        when(builder.build(anyList())).thenThrow(new IllegalStateException("simulated calculation failure"));
+        cache.refresh();
+        assertThat(cache.query(5, "").view().report().total().technical()).isEqualTo(50d);
+    }
+
+    @Test void periodClassificationDoesNotUseOtherWindowsOrCurrentAcknowledgement() {
+        var acknowledged=new Host(host.id(),host.name(),host.ip(),host.groups(),true);
+        for (int i=0;i<200;i++) insert(end-3600000, 10d, null);
+        insert(end-60000, null, "Tempo esgotado"); drain(1000);
+        var snapshot=queries.buildAt(List.of(acknowledged), AvailabilityDashboard.MINUTES, now);
+        assertThat(snapshot.view(5, List.of(acknowledged)).hosts().getFirst().status()).isEqualTo("CRITICO");
+        assertThat(snapshot.view(1440, List.of(acknowledged)).hosts().getFirst().status()).isEqualTo("DEGRADADO");
+        assertThat(snapshot.view(1440, List.of(acknowledged)).report().total().loss()).isCloseTo(100d/201, within(0.00001));
+    }
+
+    @Test void coverageIncludesMissingHostsWithoutConvertingGapsToDowntimeAndTargetChangesAreIsolated() {
+        var missing=new Host("b", "Missing", "127.0.0.2", List.of());
+        var previousIp=new Host(host.id(),host.name(),"127.0.0.3",host.groups());
+        insert(previousIp,end-60000,null,"Tempo esgotado",20);
+        insert(end-60000,10d,null); drain(10);
+        var snapshot=queries.buildAt(List.of(host,missing), List.of(5), now);
+        var view=snapshot.view(5,List.of(host,missing));
+        assertThat(view.report().total().technical()).isEqualTo(100d);
+        assertThat(view.report().observedMillis()).isEqualTo(30000);
+        assertThat(view.hosts().get(1).metrics().technical()).isNull();
+        assertThat(view.report().series().stream().filter(p -> p.metrics().technical()!=null)).hasSize(1);
+    }
+
+    @Test void corruptSavedGenerationLeavesLoadingUntilBackgroundRebuild() {
+        jdbc.update("INSERT INTO availability_snapshot VALUES(1,1,0,'invalid')");
+        var repository=new AvailabilitySnapshotRepository(jdbc,new ObjectMapper());
+        var builder=mock(PacketLossAnalysisService.class);
+        var monitor=mock(ZabbixService.class);
+        var cache=new AvailabilitySnapshotCache(builder,repository,monitor);
+        cache.restore();
+        assertThat(cache.query(1440, "").view()).isNull();
+        insert(end-60000, 10d, null); drain(10);
+        when(monitor.hosts()).thenReturn(List.of(host));
+        when(builder.build(anyList())).thenReturn(queries.buildAt(List.of(host),AvailabilityDashboard.MINUTES,now));
+        cache.refresh();
+        assertThat(cache.query(1440, "").view().report().total().technical()).isEqualTo(100d);
+    }
+}

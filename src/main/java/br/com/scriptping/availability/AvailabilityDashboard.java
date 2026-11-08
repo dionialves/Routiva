@@ -2,34 +2,20 @@ package br.com.scriptping.availability;
 
 import br.com.scriptping.Host;
 
-import br.com.scriptping.zabbix.ZabbixService;
 
 import java.util.*;
 import org.springframework.stereotype.Service;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 import static br.com.scriptping.availability.HostAvailabilityService.*;
 
-/** Queries only the requested group and period. No background publication or cache. */
+/** Selection is served exclusively from the published in-memory generation. */
 @Service
 public class AvailabilityDashboard {
     static final List<Integer> MINUTES=java.util.stream.Stream.concat(AvailabilityPeriod.OPTIONS.stream().map(AvailabilityPeriod::minutes), java.util.stream.Stream.of(480)).toList();
-    private final ZabbixService monitor;
-    private final PacketLossAnalysisService analysis;
+    private final AvailabilitySnapshotCache cache;
     public record Row(String id,String name,Metrics metrics,String ip,List<Host.Group> groups,
         String status,boolean fresh,boolean collectorHealthy) {}
     public record View(Report report,List<Row> hosts) {}
     public record Result(List<Host.Group> groups,View view) {}
-    public AvailabilityDashboard(ZabbixService monitor,PacketLossAnalysisService analysis) {
-        this.monitor=monitor;this.analysis=analysis;
-    }
-    public Result query(int minutes,String groupId) {
-        var hosts=monitor.hosts();
-        var groups=hosts.stream().flatMap(h->h.groups().stream()).distinct()
-            .sorted(Comparator.comparing(Host.Group::name,String.CASE_INSENSITIVE_ORDER)).toList();
-        if(!groupId.isEmpty() && groups.stream().noneMatch(g->g.id().equals(groupId)))
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Grupo indisponível");
-        var selected=groupId.isEmpty()?hosts:hosts.stream().filter(h->h.groups().stream().anyMatch(g->g.id().equals(groupId))).toList();
-        return new Result(groups,analysis.view(selected,minutes));
-    }
+    public AvailabilityDashboard(AvailabilitySnapshotCache cache) { this.cache=cache; }
+    public Result query(int minutes,String groupId) { return cache.query(minutes, groupId); }
 }

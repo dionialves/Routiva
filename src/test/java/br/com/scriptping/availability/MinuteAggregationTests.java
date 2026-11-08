@@ -185,7 +185,14 @@ class MinuteAggregationTests extends MinuteTestSupport {
         var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
         appender.start();logger.addAppender(appender);
         try {
-            new MinuteAggregationScheduled(summaries,3).aggregate();
+            var cache=org.mockito.Mockito.mock(AvailabilitySnapshotCache.class);
+            org.mockito.Mockito.doAnswer(call -> {
+                assertThat(summaries.progress().cursor()).isEqualTo(boundary());
+                assertThat(count("total_pings")).isEqualTo(10);
+                return null;
+            }).when(cache).refresh();
+            new MinuteAggregationScheduled(summaries,cache,3).aggregate();
+            org.mockito.Mockito.verify(cache).refresh();
             assertThat(count("total_pings")).isEqualTo(10);
             assertThat(appender.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)).anyMatch(s->s.contains("MINUTE_AGGREGATION_COMPLETED"));
         } finally {logger.detachAppender(appender);}

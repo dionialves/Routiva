@@ -1,20 +1,18 @@
 package br.com.scriptping.availability;
 
-import br.com.scriptping.Host;
-
 import br.com.scriptping.ingestion.PingSample;
 
 import java.util.*;
 import org.springframework.stereotype.Service;
 
-/** Queries persisted minute summaries; raw samples are never loaded for requests. */
+/** Host reports are read exclusively from the published generation. */
 @Service
 public class HostAvailabilityService {
     static final List<Integer> PERIODS = List.of(1, 8, 24, 48);
-    private final PacketLossAnalysisService indicators;
+    private final AvailabilitySnapshotCache cache;
 
-    public HostAvailabilityService(PacketLossAnalysisService indicators) {
-        this.indicators = indicators;
+    public HostAvailabilityService(AvailabilitySnapshotCache cache) {
+        this.cache = cache;
     }
 
     public record Metrics(long healthy, long degraded, long lost, Double technical,
@@ -59,8 +57,8 @@ public class HostAvailabilityService {
         }
     }
 
-    public Report report(Host host, int hours) {
+    public Report report(String id, int hours) {
         if (!PERIODS.contains(hours)) throw new IllegalArgumentException("Período inválido");
-        return indicators.availability(host, hours);
+        return cache.host(id, hours*60);
     }
 }
