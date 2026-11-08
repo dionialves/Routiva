@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.config;
 
 import io.github.cdimascio.dotenv.Dotenv;
 import java.util.LinkedHashMap;

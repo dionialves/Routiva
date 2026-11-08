@@ -1,4 +1,4 @@
-package br.com.scriptping;
+package br.com.scriptping.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
