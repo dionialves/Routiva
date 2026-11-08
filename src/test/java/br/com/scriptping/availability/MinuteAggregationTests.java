@@ -140,6 +140,19 @@ class MinuteAggregationTests extends MinuteTestSupport {
         } finally {executor.shutdownNow();}
     }
 
+    @Test void scheduledAggregationDrainsRawIdsBelowExistingLiveRevision() {
+        jdbc.update("UPDATE ping_aggregation_progress SET cursor_id=1000000,boundary_id=1000000 WHERE id=1");
+        for(int i=0;i<5;i++) insert(end-60000+i*1000,10d,null);
+        long boundary=boundary();
+        summaries.aggregate(boundary,2,now);
+        assertThat(summaries.progress().cursor()).isGreaterThan(1000000);
+        assertThat(summaries.progress().boundary()).isGreaterThan(summaries.progress().cursor());
+        new MinuteAggregationScheduled(summaries,2).aggregate();
+        assertThat(count("total_pings")).isEqualTo(5);
+        assertThat(summaries.progress().rawCursor()).isEqualTo(boundary);
+        assertThat(summaries.progress().cursor()).isEqualTo(summaries.progress().boundary());
+    }
+
     @Test void nonFiniteAndNegativeLatenciesFollowRawOutcomeSemantics() {
         insert(end-1000,Double.NaN,null);
         insert(end-1000,Double.POSITIVE_INFINITY,null);

@@ -156,7 +156,7 @@ docker compose exec -T collector routiva-collector --health | jq '{
 }'
 ```
 
-**Como interpretar o fluxo:** o Go persiste os lotes no SQLite local e mantém um lote enviado aguardando ACK por vez. Java agrega diretamente por host/destino/minuto e grava resumos, rollups, alterações do painel e recibo na mesma transação. Só depois envia ACK; o Go remove o lote da fila persistente. Novos pings individuais não são gravados no PostgreSQL. Consulte [fila persistente e agregação direta](docs/fila-persistente.md) para limites, migração e testes.
+**Como interpretar o fluxo:** o Go persiste os lotes no SQLite local e envia um lote por vez. Java grava os pings brutos em `ping_sample` e o recibo na mesma transação; após o commit envia ACK e Go remove o lote da fila persistente. A análise ocorre separadamente, a cada 60 segundos, e atualiza os resumos de minuto, rollups e alterações do painel. O ACK não depende da conclusão da análise. Consulte [fila persistente e agregação agendada](docs/fila-persistente.md).
 
 Compare leituras ao longo do tempo: aumento de `dropped_total` indica novos descartes; queda de `result_buffer` indica redução do acúmulo naquele intervalo. Um buffer estável, sozinho, não comprova equilíbrio, pois pode coexistir com descartes. Para calcular uma taxa, divida a diferença de um contador pelo tempo entre as consultas. A saída atual não expõe os IDs dos lotes pendentes nem separa lotes aguardando envio daqueles aguardando ACK.
 
@@ -379,9 +379,9 @@ Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no pro
 
 ### Agregação persistida e consultas dos indicadores
 
-O coletor persiste temporariamente os lotes na fila SQLite. O app agrega cada lote diretamente em `ping_minute`, por host/IP/minuto, mantendo contagens de respostas normais, respostas acima do limite, perdas, erros internos, soma das latências e extremos para minutos novos. Novos pings brutos não são gravados no PostgreSQL.
+O coletor persiste temporariamente os lotes na fila SQLite. O app grava os resultados individuais em `ping_sample`, preservando os horários, status e limite de latência de cada tentativa. A cada 60 segundos, o agregador lê os novos IDs em páginas transacionais e atualiza `ping_minute`, rollups e alterações do painel. A ingestão não consulta nem atualiza resumos por lote.
 
-A revisão em `ping_aggregation_progress`, os resumos e o recibo do lote são atualizados na mesma transação. O cursor dos pings brutos legados é separado da revisão da ingestão nova. Lotes podem contribuir para o mesmo minuto, e pings atrasados corrigem minutos anteriores. Em atraso de seis horas ou reinício, a agregação retoma o cursor e drena os lotes pendentes sem esperar um minuto entre eles. A limpeza preserva pings ainda não processados.
+O cursor bruto `raw_cursor_id` e a revisão de resumos `cursor_id` permanecem separados. Cada página atualiza os resumos e o progresso na mesma transação. Lotes podem contribuir para o mesmo minuto, e pings atrasados corrigem minutos anteriores. O agregador drena imediatamente o limite capturado, sem esperar um minuto entre páginas. A limpeza incremental preserva pings ainda não processados e não bloqueia o progresso.
 
 As APIs consultam somente os resumos persistidos para o período e grupo solicitados, sem cache de indicadores ou publicação antecipada de todos os períodos. As séries são agrupadas diretamente no banco. As médias usam a soma de latências dividida pelo total de respostas. Os períodos terminam em minutos completos; o minuto em andamento não é apresentado.
 
@@ -426,7 +426,7 @@ A rotação continua diária ou por tamanho, configurável pelas variáveis `IND
 | APP_BIND_ADDRESS | 0.0.0.0 | Interface publicada pelo Docker; use 127.0.0.1 com Nginx local |
 | APP_PORT | 8080 | Porta do servidor publicada pelo contêiner Spring |
 
-Os intervalos precisam ser positivos. O painel calcula o período solicitado a partir dos resumos no banco; a ingestão agrega os novos lotes diretamente; o processo em background finaliza o legado e avança a referência temporal. A capacidade para inventários grandes depende de validação de carga. Não possui autenticação e escuta apenas localmente por padrão. Para acesso em rede, configure `SERVER_ADDRESS` e um proxy com autenticação e HTTPS conforme seu ambiente.
+Os intervalos precisam ser positivos. O painel calcula o período solicitado a partir dos resumos no banco; a ingestão persiste os pings brutos; o processo em background os agrega a cada 60 segundos. A capacidade para inventários grandes depende de validação de carga. Não possui autenticação e escuta apenas localmente por padrão. Para acesso em rede, configure `SERVER_ADDRESS` e um proxy com autenticação e HTTPS conforme seu ambiente.
 
 ## Testes
 

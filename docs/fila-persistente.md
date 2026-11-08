@@ -1,4 +1,4 @@
-# Fila persistente e agregação direta
+# Fila persistente e agregação agendada
 
 O limite permanece em **10.000 hosts ativos por coletor**. O intervalo dos pings continua configurado por host (padrão 1 s). Os 100 ms fecham lotes incompletos, sem limitar o envio a um lote por intervalo.
 
@@ -7,11 +7,13 @@ O limite permanece em **10.000 hosts ativos por coletor**. O intervalo dos pings
 1. O Go agrupa até 500 resultados, ou fecha o lote após 100 ms.
 2. Confirma a gravação no SQLite local (WAL, synchronous=FULL).
 3. Envia um lote e aguarda ACK.
-4. Java valida o lote e agrupa por host, destino e minuto original da medição.
-5. Uma transação grava resumos de minuto, rollups de hora/dia, alterações incrementais e recibo.
-6. Após o commit, Java envia ACK e Go apaga o lote do SQLite.
+4. Java valida e grava os resultados brutos em `ping_sample` junto ao recibo, em uma transação.
+5. Após o commit, Java envia ACK e Go apaga o lote do SQLite.
+6. Independentemente da entrega, a cada 60 segundos o agregador lê os novos pings brutos em páginas e atualiza os resumos de minuto, rollups de hora/dia e alterações do painel.
 
-Reenvios preservam a identidade e não duplicam as contagens. Novos pings individuais não são inseridos no PostgreSQL. A fila guarda protobufs brutos somente enquanto aguardam confirmação ou retenção.
+Reenvios preservam a identidade e não duplicam pings nem contagens. O ACK não espera a análise, não consulta resumos e não exige o bloqueio de progresso. A fila local protege resultados ainda não recebidos; o PostgreSQL protege resultados recebidos ainda não analisados.
+
+`INDICATORS_AGGREGATION_INTERVAL_MS=60000` define a cadência padrão e `INDICATORS_AGGREGATION_PAGE_SIZE=10000` limita cada página transacional. As páginas do mesmo ciclo são processadas consecutivamente até alcançar o limite capturado. `MINUTE_BATCH_COMMITTED` e `MINUTE_AGGREGATION_COMPLETED` registram avanço e conclusão em `indicators.log`.
 
 Resumos preservam respostas saudáveis/degradadas, perdas, erros internos, soma de latências e última medição. Mínimo/máximo são armazenados para novos minutos; ficam desconhecidos em minutos históricos sem extremos completos. Os gráficos existentes mantêm média ponderada e perda. Ausência de resposta não vira latência zero; erro de coleta não vira perda de rede.
 
@@ -34,17 +36,25 @@ Ao atingir tamanho/idade, elimina os lotes mais antigos, exceto o lote em envio.
 
 Falhas de escrita mantêm o lote em formação para nova tentativa; os buffers em RAM continuam limitados e podem descartar resultados quando cheios. Resultados ainda em RAM não são recuperáveis após queda abrupta. Persistência local não protege contra perda do disco/máquina.
 
-## Migração
+## Transição da agregação direta
 
-O esquema adiciona colunas sem apagar resumos existentes. O consumidor drena o legado em páginas de 10.000 registros, com uma transação por página, antes da ingestão nova. O agendador também pode finalizar esse legado e continua avançando a referência temporal do painel; ele não precisa ler novos pings brutos.
+A restauração da persistência bruta é uma mudança nova, sem reverter os commits do SQLite ou da limpeza incremental. Não exige apagar tabelas, resumos ou arquivos da fila.
 
-`raw_cursor_id` controla exclusivamente o legado; `cursor_id` identifica revisões dos resumos. A limpeza usa o cursor bruto e nunca apaga dados legados pendentes. Recibos duram sete dias além da janela de aceitação (limitada a 48 horas), cobrindo a retenção máxima da fila. Resultados fora da janela são ignorados sem ressuscitar o histórico.
+Resumos, rollups e recibos anteriores são preservados. Um lote já confirmado na versão de agregação direta continua sendo reconhecido pelo recibo e não é inserido novamente como bruto. Lotes sem recibo são gravados em `ping_sample` e analisados no ciclo agendado. Os pings da etapa direta não podem ser reconstruídos individualmente a partir de resumos, mas seus indicadores permanecem disponíveis.
 
-Lotes inválidos recebem rejeição terminal persistida em `collector_batch.rejection` antes do ACK, com log e contador `rejectedResults`. O lote inteiro é descartado, sem conservar payload bruto no app. Falhas temporárias de banco são repetidas.
+`raw_cursor_id` continua controlando quais IDs brutos foram processados, enquanto `cursor_id` permanece como revisão monotônica do painel. A agregação não usa a revisão para filtrar IDs brutos: eles podem estar abaixo dela após a transição. O estado pendente e o escoamento das páginas também respeitam essa separação.
 
-Não misture gravadores de versões diferentes durante a atualização. O primeiro upgrade ainda parte de um coletor antigo com fila em memória; espere o escoamento antes de pará-lo quando possível. Preserve os volumes. Um retorno à versão antiga exige migração dos cursores; não basta substituir o binário.
+Recibos duram sete dias além da janela de aceitação (limitada a 48 horas). Resultados expirados são ignorados sem ressuscitar o histórico. Lotes inválidos recebem rejeição terminal persistida em `collector_batch.rejection` antes do ACK, com log e contador `rejectedResults`. Falhas temporárias de banco continuam sendo repetidas.
 
-## Limpeza incremental do legado
+Atualize somente o app, preservando o coletor em execução e todos os volumes:
+
+```sh
+docker compose up -d --build --no-deps app
+```
+
+Não misture gravadores de versões diferentes. Os testes verificam a transição com revisão adiantada, IDs brutos menores, reenvios de lotes já confirmados e ausência de bloqueio da ingestão enquanto o progresso está ocupado.
+
+## Limpeza incremental dos dados brutos
 
 A limpeza dos pings brutos lê o cursor confirmado sem `FOR UPDATE`. Ela não bloqueia `ping_aggregation_progress` nem `ping_ingestion_guard`. Cada lote usa uma transação independente com prazo de cinco segundos e apaga somente registros expirados cujo ID já foi agregado. Os resumos não são apagados.
 
@@ -80,12 +90,8 @@ docker compose exec -T collector routiva-collector --health | jq '{
 
 `pending` continua representando pings em andamento. `result_buffer` inclui o buffer do motor e lotes persistidos; `forming_results` informa a parte em formação. Contadores do motor reiniciam com o processo, mesmo que a identidade da fila permaneça igual. Descarte indica lacuna de observação, não perda de rede. A saúde do app fica DOWN em falha de persistência; o fluxo continua apto a escoar lotes já gravados.
 
-## Validação em 08/11/2026
+## Validação da restauração
 
-- Suíte Java: 150 testes, zero falhas/erros e dois ignorados, com H2, incluindo deduplicação, minutos originais, contribuições tardias, separação de erros, migração e preservação de rollups/alterações do painel.
-- Testes Go com detector de concorrência, replay gRPC, confirmação da fila persistente, recuperação de processo encerrado sem Close, identidades estáveis, exclusão mútua, limites de bytes/idade e rollback de falha de escrita.
-- Compilação cruzada para Linux amd64, CGO desativado.
-- Teste sintético Java: 20.000 resultados de 10.000 hosts, em 40 lotes, aproximadamente 1,4–1,8 s no H2 local; nenhuma linha bruta gravada.
-- Microbenchmark da gravação local: 20 lotes de 500 resultados por operação, 5 operações, aproximadamente 7,24 ms por operação no macOS ARM64. Não mede transporte, ICMP, PostgreSQL ou persistência em outro hardware.
+Testes cobrem gravação bruta antes da análise, deduplicação por lote e tentativa, horários originais, rollback de dados e recibo, correção de minutos atrasados e preservação de resumos existentes. Um teste mantém o progresso bloqueado em outra conexão e confirma que a ingestão bruta conclui sem esperar. A suíte de agregação verifica IDs brutos abaixo da revisão herdada da versão direta e o processamento de todas as páginas.
 
-A capacidade sustentada com 10.000 destinos reais, recuperação de atraso e comportamento sob falha física de disco ainda requerem ensaio no ambiente de implantação. O limite de hosts é uma restrição do inventário, não uma certificação de vazão.
+A validação inclui H2 e PostgreSQL 17 isolado. O teste sintético separa o tempo de persistência de 20.000 resultados de 10.000 hosts do tempo total com agregação. Esses ensaios não certificam ICMP real, recuperação sustentada nem vazão no banco de produção. O comportamento da fila Go permanece o mesmo, incluindo recuperação após reinícios, limites, exclusão mútua e ACK após persistência.

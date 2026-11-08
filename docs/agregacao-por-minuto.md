@@ -1,9 +1,10 @@
 # Indicadores a partir de resumos persistidos por minuto
 
-> Atualização: novos lotes agora são agregados diretamente na ingestão, sem gravar `ping_sample`. O fluxo agendado descrito neste guia atende ao histórico legado. A operação atual, os cursores separados e a fila SQLite estão em [Fila persistente e agregação direta](fila-persistente.md).
+> Atualização: a ingestão voltou a persistir `ping_sample`, com ACK após a gravação bruta e agregação independente a cada 60 segundos. O coletor mantém a fila SQLite e a limpeza é incremental, sem bloqueio do progresso. Veja [Fila persistente e agregação agendada](fila-persistente.md).
+
 ## Fluxo
 
-O coletor grava os pings em `ping_sample`. A aplicação não mantém histórico bruto em memória. Um processo agendado agrega novos IDs no PostgreSQL a cada 60 segundos e grava `ping_minute`. As requisições calculam somente o período e grupo solicitados a partir dessa tabela e das consolidações auxiliares de hora/dia em `ping_rollup`. Não existe cache de indicadores nem recuperação por checkpoint.
+O app grava os pings recebidos do coletor em `ping_sample`. A aplicação não mantém histórico bruto em memória. Um processo agendado agrega novos IDs no PostgreSQL a cada 60 segundos e grava `ping_minute`. As requisições calculam somente o período e grupo solicitados a partir dessa tabela e das consolidações auxiliares de hora/dia em `ping_rollup`. Não existe cache de indicadores nem recuperação por checkpoint.
 
 Cada resumo é identificado por `(host_id, target, minute_at)`. O minuto é UTC, definido pelo horário da medição, em intervalo semiaberto `[início, início + 60000)`. Contém `total_pings`, `healthy`, `degraded`, `lost`, `errors`, `latency_sum` e `last_sample_at`. Respostas acima do `latency_limit` da própria amostra são degradadas. Timeout e erro ICMP contam como perda; erros internos ficam separados. Total bruto = saudáveis + degradados + perdas + erros. O denominador dos percentuais exclui erros internos.
 
@@ -11,13 +12,13 @@ Média = soma das latências / quantidade de respostas. Nunca se faz média simp
 
 ## Retomada e consistência
 
-`ping_aggregation_progress` mantém o último ID consumido, o limite confirmado da execução, o horário de processamento e o limite de minutos completos consolidados. Não contém pings nem objetos serializados.
+`ping_aggregation_progress` mantém `raw_cursor_id` (último ID bruto consumido), `cursor_id` (revisão monotônica dos resumos), o limite de trabalho da execução, o horário de processamento e o limite de minutos completos consolidados. Os IDs brutos podem ser menores que a revisão após a transição da agregação direta; a seleção usa exclusivamente o cursor bruto. Não contém pings nem objetos serializados.
 
 1. Capturar o limite de IDs confirmados sob `ping_ingestion_guard`, usando uma transação curta. Todos os escritores devem respeitar esse bloqueio antes de alocar IDs; gravações externas e reutilização/alteração de IDs não são suportadas.
 2. Selecionar até `INDICATORS_AGGREGATION_PAGE_SIZE` novos IDs até esse limite. A seleção não filtra por horário: seis horas pendentes continuam elegíveis.
 3. Ler a página de pings e agrupar suas contribuições por minuto.
 4. Somar as contribuições nos resumos existentes ou criar os ausentes; atualizar também as consolidações por hora/dia.
-5. Atualizar o cursor na mesma transação. `FOR UPDATE` na linha de progresso serializa consumidores e limpeza. Rollback desfaz resumos, consolidações e cursor juntos; repetir um lote não duplica valores.
+5. Atualizar o cursor na mesma transação. `FOR UPDATE` na linha de progresso serializa somente agregadores. A ingestão bruta e a limpeza não precisam desse bloqueio. Rollback desfaz resumos, consolidações e cursor juntos; repetir um lote não duplica valores.
 6. Continuar imediatamente com o próximo lote até alcançar o limite capturado. Depois aguardar o intervalo configurado. Novos IDs posteriores ao limite ficam para a próxima execução.
 
 Um minuto pode receber contribuições de muitos lotes. Pings atrasados corrigem o resumo do seu minuto original. O resumo do minuto atual também pode estar persistido, mas as consultas excluem minutos ainda abertos. Não há fila de pings futuros em memória.

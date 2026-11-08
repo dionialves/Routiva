@@ -4,7 +4,7 @@
 
 Routiva usa Java 21, Spring Boot 3.5.7, JDBC e PostgreSQL (H2 nos testes). `ZabbixService` carrega hosts e grupos pelo `ZabbixClient`; não há cadastro local independente. Antes desta implementação, `tick()` criava uma tarefa Java e um subprocesso `ping` para cada tentativa. Um conjunto `running` impedia sobreposição por host, e o semáforo incluía espera pelo banco. O intervalo efetivo aumentava quando timeout superava a cadência.
 
-O app recebe os lotes e atualiza diretamente `ping_minute`, os resumos por hora/dia e as alterações incrementais do painel. Novos resultados individuais não são inseridos em `ping_sample`; essa tabela permanece apenas para migração e limpeza do histórico legado. Os gráficos e percentuais continuam consultando resumos.
+O app recebe os lotes e grava pings brutos em `ping_sample` junto ao recibo da entrega. O ACK depende somente desse commit. A agregação agendada a cada 60 segundos lê os pings em páginas e atualiza `ping_minute`, resumos de hora/dia e alterações incrementais do painel. Os gráficos continuam consultando os resumos.
 
 O novo fluxo é inventário Java → gRPC → heap de agendamento Go → fila de envio → socket ICMP → recepção independente → resultados → lotes limitados → stream gRPC → consumidor Java → transação JDBC → ACK. O Go usa SQLite local para a fila de entrega; não acessa o PostgreSQL do app. `PingProbe` mantém somente o tipo de resultado legado e um adaptador que informa erro de coleta; não executa testes ICMP.
 
@@ -40,9 +40,9 @@ O agendador central usa heaps de hosts e prazos, sem goroutine por host/tentativ
 | Fila Java | 8 lotes, um consumidor |
 | Prazo de ACK | 30 s |
 
-O lote é enviado ao atingir tamanho ou prazo. Uma conexão Java por coletor, com um lote em trânsito aguardando confirmação. O ACK é posterior ao commit dos resumos e do recibo de processamento. A recepção gRPC usa controle manual de fluxo; callbacks não executam SQL. Java repete falhas de persistência a cada segundo mantendo o mesmo lote. Reconexão usa espera exponencial com jitter de aproximadamente 500 ms até 30 s, seguida de snapshot do inventário. O servidor encerra a sessão sem ACK em 30 s; a persistência pendente pode terminar depois disso e a retransmissão será idempotente.
+O lote é enviado ao atingir tamanho ou prazo. Uma conexão Java por coletor, com um lote em trânsito aguardando confirmação. O ACK é posterior ao commit dos pings brutos e do recibo de recebimento, independentemente da análise. A recepção gRPC usa controle manual de fluxo; callbacks não executam SQL. Java repete falhas de persistência a cada segundo mantendo o mesmo lote. Reconexão usa espera exponencial com jitter de aproximadamente 500 ms até 30 s, seguida de snapshot do inventário. O servidor encerra a sessão sem ACK em 30 s; a persistência pendente pode terminar depois disso e a retransmissão será idempotente.
 
-`collector_batch` guarda o recibo na mesma transação dos resumos por minuto, rollups e alterações do painel. Reenvios do mesmo lote não somam novamente. Recibos são retidos por sete dias além da janela de aceitação de resultados (até 48 horas). Lotes permanentemente inválidos são rejeitados integralmente: o motivo é persistido no recibo e registrado em log antes do ACK; não bloqueiam os lotes seguintes. Falhas temporárias de banco continuam sendo repetidas.
+`collector_batch` guarda o recibo na mesma transação dos pings individuais. A análise posterior atualiza os resumos, rollups e alterações do painel em outra transação. Reenvios do mesmo lote não somam novamente. Recibos são retidos por sete dias além da janela de aceitação de resultados (até 48 horas). Lotes permanentemente inválidos são rejeitados integralmente: o motivo é persistido no recibo e registrado em log antes do ACK; não bloqueiam os lotes seguintes. Falhas temporárias de banco continuam sendo repetidas.
 
 Quando Java/banco fica indisponível, o Go continua coletando e persistindo lotes localmente. Ao atingir o orçamento de payload ou idade, descarta os lotes mais antigos, protegendo o lote em trânsito; se ele ocupar todo o orçamento, pode descartar o lote novo. Descartes são contabilizados, não convertidos em perda de rede. Se o disco falhar, mantém o lote em formação para repetição e limita o consumo de RAM; o buffer do motor pode descartar resultados novos. `persistence_healthy=0` sinaliza a falha sem impedir o envio dos lotes já persistidos.
 
@@ -114,13 +114,11 @@ Saúde do processo e perda de rede são distintas. Uma conexão ativa não certi
 
 O esquema mantém tabelas e consultas existentes, com colunas opcionais e índices adicionais. Migração ocorre via `schema.sql`. Em banco grande, adicionar índices pode bloquear escritas; execute a atualização numa janela de manutenção e avalie criação concorrente manual com DBA antes da subida.
 
-A 10.000 hosts e um ping por segundo são 864 milhões de resultados/dia, mas o PostgreSQL recebe somente resumos: até 14,4 milhões de registros de minuto/dia, além de rollups, recibos e alterações incrementais. Atualizações ainda acontecem a cada lote. Retenção e tamanho desses resumos também precisam ser dimensionados.
+A 10.000 hosts e um ping por segundo são 864 milhões de resultados/dia. A gravação bruta voltou ao PostgreSQL, com retenção de até 48 horas e limpeza incremental limitada. Isso exige dimensionar disco, índices, WAL e vacuum; o limite de 10.000 hosts não é certificação de vazão sustentada.
 
-O limite continua em **10.000 hosts ativos**. Testes sintéticos não certificam ICMP real nem vazão sustentada no PostgreSQL. A fila local é temporária; os 256 MiB não garantem 24 horas de coleta no limite de hosts. O primeiro limite atingido determina o descarte.
+A transição preserva os resumos e recibos já gravados pela agregação direta. Lotes com recibo existente continuam sendo reconhecidos, sem recriar pings nem duplicar resumos. Lotes pendentes no SQLite passam a ser gravados como dados brutos e analisados no ciclo agendado. Os cursores bruto e de revisão continuam separados, sem reset ou reconstrução destrutiva do histórico. Não misture gravadores de versões diferentes.
 
-Na atualização, o consumidor Java drena o legado em transações de até 10.000 amostras antes de ingerir novos lotes. O cursor bruto foi separado da revisão dos resumos, preservando migração, limpeza e atualização incremental do painel. O agendador antigo permanece para finalizar legado e avançar a referência temporal; novos lotes são agregados na ingestão. Não execute versões antigas e novas como gravadoras simultaneamente. Um retorno à versão anterior exige migração própria dos cursores.
-
-`latency_sum`, contagens, mínimo e máximo permitem média ponderada e extremos por minuto. Extremos antigos sem dados suficientes permanecem nulos, inclusive quando chegam novas contribuições ao mesmo minuto. A API e os gráficos existentes continuam usando média e perda; mínimo/máximo ficam disponíveis no armazenamento para evolução da apresentação.
+O SQLite continua temporário: os 256 MiB não garantem 24 horas de coleta no limite de hosts. O primeiro limite atingido determina o descarte. O inventário não é persistido; após reiniciar, o coletor aguarda a configuração do app para voltar a pingar.
 
 Veja [operação e validação da fila persistente](fila-persistente.md).
 

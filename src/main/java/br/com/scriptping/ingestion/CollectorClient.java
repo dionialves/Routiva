@@ -220,7 +220,6 @@ public class CollectorClient implements HealthIndicator {
     }
 
     private void persist() {
-        boolean migrated = false;
         while (!closed || !queue.isEmpty())
             try {
                 Delivery d = queue.poll(1, TimeUnit.SECONDS);
@@ -229,12 +228,6 @@ public class CollectorClient implements HealthIndicator {
                 while (!saved && !Thread.currentThread().isInterrupted())
                     try {
                         try {
-                            if (!migrated) {
-                                while (store.migrateLegacyPage() > 0) {
-                                    if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-                                }
-                                migrated = true;
-                            }
                             store.saveBatch(d.batch());
                             committed += d.batch().getResultsCount();
                         } catch (IllegalArgumentException invalid) {

@@ -3,7 +3,7 @@ package br.com.scriptping.ingestion;
 import br.com.scriptping.IpAddress;
 import br.com.scriptping.collector.proto.Batch;
 import br.com.scriptping.collector.proto.Status;
-import br.com.scriptping.aggregation.MinuteAggregationService;
+import br.com.scriptping.ingestion.SampleBatchWriter.Row;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,12 +22,10 @@ public class SampleIngestionService {
     private final double latencyLimit;
     private final SampleIngestionRepository repository;
     private final CollectorBatchRepository receipts;
-    private final MinuteAggregationService summaries;
 
     public SampleIngestionService(
         SampleIngestionRepository repository,
         CollectorBatchRepository receipts,
-        MinuteAggregationService summaries,
         @Value("${monitor.retention-hours:48}") long retentionHours,
         @Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds,
         @Value("${monitor.latency-limit-ms:20}") double latencyLimit
@@ -46,7 +44,6 @@ public class SampleIngestionService {
         );
         this.repository = repository;
         this.receipts = receipts;
-        this.summaries = summaries;
         this.retention = Duration.ofHours(Math.min(retentionHours, 48));
     }
 
@@ -54,16 +51,7 @@ public class SampleIngestionService {
         return latencyLimit;
     }
 
-    /** Upgrade one bounded page per transaction before accepting live batches. */
-    @Transactional
-    public long migrateLegacyPage() {
-        repository.lockIngestion();
-        long boundary = summaries.legacyBoundary();
-        var page = summaries.aggregate(boundary, 10000, System.currentTimeMillis());
-        return Math.max(0, boundary - page.cursor());
-    }
-
-    /** The receipt and all summaries commit together. The single ingestion writer retries the same identity. */
+    /** Raw samples and their receipt commit together; aggregation runs independently. */
     @Transactional
     public void saveBatch(Batch batch) {
         repository.lockIngestion();
@@ -78,7 +66,7 @@ public class SampleIngestionService {
         if (receipts.existsById(receiptId)) return;
         long now = System.currentTimeMillis(),
             cutoff = retentionCutoff(now);
-        List<PingSample> rows = new ArrayList<>();
+        List<Row> rows = new ArrayList<>();
         for (var r : batch.getResultsList()) {
             if (
                 !collector.equals(r.getCollectorId()) ||
@@ -108,10 +96,13 @@ public class SampleIngestionService {
                 case ICMP_ERROR -> "Sem resposta ICMP";
                 default -> "Coletor: " + r.getStatus().name();
             };
-            rows.add(new PingSample(0, r.getHostId(), r.getTarget(), measured, latency,
-                error, r.getLatencyLimitMs() > 0 ? r.getLatencyLimitMs() : latencyLimit));
+            rows.add(new Row(r.getHostId(), r.getTarget(), measured, latency, error,
+                r.getLatencyLimitMs() > 0 ? r.getLatencyLimitMs() : latencyLimit,
+                collector, r.getAttemptId(), batch.getBatchId(), r.getSequence(),
+                r.getScheduledAt(), r.getSentAt(), r.getReceivedAt(), r.getRttNs(),
+                r.getStatus().name(), r.getErrorCode()));
         }
-        summaries.ingest(rows, now);
+        repository.insertSamples(rows);
         receipts.save(new CollectorBatchReceipt(receiptId, now));
     }
 

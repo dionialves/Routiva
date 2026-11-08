@@ -84,7 +84,7 @@ class SampleStoreRetentionTests {
         insert("custom-old", now - Duration.ofHours(3).toMillis(), 10d, null);
         insert("custom-recent", now - Duration.ofHours(1).toMillis(), 10d, null);
         markProcessed();
-        retention.cleanup(new SampleIngestionService(repository, receipts, null, 2, 600, 20d).retentionCutoff(now));
+        retention.cleanup(new SampleIngestionService(repository, receipts, 2, 600, 20d).retentionCutoff(now));
         assertThat(
             jdbc.queryForList(
                 "SELECT host_id FROM ping_sample WHERE host_id LIKE 'custom-%' ORDER BY host_id",
@@ -99,7 +99,7 @@ class SampleStoreRetentionTests {
         insert("over-limit", now - Duration.ofHours(49).toMillis(), 10d, null);
         insert("within-limit", now - Duration.ofHours(47).toMillis(), 10d, null);
         markProcessed();
-        retention.cleanup(new SampleIngestionService(repository, receipts, null, 168, 600, 20d).retentionCutoff(now));
+        retention.cleanup(new SampleIngestionService(repository, receipts, 168, 600, 20d).retentionCutoff(now));
         assertThat(
             jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class)
         ).containsExactly("within-limit");
@@ -108,10 +108,10 @@ class SampleStoreRetentionTests {
     @Test
     void rejectsNonPositiveRetentionOrCleanupInterval() {
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-            new SampleIngestionService(repository, receipts, null, 0, 600, 20d)
+            new SampleIngestionService(repository, receipts, 0, 600, 20d)
         ).isInstanceOf(IllegalArgumentException.class);
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-            new SampleIngestionService(repository, receipts, null, 48, 0, 20d)
+            new SampleIngestionService(repository, receipts, 48, 0, 20d)
         ).isInstanceOf(IllegalArgumentException.class);
     }
 
