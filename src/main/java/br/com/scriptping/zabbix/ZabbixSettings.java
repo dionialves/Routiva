@@ -1,6 +1,5 @@
 package br.com.scriptping.zabbix;
 
-import br.com.scriptping.Host;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;

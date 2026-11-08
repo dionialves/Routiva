@@ -1,6 +1,5 @@
 package br.com.scriptping.zabbix;
 
-import br.com.scriptping.Host;
 import br.com.scriptping.ingestion.CollectorClient;
 import java.util.List;
 import java.util.Set;

@@ -1,6 +1,6 @@
 package br.com.scriptping.aggregation;
 
-import br.com.scriptping.Host;
+import br.com.scriptping.zabbix.Host;
 import br.com.scriptping.aggregation.MinuteAggregationService.Key;
 import br.com.scriptping.aggregation.MinuteAggregationService.Summary;
 import org.springframework.jdbc.core.JdbcTemplate;

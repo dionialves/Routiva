@@ -1,6 +1,6 @@
 package br.com.scriptping.availability;
 
-import br.com.scriptping.Host;
+import br.com.scriptping.zabbix.Host;
 
 
 import java.util.*;

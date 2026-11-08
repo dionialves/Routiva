@@ -1,6 +1,5 @@
 package br.com.scriptping.zabbix;
 
-import br.com.scriptping.Host;
 
 import static org.assertj.core.api.Assertions.*;
 

@@ -1,6 +1,6 @@
 package br.com.scriptping.ingestion;
 
-import br.com.scriptping.Host;
+import br.com.scriptping.zabbix.Host;
 import br.com.scriptping.IpAddress;
 import br.com.scriptping.collector.proto.*;
 import io.grpc.ManagedChannel;

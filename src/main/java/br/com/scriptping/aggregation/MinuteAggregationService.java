@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import br.com.scriptping.Host;
+import br.com.scriptping.zabbix.Host;
 import br.com.scriptping.ingestion.PingSample;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;

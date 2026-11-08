@@ -1,6 +1,6 @@
 package br.com.scriptping.availability;
 
-import br.com.scriptping.Host;
+import br.com.scriptping.zabbix.Host;
 import br.com.scriptping.IpAddress;
 import br.com.scriptping.aggregation.MinuteAggregationService;
 import br.com.scriptping.aggregation.MinuteAggregationService.Key;

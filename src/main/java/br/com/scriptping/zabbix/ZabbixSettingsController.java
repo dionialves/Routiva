@@ -1,6 +1,5 @@
 package br.com.scriptping.zabbix;
 
-import br.com.scriptping.Host;
 
 import jakarta.servlet.http.HttpSession;
 import java.util.*;
