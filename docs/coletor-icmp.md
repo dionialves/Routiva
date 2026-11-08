@@ -4,21 +4,21 @@
 
 Routiva usa Java 21, Spring Boot 3.5.7, JDBC e PostgreSQL (H2 nos testes). `ZabbixService` carrega hosts e grupos pelo `ZabbixClient`; não há cadastro local independente. Antes desta implementação, `tick()` criava uma tarefa Java e um subprocesso `ping` para cada tentativa. Um conjunto `running` impedia sobreposição por host, e o semáforo incluía espera pelo banco. O intervalo efetivo aumentava quando timeout superava a cadência.
 
-`SampleStore` grava `ping_sample` e publica `PingSample` depois do commit. `PacketLossAnalysisService`, `RollingPingHistory`, `PacketLossAnalyzer` e `HostAvailabilityService` alimentam as APIs, cores, percentuais e gráficos existentes. Foram preservados esses consumidores e a publicação pós-commit. Nenhum arquivo de frontend foi alterado.
+O app recebe os lotes e atualiza diretamente `ping_minute`, os resumos por hora/dia e as alterações incrementais do painel. Novos resultados individuais não são inseridos em `ping_sample`; essa tabela permanece apenas para migração e limpeza do histórico legado. Os gráficos e percentuais continuam consultando resumos.
 
-O novo fluxo é inventário Java → gRPC → heap de agendamento Go → fila de envio → socket ICMP → recepção independente → resultados → lotes limitados → stream gRPC → consumidor Java → transação JDBC → ACK. O Go não acessa o banco. `PingProbe` mantém somente o tipo de resultado legado e um adaptador que informa erro de coleta; não executa testes ICMP.
+O novo fluxo é inventário Java → gRPC → heap de agendamento Go → fila de envio → socket ICMP → recepção independente → resultados → lotes limitados → stream gRPC → consumidor Java → transação JDBC → ACK. O Go usa SQLite local para a fila de entrega; não acessa o PostgreSQL do app. `PingProbe` mantém somente o tipo de resultado legado e um adaptador que informa erro de coleta; não executa testes ICMP.
 
 A proposta anterior em `arquitetura-coleta-assincrona.md`, já presente no workspace, não foi alterada. Sua sugestão de subprocessos Java foi substituída pelo pedido de coletor Go.
 
 ## Protocolo e identidade
 
-Fonte única: `src/main/proto/collector.proto`, pacote `routiva.collector.v1`, versão de comando/lote 1. Java é gerado pelo Maven. Go gerado fica versionado em `collector/gen`. Cada inicialização cria `collector_id` aleatório; a tentativa tem contador de 64 bits iniciado em posição aleatória de 48 bits. A unicidade persistida é `(collector_id, attempt_id)`; não depende da sequência ICMP de 16 bits.
+Fonte única: `src/main/proto/collector.proto`, pacote `routiva.collector.v1`, versão 1. Java é gerado pelo Maven e Go fica versionado em `collector/gen`. O `collector_id` é criado na primeira abertura da fila SQLite e preservado em reinícios. O ID do lote usa AUTOINCREMENT persistente, sem reutilização após ACK. A tentativa mantém contador aleatório por execução; a deduplicação da ingestão é por `(collector_id, batch_id)`.
 
 `Connect` é bidirecional. O primeiro comando deve conter configuração em até 10 segundos. Snapshots substituem atomicamente o inventário; upsert/remove permitem alterações individuais e `enabled=false` remove o agendamento. O backend envia snapshots após sincronização Zabbix e reconexão. IP inválido ou IPv6 não é coletado nesta etapa. Remoção para novos envios; tentativas já admitidas podem terminar com destino original. Alterações de IP preservam a separação dos históricos.
 
 Intervalo permitido: 100 ms–1 hora; timeout: 100 ms–60 s. Padrões: 1000/1500 ms. Até 10.000 hosts configuráveis por instância. A configuração preserva a fase dos hosts inalterados. O limite de latência também acompanha a configuração e a tentativa, preservando a política em retransmissões após reinício do Java.
 
-Os timestamps são Unix **nanoseconds**. `measured_at` existente recebe `scheduled_at / 1.000.000`, nunca o horário de persistência. `sent_at` e `received_at` ficam zerados quando não aplicáveis. O RTT é uma subtração de `time.Time` com relógio monotônico. A sequência lógica identifica lacunas; o payload usa marcador e token de 64 bits, validando também origem e sequência do Echo Reply. O kernel pode reescrever o ID ICMP de sockets datagram; ele não é usado como identidade de aplicação.
+Os timestamps são Unix **nanoseconds**. O minuto da agregação usa `scheduled_at / 1.000.000`, nunca o horário de chegada. `sent_at` e `received_at` ficam zerados quando não aplicáveis. O RTT é uma subtração de `time.Time` com relógio monotônico. A sequência lógica identifica lacunas; o payload usa marcador e token de 64 bits, validando também origem e sequência do Echo Reply. O kernel pode reescrever o ID ICMP de sockets datagram; ele não é usado como identidade de aplicação.
 
 O agendador central usa heaps de hosts e prazos, sem goroutine por host/tentativa. Há envio e recepção em workers fixos. Um host pode ter várias tentativas pendentes. Conclusão remove imediatamente o prazo do heap. As fases são distribuídas por hash do host. Ao atrasar um ou mais intervalos, registra `SKIPPED` resumindo o número de slots em `SCHEDULER_LATE:N`, avança a sequência e envia somente a tentativa atual, sem rajada de recuperação.
 
@@ -34,19 +34,21 @@ O agendador central usa heaps de hosts e prazos, sem goroutine por host/tentativ
 | `COLLECTOR_RESULT_BUFFER` | 32.768 resultados |
 | `COLLECTOR_BATCH_SIZE` | 500 (máximo 5.000) |
 | `COLLECTOR_FLUSH_MS` | 100 ms |
-| `COLLECTOR_MAX_BATCHES` | 128 lotes não confirmados |
+| `COLLECTOR_SPOOL_MAX_MIB` | 256 MiB de payloads pendentes |
+| `COLLECTOR_SPOOL_MAX_AGE_HOURS` | 24 horas (máximo 48) |
+| `COLLECTOR_SPOOL_PATH` | `/var/lib/routiva/queue.db` |
 | Fila Java | 8 lotes, um consumidor |
 | Prazo de ACK | 30 s |
 
-O lote é enviado ao atingir tamanho ou prazo. Uma conexão Java por coletor, com um lote em trânsito aguardando confirmação. O ACK é posterior ao commit e à publicação das amostras. A recepção gRPC usa controle manual de fluxo; callbacks não executam SQL. Java repete falhas de persistência a cada segundo mantendo o mesmo lote. Reconexão usa espera exponencial com jitter de aproximadamente 500 ms até 30 s, seguida de snapshot do inventário. O servidor encerra a sessão sem ACK em 30 s; a persistência pendente pode terminar depois disso e a retransmissão será idempotente.
+O lote é enviado ao atingir tamanho ou prazo. Uma conexão Java por coletor, com um lote em trânsito aguardando confirmação. O ACK é posterior ao commit dos resumos e do recibo de processamento. A recepção gRPC usa controle manual de fluxo; callbacks não executam SQL. Java repete falhas de persistência a cada segundo mantendo o mesmo lote. Reconexão usa espera exponencial com jitter de aproximadamente 500 ms até 30 s, seguida de snapshot do inventário. O servidor encerra a sessão sem ACK em 30 s; a persistência pendente pode terminar depois disso e a retransmissão será idempotente.
 
-`collector_batch` guarda o recibo da transação. A escrita JDBC em lote, o recibo e as amostras são atômicos. Índice único de tentativa protege também reenvio em outro lote. Os eventos só são publicados após commit, mantendo IDs reais do banco. A política pressupõe uma instância Java gravadora por banco/coletor, como a aplicação anterior. Não é uma solução de coordenação distribuída entre réplicas.
+`collector_batch` guarda o recibo na mesma transação dos resumos por minuto, rollups e alterações do painel. Reenvios do mesmo lote não somam novamente. Recibos são retidos por sete dias além da janela de aceitação de resultados (até 48 horas). Lotes permanentemente inválidos são rejeitados integralmente: o motivo é persistido no recibo e registrado em log antes do ACK; não bloqueiam os lotes seguintes. Falhas temporárias de banco continuam sendo repetidas.
 
-Quando o Java/banco fica indisponível, o Go continua coletando. Filas cheias descartam **novos resultados** e aumentam `dropped_total`; lotes antigos não confirmados permanecem. Fila de envio ou pendências cheias geram `SKIPPED`. A indisponibilidade do banco não muda a cadência ICMP. Sem espaço para comunicar a própria falha, o contador de descarte permanece disponível na saúde.
+Quando Java/banco fica indisponível, o Go continua coletando e persistindo lotes localmente. Ao atingir o orçamento de payload ou idade, descarta os lotes mais antigos, protegendo o lote em trânsito; se ele ocupar todo o orçamento, pode descartar o lote novo. Descartes são contabilizados, não convertidos em perda de rede. Se o disco falhar, mantém o lote em formação para repetição e limita o consumo de RAM; o buffer do motor pode descartar resultados novos. `persistence_healthy=0` sinaliza a falha sem impedir o envio dos lotes já persistidos.
 
-**Não há spool persistente.** Queda/reinício do Go perde resultados ainda não confirmados. Java pode reiniciar e receber replay enquanto o Go permanece vivo. Reinício do Go gera nova identidade e requer ressincronização. Para sobreviver à queda dos dois processos com garantia de entrega, será necessário um diário local durável, limitado e testado; filas em memória não oferecem essa garantia.
+**A fila usa SQLite WAL com `synchronous=FULL`.** Cada lote é confirmado localmente antes de ficar disponível ao gRPC e removido somente após ACK. Um lock de arquivo impede dois processos de usar a mesma fila. O volume `collector_data` mantém a fila ao recriar o contêiner; systemd usa `StateDirectory=routiva`. A recuperação exige preservar esse diretório e seus arquivos SQLite/WAL. O limite em MiB é de payload: há espaço adicional para páginas, índices e WAL; o arquivo principal tem teto de aproximadamente duas vezes o orçamento mais 4 MiB, e páginas liberadas são reutilizadas. Isso não protege contra perda física do disco. Resultados ainda no motor ou em formação não têm garantia de recuperação após queda abrupta.
 
-SIGTERM/SIGINT interrompem o motor, finalizam pendências como erro de encerramento e permitem até cinco segundos para confirmar lotes. O restante é informado em log. Java tenta drenar sua fila por até dez segundos. Supervisores reiniciam os processos. Um lock local e a verificação do socket permitem remover sockets abandonados sem substituir um coletor ativo.
+SIGTERM/SIGINT interrompem o motor e permitem até cinco segundos para confirmar lotes. O fechamento persiste o lote em formação e drena o buffer disponível; lotes sem ACK ficam no SQLite para a próxima execução. Falhas de disco no fechamento são registradas explicitamente. Java tenta drenar sua fila por até dez segundos. Após reiniciar, o Go precisa receber novamente o inventário do app para retomar os pings, mas os lotes existentes continuam disponíveis para replay.
 
 ## Compilação e Linux
 
@@ -106,15 +108,21 @@ O servidor aceita `COLLECTOR_LISTEN=tcp://ENDERECO:50051` somente com mTLS, exig
 
 `Health` informa versão e identidade, hosts ativos, enviados/respondidos/timeouts/erros/skips cumulativos, pendências, atraso recente/máximo de agendamento, latência local de processamento, CPU acumulada, heap, goroutines, resultados em buffer, tempo de ACK (inclui commit), conexões e descartes. Taxas por segundo são deltas dos contadores divididos pelo tempo entre consultas. O Java consulta a cada segundo e integra `/actuator/health` com fila, gravações e falhas. Para visualizar detalhes em ambiente controlado, use `management.endpoint.health.show-details=always`; o padrão não expõe esses detalhes publicamente. Logs gerais do Go na saída do processo são JSON. O arquivo `/var/log/routiva/collector.log` registra eventos de lotes em texto estruturado, em inglês, sem pings individuais. Possui sequência por execução, rotação e volume persistente no Compose. Consulte [Arquivo de log dos lotes](../README.md#arquivo-de-log-dos-lotes) para comandos, configuração e limitações.
 
-Saúde do processo e perda de rede são distintas. Uma conexão ativa não certifica capacidade de armazenamento: monitore também `writeFailures`, fila, descartes e saúde do datasource. Contadores Go reiniciam com a nova identidade. Tempo de ACK mede persistência e transporte juntos, não somente latência da rede.
+Saúde do processo e perda de rede são distintas. Uma conexão ativa não certifica capacidade de armazenamento: monitore também `writeFailures`, fila, descartes e saúde do datasource. Contadores do motor reiniciam a cada execução; `queue_dropped_total` persiste com a fila, mesmo mantendo a identidade. Tempo de ACK mede persistência e transporte juntos, não somente latência da rede.
 
 ## Persistência, retenção e capacidade não certificada
 
 O esquema mantém tabelas e consultas existentes, com colunas opcionais e índices adicionais. Migração ocorre via `schema.sql`. Em banco grande, adicionar índices pode bloquear escritas; execute a atualização numa janela de manutenção e avalie criação concorrente manual com DBA antes da subida.
 
-A 10.000 hosts/segundo são 864 milhões de registros/dia, até 1,728 bilhão em 48 horas. Somente os arrays de histórico de oito horas representam cerca de 7,2 GB (25 bytes × 288 milhões), fora capacidade excedente, objetos, cache e JVM. A 800 hosts são cerca de 576 MB. O processamento incremental mantém contagens e somas por janela e resumos em blocos compactos. A ocupação parcial dos blocos, seus resumos e a organização por host/IP acrescentam memória à estimativa dos dados brutos; a capacidade real ainda depende de ensaios. Esses limites não desaparecem com a troca do transporte.
+A 10.000 hosts e um ping por segundo são 864 milhões de resultados/dia, mas o PostgreSQL recebe somente resumos: até 14,4 milhões de registros de minuto/dia, além de rollups, recibos e alterações incrementais. Atualizações ainda acontecem a cada lote. Retenção e tamanho desses resumos também precisam ser dimensionados.
 
-**O sistema completo não tem suporte comprovado a 10.000 hosts.** O motor e protocolo têm limites explícitos e foram ensaiados com essa quantidade simulada; PostgreSQL real, análise Java, rede e estabilidade prolongada não foram certificados. Não foi introduzida agregação que alterasse as regras históricas. Antes de expandir, medir ingestão sustentada, WAL, índices, vacuum, limpeza e heap; definir particionamento/retenção curta de amostras e agregações compatíveis com os cálculos. O `DELETE` periódico existente pode ser caro nesse volume. Recibos expiram junto à retenção; resultados antigos não ressuscitam amostras já expiradas.
+O limite continua em **10.000 hosts ativos**. Testes sintéticos não certificam ICMP real nem vazão sustentada no PostgreSQL. A fila local é temporária; os 256 MiB não garantem 24 horas de coleta no limite de hosts. O primeiro limite atingido determina o descarte.
+
+Na atualização, o consumidor Java drena o legado em transações de até 10.000 amostras antes de ingerir novos lotes. O cursor bruto foi separado da revisão dos resumos, preservando migração, limpeza e atualização incremental do painel. O agendador antigo permanece para finalizar legado e avançar a referência temporal; novos lotes são agregados na ingestão. Não execute versões antigas e novas como gravadoras simultaneamente. Um retorno à versão anterior exige migração própria dos cursores.
+
+`latency_sum`, contagens, mínimo e máximo permitem média ponderada e extremos por minuto. Extremos antigos sem dados suficientes permanecem nulos, inclusive quando chegam novas contribuições ao mesmo minuto. A API e os gráficos existentes continuam usando média e perda; mínimo/máximo ficam disponíveis no armazenamento para evolução da apresentação.
+
+Veja [operação e validação da fila persistente](fila-persistente.md).
 
 ## Validação e roteiro de aceite
 

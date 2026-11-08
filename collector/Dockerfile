@@ -13,8 +13,8 @@ FROM alpine:3.22
 
 RUN addgroup -g 10001 routiva \
     && adduser -D -u 10001 -G routiva routiva \
-    && mkdir -p /run/routiva /var/log/routiva \
-    && chown routiva:routiva /run/routiva /var/log/routiva
+    && mkdir -p /run/routiva /var/log/routiva /var/lib/routiva \
+    && chown routiva:routiva /run/routiva /var/log/routiva /var/lib/routiva
 
 COPY --from=build /collector /usr/local/bin/routiva-collector
 

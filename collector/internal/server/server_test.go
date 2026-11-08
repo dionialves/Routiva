@@ -12,6 +12,7 @@ import (
 	pb "routiva/collector/gen"
 	"routiva/collector/internal/audit"
 	"routiva/collector/internal/engine"
+	"routiva/collector/internal/spool"
 	"strings"
 	"testing"
 	"time"
@@ -19,14 +20,28 @@ import (
 
 type silent struct{ done chan struct{} }
 
-func (s *silent) Send(string, uint64) error      { return nil }
-func (s *silent) Receive() (engine.Reply, error) { <-s.done; return engine.Reply{}, io.EOF }
-func (s *silent) Close() error                   { close(s.done); return nil }
-func TestStreamingReplayAndAck(t *testing.T) {
+func (s *silent) Send(string, uint64) error            { return nil }
+func (s *silent) Receive() (engine.Reply, error)       { <-s.done; return engine.Reply{}, io.EOF }
+func (s *silent) Close() error                         { close(s.done); return nil }
+func TestStreamingReplayAndAck(t *testing.T)           { testStreamingReplay(t, false) }
+func TestPersistentStreamingReplayAndAck(t *testing.T) { testStreamingReplay(t, true) }
+func testStreamingReplay(t *testing.T, persistent bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	e := engine.New("boot", &silent{make(chan struct{})}, 8)
+	id := "boot"
+	var queue *spool.Queue
+	if persistent {
+		var err error
+		queue, err = spool.Open(filepath.Join(t.TempDir(), "queue.db"), 1<<20, time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer queue.Close()
+		id = queue.ID
+	}
+	e := engine.New(id, &silent{make(chan struct{})}, 8)
 	s := New(e, 2, 2, 5*time.Millisecond)
+	s.Queue = queue
 	logPath := filepath.Join(t.TempDir(), "collector.log")
 	logger, err := audit.Open(logPath, 1<<20, 2)
 	if err != nil {
@@ -35,7 +50,9 @@ func TestStreamingReplayAndAck(t *testing.T) {
 	s.Audit = logger
 	defer logger.Close()
 	go e.Run(ctx)
-	go s.Run(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); s.Run(ctx) }()
+	defer func() { cancel(); <-done }()
 	lis := bufconn.Listen(1 << 20)
 	g := grpc.NewServer()
 	pb.RegisterCollectorServer(g, s)
@@ -59,8 +76,8 @@ func TestStreamingReplayAndAck(t *testing.T) {
 		return stream, stop
 	}
 	stream, stop := open()
-	e.Results <- &pb.Result{CollectorId: "boot", AttemptId: 1}
-	e.Results <- &pb.Result{CollectorId: "boot", AttemptId: 2}
+	e.Results <- &pb.Result{CollectorId: id, AttemptId: 1}
+	e.Results <- &pb.Result{CollectorId: id, AttemptId: 2}
 	first, err := stream.Recv()
 	if err != nil {
 		t.Fatal(err)
@@ -79,13 +96,20 @@ func TestStreamingReplayAndAck(t *testing.T) {
 	if replay.BatchId != first.BatchId || len(replay.Results) != 2 {
 		t.Fatal("identity changed on replay")
 	}
-	if err = stream.Send(&pb.Command{ProtocolVersion: 1, Body: &pb.Command_Ack{Ack: &pb.Ack{CollectorId: "boot", BatchId: replay.BatchId}}}); err != nil {
+	if err = stream.Send(&pb.Command{ProtocolVersion: 1, Body: &pb.Command_Ack{Ack: &pb.Ack{CollectorId: id, BatchId: replay.BatchId}}}); err != nil {
 		t.Fatal(err)
 	}
 	deadline = time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		s.mu.Lock()
 		n := len(s.batches)
+		if queue != nil {
+			stats, err := queue.Stats()
+			if err != nil {
+				t.Fatal(err)
+			}
+			n = int(stats.Batches)
+		}
 		s.mu.Unlock()
 		if n == 0 {
 			logger.Close()

@@ -15,10 +15,16 @@ public class CollectorBatchReceipt {
     @Column(name = "committed_at", nullable = false)
     private long committedAt;
 
+    private String rejection;
+
     protected CollectorBatchReceipt() {}
 
     CollectorBatchReceipt(CollectorBatchKey id, long committedAt) {
         this.id = id;
         this.committedAt = committedAt;
+    }
+    CollectorBatchReceipt(CollectorBatchKey id, long committedAt, String rejection) {
+        this(id, committedAt);
+        this.rejection = rejection;
     }
 }

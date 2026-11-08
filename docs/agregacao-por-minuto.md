@@ -1,5 +1,6 @@
 # Indicadores a partir de resumos persistidos por minuto
 
+> Atualização: novos lotes agora são agregados diretamente na ingestão, sem gravar `ping_sample`. O fluxo agendado descrito neste guia atende ao histórico legado. A operação atual, os cursores separados e a fila SQLite estão em [Fila persistente e agregação direta](fila-persistente.md).
 ## Fluxo
 
 O coletor grava os pings em `ping_sample`. A aplicação não mantém histórico bruto em memória. Um processo agendado agrega novos IDs no PostgreSQL a cada 60 segundos e grava `ping_minute`. As requisições calculam somente o período e grupo solicitados a partir dessa tabela e das consolidações auxiliares de hora/dia em `ping_rollup`. Não existe cache de indicadores nem recuperação por checkpoint.

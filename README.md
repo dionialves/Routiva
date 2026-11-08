@@ -102,11 +102,11 @@ Encerre o acompanhamento com `Ctrl+C`. A consulta é uma fotografia do estado at
 
 | Campo | Significado e unidade |
 | --- | --- |
-| `collector_id` | Identificador desta execução do coletor. Muda quando o processo Go reinicia; junto ao ID do lote ou da tentativa, permite identificar seus registros. |
+| `collector_id` | Identificador persistente da fila do coletor. Permanece após reinícios enquanto o volume `collector_data` for preservado; junto ao ID do lote, permite deduplicar entregas. |
 | `protocol_version` | Versão do protocolo de comunicação entre Java e Go; atualmente `1`. Não é a versão do aplicativo. |
 | `metrics` | Objeto que reúne os indicadores abaixo. |
 
-Os contadores acumulados abaixo são reiniciados quando o processo Go reinicia. Compare leituras com o mesmo `collector_id`. Valores instantâneos e tempos da última ocorrência não são médias.
+Os contadores do motor reiniciam com o processo; `queue_dropped_total` permanece no SQLite. A identidade pode permanecer igual após um reinício. Valores instantâneos e tempos da última ocorrência não são médias.
 
 | Campo em `metrics` | Significado e unidade |
 | --- | --- |
@@ -116,6 +116,11 @@ Os contadores acumulados abaixo são reiniciados quando o processo Go reinicia. 
 | `connections_total` | Total acumulado de sessões de coleta aceitas pelo Go, incluindo reconexões. Não conta consultas `--health` nem representa conexões simultâneas. |
 | `cpu_seconds` | Tempo acumulado de CPU do processo Go, somando usuário e sistema, em segundos. Não é percentual de CPU nem tempo desde a inicialização. |
 | `dropped_total` | Total acumulado de resultados descartados por falta de espaço no buffer de resultados ou na fila de lotes. Não é quantidade de pings sem resposta. |
+| `queue_bytes`, `queue_max_bytes` | Payload pendente em disco e orçamento configurado, em bytes; não inclui overhead SQLite. |
+| `queue_batches`, `queue_oldest_age_seconds` | Lotes persistidos e idade do mais antigo. |
+| `queue_dropped_total` | Descartes persistentes por tamanho/idade; também compõe `dropped_total`. |
+| `forming_results` | Resultados reunidos para o próximo lote, ainda em RAM. |
+| `storage_errors_total`, `persistence_healthy` | Falhas locais de armazenamento e estado atual (1 saudável, 0 falhando). |
 | `goroutines` | Quantidade atual de goroutines, as tarefas concorrentes do runtime Go. Não é quantidade de hosts nem de threads do sistema operacional. |
 | `heap_bytes` | Bytes atualmente alocados no heap do Go. Divida por `1048576` para MiB. Não representa toda a memória do container. |
 | `icmp_errors_total` | Total acumulado de tentativas encerradas por erro ICMP correlacionado, como destino inalcançável. Entra como perda de rede. |
@@ -151,7 +156,7 @@ docker compose exec -T collector routiva-collector --health | jq '{
 }'
 ```
 
-**Como interpretar o fluxo:** o Go mantém um lote enviado aguardando ACK por vez. O Java grava as amostras e o recibo em `collector_batch` na mesma transação e só depois confirma ao Go. Ao receber o ACK, o Go remove o lote da memória e pode enviar o próximo. O arquivo de log registra o ciclo dos lotes e os ACKs, mas não armazena os resultados para recuperação; os recibos e amostras no PostgreSQL seguem a retenção configurada. O recibo comprova a gravação, mas não que o Go recebeu a confirmação.
+**Como interpretar o fluxo:** o Go persiste os lotes no SQLite local e mantém um lote enviado aguardando ACK por vez. Java agrega diretamente por host/destino/minuto e grava resumos, rollups, alterações do painel e recibo na mesma transação. Só depois envia ACK; o Go remove o lote da fila persistente. Novos pings individuais não são gravados no PostgreSQL. Consulte [fila persistente e agregação direta](docs/fila-persistente.md) para limites, migração e testes.
 
 Compare leituras ao longo do tempo: aumento de `dropped_total` indica novos descartes; queda de `result_buffer` indica redução do acúmulo naquele intervalo. Um buffer estável, sozinho, não comprova equilíbrio, pois pode coexistir com descartes. Para calcular uma taxa, divida a diferença de um contador pelo tempo entre as consultas. A saída atual não expõe os IDs dos lotes pendentes nem separa lotes aguardando envio daqueles aguardando ACK.
 
@@ -165,7 +170,7 @@ O Docker captura os logs gerais dos processos. O coletor também mantém um **ar
 
 ### Arquivo de log dos lotes
 
-O arquivo permite acompanhar o caminho de cada lote: criação → envio ao Java → recebimento e validação do ACK → remoção da memória. Também registra reconexões, reenvios, descartes e o estado das filas. As mensagens são em inglês e não incluem pings individuais.
+O arquivo permite acompanhar o caminho de cada lote: criação → envio ao Java → recebimento e validação do ACK → remoção da fila persistente. Também registra reconexões, reenvios, descartes e o estado das filas. As mensagens são em inglês e não incluem pings individuais.
 
 O caminho `/var/log/routiva/collector.log` fica **dentro do container `collector`**, no volume `collector_logs`; não é um arquivo criado diretamente na pasta do projeto no servidor. Execute os comandos abaixo na pasta do projeto, onde está o `compose.yaml`.
 
@@ -177,7 +182,7 @@ Após atualizar o código, reconstrua o coletor para ativar o arquivo e o volume
 docker compose up -d --build --wait collector
 ```
 
-A recriação reinicia o coletor: resultados ainda não confirmados em memória podem ser perdidos. Essa etapa é necessária para aplicar a implementação, não a cada consulta do log.
+A recriação recupera os lotes no volume `collector_data`; resultados ainda em buffers de memória podem ser perdidos. Na primeira atualização a partir da versão sem SQLite, os lotes antigos ainda estão somente em memória. Essa etapa é necessária para aplicar a implementação, não a cada consulta do log.
 
 Para abrir as últimas 100 linhas, sem continuar acompanhando:
 
@@ -236,12 +241,12 @@ Cada linha contém `time`, `level`, `msg`, `seq`, `event` e os campos do evento.
 | `BATCH_CREATED` | Lote formado e colocado na fila, com quantidade de resultados e motivo. |
 | `SEND_STARTED`, `SEND_COMPLETED`, `SEND_FAILED` | Início, retorno bem-sucedido do envio gRPC ou falha. `send_attempt` maior que 1 indica reenvio do mesmo lote. Envio concluído não comprova gravação no banco. |
 | `ACK_RECEIVED`, `ACK_VALIDATED`, `ACK_REJECTED`, `ACK_TIMEOUT` | Recebimento, validação, rejeição ou ausência de confirmação no prazo. `ack_ms` mede envio até validação, incluindo persistência. |
-| `BATCH_REMOVED` | Remoção do lote da memória após ACK válido. |
-| `BATCH_DROPPED` | Novo lote descartado por falta de espaço; inclui ID e quantidade. |
+| `BATCH_REMOVED` | Remoção do lote da fila persistente após ACK válido. |
+| `BATCH_DROPPED` | Resultados descartados por limite de tamanho/idade da fila; inclui quantidade e motivo. |
 | `QUEUE_STATUS` | Fotografia da fila a cada dez segundos; inclui resultados em formação, buffer do motor e descartes acumulados. |
 | `SHUTDOWN_REQUESTED`, `ENGINE_STOPPED`, `SHUTDOWN_UNCONFIRMED`, `SHUTDOWN_COMPLETED`, `COLLECTOR_FAILED` | Encerramento, dados restantes ou falha do processo. |
 
-`retained_batches` inclui o lote em voo; `waiting_to_send` exclui esse lote; `awaiting_ack` é zero ou um. `in_flight_batch_id` identifica o lote em transmissão/espera de ACK (zero se não houver). Descartes anteriores à formação de lote aparecem somente no total agregado de `QUEUE_STATUS`, pois ainda não possuem ID de lote.
+`retained_batches` inclui o lote em voo; a fila persistente também informa `queue_bytes`. `in_flight_batch_id` identifica o lote em transmissão/espera de ACK (zero se não houver). Descartes anteriores à formação de lote aparecem somente no total agregado de `QUEUE_STATUS`, pois ainda não possuem ID de lote.
 
 #### Rotação, persistência e limites
 
@@ -324,7 +329,7 @@ Clique no cabeçalho de qualquer coluna para ordenar; clique novamente para inve
 
 A coleta usa **1 ping por segundo por host** (`PING_INTERVAL_MS=1000`) no processo Go, com um socket ICMP compartilhado e recepção assíncrona. O intervalo é contado pelo horário planejado; timeout não bloqueia o próximo envio. O padrão de timeout é 1500 ms. Valores explícitos no `.env` continuam prevalecendo.
 
-Java sincroniza o inventário por gRPC, recebe lotes e confirma depois do commit. Filas limitadas e retransmissão em memória separam o motor da latência do banco. Não há execução de comandos externos de ping. Timeouts são perdas; erros internos e tentativas puladas ficam fora do denominador. Detalhes, limites, métricas e evidências de teste estão em [Operação do coletor](docs/coletor-icmp.md).
+Java sincroniza o inventário por gRPC, recebe lotes e confirma depois do commit. A fila SQLite limitada e o reenvio após reinícios separam o motor da latência do banco. Não há execução de comandos externos de ping. Timeouts são perdas; erros internos e tentativas puladas ficam fora do denominador. Detalhes, limites, métricas e evidências de teste estão em [Operação do coletor](docs/coletor-icmp.md).
 
 Os dados originais continuam no PostgreSQL, com novas colunas opcionais para identidade, status e horários da tentativa. A retenção permanece limitada a 48 horas e a limpeza ocorre a cada 600 segundos, preservando os pings ainda não agregados. A capacidade do banco e das consultas agregadas não está certificada para 10.000 hosts.
 
@@ -374,9 +379,9 @@ Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no pro
 
 ### Agregação persistida e consultas dos indicadores
 
-O coletor persiste os pings brutos em `ping_sample`. A cada 60 segundos, o banco agrega os novos IDs em `ping_minute`, por host/IP/minuto, mantendo contagens de respostas normais, respostas acima do limite, perdas, erros internos e soma das latências. O Java não mantém histórico bruto em memória.
+O coletor persiste temporariamente os lotes na fila SQLite. O app agrega cada lote diretamente em `ping_minute`, por host/IP/minuto, mantendo contagens de respostas normais, respostas acima do limite, perdas, erros internos, soma das latências e extremos para minutos novos. Novos pings brutos não são gravados no PostgreSQL.
 
-O cursor em `ping_aggregation_progress` e os resumos são atualizados na mesma transação. Lotes podem contribuir para o mesmo minuto, e pings atrasados corrigem minutos anteriores. Em atraso de seis horas ou reinício, a agregação retoma o cursor e drena os lotes pendentes sem esperar um minuto entre eles. A limpeza preserva pings ainda não processados.
+A revisão em `ping_aggregation_progress`, os resumos e o recibo do lote são atualizados na mesma transação. O cursor dos pings brutos legados é separado da revisão da ingestão nova. Lotes podem contribuir para o mesmo minuto, e pings atrasados corrigem minutos anteriores. Em atraso de seis horas ou reinício, a agregação retoma o cursor e drena os lotes pendentes sem esperar um minuto entre eles. A limpeza preserva pings ainda não processados.
 
 As APIs consultam somente os resumos persistidos para o período e grupo solicitados, sem cache de indicadores ou publicação antecipada de todos os períodos. As séries são agrupadas diretamente no banco. As médias usam a soma de latências dividida pelo total de respostas. Os períodos terminam em minutos completos; o minuto em andamento não é apresentado.
 
@@ -421,7 +426,7 @@ A rotação continua diária ou por tamanho, configurável pelas variáveis `IND
 | APP_BIND_ADDRESS | 0.0.0.0 | Interface publicada pelo Docker; use 127.0.0.1 com Nginx local |
 | APP_PORT | 8080 | Porta do servidor publicada pelo contêiner Spring |
 
-Os intervalos precisam ser positivos. O painel calcula o período solicitado a partir dos resumos no banco; o processo em background agrega os novos pings em lotes transacionais. A capacidade para inventários grandes depende de validação de carga. Não possui autenticação e escuta apenas localmente por padrão. Para acesso em rede, configure `SERVER_ADDRESS` e um proxy com autenticação e HTTPS conforme seu ambiente.
+Os intervalos precisam ser positivos. O painel calcula o período solicitado a partir dos resumos no banco; a ingestão agrega os novos lotes diretamente; o processo em background finaliza o legado e avança a referência temporal. A capacidade para inventários grandes depende de validação de carga. Não possui autenticação e escuta apenas localmente por padrão. Para acesso em rede, configure `SERVER_ADDRESS` e um proxy com autenticação e HTTPS conforme seu ambiente.
 
 ## Testes
 

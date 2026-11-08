@@ -3,7 +3,7 @@ package br.com.scriptping.ingestion;
 import br.com.scriptping.IpAddress;
 import br.com.scriptping.collector.proto.Batch;
 import br.com.scriptping.collector.proto.Status;
-import br.com.scriptping.ingestion.SampleBatchWriter.Row;
+import br.com.scriptping.aggregation.MinuteAggregationService;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,10 +21,12 @@ public class SampleIngestionService {
     private final double latencyLimit;
     private final SampleIngestionRepository repository;
     private final CollectorBatchRepository receipts;
+    private final MinuteAggregationService summaries;
 
     public SampleIngestionService(
         SampleIngestionRepository repository,
         CollectorBatchRepository receipts,
+        MinuteAggregationService summaries,
         @Value("${monitor.retention-hours:48}") long retentionHours,
         @Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds,
         @Value("${monitor.latency-limit-ms:20}") double latencyLimit
@@ -43,6 +45,7 @@ public class SampleIngestionService {
         );
         this.repository = repository;
         this.receipts = receipts;
+        this.summaries = summaries;
         this.retention = Duration.ofHours(Math.min(retentionHours, 48));
     }
 
@@ -50,7 +53,16 @@ public class SampleIngestionService {
         return latencyLimit;
     }
 
-    /** The receipt and all rows commit together. The single ingestion writer retries the same identity. */
+    /** Upgrade one bounded page per transaction before accepting live batches. */
+    @Transactional
+    public long migrateLegacyPage() {
+        repository.lockIngestion();
+        long boundary = summaries.legacyBoundary();
+        var page = summaries.aggregate(boundary, 10000, System.currentTimeMillis());
+        return Math.max(0, boundary - page.cursor());
+    }
+
+    /** The receipt and all summaries commit together. The single ingestion writer retries the same identity. */
     @Transactional
     public void saveBatch(Batch batch) {
         repository.lockIngestion();
@@ -65,7 +77,7 @@ public class SampleIngestionService {
         if (receipts.existsById(receiptId)) return;
         long now = System.currentTimeMillis(),
             cutoff = retentionCutoff(now);
-        List<Row> rows = new ArrayList<>();
+        List<PingSample> rows = new ArrayList<>();
         for (var r : batch.getResultsList()) {
             if (
                 !collector.equals(r.getCollectorId()) ||
@@ -95,27 +107,20 @@ public class SampleIngestionService {
                 case ICMP_ERROR -> "Sem resposta ICMP";
                 default -> "Coletor: " + r.getStatus().name();
             };
-            rows.add(new Row(
-                r.getHostId(),
-                r.getTarget(),
-                measured,
-                latency,
-                error,
-                r.getLatencyLimitMs() > 0 ? r.getLatencyLimitMs() : 20d,
-                collector,
-                r.getAttemptId(),
-                batch.getBatchId(),
-                r.getSequence(),
-                r.getScheduledAt(),
-                r.getSentAt(),
-                r.getReceivedAt(),
-                r.getRttNs(),
-                r.getStatus().name(),
-                r.getErrorCode()
-            ));
+            rows.add(new PingSample(0, r.getHostId(), r.getTarget(), measured, latency,
+                error, r.getLatencyLimitMs() > 0 ? r.getLatencyLimitMs() : latencyLimit));
         }
-        repository.insertSamples(rows);
+        summaries.ingest(rows, now);
         receipts.save(new CollectorBatchReceipt(receiptId, now));
+    }
+
+    /** Persist a terminal rejection before releasing the producer's batch. No raw data is stored. */
+    @Transactional
+    public void rejectBatch(Batch batch, String reason) {
+        repository.lockIngestion();
+        var id = new CollectorBatchKey(batch.getCollectorId(), batch.getBatchId());
+        if (!receipts.existsById(id)) receipts.save(new CollectorBatchReceipt(id,
+            System.currentTimeMillis(), reason.substring(0, Math.min(reason.length(), 255))));
     }
 
     public long retentionCutoff(long now) {
@@ -125,6 +130,6 @@ public class SampleIngestionService {
     @Transactional
     public void deleteExpiredSamplesAndReceipts(long cutoff, long processedCursor) {
         repository.deleteExpiredSamples(cutoff, processedCursor);
-        receipts.deleteExpired(cutoff);
+        receipts.deleteExpired(cutoff - Duration.ofDays(7).toMillis());
     }
 }

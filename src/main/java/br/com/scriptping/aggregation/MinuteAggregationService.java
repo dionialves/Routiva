@@ -18,7 +18,11 @@ public class MinuteAggregationService {
     static final long MINUTE = 60_000L;
     private static final int MINUTE_LOOKUP_BATCH_SIZE = 500;
     public record Key(String host, String target) {}
-    public record Progress(long cursor, long boundary, Long processedAt, long completeThrough) {}
+    public record Progress(long cursor, long boundary, Long processedAt, long completeThrough, long rawCursor) {
+        public Progress(long cursor, long boundary, Long processedAt, long completeThrough) {
+            this(cursor, boundary, processedAt, completeThrough, cursor);
+        }
+    }
     public record Batch(long cursor, long boundary, long rows, int summaries) {}
     public record Summary(String host, String target, long minute, long total, long healthy,
                    long degraded, long lost, long errors, double sum, long last) {
@@ -48,11 +52,16 @@ public class MinuteAggregationService {
         return repository.progress().snapshot();
     }
 
+    public long legacyBoundary() {
+        return Math.max(repository.latestSampleId(), jdbc.queryForObject(
+            "SELECT raw_cursor_id FROM ping_aggregation_progress WHERE id=1", Long.class));
+    }
+
     /** Hold the ingestion guard only while capturing the committed boundary. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public long committedBoundary() {
         repository.lockIngestion();
-        return Math.max(repository.latestSampleId(), repository.progress().snapshot().cursor());
+        return legacyBoundary();
     }
 
     @Transactional
@@ -64,11 +73,11 @@ public class MinuteAggregationService {
         var checkpoint = repository.lockProgress();
         Progress previous = checkpoint.snapshot();
         history.initialize();
-        if (boundary < previous.cursor()) {
-            return new Batch(previous.cursor(), previous.boundary(), 0, 0);
+        if (boundary < previous.rawCursor()) {
+            return new Batch(previous.rawCursor(), boundary, 0, 0);
         }
 
-        var samples = repository.samples(previous.cursor(), boundary, PageRequest.of(0, pageSize));
+        var samples = repository.samples(previous.rawCursor(), boundary, PageRequest.of(0, pageSize));
         var contributions = new HashMap<MinuteKey, Summary>();
         for (PingSample sample : samples) {
             long minute = minuteAt(sample.measuredAt());
@@ -85,7 +94,8 @@ public class MinuteAggregationService {
             }
         }
         long through = samples.isEmpty() ? boundary : samples.getLast().id();
-        recordChanges(through, contributions, existing);
+        long revision = through > previous.rawCursor() ? Math.max(previous.cursor() + 1, through) : previous.cursor();
+        recordChanges(revision, contributions, existing);
         history.add(contributions, existing);
         var additions = new ArrayList<PingMinute>();
         contributions.forEach((key, contribution) -> {
@@ -102,8 +112,63 @@ public class MinuteAggregationService {
             ? Math.max(previous.completeThrough(), minuteAt(now))
             : previous.completeThrough();
         long processedAt = previous.processedAt() == null ? now : Math.max(now, previous.processedAt());
-        checkpoint.setProgress(new Progress(through, boundary, processedAt, complete));
+        checkpoint.setProgress(new Progress(revision, Math.max(revision, boundary), processedAt, complete, through));
         return new Batch(through, boundary, samples.size(), contributions.size());
+    }
+
+    /** Called by the ingestion transaction while holding the ingestion guard. */
+    @Transactional
+    public void ingest(List<PingSample> samples, long now) {
+        // Finish legacy raw history before allocating revisions for direct ingestion.
+        var checkpoint = repository.lockProgress();
+        var previous = checkpoint.snapshot();
+        long boundary = Math.max(repository.latestSampleId(), previous.rawCursor());
+        while (previous.rawCursor() < boundary) {
+            aggregate(boundary, 10000, now);
+            previous = checkpoint.snapshot();
+        }
+        history.initialize();
+        long revision = previous.cursor() + 1;
+        var contributions = new HashMap<MinuteKey, Summary>();
+        var extremes = new HashMap<MinuteKey, double[]>();
+        for (var sample : samples) {
+            long minute = minuteAt(sample.measuredAt());
+            var key = new MinuteKey(new HostTarget(sample.hostId(), sample.target()), minute);
+            contributions.merge(key, summarize(sample, minute), MinuteAggregationService::combine);
+            if (sample.outcome() == PingSample.SUCCESS) {
+                var range = extremes.computeIfAbsent(key,
+                    ignored -> new double[]{sample.latency(), sample.latency()});
+                range[0] = Math.min(range[0], sample.latency());
+                range[1] = Math.max(range[1], sample.latency());
+            }
+        }
+        var existing = new HashMap<MinuteKey, PingMinute>();
+        var keys = new ArrayList<>(contributions.keySet());
+        for (int start = 0; start < keys.size(); start += MINUTE_LOOKUP_BATCH_SIZE) {
+            for (var stored : repository.minutes(keys.subList(start,
+                Math.min(start + MINUTE_LOOKUP_BATCH_SIZE, keys.size())))) existing.put(stored.getId(), stored);
+        }
+        recordChanges(revision, contributions, existing);
+        history.add(contributions, existing);
+        var additions = new ArrayList<PingMinute>();
+        contributions.forEach((key, contribution) -> {
+            var stored = existing.get(key);
+            if (stored == null) additions.add(new PingMinute(key, contribution));
+            else stored.setSummary(combine(stored.snapshot(), contribution));
+        });
+        repository.saveAllAndFlush(additions);
+        var ranges = new ArrayList<Object[]>();
+        extremes.forEach((key, range) -> ranges.add(new Object[]{range[0], range[0], range[1], range[1],
+            key.endpoint().host(), key.endpoint().target(), key.minute(),
+            contributions.get(key).healthy() + contributions.get(key).degraded()}));
+        if (!ranges.isEmpty()) jdbc.batchUpdate("""
+            UPDATE ping_minute SET latency_min=CASE WHEN latency_min IS NULL THEN ? ELSE LEAST(latency_min,?) END,
+                latency_max=CASE WHEN latency_max IS NULL THEN ? ELSE GREATEST(latency_max,?) END
+            WHERE host_id=? AND target=? AND minute_at=?
+                AND (latency_min IS NOT NULL OR healthy+degraded=?)
+            """, ranges);
+        checkpoint.setProgress(new Progress(revision, revision, now,
+            Math.max(previous.completeThrough(), minuteAt(now)), previous.rawCursor()));
     }
 
     private void recordChanges(long revision, Map<MinuteKey, Summary> contributions,

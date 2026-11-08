@@ -16,6 +16,8 @@ class AggregationProgress {
     private long cursor;
     @Column(name = "boundary_id")
     private long boundary;
+    @Column(name = "raw_cursor_id")
+    private long rawCursor;
     @Column(name = "processed_at")
     private Long processedAt;
     @Column(name = "complete_through")
@@ -24,11 +26,12 @@ class AggregationProgress {
     protected AggregationProgress() {}
 
     Progress snapshot() {
-        return new Progress(cursor, boundary, processedAt, completeThrough);
+        return new Progress(cursor, boundary, processedAt, completeThrough, rawCursor);
     }
 
     void setProgress(Progress progress) {
         cursor = progress.cursor();
+        rawCursor = progress.rawCursor();
         boundary = progress.boundary();
         processedAt = progress.processedAt();
         completeThrough = progress.completeThrough();

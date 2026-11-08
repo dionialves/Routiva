@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"google.golang.org/grpc"
@@ -19,6 +17,7 @@ import (
 	"routiva/collector/internal/audit"
 	"routiva/collector/internal/engine"
 	"routiva/collector/internal/server"
+	"routiva/collector/internal/spool"
 	"strconv"
 	"strings"
 	"syscall"
@@ -138,18 +137,20 @@ func run() (runErr error) {
 		return fmt.Errorf("ICMP socket: %w (check ping_group_range)", err)
 	}
 	auditLog.Event(slog.LevelInfo, "ICMP_READY", "ICMP socket opened")
-	var id [16]byte
-	if _, err = rand.Read(id[:]); err != nil {
-		return err
+	queue, err := spool.Open(env("COLLECTOR_SPOOL_PATH", "/var/lib/routiva/queue.db"), int64(number("COLLECTOR_SPOOL_MAX_MIB", 256))<<20, time.Duration(number("COLLECTOR_SPOOL_MAX_AGE_HOURS", 24))*time.Hour)
+	if err != nil {
+		return fmt.Errorf("open persistent queue: %w", err)
 	}
-	e := engine.New(hex.EncodeToString(id[:]), socket, number("COLLECTOR_RESULT_BUFFER", 32768))
+	defer queue.Close()
+	e := engine.New(queue.ID, socket, number("COLLECTOR_RESULT_BUFFER", 32768))
 	batchSize := number("COLLECTOR_BATCH_SIZE", 500)
 	if batchSize > 5000 {
 		return fmt.Errorf("COLLECTOR_BATCH_SIZE must be <=5000")
 	}
-	s := server.New(e, batchSize, number("COLLECTOR_MAX_BATCHES", 128), time.Duration(number("COLLECTOR_FLUSH_MS", 100))*time.Millisecond)
+	s := server.New(e, batchSize, 0, time.Duration(number("COLLECTOR_FLUSH_MS", 100))*time.Millisecond)
 	s.Audit = auditLog
-	auditLog.Event(slog.LevelInfo, "LIMITS", "Collector limits configured", "collector_id", e.ID, "max_batch_size", s.BatchSize, "max_batches", s.MaxBatches, "flush_ms", s.Flush.Milliseconds(), "result_buffer_capacity", cap(e.Results), "ack_timeout_ms", 30000)
+	s.Queue = queue
+	auditLog.Event(slog.LevelInfo, "LIMITS", "Collector limits configured", "collector_id", e.ID, "max_batch_size", s.BatchSize, "spool_max_bytes", queue.MaxBytes, "spool_max_age_hours", queue.MaxAge.Hours(), "flush_ms", s.Flush.Milliseconds(), "result_buffer_capacity", cap(e.Results), "ack_timeout_ms", 30000)
 	g := grpc.NewServer(append(options, grpc.MaxRecvMsgSize(4<<20))...)
 	pb.RegisterCollectorServer(g, s)
 	engineDone := make(chan struct{})
@@ -173,8 +174,8 @@ func run() (runErr error) {
 			time.Sleep(50 * time.Millisecond)
 		}
 		if n := s.Buffered(); n > 0 {
-			slog.Warn("shutdown with unacknowledged in-memory results", "buffer_units", n)
-			auditLog.Event(slog.LevelWarn, "SHUTDOWN_UNCONFIRMED", "Unacknowledged data remains in memory", "collector_id", e.ID, "buffer_units", n)
+			slog.Warn("shutdown with queued results (persisted batches retained)", "buffer_units", n)
+			auditLog.Event(slog.LevelWarn, "SHUTDOWN_UNCONFIRMED", "Unacknowledged batches remain on disk", "collector_id", e.ID, "buffer_units", n)
 		}
 		stopBatch()
 		g.Stop()

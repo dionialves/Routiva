@@ -54,21 +54,31 @@ final class HistoricalAggregation {
                 valid.merge(key, newlyValid, Long::sum);
             }
         });
-        totals.forEach((key, s) -> {
-            int changed = jdbc.update("""
-                UPDATE ping_rollup SET total_pings=total_pings+?,healthy=healthy+?,degraded=degraded+?,
-                    lost=lost+?,errors=errors+?,latency_sum=latency_sum+?,
-                    last_sample_at=GREATEST(last_sample_at,?),valid_minutes=valid_minutes+?
-                WHERE host_id=? AND target=? AND resolution=? AND bucket_at=?
-                """, s.total(),s.healthy(),s.degraded(),s.lost(),s.errors(),s.sum(),s.last(),valid.get(key),
-                key.host(),key.target(),key.resolution(),key.at());
-            if (changed == 0) jdbc.update("""
-                INSERT INTO ping_rollup(host_id,target,resolution,bucket_at,total_pings,healthy,
-                    degraded,lost,errors,latency_sum,last_sample_at,valid_minutes)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-                """,key.host(),key.target(),key.resolution(),key.at(),s.total(),s.healthy(),s.degraded(),
-                s.lost(),s.errors(),s.sum(),s.last(),valid.get(key));
-        });
+        var entries = new ArrayList<>(totals.entrySet());
+        var updates = new ArrayList<Object[]>();
+        for (var entry : entries) {
+            var key=entry.getKey(); var s=entry.getValue();
+            updates.add(new Object[]{s.total(),s.healthy(),s.degraded(),s.lost(),s.errors(),s.sum(),
+                s.last(),valid.get(key),key.host(),key.target(),key.resolution(),key.at()});
+        }
+        if (updates.isEmpty()) return;
+        int[] changed = jdbc.batchUpdate("""
+            UPDATE ping_rollup SET total_pings=total_pings+?,healthy=healthy+?,degraded=degraded+?,
+                lost=lost+?,errors=errors+?,latency_sum=latency_sum+?,
+                last_sample_at=GREATEST(last_sample_at,?),valid_minutes=valid_minutes+?
+            WHERE host_id=? AND target=? AND resolution=? AND bucket_at=?
+            """,updates);
+        var inserts = new ArrayList<Object[]>();
+        for (int i=0;i<changed.length;i++) if (changed[i]==0) {
+            var key=entries.get(i).getKey();var s=entries.get(i).getValue();
+            inserts.add(new Object[]{key.host(),key.target(),key.resolution(),key.at(),s.total(),
+                s.healthy(),s.degraded(),s.lost(),s.errors(),s.sum(),s.last(),valid.get(key)});
+        }
+        if (!inserts.isEmpty()) jdbc.batchUpdate("""
+            INSERT INTO ping_rollup(host_id,target,resolution,bucket_at,total_pings,healthy,
+                degraded,lost,errors,latency_sum,last_sample_at,valid_minutes)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            """,inserts);
     }
 
     record Result(Map<Key, Summary> totals, long validHostMinutes) {}

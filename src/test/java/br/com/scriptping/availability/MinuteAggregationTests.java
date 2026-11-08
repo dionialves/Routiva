@@ -164,7 +164,7 @@ class MinuteAggregationTests extends MinuteTestSupport {
         jdbc.update("INSERT INTO analytics_checkpoint_part VALUES ('old-checkpoint','old-block')");
         jdbc.update("INSERT INTO host_latency_policy VALUES ('a',20)");
         insert(end-10000,10d,null);drain(1);
-        jdbc.update("INSERT INTO collector_batch VALUES ('collector',1,?)",now);
+        jdbc.update("INSERT INTO collector_batch(collector_id,batch_id,committed_at) VALUES ('collector',1,?)",now);
         jdbc.update("INSERT INTO zabbix_settings VALUES (1,'saved-settings')");
         var progress=summaries.progress();
         long pendingChanges=jdbc.queryForObject("SELECT COUNT(*) FROM availability_change",Long.class);

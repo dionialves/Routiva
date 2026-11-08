@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	pb "routiva/collector/gen"
 	"testing"
 	"time"
@@ -117,5 +118,19 @@ func TestTokenRejectsTruncatedOversizedAndForeignPayloads(t *testing.T) {
 		if _, ok := Token(payload); ok {
 			t.Fatalf("accepted invalid payload %v", payload)
 		}
+	}
+}
+
+func TestInventoryStillRejectsMoreThanTenThousandHosts(t *testing.T) {
+	e := New("limit", nil, 1)
+	config := &pb.Configuration{Replace: true}
+	for i := 0; i < 10001; i++ {
+		config.Hosts = append(config.Hosts, &pb.HostConfig{HostId: fmt.Sprint(i), Target: "127.0.0.1", IntervalMs: 1000, TimeoutMs: 1500, Enabled: true})
+	}
+	if err := e.configure(config, time.Now()); err == nil {
+		t.Fatal("accepted more than 10000 hosts")
+	}
+	if len(e.inventory) != 0 {
+		t.Fatal("rejected configuration changed inventory")
 	}
 }

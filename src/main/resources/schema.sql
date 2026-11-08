@@ -157,3 +157,13 @@ CREATE TABLE IF NOT EXISTS availability_change_state (
 INSERT INTO availability_change_state(id,floor_revision)
 SELECT 1,cursor_id FROM ping_aggregation_progress
 WHERE id=1 AND NOT EXISTS (SELECT 1 FROM availability_change_state WHERE id=1);
+
+-- Optional extremes: historical minutes without complete extrema remain unknown.
+ALTER TABLE ping_minute ADD COLUMN IF NOT EXISTS latency_min DOUBLE PRECISION;
+ALTER TABLE ping_minute ADD COLUMN IF NOT EXISTS latency_max DOUBLE PRECISION;
+
+ALTER TABLE collector_batch ADD COLUMN IF NOT EXISTS rejection VARCHAR(255);
+
+-- Split legacy raw ID migration from the live summary revision, initialized once on upgrade.
+ALTER TABLE ping_aggregation_progress ADD COLUMN IF NOT EXISTS raw_cursor_id BIGINT;
+UPDATE ping_aggregation_progress SET raw_cursor_id=cursor_id WHERE raw_cursor_id IS NULL;

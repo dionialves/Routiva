@@ -34,6 +34,12 @@ services:
       dockerfile: collector/Dockerfile
     restart: unless-stopped
     environment:
+      COLLECTOR_SPOOL_PATH: /var/lib/routiva/queue.db
+      COLLECTOR_SPOOL_MAX_MIB: ${COLLECTOR_SPOOL_MAX_MIB:-256}
+      COLLECTOR_SPOOL_MAX_AGE_HOURS: ${COLLECTOR_SPOOL_MAX_AGE_HOURS:-24}
+      COLLECTOR_BATCH_SIZE: ${COLLECTOR_BATCH_SIZE:-500}
+      COLLECTOR_FLUSH_MS: ${COLLECTOR_FLUSH_MS:-100}
+      COLLECTOR_RESULT_BUFFER: ${COLLECTOR_RESULT_BUFFER:-32768}
       COLLECTOR_LOG_PATH: /var/log/routiva/collector.log
       COLLECTOR_LOG_MAX_MIB: ${COLLECTOR_LOG_MAX_MIB:-100}
       COLLECTOR_LOG_FILES: ${COLLECTOR_LOG_FILES:-10}
@@ -43,6 +49,7 @@ services:
     volumes:
       - collector_socket:/run/routiva
       - collector_logs:/var/log/routiva
+      - collector_data:/var/lib/routiva
     stop_grace_period: 15s
   postgres:
     image: postgres:17-alpine
@@ -64,5 +71,6 @@ services:
 volumes:
   collector_socket:
   collector_logs:
+  collector_data:
   indicator_logs:
   postgres_data:

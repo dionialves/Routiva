@@ -43,7 +43,8 @@ public class CollectorClient implements HealthIndicator {
     private StreamObserver<Command> commands;
     private ClientCallStreamObserver<Command> inbound;
     private long generation;
-    private volatile boolean connected, closed;
+    private volatile boolean connected, closed, persistenceFailure;
+    private volatile long rejected;
     private volatile List<Host> hosts = List.of();
     private volatile Map<String, Double> metrics = Map.of();
     private volatile long lastHealth, committed, writeFailures;
@@ -167,7 +168,7 @@ public class CollectorClient implements HealthIndicator {
                     if (
                         batch.getProtocolVersion() != 1 ||
                         batch.getResultsCount() > 5000 ||
-                        batch.getCollectorId().isBlank() ||
+                        batch.getCollectorId().isBlank() || batch.getCollectorId().length() > 64 ||
                         batch.getBatchId() <= 0
                     ) {
                         synchronized (CollectorClient.this) {
@@ -219,6 +220,7 @@ public class CollectorClient implements HealthIndicator {
     }
 
     private void persist() {
+        boolean migrated = false;
         while (!closed || !queue.isEmpty())
             try {
                 Delivery d = queue.poll(1, TimeUnit.SECONDS);
@@ -226,11 +228,28 @@ public class CollectorClient implements HealthIndicator {
                 boolean saved = false;
                 while (!saved && !Thread.currentThread().isInterrupted())
                     try {
-                        store.saveBatch(d.batch());
+                        try {
+                            if (!migrated) {
+                                while (store.migrateLegacyPage() > 0) {
+                                    if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                                }
+                                migrated = true;
+                            }
+                            store.saveBatch(d.batch());
+                            committed += d.batch().getResultsCount();
+                        } catch (IllegalArgumentException invalid) {
+                            store.rejectBatch(d.batch(), invalid.getMessage());
+                            rejected += d.batch().getResultsCount();
+                            LoggerFactory.getLogger(getClass()).error(
+                                "Lote ICMP rejeitado definitivamente collector={} batch={} results={} reason={}",
+                                d.batch().getCollectorId(), d.batch().getBatchId(),
+                                d.batch().getResultsCount(), invalid.getMessage());
+                        }
+                        persistenceFailure = false;
                         saved = true;
-                        committed += d.batch().getResultsCount();
                     } catch (Exception e) {
                         writeFailures++;
+                        persistenceFailure = true;
                         failure = "Falha na persistência";
                         LoggerFactory.getLogger(getClass()).warn(
                             "Falha ao gravar lote ICMP; mantendo para repetição",
@@ -268,14 +287,17 @@ public class CollectorClient implements HealthIndicator {
     public Health health() {
         if (!enabled) return Health.unknown().withDetail("enabled", false).build();
         var result =
-            connected && System.currentTimeMillis() - lastHealth < 10000
+            connected && !persistenceFailure && metrics.getOrDefault("persistence_healthy", 1d) > 0
+                && System.currentTimeMillis() - lastHealth < 10000
                 ? Health.up()
                 : Health.down();
         return result
-            .withDetail("message", connected ? "Conectado" : failure)
+            .withDetail("message", metrics.getOrDefault("persistence_healthy", 1d) == 0
+                ? "Falha na persistência local do coletor" : connected && !persistenceFailure ? "Conectado" : failure)
             .withDetail("queueBatches", queue.size())
             .withDetail("committedResults", committed)
             .withDetail("writeFailures", writeFailures)
+            .withDetail("rejectedResults", rejected)
             .withDetail("engine", metrics)
             .build();
     }

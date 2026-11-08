@@ -26,7 +26,7 @@ public class MinuteRetention {
 
     @Transactional
     public void cleanup(long cutoff) {
-        long cursor = repository.lockProgress().snapshot().cursor();
+        long cursor = repository.lockProgress().snapshot().rawCursor();
         samples.deleteExpiredSamplesAndReceipts(cutoff, cursor);
     }
 }
