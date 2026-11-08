@@ -161,3 +161,58 @@ func BenchmarkPersistTenThousandResults(b *testing.B) {
 	}
 	b.ReportMetric(float64(b.N*10000)/b.Elapsed().Seconds(), "results/s")
 }
+
+func TestEntireSentPrefixSurvivesRetentionAndReplaysUntilAcknowledged(t *testing.T) {
+	q := openTest(t, filepath.Join(t.TempDir(), "queue.db"))
+	defer q.Close()
+	for i := 0; i < 4; i++ {
+		appendTest(t, q, []*pb.Result{{AttemptId: uint64(i + 1), ErrorCode: strings.Repeat("x", 200000)}}, 0)
+	}
+	first, err := q.Peek()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := q.PeekAfter(first.BatchId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, err := q.PeekAfter(second.BatchId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendTest(t, q, []*pb.Result{{AttemptId: 5, ErrorCode: strings.Repeat("x", 400000)}}, third.BatchId)
+	// The fourth unsent batch is evicted; all three sent batches remain.
+	stats, _ := q.Stats()
+	if stats.Dropped != 1 || stats.Batches != 4 {
+		t.Fatal(stats)
+	}
+	for i := 0; i < 3; i++ {
+		b, err := q.PeekAfter(uint64(i))
+		if err != nil || b.BatchId != uint64(i+1) {
+			t.Fatal("sent batch evicted", b, err)
+		}
+	}
+	if _, err = q.db.Exec("UPDATE batches SET created=?", time.Now().Add(-2*time.Hour).UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := q.PeekAfter(third.BatchId); err != nil || b != nil {
+		t.Fatal("unsent expired batch replayed", b, err)
+	}
+	stats, _ = q.Stats()
+	if stats.Batches != 3 || stats.Dropped != 2 {
+		t.Fatal(stats)
+	}
+	if err = q.AckMany([]uint64{first.BatchId, second.BatchId}); err != nil {
+		t.Fatal(err)
+	}
+	stats, _ = q.Stats()
+	if stats.Batches != 1 {
+		t.Fatal(stats)
+	}
+	// Simulate reconnect: retained third batch can now be replayed when it is not expired.
+	q.db.Exec("UPDATE batches SET created=?", time.Now().UnixMilli())
+	replay, err := q.Peek()
+	if err != nil || replay.BatchId != third.BatchId {
+		t.Fatal(replay, err)
+	}
+}

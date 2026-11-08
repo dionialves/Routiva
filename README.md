@@ -117,6 +117,7 @@ Os contadores do motor reiniciam com o processo; `queue_dropped_total` permanece
 | `cpu_seconds` | Tempo acumulado de CPU do processo Go, somando usuário e sistema, em segundos. Não é percentual de CPU nem tempo desde a inicialização. |
 | `dropped_total` | Total acumulado de resultados descartados por falta de espaço no buffer de resultados ou na fila de lotes. Não é quantidade de pings sem resposta. |
 | `queue_bytes`, `queue_max_bytes` | Payload pendente em disco e orçamento configurado, em bytes; não inclui overhead SQLite. |
+| `send_window`, `in_flight_batches` | Janela negociada na conexão e lotes enviados ainda sem ACK. |
 | `queue_batches`, `queue_oldest_age_seconds` | Lotes persistidos e idade do mais antigo. |
 | `queue_dropped_total` | Descartes persistentes por tamanho/idade; também compõe `dropped_total`. |
 | `forming_results` | Resultados reunidos para o próximo lote, ainda em RAM. |
@@ -156,7 +157,7 @@ docker compose exec -T collector routiva-collector --health | jq '{
 }'
 ```
 
-**Como interpretar o fluxo:** o Go persiste os lotes no SQLite local e envia um lote por vez. Java grava os pings brutos em `ping_sample` e o recibo na mesma transação; após o commit envia ACK e Go remove o lote da fila persistente. A análise ocorre separadamente, a cada 60 segundos, e atualiza os resumos de minuto, rollups e alterações do painel. O ACK não depende da conclusão da análise. Consulte [fila persistente e agregação agendada](docs/fila-persistente.md).
+**Como interpretar o fluxo:** o Go persiste os lotes no SQLite local e envia até 16 lotes sem esperar cada ACK individual. Java reúne vários lotes e grava os pings brutos em `ping_sample` com seus recibos na mesma transação; após o commit envia ACK e Go remove o lote da fila persistente. A análise ocorre separadamente, a cada 60 segundos, e atualiza os resumos de minuto, rollups e alterações do painel. O ACK não depende da conclusão da análise. `RAW_GROUP_COMMITTED` informa lotes por transação e tempos de espera, inserção e commit. Consulte [fila persistente e agregação agendada](docs/fila-persistente.md).
 
 Compare leituras ao longo do tempo: aumento de `dropped_total` indica novos descartes; queda de `result_buffer` indica redução do acúmulo naquele intervalo. Um buffer estável, sozinho, não comprova equilíbrio, pois pode coexistir com descartes. Para calcular uma taxa, divida a diferença de um contador pelo tempo entre as consultas. A saída atual não expõe os IDs dos lotes pendentes nem separa lotes aguardando envio daqueles aguardando ACK.
 

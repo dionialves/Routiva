@@ -6,9 +6,9 @@ O limite permanece em **10.000 hosts ativos por coletor**. O intervalo dos pings
 
 1. O Go agrupa até 500 resultados, ou fecha o lote após 100 ms.
 2. Confirma a gravação no SQLite local (WAL, synchronous=FULL).
-3. Envia um lote e aguarda ACK.
-4. Java valida e grava os resultados brutos em `ping_sample` junto ao recibo, em uma transação.
-5. Após o commit, Java envia ACK e Go apaga o lote do SQLite.
+3. Negocia uma janela limitada e envia até 16 lotes sem aguardar cada ACK individual.
+4. Java reúne até 16 lotes e 5.000 resultados, esperando no máximo 100 ms para formar o grupo. Grava os brutos em `ping_sample` e os recibos em uma transação.
+5. Após o commit, Java envia um ACK para cada lote original. Go valida a ordem e apaga apenas os lotes confirmados; ACKs disponíveis juntos são removidos em um commit SQLite.
 6. Independentemente da entrega, a cada 60 segundos o agregador lê os novos pings brutos em páginas e atualiza os resumos de minuto, rollups de hora/dia e alterações do painel.
 
 Reenvios preservam a identidade e não duplicam pings nem contagens. O ACK não espera a análise, não consulta resumos e não exige o bloqueio de progresso. A fila local protege resultados ainda não recebidos; o PostgreSQL protege resultados recebidos ainda não analisados.
@@ -32,9 +32,58 @@ O serviço Compose repassa os limites do `.env` ao coletor e usa o volume `colle
 
 O orçamento de payload não é o consumo total de disco. Há overhead de páginas/índices; o arquivo principal tem teto aproximado de duas vezes o orçamento mais 4 MiB, com WAL adicional e checkpoints automáticos. Páginas apagadas são reutilizadas. Monitore também o espaço livre do volume.
 
-Ao atingir tamanho/idade, elimina os lotes mais antigos, exceto o lote em envio. Se necessário, descarta novos resultados para respeitar o orçamento. A idade também é verificada antes do replay, mesmo sem novos resultados. `queue_dropped_total` persiste após reinícios. Descartes por retenção não são recuperáveis.
+Ao atingir tamanho/idade, elimina os lotes mais antigos, exceto os lotes em envio. Se necessário, descarta novos resultados para respeitar o orçamento. A idade também é verificada antes do replay, mesmo sem novos resultados. `queue_dropped_total` persiste após reinícios. Descartes por retenção não são recuperáveis.
 
 Falhas de escrita mantêm o lote em formação para nova tentativa; os buffers em RAM continuam limitados e podem descartar resultados quando cheios. Resultados ainda em RAM não são recuperáveis após queda abrupta. Persistência local não protege contra perda do disco/máquina.
+
+## Janela e gravação de grupos
+
+| Variável do app | Padrão | Limites |
+|---|---:|---|
+| COLLECTOR_SEND_WINDOW | 16 | 1..32 lotes por stream |
+| COLLECTOR_PERSISTENCE_MAX_RESULTS | 5000 | 5000..20000 resultados por transação |
+| COLLECTOR_PERSISTENCE_WAIT_MS | 100 | 0..1000 ms para reunir o grupo |
+
+A janela usa metadados gRPC `x-routiva-window`, mantendo o protocolo e os arquivos antigos da fila. Clientes antigos que não enviam esse metadado recebem somente um lote por vez. Um app novo também funciona com coletor antigo, mas nesse caso o agrupamento normalmente terá apenas um lote e o ganho depende de atualizar o coletor.
+
+Os limites de quantidade de lotes, resultados e tempo são aplicados juntos. A fila de recepção Java tem capacidade fixa de 64 entregas, e o controle manual gRPC libera novos créditos somente após o commit. Um lote que ultrapassaria o orçamento do grupo fica reservado para o próximo grupo. SQL nunca é executado no callback de recepção.
+
+Todos os lotes enviados ficam protegidos contra descarte por retenção até receber ACK ou encerrar a conexão. Uma falha de banco repete o mesmo grupo, sem ACK. Se o commit concluir e a conexão cair antes das confirmações, os recibos permitem reconhecer o replay sem duplicar resultados. ACKs fora da ordem ou de outra identidade encerram a sessão preservando os pendentes. Lotes com resultados inválidos são rejeitados integralmente no mesmo commit dos demais; os lotes válidos seguem normalmente.
+
+A melhoria também atende aos lotes antigos já acumulados, sem reempacotar ou trocar suas identidades. A agregação permanece a cada 60 segundos. Nenhuma configuração de durabilidade do PostgreSQL é desligada.
+
+### Medições
+
+`RAW_GROUP_COMMITTED` em `indicators.log` é emitido depois do commit e inclui:
+
+- `batches`, `results`, `duplicate_batches`, `rejected_results`.
+- `queue_wait_ms`: da primeira entrega até iniciar a tentativa de gravação, incluindo formação do grupo e eventuais repetições.
+- `group_wait_ms`: tempo de formação do grupo.
+- `lock_ms`: espera pelo bloqueio curto de ingestão.
+- `prepare_ms`: validação e consulta dos recibos.
+- `insert_ms`: inserção bruta e preparação dos recibos.
+- `commit_ms`: finalização da transação, incluindo flush dos recibos e commit.
+- `database_ms`: chamada transacional completa, incluindo aquisição da conexão e commit.
+
+O health detalhado do app apresenta `committedGroups`, `lastGroupBatches`, `lastDatabaseMs`, `lastCommitMs`, `lastQueueWaitMs`, `lastLockMs` e `lastInsertMs`. São métricas da última operação, não médias. No coletor, `send_window` informa a janela negociada e `in_flight_batches` os lotes aguardando confirmação.
+
+Para acompanhar recuperação, compare a idade do lote mais antigo em várias leituras e o avanço dos pings no banco. O ACK pode incluir a espera para agrupar e não precisa diminuir para a vazão melhorar. Grupos com vários lotes reduzem o número de commits, mas não garantem capacidade de produção por si só.
+
+### Atualização
+
+Atualize o app primeiro, mantendo o coletor em execução:
+
+```sh
+docker compose up -d --build --no-deps app
+```
+
+Aguarde o app concluir a inicialização e voltar a conectar. Depois atualize o coletor, preservando `collector_data`:
+
+```sh
+docker compose up -d --build --no-deps collector
+```
+
+Isso evita reiniciar o coletor antes de uma inicialização longa do app. O inventário ainda precisa ser reenviado após o reinício do Go; a fila persistida permanece disponível. A ativação da janela pode ser confirmada por `WINDOW_NEGOTIATED window=16` e pelo health. Configurar `COLLECTOR_SEND_WINDOW=1` no app permite voltar ao envio sequencial, mantendo os formatos existentes.
 
 ## Transição da agregação direta
 

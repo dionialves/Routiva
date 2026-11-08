@@ -84,7 +84,7 @@ func Open(path string, maxBytes int64, maxAge time.Duration) (_ *Queue, err erro
 }
 func (q *Queue) Close() error { err := q.db.Close(); q.lock.Close(); return err }
 
-// Append commits before a batch can be sent. An in-flight batch is never evicted.
+// Append commits before a batch can be sent. All IDs up to protected (the sent prefix) are never evicted.
 func (q *Queue) Append(results []*pb.Result, protected uint64) (dropped int64, err error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -105,7 +105,7 @@ func (q *Queue) Append(results []*pb.Result, protected uint64) (dropped int64, e
 	}
 	for {
 		var id, n, size, at int64
-		err = tx.QueryRow("SELECT id,results,length(payload),created FROM batches WHERE id<>? ORDER BY id LIMIT 1", protected).Scan(&id, &n, &size, &at)
+		err = tx.QueryRow("SELECT id,results,length(payload),created FROM batches WHERE id>? ORDER BY id LIMIT 1", protected).Scan(&id, &n, &size, &at)
 		if err == sql.ErrNoRows {
 			break
 		}
@@ -133,12 +133,15 @@ func (q *Queue) Append(results []*pb.Result, protected uint64) (dropped int64, e
 	}
 	return dropped, tx.Commit()
 }
-func (q *Queue) Peek() (*pb.Batch, error) {
+func (q *Queue) Peek() (*pb.Batch, error) { return q.PeekAfter(0) }
+
+// PeekAfter skips sent batches and only expires the unsent suffix.
+func (q *Queue) PeekAfter(after uint64) (*pb.Batch, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	// Expire before replay too, including after an idle restart without new pings.
 	var oldest int64
-	if err := q.db.QueryRow("SELECT COALESCE(MIN(created),0) FROM batches").Scan(&oldest); err != nil {
+	if err := q.db.QueryRow("SELECT COALESCE(MIN(created),0) FROM batches WHERE id>?", after).Scan(&oldest); err != nil {
 		return nil, err
 	}
 	var err error
@@ -149,10 +152,10 @@ func (q *Queue) Peek() (*pb.Batch, error) {
 		}
 		defer tx.Rollback()
 		cutoff := time.Now().Add(-q.MaxAge).UnixMilli()
-		if _, err = tx.Exec("UPDATE meta SET dropped=dropped+(SELECT COALESCE(SUM(results),0) FROM batches WHERE created<?) WHERE id=1", cutoff); err != nil {
+		if _, err = tx.Exec("UPDATE meta SET dropped=dropped+(SELECT COALESCE(SUM(results),0) FROM batches WHERE created<? AND id>?) WHERE id=1", cutoff, after); err != nil {
 			return nil, err
 		}
-		if _, err = tx.Exec("DELETE FROM batches WHERE created<?", cutoff); err != nil {
+		if _, err = tx.Exec("DELETE FROM batches WHERE created<? AND id>?", cutoff, after); err != nil {
 			return nil, err
 		}
 		if err = tx.Commit(); err != nil {
@@ -161,7 +164,7 @@ func (q *Queue) Peek() (*pb.Batch, error) {
 	}
 	var id uint64
 	var payload []byte
-	err = q.db.QueryRow("SELECT id,payload FROM batches ORDER BY id LIMIT 1").Scan(&id, &payload)
+	err = q.db.QueryRow("SELECT id,payload FROM batches WHERE id>? ORDER BY id LIMIT 1", after).Scan(&id, &payload)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -175,11 +178,23 @@ func (q *Queue) Peek() (*pb.Batch, error) {
 	b.BatchId = id
 	return b, nil
 }
-func (q *Queue) Ack(id uint64) error {
+func (q *Queue) Ack(id uint64) error { return q.AckMany([]uint64{id}) }
+
+// A received group of individual ACKs releases disk space in a single SQLite commit.
+func (q *Queue) AckMany(ids []uint64) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	_, err := q.db.Exec("DELETE FROM batches WHERE id=?", id)
-	return err
+	tx, err := q.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, id := range ids {
+		if _, err = tx.Exec("DELETE FROM batches WHERE id=?", id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 func (q *Queue) Stats() (Stats, error) {
 	q.mu.Lock()

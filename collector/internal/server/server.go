@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"log/slog"
 	pb "routiva/collector/gen"
@@ -11,6 +12,7 @@ import (
 	"routiva/collector/internal/engine"
 	"routiva/collector/internal/spool"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -29,6 +31,9 @@ type Server struct {
 	Audit                         *audit.Logger
 	sends                         map[uint64]int
 	inFlight                      uint64
+	inFlightLast                  uint64
+	inFlightCount                 int
+	activeWindow                  atomic.Int64
 	mu                            sync.Mutex
 	batches                       []*pb.Batch
 	serial                        uint64
@@ -50,18 +55,14 @@ func (s *Server) queueFields() []any {
 		if err != nil {
 			return []any{"storage_error", err}
 		}
-		return []any{"retained_batches", stats.Batches, "retained_results", stats.Results, "queue_bytes", stats.Bytes, "in_flight_batch_id", s.inFlight, "queue_dropped_total", stats.Dropped}
+		return []any{"retained_batches", stats.Batches, "retained_results", stats.Results, "queue_bytes", stats.Bytes, "in_flight_batch_id", s.inFlight, "awaiting_ack", s.inFlightCount, "queue_dropped_total", stats.Dropped}
 	}
-	waiting := len(s.batches)
+	waiting := len(s.batches) - s.inFlightCount
 	retainedResults := 0
 	for _, batch := range s.batches {
 		retainedResults += len(batch.Results)
 	}
-	ack := 0
-	if s.inFlight != 0 {
-		waiting--
-		ack = 1
-	}
+	ack := s.inFlightCount
 	return []any{"retained_batches", len(s.batches), "retained_results", retainedResults, "waiting_to_send", waiting, "awaiting_ack", ack, "in_flight_batch_id", s.inFlight}
 }
 func (s *Server) totalDropped() int64 {
@@ -86,7 +87,7 @@ func (s *Server) Run(ctx context.Context) {
 		s.mu.Lock()
 		s.serial++
 		if s.Queue != nil {
-			dropped, err := s.Queue.Append(results, s.inFlight)
+			dropped, err := s.Queue.Append(results, s.inFlightLast)
 			if err != nil {
 				s.storageErrors.Add(1)
 				s.storageFailed.Store(true)
@@ -157,6 +158,9 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 		s.mu.Lock()
 		pending := s.inFlight
 		s.inFlight = 0
+		s.inFlightLast = 0
+		s.inFlightCount = 0
+		s.activeWindow.Store(0)
 		s.log(slog.LevelInfo, "CONNECTION_CLOSED", "Unacknowledged batches retained for replay", append(s.queueFields(), "session_id", session, "unacknowledged_batch_id", pending, "error", retErr)...)
 		s.mu.Unlock()
 		s.connected.Store(false)
@@ -165,7 +169,7 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 	defer cancel()
 	errors := make(chan error, 1)
 	ready := make(chan struct{})
-	acks := make(chan *pb.Ack, 16)
+	acks := make(chan *pb.Ack, 32)
 	go func() {
 		initialized := false
 		for {
@@ -212,41 +216,73 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 		s.log(slog.LevelWarn, "CONFIG_TIMEOUT", "Initial configuration deadline exceeded", "session_id", session)
 		return status.Error(codes.DeadlineExceeded, "configuration required")
 	}
+	// Metadata negotiation keeps older Java clients at one outstanding batch.
+	window := 1
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if values := md.Get("x-routiva-window"); len(values) > 0 {
+			value, err := strconv.Atoi(values[0])
+			if err != nil || value < 1 || value > 32 {
+				return status.Error(codes.InvalidArgument, "send window must be 1..32")
+			}
+			window = value
+		}
+	}
+	s.activeWindow.Store(int64(window))
+	s.log(slog.LevelInfo, "WINDOW_NEGOTIATED", "Delivery window negotiated", "window", window, "session_id", session)
 	ticker := time.NewTicker(s.Flush)
 	defer ticker.Stop()
-	var pending *pb.Batch
-	var sent time.Time
+	type delivery struct {
+		batch *pb.Batch
+		sent  time.Time
+	}
+	pending := make([]delivery, 0, window)
 	for {
-		if pending == nil {
+		for len(pending) < window {
 			s.mu.Lock()
+			after := uint64(0)
+			if len(pending) > 0 {
+				after = pending[len(pending)-1].batch.BatchId
+			}
+			var batch *pb.Batch
 			if s.Queue != nil {
 				var err error
-				pending, err = s.Queue.Peek()
+				batch, err = s.Queue.PeekAfter(after)
 				if err != nil {
 					s.storageErrors.Add(1)
 					s.mu.Unlock()
 					return status.Error(codes.Internal, "spool read failed")
 				}
-			} else if len(s.batches) > 0 {
-				pending = s.batches[0]
-			}
-			if pending != nil {
-				s.inFlight = pending.BatchId
-				if _, exists := s.sends[pending.BatchId]; !exists {
-					s.sends = make(map[uint64]int)
+			} else {
+				for _, candidate := range s.batches {
+					if candidate.BatchId > after {
+						batch = candidate
+						break
+					}
 				}
-				s.sends[pending.BatchId]++
-				s.log(slog.LevelInfo, "SEND_STARTED", "Sending batch", append(s.queueFields(), "batch_id", pending.BatchId, "send_attempt", s.sends[pending.BatchId])...)
+			}
+			if batch != nil {
+				pending = append(pending, delivery{batch, time.Now()})
+				s.inFlight = pending[0].batch.BatchId
+				s.inFlightLast = batch.BatchId
+				s.inFlightCount = len(pending)
+				s.sends[batch.BatchId]++
+				// Keep retry tracking bounded by the current window.
+				for id := range s.sends {
+					if id < s.inFlight {
+						delete(s.sends, id)
+					}
+				}
+				s.log(slog.LevelInfo, "SEND_STARTED", "Sending batch", append(s.queueFields(), "batch_id", batch.BatchId, "send_attempt", s.sends[batch.BatchId])...)
 			}
 			s.mu.Unlock()
-			if pending != nil {
-				sent = time.Now()
-				if err := stream.Send(pending); err != nil {
-					s.log(slog.LevelWarn, "SEND_FAILED", "Batch send failed; retained for replay", "session_id", session, "batch_id", pending.BatchId, "error", err)
-					return err
-				}
-				s.log(slog.LevelInfo, "SEND_COMPLETED", "gRPC accepted the send; awaiting ACK", "session_id", session, "batch_id", pending.BatchId)
+			if batch == nil {
+				break
 			}
+			if err := stream.Send(batch); err != nil {
+				s.log(slog.LevelWarn, "SEND_FAILED", "Batch send failed; retained for replay", "batch_id", batch.BatchId, "error", err)
+				return err
+			}
+			s.log(slog.LevelInfo, "SEND_COMPLETED", "gRPC accepted send; awaiting ACK", "batch_id", batch.BatchId)
 		}
 		select {
 		case <-ctx.Done():
@@ -254,36 +290,65 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 		case err := <-errors:
 			return err
 		case ack := <-acks:
-			if pending == nil || ack.CollectorId != s.Engine.ID || ack.BatchId != pending.BatchId {
-				s.log(slog.LevelWarn, "ACK_REJECTED", "Unexpected acknowledgement; batch retained", "session_id", session, "batch_id", ack.BatchId)
-				return status.Error(codes.InvalidArgument, "unexpected acknowledgement")
+			received := []*pb.Ack{ack}
+			// Java sends an ACK per original batch after a shared PostgreSQL commit.
+			for len(received) < len(pending) {
+				select {
+				case next := <-acks:
+					received = append(received, next)
+				default:
+					goto drained
+				}
 			}
-			s.ackNS.Store(time.Since(sent).Nanoseconds())
-			s.log(slog.LevelInfo, "ACK_VALIDATED", "Java confirmed persistence; ACK identity is valid", "session_id", session, "batch_id", pending.BatchId, "ack_ms", float64(s.ackNS.Load())/1e6)
+		drained:
+			for i, item := range received {
+				if i >= len(pending) || item.CollectorId != s.Engine.ID || item.BatchId != pending[i].batch.BatchId {
+					s.log(slog.LevelWarn, "ACK_REJECTED", "Unexpected acknowledgement; window retained", "batch_id", item.BatchId)
+					return status.Error(codes.InvalidArgument, "unexpected acknowledgement")
+				}
+			}
+			ackReceivedAt := time.Now()
+			ids := make([]uint64, len(received))
+			for i, item := range received {
+				ids[i] = item.BatchId
+			}
 			s.mu.Lock()
 			if s.Queue != nil {
-				if err := s.Queue.Ack(pending.BatchId); err != nil {
+				if err := s.Queue.AckMany(ids); err != nil {
 					s.storageErrors.Add(1)
 					s.mu.Unlock()
 					return status.Error(codes.Internal, "spool ACK failed")
 				}
 			} else {
-				s.batches[0] = nil
-				s.batches = s.batches[1:]
+				for range ids {
+					s.batches[0] = nil
+					s.batches = s.batches[1:]
+				}
 			}
-			delete(s.sends, pending.BatchId)
+			for i, id := range ids {
+				s.ackNS.Store(ackReceivedAt.Sub(pending[i].sent).Nanoseconds())
+				s.log(slog.LevelInfo, "ACK_VALIDATED", "Java confirmed persistence; ACK identity is valid", "batch_id", id, "ack_ms", float64(s.ackNS.Load())/1e6)
+				delete(s.sends, id)
+				s.log(slog.LevelInfo, "BATCH_REMOVED", "Confirmed batch removed from queue", "batch_id", id, "results", len(pending[i].batch.Results))
+			}
+			pending = append(pending[:0], pending[len(ids):]...)
 			s.inFlight = 0
-			s.log(slog.LevelInfo, "BATCH_REMOVED", "Confirmed batch removed from queue", append(s.queueFields(), "batch_id", pending.BatchId, "results", len(pending.Results))...)
+			s.inFlightLast = 0
+			s.inFlightCount = len(pending)
+			if len(pending) > 0 {
+				s.inFlight = pending[0].batch.BatchId
+				s.inFlightLast = pending[len(pending)-1].batch.BatchId
+			}
 			s.mu.Unlock()
-			pending = nil
 		case <-ticker.C:
-			if pending != nil && time.Since(sent) > 30*time.Second {
-				s.log(slog.LevelWarn, "ACK_TIMEOUT", "Acknowledgement deadline exceeded; batch retained", "session_id", session, "batch_id", pending.BatchId)
+			if len(pending) > 0 && time.Since(pending[0].sent) > 30*time.Second {
+				s.log(slog.LevelWarn, "ACK_TIMEOUT", "Acknowledgement deadline exceeded; window retained", "batch_id", pending[0].batch.BatchId)
 				return status.Error(codes.DeadlineExceeded, "commit acknowledgement timeout")
 			}
 		}
 	}
 }
+
 func (s *Server) Health(context.Context, *pb.HealthRequest) (*pb.HealthReply, error) {
 	var usage syscall.Rusage
 	_ = syscall.Getrusage(syscall.RUSAGE_SELF, &usage)
@@ -296,9 +361,10 @@ func (s *Server) Health(context.Context, *pb.HealthRequest) (*pb.HealthReply, er
 	for _, b := range s.batches {
 		buffer += len(b.Results)
 	}
+	outstanding := s.inFlightCount
 	s.mu.Unlock()
 
-	extra := map[string]float64{"storage_errors_total": float64(s.storageErrors.Load()), "forming_results": float64(s.forming.Load())}
+	extra := map[string]float64{"storage_errors_total": float64(s.storageErrors.Load()), "forming_results": float64(s.forming.Load()), "in_flight_batches": float64(outstanding), "send_window": float64(s.activeWindow.Load())}
 	extra["persistence_healthy"] = 1
 	if s.storageFailed.Load() {
 		extra["persistence_healthy"] = 0

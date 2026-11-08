@@ -178,4 +178,75 @@ class CollectorPersistenceTests {
         } finally { executor.shutdownNow(); }
     }
 
+    @Test void commitsSeveralBatchesTogetherAndDeduplicatesTheirReplay() {
+        long at=System.currentTimeMillis();
+        var batches=new java.util.ArrayList<Batch>();
+        for(int i=1;i<=8;i++) batches.add(batch("group",i,result("group",i,Status.SUCCESS,at,10)));
+        var report=store.saveBatches(batches);
+        assertThat(report.results).isEqualTo(8);
+        assertThat(report.commitNanos).isPositive();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE collector_id='group'",Long.class)).isEqualTo(8);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch WHERE collector_id='group'",Long.class)).isEqualTo(8);
+        assertThat(count("total_pings","group")).isZero();
+        var replay=store.saveBatches(batches);
+        assertThat(replay.duplicateBatches).isEqualTo(8);
+        assertThat(replay.results).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE collector_id='group'",Long.class)).isEqualTo(8);
+    }
+
+    @Test void invalidBatchDoesNotPoisonOtherBatchesInTheGroup() {
+        long at=System.currentTimeMillis();
+        var invalid=batch("group-invalid",1,result("group-invalid",1,Status.SUCCESS,at,10),
+            result("wrong",2,Status.SUCCESS,at,10));
+        var valid=batch("group-valid",1,result("group-valid",1,Status.SUCCESS,at,10));
+        var report=store.saveBatches(java.util.List.of(invalid,valid,valid));
+        assertThat(report.results).isEqualTo(1);
+        assertThat(report.rejectedResults).isEqualTo(2);
+        assertThat(report.duplicateBatches).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE collector_id='group-invalid'",Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT rejection FROM collector_batch WHERE collector_id='group-invalid'",String.class)).isEqualTo("Invalid result");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE collector_id='group-valid'",Long.class)).isEqualTo(1);
+    }
+
+    @Test void failureAtTheLastReceiptRollsBackTheEntireGroup() {
+        long at=System.currentTimeMillis();
+        jdbc.execute("ALTER TABLE collector_batch ADD CONSTRAINT fail_group_receipt CHECK (collector_id <> 'group-fail')");
+        try {
+            assertThatThrownBy(()->store.saveBatches(java.util.List.of(
+                batch("group-rollback",1,result("group-rollback",1,Status.SUCCESS,at,10)),
+                batch("group-fail",1,result("group-fail",1,Status.SUCCESS,at,10)))))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE collector_id IN ('group-rollback','group-fail')",Long.class)).isZero();
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch WHERE collector_id IN ('group-rollback','group-fail')",Long.class)).isZero();
+        } finally {jdbc.execute("ALTER TABLE collector_batch DROP CONSTRAINT fail_group_receipt");}
+    }
+
+    @Test void measuresSmallBatchesWithSingleAndGroupedTransactions() {
+        long at=System.currentTimeMillis();
+        long singleStarted=System.nanoTime();
+        for(int number=1;number<=32;number++) {
+            var builder=Batch.newBuilder().setCollectorId("bench-single").setBatchId(number).setProtocolVersion(1);
+            for(int i=0;i<50;i++) builder.addResults(result("bench-single",(number-1)*50+i+1,Status.SUCCESS,at,10));
+            store.saveBatch(builder.build());
+        }
+        long singleMs=(System.nanoTime()-singleStarted)/1000000;
+        long groupedStarted=System.nanoTime();
+        int groups=0;
+        for(int chunk=0;chunk<2;chunk++) {
+            var batches=new java.util.ArrayList<Batch>();
+            for(int number=chunk*16+1;number<=chunk*16+16;number++) {
+                var builder=Batch.newBuilder().setCollectorId("bench-group").setBatchId(number).setProtocolVersion(1);
+                for(int i=0;i<50;i++) builder.addResults(result("bench-group",(number-1)*50+i+1,Status.SUCCESS,at,10));
+                batches.add(builder.build());
+            }
+            assertThat(store.saveBatches(batches).results).isEqualTo(800);
+            groups++;
+        }
+        assertThat(groups).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE collector_id='bench-group'",Long.class)).isEqualTo(1600);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch WHERE collector_id='bench-group'",Long.class)).isEqualTo(32);
+        System.out.printf("RAW_GROUP_SYNTHETIC results=1600 batches=32 single_transactions=32 grouped_transactions=2 single_ms=%d grouped_ms=%d%n",
+            singleMs,(System.nanoTime()-groupedStarted)/1000000);
+    }
+
 }

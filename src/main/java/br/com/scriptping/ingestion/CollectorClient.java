@@ -4,6 +4,8 @@ import br.com.scriptping.zabbix.Host;
 import br.com.scriptping.IpAddress;
 import br.com.scriptping.collector.proto.*;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
+import io.grpc.stub.MetadataUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.ClientCallStreamObserver;
@@ -16,6 +18,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.File;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.*;
 import org.slf4j.LoggerFactory;
@@ -28,13 +31,21 @@ import org.springframework.stereotype.Component;
 @Component("collector")
 public class CollectorClient implements HealthIndicator {
 
-    private record Delivery(Batch batch, long generation) {}
+    private record Delivery(Batch batch, long generation, long receivedAt) {}
 
     private final SampleIngestionService store;
     private final String address, ca, cert, key, executable;
     private final long interval, timeout;
     private final boolean enabled;
-    private final BlockingQueue<Delivery> queue = new ArrayBlockingQueue<>(8);
+    private final BlockingQueue<Delivery> queue = new ArrayBlockingQueue<>(64);
+    @Value("${collector.send-window:16}")
+    private int sendWindow = 16;
+    @Value("${collector.persistence-max-results:5000}")
+    private int maxGroupResults = 5000;
+    @Value("${collector.persistence-wait-ms:100}")
+    private long groupWaitMs = 100;
+    private volatile long committedGroups, lastGroupBatches, lastDatabaseNanos, lastCommitNanos;
+    private volatile long lastQueueNanos, lastLockNanos, lastInsertNanos;
     private final ScheduledExecutorService control = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService writer = Executors.newSingleThreadExecutor();
     private ManagedChannel channel;
@@ -79,6 +90,8 @@ public class CollectorClient implements HealthIndicator {
 
     @PostConstruct
     public void start() {
+        if (sendWindow < 1 || sendWindow > 32 || maxGroupResults < 5000 || maxGroupResults > 20000
+            || groupWaitMs < 0 || groupWaitMs > 1000) throw new IllegalArgumentException("Invalid collector persistence limits");
         if (!enabled) return;
         if (!executable.isBlank()) try {
             process = new ProcessBuilder(executable).inheritIO().start();
@@ -155,11 +168,14 @@ public class CollectorClient implements HealthIndicator {
             channel = builder.maxInboundMessageSize(4 * 1024 * 1024).build();
         }
         long current = ++generation;
-        commands = CollectorGrpc.newStub(channel).connect(
+        var headers = new Metadata();
+        headers.put(Metadata.Key.of("x-routiva-window", Metadata.ASCII_STRING_MARSHALLER), Integer.toString(sendWindow));
+        commands = CollectorGrpc.newStub(channel)
+            .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers)).connect(
             new ClientResponseObserver<Command, Batch>() {
                 @Override
                 public void beforeStart(ClientCallStreamObserver<Command> request) {
-                    request.disableAutoRequestWithInitial(1);
+                    request.disableAutoRequestWithInitial(sendWindow);
                     inbound = request;
                 }
 
@@ -176,10 +192,10 @@ public class CollectorClient implements HealthIndicator {
                         }
                         return;
                     }
-                    if (!queue.offer(new Delivery(batch, current))) synchronized (
-                        CollectorClient.this
-                    ) {
-                        disconnect(current, "Fila de persistência cheia");
+                    synchronized (CollectorClient.this) {
+                        if (current != generation || !connected) return;
+                        if (!queue.offer(new Delivery(batch, current, System.nanoTime())))
+                            disconnect(current, "Fila de persistência cheia");
                     }
                 }
 
@@ -220,49 +236,75 @@ public class CollectorClient implements HealthIndicator {
     }
 
     private void persist() {
-        while (!closed || !queue.isEmpty())
+        Delivery carry = null;
+        while (!closed || carry != null || !queue.isEmpty()) {
             try {
-                Delivery d = queue.poll(1, TimeUnit.SECONDS);
-                if (d == null) continue;
+                Delivery first = carry != null ? carry : queue.poll(1, TimeUnit.SECONDS);
+                carry = null;
+                if (first == null) continue;
+                var deliveries = new ArrayList<Delivery>();
+                deliveries.add(first);
+                int results = first.batch().getResultsCount();
+                long groupStarted = System.nanoTime();
+                long deadline = groupStarted + TimeUnit.MILLISECONDS.toNanos(groupWaitMs);
+                while (deliveries.size() < sendWindow && results < maxGroupResults) {
+                    Delivery next = queue.poll();
+                    if (next == null && !closed && System.nanoTime() < deadline)
+                        next = queue.poll(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+                    if (next == null) break;
+                    if (results + next.batch().getResultsCount() > maxGroupResults) {
+                        carry = next;
+                        break;
+                    }
+                    deliveries.add(next);
+                    results += next.batch().getResultsCount();
+                }
+                long formingNanos = System.nanoTime() - groupStarted;
+                List<Batch> batches = deliveries.stream().map(Delivery::batch).toList();
                 boolean saved = false;
-                while (!saved && !Thread.currentThread().isInterrupted())
+                while (!saved && !Thread.currentThread().isInterrupted()) {
                     try {
-                        try {
-                            store.saveBatch(d.batch());
-                            committed += d.batch().getResultsCount();
-                        } catch (IllegalArgumentException invalid) {
-                            store.rejectBatch(d.batch(), invalid.getMessage());
-                            rejected += d.batch().getResultsCount();
-                            LoggerFactory.getLogger(getClass()).error(
-                                "Lote ICMP rejeitado definitivamente collector={} batch={} results={} reason={}",
-                                d.batch().getCollectorId(), d.batch().getBatchId(),
-                                d.batch().getResultsCount(), invalid.getMessage());
-                        }
+                        long started = System.nanoTime();
+                        var write = store.saveBatches(batches);
+                        lastDatabaseNanos = System.nanoTime() - started;
+                        lastQueueNanos = started - first.receivedAt();
+                        lastGroupBatches = batches.size();
+                        lastCommitNanos = write.commitNanos;
+                        lastLockNanos = write.lockNanos;
+                        lastInsertNanos = write.insertNanos;
+                        committed += write.results;
+                        rejected += write.rejectedResults;
+                        committedGroups++;
                         persistenceFailure = false;
                         saved = true;
+                        LoggerFactory.getLogger("routiva.indicators").info(
+                            "event=RAW_GROUP_COMMITTED batches={} results={} duplicate_batches={} rejected_results={} queue_wait_ms={} group_wait_ms={} lock_ms={} prepare_ms={} insert_ms={} commit_ms={} database_ms={}",
+                            batches.size(), write.results, write.duplicateBatches, write.rejectedResults,
+                            lastQueueNanos / 1000000d, formingNanos / 1000000d,
+                            write.lockNanos / 1000000d, write.prepareNanos / 1000000d,
+                            write.insertNanos / 1000000d, write.commitNanos / 1000000d,
+                            lastDatabaseNanos / 1000000d);
                     } catch (Exception e) {
                         writeFailures++;
                         persistenceFailure = true;
                         failure = "Falha na persistência";
                         LoggerFactory.getLogger(getClass()).warn(
-                            "Falha ao gravar lote ICMP; mantendo para repetição",
-                            e
-                        );
+                            "Falha ao gravar grupo ICMP; mantendo {} lotes para repetição", batches.size(), e);
                         Thread.sleep(1000);
                     }
+                }
                 synchronized (this) {
-                    if (saved && connected && d.generation() == generation) {
-                        commands.onNext(
-                            Command.newBuilder()
-                                .setProtocolVersion(1)
-                                .setAck(
-                                    Ack.newBuilder()
-                                        .setCollectorId(d.batch().getCollectorId())
-                                        .setBatchId(d.batch().getBatchId())
-                                )
-                                .build()
-                        );
-                        if (!closed) inbound.request(1);
+                    int confirmed = 0;
+                    for (var delivery : deliveries) {
+                        if (saved && connected && delivery.generation() == generation) {
+                            commands.onNext(Command.newBuilder().setProtocolVersion(1)
+                                .setAck(Ack.newBuilder().setCollectorId(delivery.batch().getCollectorId())
+                                    .setBatchId(delivery.batch().getBatchId())).build());
+                            confirmed++;
+                        }
+                    }
+                    if (confirmed > 0) {
+                        if (!closed) inbound.request(confirmed);
                         retries = 0;
                     }
                 }
@@ -270,10 +312,9 @@ public class CollectorClient implements HealthIndicator {
                 Thread.currentThread().interrupt();
                 return;
             } catch (Exception e) {
-                synchronized (this) {
-                    disconnect(generation, "Falha no consumidor");
-                }
+                synchronized (this) { disconnect(generation, "Falha no consumidor"); }
             }
+        }
     }
 
     @Override
@@ -288,6 +329,14 @@ public class CollectorClient implements HealthIndicator {
             .withDetail("message", metrics.getOrDefault("persistence_healthy", 1d) == 0
                 ? "Falha na persistência local do coletor" : connected && !persistenceFailure ? "Conectado" : failure)
             .withDetail("queueBatches", queue.size())
+            .withDetail("sendWindow", sendWindow)
+            .withDetail("committedGroups", committedGroups)
+            .withDetail("lastGroupBatches", lastGroupBatches)
+            .withDetail("lastDatabaseMs", lastDatabaseNanos / 1000000d)
+            .withDetail("lastCommitMs", lastCommitNanos / 1000000d)
+            .withDetail("lastQueueWaitMs", lastQueueNanos / 1000000d)
+            .withDetail("lastLockMs", lastLockNanos / 1000000d)
+            .withDetail("lastInsertMs", lastInsertNanos / 1000000d)
             .withDetail("committedResults", committed)
             .withDetail("writeFailures", writeFailures)
             .withDetail("rejectedResults", rejected)

@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 	"io"
 	"net"
@@ -176,5 +178,120 @@ func TestOfflineBufferIsBounded(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "reason=BATCH_LIMIT") {
 		t.Fatal("discard reason missing")
+	}
+}
+
+func TestNegotiatedWindowBackpressureAndReplay(t *testing.T) {
+	for _, window := range []int{1, 4} {
+		t.Run(fmt.Sprint(window), func(t *testing.T) {
+			q, err := spool.Open(filepath.Join(t.TempDir(), "queue.db"), 1<<20, time.Hour)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer q.Close()
+			for i := 0; i < window+1; i++ {
+				if _, err = q.Append([]*pb.Result{{CollectorId: q.ID, AttemptId: uint64(i + 1)}}, 0); err != nil {
+					t.Fatal(err)
+				}
+			}
+			logger, err := audit.Open(filepath.Join(t.TempDir(), "audit.log"), 1<<20, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer logger.Close()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			e := engine.New(q.ID, &silent{make(chan struct{})}, 1)
+			engineDone := make(chan struct{})
+			go func() { defer close(engineDone); e.Run(ctx) }()
+			defer func() { cancel(); <-engineDone }()
+			s := New(e, 1, 0, time.Millisecond)
+			s.Queue = q
+			s.Audit = logger
+			listener := bufconn.Listen(1 << 20)
+			g := grpc.NewServer()
+			pb.RegisterCollectorServer(g, s)
+			go g.Serve(listener)
+			defer g.Stop()
+			conn, err := grpc.NewClient("passthrough:///window", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+			open := func() (pb.Collector_ConnectClient, context.CancelFunc) {
+				request, stop := context.WithTimeout(ctx, 5*time.Second)
+				if window > 1 {
+					request = metadata.AppendToOutgoingContext(request, "x-routiva-window", fmt.Sprint(window))
+				}
+				stream, err := pb.NewCollectorClient(conn).Connect(request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = stream.Send(&pb.Command{ProtocolVersion: 1, Body: &pb.Command_Config{Config: &pb.Configuration{Replace: true}}}); err != nil {
+					t.Fatal(err)
+				}
+				return stream, stop
+			}
+			stream, stop := open()
+			for i := 1; i <= window; i++ {
+				b, err := stream.Recv()
+				if err != nil || b.BatchId != uint64(i) {
+					t.Fatal(b, err)
+				}
+			}
+			next := make(chan *pb.Batch, 1)
+			nextError := make(chan error, 1)
+			go func() {
+				b, err := stream.Recv()
+				if err != nil {
+					nextError <- err
+				} else {
+					next <- b
+				}
+			}()
+			select {
+			case <-next:
+				t.Fatal("window exceeded before ACK")
+			case err := <-nextError:
+				t.Fatal(err)
+			case <-time.After(50 * time.Millisecond):
+			}
+			if err = stream.Send(&pb.Command{ProtocolVersion: 1, Body: &pb.Command_Ack{Ack: &pb.Ack{CollectorId: q.ID, BatchId: 1}}}); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case b := <-next:
+				if b.BatchId != uint64(window+1) {
+					t.Fatal(b)
+				}
+			case err := <-nextError:
+				t.Fatal(err)
+			case <-time.After(time.Second):
+				t.Fatal("ACK did not release a delivery slot")
+			}
+			stop()
+			deadline := time.Now().Add(time.Second)
+			for s.connected.Load() && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+			stream, stop = open()
+			defer stop()
+			for i := 2; i <= window+1; i++ {
+				b, err := stream.Recv()
+				if err != nil || b.BatchId != uint64(i) {
+					t.Fatal("replay identity changed", b, err)
+				}
+			}
+			if err = stream.Send(&pb.Command{ProtocolVersion: 1, Body: &pb.Command_Ack{Ack: &pb.Ack{CollectorId: q.ID, BatchId: uint64(window + 2)}}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = stream.Recv(); err == nil {
+				t.Fatal("invalid ACK accepted")
+			}
+			stats, err := q.Stats()
+			if err != nil || stats.Batches != int64(window) {
+				t.Fatal("unacknowledged batches lost", stats, err)
+			}
+		})
 	}
 }
