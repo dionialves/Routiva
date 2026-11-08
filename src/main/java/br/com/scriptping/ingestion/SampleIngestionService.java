@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @Service
 @DependsOnDatabaseInitialization
@@ -127,9 +128,14 @@ public class SampleIngestionService {
         return now - retention.toMillis();
     }
 
-    @Transactional
-    public void deleteExpiredSamplesAndReceipts(long cutoff, long processedCursor) {
-        repository.deleteExpiredSamples(cutoff, processedCursor);
-        receipts.deleteExpired(cutoff - Duration.ofDays(7).toMillis());
+    public record Cleanup(int samples, int receipts) {}
+
+    /** One short transaction, with no locks on ingestion or aggregation guards. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 5)
+    public Cleanup deleteExpiredSamplesAndReceipts(long cutoff, long processedCursor, int batchSize) {
+        if (batchSize < 1 || batchSize > 10000) throw new IllegalArgumentException("Invalid cleanup batch size");
+        int deleted = repository.deleteExpiredSamples(cutoff, processedCursor, batchSize);
+        int expiredReceipts = receipts.deleteExpired(cutoff - Duration.ofDays(7).toMillis(), batchSize);
+        return new Cleanup(deleted, expiredReceipts);
     }
 }

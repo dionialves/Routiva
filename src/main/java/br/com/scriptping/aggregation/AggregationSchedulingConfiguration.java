@@ -21,4 +21,12 @@ class AggregationSchedulingConfiguration {
         scheduler.setThreadNamePrefix("availability-");
         return scheduler;
     }
+    @Bean
+    ThreadPoolTaskScheduler retentionScheduler() {
+        var scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("retention-");
+        return scheduler;
+    }
+
 }

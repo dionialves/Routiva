@@ -389,7 +389,7 @@ A primeira execução agrega automaticamente o histórico bruto ainda disponíve
 
 ### Log da agregação
 
-O arquivo é `logs/indicators.log` localmente ou `/var/log/routiva/indicators.log` no Compose. Eventos atuais: `MINUTE_BATCH_COMMITTED`, `MINUTE_AGGREGATION_COMPLETED` e `MINUTE_AGGREGATION_FAILED`. Cada lote informa cursor, limite confirmado, pings e resumos tratados. Não há logs por ping.
+O arquivo é `logs/indicators.log` localmente ou `/var/log/routiva/indicators.log` no Compose. Eventos de agregação: `MINUTE_BATCH_COMMITTED`, `MINUTE_AGGREGATION_COMPLETED` e `MINUTE_AGGREGATION_FAILED`. A limpeza incremental registra `RETENTION_BATCH_COMMITTED` (quantidades removidas e tempo por transação) ou `RETENTION_BATCH_FAILED` (nova tentativa no próximo ciclo). Cada lote informa cursor, limite confirmado, pings e resumos tratados. Não há logs por ping.
 
 ```sh
 docker compose exec -T app tail -F /var/log/routiva/indicators.log

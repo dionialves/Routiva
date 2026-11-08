@@ -1,5 +1,7 @@
 package br.com.scriptping.ingestion;
 
+import jakarta.persistence.QueryHint;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
@@ -12,6 +14,12 @@ public interface CollectorBatchRepository extends Repository<CollectorBatchRecei
     CollectorBatchReceipt save(CollectorBatchReceipt receipt);
 
     @Modifying
-    @Query("DELETE FROM CollectorBatchReceipt r WHERE r.committedAt < :cutoff")
-    void deleteExpired(@Param("cutoff") long cutoff);
+    @QueryHints(@QueryHint(name = "jakarta.persistence.query.timeout", value = "5000"))
+    @Query(value = """
+        DELETE FROM collector_batch WHERE (collector_id, batch_id) IN (
+            SELECT collector_id, batch_id FROM collector_batch WHERE committed_at < :cutoff
+            ORDER BY committed_at, collector_id, batch_id LIMIT :batchSize
+        )
+        """, nativeQuery = true)
+    int deleteExpired(@Param("cutoff") long cutoff, @Param("batchSize") int batchSize);
 }

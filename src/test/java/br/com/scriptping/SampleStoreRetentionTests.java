@@ -23,9 +23,22 @@ import org.springframework.jdbc.core.JdbcTemplate;
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "monitor.retention-hours=48",
+        "monitor.cleanup-batch-size=2",
+        "monitor.cleanup-max-batches=3",
     }
 )
 class SampleStoreRetentionTests {
+
+    @org.springframework.test.context.DynamicPropertySource
+    static void database(org.springframework.test.context.DynamicPropertyRegistry properties) {
+        String url = System.getenv("ROUTIVA_TEST_JDBC_URL");
+        if (url != null) {
+            properties.add("spring.datasource.url", () -> url);
+            properties.add("spring.datasource.username", () -> "postgres");
+            properties.add("spring.datasource.password", () -> "routiva-test-only");
+        }
+    }
+
 
     @Autowired
     MinuteRetention retention;
@@ -39,9 +52,16 @@ class SampleStoreRetentionTests {
     @Autowired
     CollectorBatchRepository receipts;
 
+    @Autowired
+    javax.sql.DataSource dataSource;
+
+    @Autowired
+    org.springframework.transaction.PlatformTransactionManager transactions;
+
     @org.junit.jupiter.api.BeforeEach
     void clearSamples() {
         jdbc.update("DELETE FROM ping_sample");
+        jdbc.update("DELETE FROM collector_batch");
     }
 
     @Test
@@ -93,6 +113,76 @@ class SampleStoreRetentionTests {
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
             new SampleIngestionService(repository, receipts, null, 48, 0, 20d)
         ).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void cleanupIsBoundedAndNeverDeletesUnprocessedOrRecentSamples() {
+        long now = System.currentTimeMillis();
+        long expired = now - Duration.ofHours(49).toMillis();
+        for (int i = 0; i < 10; i++) insert("expired-" + i, expired, 10d, null);
+        insert("recent", now, 10d, null);
+        markProcessed();
+        insert("unprocessed", expired, 10d, null);
+
+        retention.cleanup(now - Duration.ofHours(48).toMillis());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE host_id LIKE 'expired-%'", Long.class))
+            .isEqualTo(4); // Three independent transactions, two rows each.
+        retention.cleanup(now - Duration.ofHours(48).toMillis());
+        assertThat(jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class))
+            .containsExactly("recent", "unprocessed");
+    }
+
+    @Test
+    void cleanupDoesNotWaitForTheProgressLockUsedByIngestion() throws Exception {
+        long now = System.currentTimeMillis();
+        insert("expired", now - Duration.ofHours(49).toMillis(), 10d, null);
+        markProcessed();
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try (var connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try (var statement = connection.prepareStatement(
+                "SELECT id FROM ping_aggregation_progress WHERE id=1 FOR UPDATE")) {
+                statement.executeQuery().close();
+            }
+            try {
+                // The old implementation blocked here, keeping new batches without ACK.
+                executor.submit(() -> retention.cleanup(now - Duration.ofHours(48).toMillis()))
+                    .get(3, java.util.concurrent.TimeUnit.SECONDS);
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample", Long.class)).isZero();
+            } finally {
+                connection.rollback();
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void cleanupPagesCommitIndependentlyOfTheCallingTransaction() {
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < 5; i++) insert("expired-" + i,
+            now - Duration.ofHours(49).toMillis(), 10d, null);
+        markProcessed();
+        new org.springframework.transaction.support.TransactionTemplate(transactions).executeWithoutResult(status -> {
+            retention.cleanup(now - Duration.ofHours(48).toMillis());
+            status.setRollbackOnly();
+        });
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample", Long.class)).isZero();
+    }
+
+    @Test
+    void receiptCleanupIsBoundedAndKeepsTheReplayWindow() {
+        long now = System.currentTimeMillis();
+        for (int i = 1; i <= 8; i++) jdbc.update(
+            "INSERT INTO collector_batch(collector_id,batch_id,committed_at) VALUES('expired',?,?)",
+            i, now - Duration.ofDays(10).toMillis());
+        jdbc.update("INSERT INTO collector_batch(collector_id,batch_id,committed_at) VALUES('protected',1,?)",
+            now - Duration.ofDays(8).toMillis());
+        retention.cleanup(now - Duration.ofHours(48).toMillis());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch WHERE collector_id='expired'", Long.class))
+            .isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch WHERE collector_id='protected'", Long.class))
+            .isEqualTo(1);
     }
 
     private void markProcessed() {

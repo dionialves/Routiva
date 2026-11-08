@@ -44,6 +44,25 @@ Lotes inválidos recebem rejeição terminal persistida em `collector_batch.reje
 
 Não misture gravadores de versões diferentes durante a atualização. O primeiro upgrade ainda parte de um coletor antigo com fila em memória; espere o escoamento antes de pará-lo quando possível. Preserve os volumes. Um retorno à versão antiga exige migração dos cursores; não basta substituir o binário.
 
+## Limpeza incremental do legado
+
+A limpeza dos pings brutos lê o cursor confirmado sem `FOR UPDATE`. Ela não bloqueia `ping_aggregation_progress` nem `ping_ingestion_guard`. Cada lote usa uma transação independente com prazo de cinco segundos e apaga somente registros expirados cujo ID já foi agregado. Os resumos não são apagados.
+
+| Variável | Padrão | Efeito |
+|---|---:|---|
+| PING_CLEANUP_ENABLED | true | Habilita a limpeza agendada; false permite suspendê-la |
+| PING_CLEANUP_INTERVAL_SECONDS | 600 | Espera após o fim de cada ciclo |
+| PING_CLEANUP_BATCH_SIZE | 1000 | Máximo por tabela e transação; de 1 a 10.000 |
+| PING_CLEANUP_MAX_BATCHES | 10 | Máximo de transações por ciclo; de 1 a 100 |
+
+O padrão remove até 10.000 pings brutos e até 10.000 recibos por ciclo, com commit entre lotes. O agendamento tem uma thread própria. Falha ou timeout interrompe o ciclo, preservando os lotes já confirmados e repetindo o restante no próximo ciclo. Recibos continuam respeitando sete dias além da janela de aceitação. Um índice por data e identidade evita varrer todos os recibos para selecionar o lote.
+
+Em bases grandes, a remoção é gradual. Aumentar limites pode aumentar a disputa de disco com a ingestão; ajuste usando as medições do servidor. Alterações no `.env` exigem recriar o serviço app. A nova configuração só é reconhecida após instalar a versão corrigida.
+
+`RETENTION_BATCH_COMMITTED` registra `page`, `raw_deleted`, `receipts_deleted`, `raw_cursor` e `elapsed_ms` depois do commit. `RETENTION_BATCH_FAILED` indica repetição no próximo ciclo. Consulte `/var/log/routiva/indicators.log` no serviço app (localmente, `logs/indicators.log`).
+
+O problema anterior era um DELETE sem limite na mesma transação que segurava o progresso; mesmo com todo o legado agregado, ele impedia novos lotes de obter ACK. Os testes de regressão mantêm esse registro bloqueado em outra conexão e verificam que a limpeza termina, preserva os resumos e respeita seus limites, incluindo execução em PostgreSQL 17.
+
 ## Acompanhamento
 
 ```sh

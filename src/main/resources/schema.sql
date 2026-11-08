@@ -167,3 +167,7 @@ ALTER TABLE collector_batch ADD COLUMN IF NOT EXISTS rejection VARCHAR(255);
 -- Split legacy raw ID migration from the live summary revision, initialized once on upgrade.
 ALTER TABLE ping_aggregation_progress ADD COLUMN IF NOT EXISTS raw_cursor_id BIGINT;
 UPDATE ping_aggregation_progress SET raw_cursor_id=cursor_id WHERE raw_cursor_id IS NULL;
+
+-- Bounded receipt retention follows this order without scanning all receipts.
+CREATE INDEX IF NOT EXISTS idx_collector_batch_retention
+ON collector_batch(committed_at, collector_id, batch_id);

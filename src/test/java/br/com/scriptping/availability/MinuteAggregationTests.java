@@ -121,6 +121,25 @@ class MinuteAggregationTests extends MinuteTestSupport {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample",Long.class)).isZero();
         assertThat(count("total_pings")).isEqualTo(1);
     }
+    @Test void retentionNeverAcquiresTheProgressLockOnEitherDatabase() throws Exception {
+        insert(System.currentTimeMillis()-49*3600000L,10d,null);
+        drain(10);
+        var executor=Executors.newSingleThreadExecutor();
+        try(var connection=ds.getConnection()) {
+            connection.setAutoCommit(false);
+            try(var statement=connection.prepareStatement(
+                "SELECT id FROM ping_aggregation_progress WHERE id=1 FOR UPDATE")) {
+                statement.executeQuery().close();
+            }
+            try {
+                executor.submit(()->retention.cleanup(System.currentTimeMillis()-48*3600000L))
+                    .get(3,TimeUnit.SECONDS);
+                assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample",Long.class)).isZero();
+                assertThat(count("total_pings")).isEqualTo(1);
+            } finally {connection.rollback();}
+        } finally {executor.shutdownNow();}
+    }
+
     @Test void nonFiniteAndNegativeLatenciesFollowRawOutcomeSemantics() {
         insert(end-1000,Double.NaN,null);
         insert(end-1000,Double.POSITIVE_INFINITY,null);
