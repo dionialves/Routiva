@@ -216,3 +216,192 @@ func TestEntireSentPrefixSurvivesRetentionAndReplaysUntilAcknowledged(t *testing
 		t.Fatal(replay, err)
 	}
 }
+
+func TestCommittedStatsNeverWaitForAnActiveSQLiteTransaction(t *testing.T) {
+	q := openTest(t, filepath.Join(t.TempDir(), "queue.db"))
+	defer q.Close()
+	appendTest(t, q, []*pb.Result{{AttemptId: 1}}, 0)
+	tx, err := q.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("UPDATE meta SET dropped=999 WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	// The only database connection is occupied. Health must return committed data from memory.
+	done := make(chan Stats, 1)
+	fail := make(chan error, 1)
+	go func() {
+		snapshot, err := q.Stats()
+		if err != nil {
+			fail <- err
+		} else {
+			done <- snapshot
+		}
+	}()
+	select {
+	case snapshot := <-done:
+		if snapshot.Batches != 1 || snapshot.Dropped != 0 {
+			t.Fatal("uncommitted state exposed", snapshot)
+		}
+	case err := <-fail:
+		t.Fatal(err)
+	case <-time.After(time.Second):
+		t.Fatal("health waited for the SQLite writer")
+	}
+}
+
+func TestReservationsProtectSentBatchesWithoutTheServerMutex(t *testing.T) {
+	q := openTest(t, filepath.Join(t.TempDir(), "queue.db"))
+	defer q.Close()
+	for i := 0; i < 3; i++ {
+		appendTest(t, q, []*pb.Result{{AttemptId: uint64(i + 1), ErrorCode: strings.Repeat("x", 300000)}}, 0)
+	}
+	first, err := q.ReserveAfter(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := q.ReserveAfter(first.BatchId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Production append no longer reads a watermark under the server's lock.
+	if dropped := appendTest(t, q, []*pb.Result{{AttemptId: 4, ErrorCode: strings.Repeat("x", 400000)}}, 0); dropped != 1 {
+		t.Fatal(dropped)
+	}
+	for _, id := range []uint64{first.BatchId, second.BatchId} {
+		var found int
+		if err = q.db.QueryRow("SELECT COUNT(*) FROM batches WHERE id=?", id).Scan(&found); err != nil || found != 1 {
+			t.Fatal("reserved batch evicted", id, err)
+		}
+	}
+	third, err := q.ReserveAfter(second.BatchId)
+	if err != nil || third.BatchId != 4 {
+		t.Fatal(third, err)
+	}
+	q.ReleaseReservations()
+	if dropped := appendTest(t, q, []*pb.Result{{AttemptId: 5, ErrorCode: strings.Repeat("x", 600000)}}, 0); dropped != 2 {
+		t.Fatal("released prefix remained pinned", dropped)
+	}
+	replay, err := q.Peek()
+	if err != nil || replay.BatchId != 4 {
+		t.Fatal(replay, err)
+	}
+}
+
+func TestAckGroupRollsBackAndPublishesMetricsOnlyForCommittedRemovals(t *testing.T) {
+	q := openTest(t, filepath.Join(t.TempDir(), "queue.db"))
+	defer q.Close()
+	for i := 0; i < 3; i++ {
+		appendTest(t, q, []*pb.Result{{AttemptId: uint64(i + 1)}}, 0)
+	}
+	if _, err := q.db.Exec("CREATE TRIGGER reject_delete BEFORE DELETE ON batches WHEN OLD.id=2 BEGIN SELECT RAISE(ABORT,'disk failure'); END"); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.AckMany([]uint64{1, 2}); err == nil {
+		t.Fatal("delete failure hidden")
+	}
+	snapshot, err := q.Stats()
+	if err != nil || snapshot.Batches != 3 {
+		t.Fatal("failed commit exposed", snapshot, err)
+	}
+	var remaining int
+	if err = q.db.QueryRow("SELECT COUNT(*) FROM batches").Scan(&remaining); err != nil || remaining != 3 {
+		t.Fatal(remaining, err)
+	}
+	if _, err = q.db.Exec("DROP TRIGGER reject_delete"); err != nil {
+		t.Fatal(err)
+	}
+	if err = q.AckMany([]uint64{1, 2}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err = q.Stats()
+	if err != nil || snapshot.Batches != 1 {
+		t.Fatal(snapshot, err)
+	}
+	metrics := q.Metrics()
+	if metrics["sqlite_ack_operations_total"] != 2 || metrics["sqlite_ack_errors_total"] != 1 || metrics["sqlite_ack_batches_total"] != 2 || metrics["sqlite_ack_last_batches"] != 2 {
+		t.Fatal(metrics)
+	}
+	if metrics["sqlite_append_operations_total"] != 3 || metrics["sqlite_append_commit_ms_total"] <= 0 {
+		t.Fatal(metrics)
+	}
+}
+
+func TestExpiryIsBoundedAndNeverSendsAnExpiredBatch(t *testing.T) {
+	q := openTest(t, filepath.Join(t.TempDir(), "queue.db"))
+	defer q.Close()
+	for i := 0; i < 140; i++ {
+		appendTest(t, q, []*pb.Result{{AttemptId: uint64(i + 1)}}, 0)
+	}
+	if _, err := q.db.Exec("UPDATE batches SET created=?", time.Now().Add(-2*time.Hour).UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	batch, err := q.ReserveAfter(0)
+	if err != nil || batch != nil {
+		t.Fatal("expired batch sent", batch, err)
+	}
+	snapshot, _ := q.Stats()
+	if snapshot.Batches != 12 || snapshot.Dropped != 128 {
+		t.Fatal("expiry work was not bounded", snapshot)
+	}
+	batch, err = q.ReserveAfter(0)
+	if err != nil || batch != nil {
+		t.Fatal(batch, err)
+	}
+	snapshot, _ = q.Stats()
+	if snapshot.Batches != 0 || snapshot.Dropped != 140 {
+		t.Fatal(snapshot)
+	}
+}
+
+func TestConcurrentProducerCannotEvictReservedDeliveryWindow(t *testing.T) {
+	q := openTest(t, filepath.Join(t.TempDir(), "queue.db"))
+	defer q.Close()
+	payload := strings.Repeat("x", 80000)
+	for i := 0; i < 10; i++ {
+		appendTest(t, q, []*pb.Result{{AttemptId: uint64(i + 1), ErrorCode: payload}}, 0)
+	}
+	first, err := q.ReserveAfter(0)
+	if err != nil || first == nil {
+		t.Fatal(first, err)
+	}
+	produced := make(chan error, 1)
+	go func() {
+		for i := 0; i < 30; i++ {
+			if _, err := q.Append([]*pb.Result{{AttemptId: uint64(i + 11), ErrorCode: payload}}, 0); err != nil {
+				produced <- err
+				return
+			}
+		}
+		produced <- nil
+	}()
+	reserved := []uint64{first.BatchId}
+	for len(reserved) < 4 {
+		next, err := q.ReserveAfter(reserved[len(reserved)-1])
+		if err != nil || next == nil {
+			t.Fatal(next, err)
+		}
+		reserved = append(reserved, next.BatchId)
+	}
+	if err = <-produced; err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range reserved {
+		var count int
+		if err = q.db.QueryRow("SELECT COUNT(*) FROM batches WHERE id=?", id).Scan(&count); err != nil || count != 1 {
+			t.Fatal("concurrent append evicted reserved batch", id, err)
+		}
+	}
+	snapshot, err := q.Stats()
+	if err != nil || snapshot.Dropped == 0 {
+		t.Fatal("retention was not exercised", snapshot, err)
+	}
+	if err = q.AckMany(reserved); err != nil {
+		t.Fatal(err)
+	}
+	if q.Metrics()["sqlite_ack_last_batches"] != 4 {
+		t.Fatal(q.Metrics())
+	}
+}

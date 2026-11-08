@@ -84,23 +84,28 @@ func (s *Server) Run(ctx context.Context) {
 		if len(results) == 0 {
 			return
 		}
-		s.mu.Lock()
-		s.serial++
 		if s.Queue != nil {
-			dropped, err := s.Queue.Append(results, s.inFlightLast)
+			dropped, err := s.Queue.Append(results, 0)
 			if err != nil {
 				s.storageErrors.Add(1)
 				s.storageFailed.Store(true)
 				s.log(slog.LevelError, "SPOOL_WRITE_FAILED", "Local persistence failed; retrying with bounded buffers", "error", err)
-				s.mu.Unlock()
 				return
 			}
 			s.storageFailed.Store(false)
 			if dropped > 0 {
 				s.log(slog.LevelWarn, "BATCH_DROPPED", "Queue retention limit exceeded", "results", dropped, "reason", "SPOOL_LIMIT")
 			}
+			s.mu.Lock()
 			s.log(slog.LevelInfo, "BATCH_CREATED", "Batch persisted", s.queueFields()...)
-		} else if len(s.batches) >= s.MaxBatches {
+			s.mu.Unlock()
+			results = nil
+			s.forming.Store(0)
+			return
+		}
+		s.mu.Lock()
+		s.serial++
+		if len(s.batches) >= s.MaxBatches {
 			s.discarded.Add(int64(len(results)))
 			s.log(slog.LevelWarn, "BATCH_DROPPED", "New results dropped; retained batches preserved", append(s.queueFields(), "batch_id", s.serial, "results", len(results), "reason", "BATCH_LIMIT", "dropped_total", s.discarded.Load())...)
 		} else {
@@ -142,6 +147,14 @@ func (s *Server) Run(ctx context.Context) {
 			s.mu.Lock()
 			s.log(slog.LevelInfo, "QUEUE_STATUS", "Batch queue snapshot", append(s.queueFields(), "forming_results", len(results), "engine_buffer_results", len(s.Engine.Results), "dropped_total", s.totalDropped())...)
 			s.mu.Unlock()
+			if s.Queue != nil {
+				metrics := s.Queue.Metrics()
+				fields := make([]any, 0, len(metrics)*2)
+				for key, value := range metrics {
+					fields = append(fields, key, value)
+				}
+				s.log(slog.LevelInfo, "SQLITE_STATUS", "SQLite operation timings", fields...)
+			}
 		case <-t.C:
 			flush("FLUSH")
 		}
@@ -155,6 +168,9 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 	session := s.connections.Add(1)
 	s.log(slog.LevelInfo, "CONNECTION_ACCEPTED", "Java opened the Connect stream", "session_id", session)
 	defer func() {
+		if s.Queue != nil {
+			s.Queue.ReleaseReservations()
+		}
 		s.mu.Lock()
 		pending := s.inFlight
 		s.inFlight = 0
@@ -246,12 +262,13 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 			var batch *pb.Batch
 			if s.Queue != nil {
 				var err error
-				batch, err = s.Queue.PeekAfter(after)
+				s.mu.Unlock()
+				batch, err = s.Queue.ReserveAfter(after)
 				if err != nil {
 					s.storageErrors.Add(1)
-					s.mu.Unlock()
 					return status.Error(codes.Internal, "spool read failed")
 				}
+				s.mu.Lock()
 			} else {
 				for _, candidate := range s.batches {
 					if candidate.BatchId > after {
@@ -291,16 +308,24 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 			return err
 		case ack := <-acks:
 			received := []*pb.Ack{ack}
-			// Java sends an ACK per original batch after a shared PostgreSQL commit.
-			for len(received) < len(pending) {
-				select {
-				case next := <-acks:
-					received = append(received, next)
-				default:
-					goto drained
+			// Wait at most 2 ms for the remaining ACKs from the same PostgreSQL commit.
+			// No server/queue lock is held while waiting.
+			if len(pending) > 1 {
+				timer := time.NewTimer(2 * time.Millisecond)
+			gather:
+				for len(received) < len(pending) {
+					select {
+					case next := <-acks:
+						received = append(received, next)
+					case <-timer.C:
+						break gather
+					case <-ctx.Done():
+						timer.Stop()
+						return ctx.Err()
+					}
 				}
+				timer.Stop()
 			}
-		drained:
 			for i, item := range received {
 				if i >= len(pending) || item.CollectorId != s.Engine.ID || item.BatchId != pending[i].batch.BatchId {
 					s.log(slog.LevelWarn, "ACK_REJECTED", "Unexpected acknowledgement; window retained", "batch_id", item.BatchId)
@@ -312,14 +337,14 @@ func (s *Server) Connect(stream pb.Collector_ConnectServer) (retErr error) {
 			for i, item := range received {
 				ids[i] = item.BatchId
 			}
-			s.mu.Lock()
 			if s.Queue != nil {
 				if err := s.Queue.AckMany(ids); err != nil {
 					s.storageErrors.Add(1)
-					s.mu.Unlock()
 					return status.Error(codes.Internal, "spool ACK failed")
 				}
-			} else {
+			}
+			s.mu.Lock()
+			if s.Queue == nil {
 				for range ids {
 					s.batches[0] = nil
 					s.batches = s.batches[1:]
@@ -373,6 +398,9 @@ func (s *Server) Health(context.Context, *pb.HealthRequest) (*pb.HealthReply, er
 		stats, err := s.Queue.Stats()
 		if err != nil {
 			return nil, status.Error(codes.Internal, "spool health failed")
+		}
+		for key, value := range s.Queue.Metrics() {
+			extra[key] = value
 		}
 		buffer = int(stats.Results)
 		extra["queue_bytes"] = float64(stats.Bytes)

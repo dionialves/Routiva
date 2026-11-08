@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 	"io"
+	sqlite "modernc.org/sqlite"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,6 +19,7 @@ import (
 	"routiva/collector/internal/engine"
 	"routiva/collector/internal/spool"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -294,4 +298,86 @@ func TestNegotiatedWindowBackpressureAndReplay(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Reproduce slow storage inside SQLite, without sleeping while holding the server mutex.
+func TestHealthRemainsAvailableWhileSQLiteInsertIsBlocked(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	function := fmt.Sprintf("spool_block_%d", time.Now().UnixNano())
+	if err := sqlite.RegisterScalarFunction(function, 0, func(*sqlite.FunctionContext, []driver.Value) (driver.Value, error) {
+		close(started)
+		<-release
+		return int64(1), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "queue.db")
+	q, err := spool.Open(path, 1<<20, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer q.Close()
+	admin, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = admin.Exec("CREATE TRIGGER slow_storage BEFORE INSERT ON batches BEGIN SELECT " + function + "(); END"); err != nil {
+		admin.Close()
+		t.Fatal(err)
+	}
+	admin.Close()
+	logger, err := audit.Open(filepath.Join(t.TempDir(), "audit.log"), 1<<20, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer logger.Close()
+	e := engine.New(q.ID, nil, 8)
+	s := New(e, 1, 0, time.Millisecond)
+	s.Queue = q
+	s.Audit = logger
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); s.Run(ctx) }()
+	defer func() { once.Do(func() { close(release) }); cancel(); <-done }()
+	e.Results <- &pb.Result{CollectorId: q.ID, AttemptId: 1}
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("SQLite write did not start")
+	}
+	health := make(chan *pb.HealthReply, 1)
+	failed := make(chan error, 1)
+	go func() {
+		reply, err := s.Health(ctx, &pb.HealthRequest{})
+		if err != nil {
+			failed <- err
+		} else {
+			health <- reply
+		}
+	}()
+	select {
+	case reply := <-health:
+		if reply.Metrics["queue_batches"] != 0 || reply.Metrics["forming_results"] != 1 {
+			t.Fatal("uncommitted batch exposed", reply.Metrics)
+		}
+	case err := <-failed:
+		t.Fatal(err)
+	case <-time.After(time.Second):
+		t.Fatal("SQLite disk wait blocked collector health")
+	}
+	once.Do(func() { close(release) })
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		stats, err := q.Stats()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats.Batches == 1 && q.Metrics()["sqlite_append_operations_total"] == 1 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("write did not commit after storage recovered")
 }

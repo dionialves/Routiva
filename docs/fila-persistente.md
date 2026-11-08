@@ -85,6 +85,65 @@ docker compose up -d --build --no-deps collector
 
 Isso evita reiniciar o coletor antes de uma inicialização longa do app. O inventário ainda precisa ser reenviado após o reinício do Go; a fila persistida permanece disponível. A ativação da janela pode ser confirmada por `WINDOW_NEGOTIATED window=16` e pelo health. Configurar `COLLECTOR_SEND_WINDOW=1` no app permite voltar ao envio sequencial, mantendo os formatos existentes.
 
+## Caminho SQLite e diagnóstico
+
+O coletor mantém WAL, `synchronous=FULL`, sincronização antes do envio e remoção somente após ACK válido. O formato da fila não muda; não é necessário apagar ou recriar `collector_data`.
+
+As operações SQLite não seguram mais o mutex geral do servidor. A fila reserva atomicamente os IDs selecionados antes de disponibilizá-los ao envio, protegendo-os contra retenção enquanto o produtor continua gravando. A reserva é liberada ao encerrar o stream. O SQLite continua com uma conexão e escrita serializada internamente: a melhoria não transforma o banco em múltiplos escritores paralelos.
+
+O health e os logs de estado consultam um snapshot em memória, atualizado somente após commits bem-sucedidos. Eles não executam SQL nem esperam pelo mutex da fila. Durante uma escrita lenta, mostram o último estado confirmado, sem expor alterações ainda em transação. Alterações externas no arquivo SQLite durante a execução não são suportadas.
+
+A recepção reúne ACKs por até 2 ms, ou até completar a janela pendente, sem segurar bloqueios nessa espera. A exclusão usa um único `DELETE ... IN (...)` e um único commit para o grupo de até 32 IDs. A reunião é limitada por tempo, portanto um commit do app não garante sempre um único grupo de exclusão no coletor; os contadores abaixo mostram o resultado real.
+
+A leitura normal passa a buscar a próxima linha e seu horário em uma consulta, sem executar `MIN(created)` separadamente a cada lote. A limpeza de expirados durante a leitura remove no máximo 128 lotes por transação e continua nas próximas tentativas; nunca envia um lote expirado. As políticas de limite de armazenamento e proteção dos lotes em trânsito continuam aplicadas.
+
+### Métricas do SQLite
+
+`--health` expõe os prefixos `sqlite_append`, `sqlite_read` e `sqlite_ack`:
+
+| Sufixo | Significado |
+|---|---|
+| `_operations_total`, `_errors_total` | Operações concluídas e falhas desde o início do processo |
+| `_wait_ms` | Última espera para obter o mutex interno da fila |
+| `_operation_ms` | Tempo após obter o mutex, incluindo SQL e commit; exclui a espera |
+| `_commit_ms` | Tempo do último commit; leitura normal não faz commit |
+| `_wait_ms_total`, `_operation_ms_total`, `_commit_ms_total` | Tempos acumulados para comparação entre leituras |
+| `_max_wait_ms`, `_max_operation_ms` | Piores tempos observados nesta execução |
+
+`sqlite_ack_batches_total` conta os lotes efetivamente removidos após commits bem-sucedidos. `sqlite_ack_last_batches` informa quantos foram removidos no último grupo bem-sucedido. Esses contadores de desempenho reiniciam com o processo; o contador de descarte da fila continua persistido.
+
+```sh
+docker compose exec -T collector routiva-collector --health | jq '{
+  lotes_pendentes: .metrics.queue_batches,
+  idade_fila_segundos: .metrics.queue_oldest_age_seconds,
+  gravacao_espera_ms: .metrics.sqlite_append_wait_ms,
+  gravacao_operacao_ms: .metrics.sqlite_append_operation_ms,
+  gravacao_commit_ms: .metrics.sqlite_append_commit_ms,
+  leitura_espera_ms: .metrics.sqlite_read_wait_ms,
+  leitura_operacao_ms: .metrics.sqlite_read_operation_ms,
+  exclusao_espera_ms: .metrics.sqlite_ack_wait_ms,
+  exclusao_operacao_ms: .metrics.sqlite_ack_operation_ms,
+  exclusao_commit_ms: .metrics.sqlite_ack_commit_ms,
+  lotes_no_ultimo_grupo_ack: .metrics.sqlite_ack_last_batches
+}'
+```
+
+O evento `SQLITE_STATUS` registra essas métricas a cada dez segundos em `/var/log/routiva/collector.log`. Ele pode atrasar se o próprio produtor estiver esperando uma escrita; o RPC de health permanece independente. Uma espera alta indica disputa interna; operação/commit altos indicam trabalho de banco ou armazenamento e precisam ser correlacionados com I/O do servidor. Valores isolados não são médias.
+
+### Validação da melhoria
+
+Foram testados rollback sem publicar contadores, reservas durante retenção concorrente, descarte de expirados em lotes limitados e health durante uma inserção bloqueada dentro do SQLite. A suíte Go usa detector de concorrência; há compilação cruzada para Linux amd64 sem CGO.
+
+No ensaio local macOS ARM64, com fila de 50.000 lotes, a mediana da exclusão de 16 IDs caiu de aproximadamente 0,44 ms para 0,27 ms. A consulta de estado deixou de executar SQL. O ensaio não reproduz o disco Linux de produção nem a disputa com PostgreSQL; não é uma certificação de vazão ou de tempo de fsync nesse servidor.
+
+Para instalar apenas esta melhoria, depois de atualizar o código no servidor:
+
+```sh
+docker compose up -d --build --no-deps collector
+```
+
+Mantenha o app em execução para reenviar o inventário após a reconexão. Preserve o volume `collector_data`.
+
 ## Transição da agregação direta
 
 A restauração da persistência bruta é uma mudança nova, sem reverter os commits do SQLite ou da limpeza incremental. Não exige apagar tabelas, resumos ou arquivos da fila.

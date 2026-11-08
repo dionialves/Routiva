@@ -5,10 +5,13 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -18,12 +21,17 @@ import (
 )
 
 type Queue struct {
-	mu       sync.Mutex
-	db       *sql.DB
-	lock     *os.File
-	ID       string
-	MaxBytes int64
-	MaxAge   time.Duration
+	mu                                     sync.Mutex
+	db                                     *sql.DB
+	lock                                   *os.File
+	ID                                     string
+	MaxBytes                               int64
+	MaxAge                                 time.Duration
+	snapshot                               atomic.Pointer[Stats]
+	closed                                 atomic.Bool
+	reservedThrough                        uint64 // guarded by mu; reserved atomically with the read
+	appendMetrics, readMetrics, ackMetrics operation
+	ackedBatches, lastAckBatches           atomic.Int64
 }
 type Stats struct {
 	Batches, Results, Bytes, Dropped int64
@@ -80,18 +88,86 @@ func Open(path string, maxBytes int64, maxAge time.Duration) (_ *Queue, err erro
 		return nil, err
 	}
 	err = db.QueryRow("SELECT collector FROM meta WHERE id=1").Scan(&q.ID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := readStats(db)
+	if err == nil {
+		q.snapshot.Store(snapshot)
+	}
 	return q, err
 }
-func (q *Queue) Close() error { err := q.db.Close(); q.lock.Close(); return err }
+func (q *Queue) Close() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed.Swap(true) {
+		return nil
+	}
+	err := q.db.Close()
+	q.lock.Close()
+	return err
+}
+
+type rowReader interface{ QueryRow(string, ...any) *sql.Row }
+
+func readStats(reader rowReader) (*Stats, error) {
+	s := new(Stats)
+	var oldest int64
+	err := reader.QueryRow("SELECT batches,results,bytes,dropped,COALESCE((SELECT created FROM batches ORDER BY id LIMIT 1),0) FROM meta WHERE id=1").Scan(&s.Batches, &s.Results, &s.Bytes, &s.Dropped, &oldest)
+	if oldest > 0 {
+		s.Oldest = time.UnixMilli(oldest)
+	}
+	return s, err
+}
+
+// Read counters inside the transaction, but publish them only after a successful commit.
+func (q *Queue) commit(tx *sql.Tx) (time.Duration, error) {
+	snapshot, err := readStats(tx)
+	if err != nil {
+		return 0, err
+	}
+	started := time.Now()
+	err = tx.Commit()
+	elapsed := time.Since(started)
+	if err == nil {
+		q.snapshot.Store(snapshot)
+	}
+	return elapsed, err
+}
+
+// Stats returns the last committed snapshot. It never waits for SQLite or the writer mutex.
+func (q *Queue) Stats() (Stats, error) {
+	if q.closed.Load() {
+		return Stats{}, errors.New("spool closed")
+	}
+	snapshot := q.snapshot.Load()
+	if snapshot == nil {
+		return Stats{}, errors.New("spool snapshot unavailable")
+	}
+	return *snapshot, nil
+}
+
+// ReleaseReservations is called after a stream ends and before another may connect.
+func (q *Queue) ReleaseReservations() { q.mu.Lock(); q.reservedThrough = 0; q.mu.Unlock() }
 
 // Append commits before a batch can be sent. All IDs up to protected (the sent prefix) are never evicted.
 func (q *Queue) Append(results []*pb.Result, protected uint64) (dropped int64, err error) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
 	batch := &pb.Batch{CollectorId: q.ID, ProtocolVersion: 1, Results: results}
 	payload, err := proto.Marshal(batch)
 	if err != nil {
 		return 0, err
+	}
+	waiting := time.Now()
+	q.mu.Lock()
+	wait := time.Since(waiting)
+	started := time.Now()
+	var commit time.Duration
+	defer func() { q.appendMetrics.finish(wait, time.Since(started), commit, err); q.mu.Unlock() }()
+	if q.closed.Load() {
+		return 0, errors.New("spool closed")
+	}
+	if q.reservedThrough > protected {
+		protected = q.reservedThrough
 	}
 	tx, err := q.db.Begin()
 	if err != nil {
@@ -128,85 +204,113 @@ func (q *Queue) Append(results []*pb.Result, protected uint64) (dropped int64, e
 			return 0, err
 		}
 	}
-	if _, err = tx.Exec("UPDATE meta SET dropped=dropped+? WHERE id=1", dropped); err != nil {
-		return 0, err
+	if dropped > 0 {
+		if _, err = tx.Exec("UPDATE meta SET dropped=dropped+? WHERE id=1", dropped); err != nil {
+			return 0, err
+		}
 	}
-	return dropped, tx.Commit()
+	commit, err = q.commit(tx)
+	return dropped, err
 }
-func (q *Queue) Peek() (*pb.Batch, error) { return q.PeekAfter(0) }
+func (q *Queue) Peek() (*pb.Batch, error)                  { return q.PeekAfter(0) }
+func (q *Queue) PeekAfter(after uint64) (*pb.Batch, error) { return q.readAfter(after, false) }
 
-// PeekAfter skips sent batches and only expires the unsent suffix.
-func (q *Queue) PeekAfter(after uint64) (*pb.Batch, error) {
+// ReserveAfter atomically protects a selected batch before a concurrent append can evict it.
+func (q *Queue) ReserveAfter(after uint64) (*pb.Batch, error) { return q.readAfter(after, true) }
+func (q *Queue) readAfter(after uint64, reserve bool) (batch *pb.Batch, err error) {
+	waiting := time.Now()
 	q.mu.Lock()
-	defer q.mu.Unlock()
-	// Expire before replay too, including after an idle restart without new pings.
-	var oldest int64
-	if err := q.db.QueryRow("SELECT COALESCE(MIN(created),0) FROM batches WHERE id>?", after).Scan(&oldest); err != nil {
-		return nil, err
+	wait := time.Since(waiting)
+	started := time.Now()
+	var commit time.Duration
+	defer func() { q.readMetrics.finish(wait, time.Since(started), commit, err); q.mu.Unlock() }()
+	if q.closed.Load() {
+		return nil, errors.New("spool closed")
 	}
-	var err error
-	if oldest > 0 && oldest < time.Now().Add(-q.MaxAge).UnixMilli() {
-		tx, err := q.db.Begin()
-		if err != nil {
-			return nil, err
-		}
-		defer tx.Rollback()
-		cutoff := time.Now().Add(-q.MaxAge).UnixMilli()
-		if _, err = tx.Exec("UPDATE meta SET dropped=dropped+(SELECT COALESCE(SUM(results),0) FROM batches WHERE created<? AND id>?) WHERE id=1", cutoff, after); err != nil {
-			return nil, err
-		}
-		if _, err = tx.Exec("DELETE FROM batches WHERE created<? AND id>?", cutoff, after); err != nil {
-			return nil, err
-		}
-		if err = tx.Commit(); err != nil {
-			return nil, err
-		}
+	if reserve && q.reservedThrough > after {
+		after = q.reservedThrough
 	}
 	var id uint64
+	var created int64
 	var payload []byte
-	err = q.db.QueryRow("SELECT id,payload FROM batches WHERE id>? ORDER BY id LIMIT 1", after).Scan(&id, &payload)
+	err = q.db.QueryRow("SELECT id,created,payload FROM batches WHERE id>? ORDER BY id LIMIT 1", after).Scan(&id, &created, &payload)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	b := new(pb.Batch)
-	if err = proto.Unmarshal(payload, b); err != nil {
+	if created < time.Now().Add(-q.MaxAge).UnixMilli() && id > q.reservedThrough {
+		// Bound expiry work to keep the write critical section short. Another tick continues it.
+		tx, beginErr := q.db.Begin()
+		if beginErr != nil {
+			return nil, beginErr
+		}
+		defer tx.Rollback()
+		protected := max(after, q.reservedThrough)
+		cutoff := time.Now().Add(-q.MaxAge).UnixMilli()
+		candidates := "SELECT id FROM batches WHERE created<? AND id>? ORDER BY id LIMIT 128"
+		_, err = tx.Exec("UPDATE meta SET dropped=dropped+(SELECT COALESCE(SUM(results),0) FROM batches WHERE id IN ("+candidates+")) WHERE id=1", cutoff, protected)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec("DELETE FROM batches WHERE id IN ("+candidates+")", cutoff, protected); err != nil {
+			return nil, err
+		}
+		commit, err = q.commit(tx)
 		return nil, err
 	}
-	b.BatchId = id
-	return b, nil
+	batch = new(pb.Batch)
+	if err = proto.Unmarshal(payload, batch); err != nil {
+		return nil, err
+	}
+	batch.BatchId = id
+	if reserve {
+		q.reservedThrough = id
+	}
+	return batch, nil
 }
 func (q *Queue) Ack(id uint64) error { return q.AckMany([]uint64{id}) }
 
-// A received group of individual ACKs releases disk space in a single SQLite commit.
-func (q *Queue) AckMany(ids []uint64) error {
+// One DELETE and one durable commit for a validated group of ACK identities.
+func (q *Queue) AckMany(ids []uint64) (err error) {
+	if len(ids) == 0 {
+		return nil
+	}
+	if len(ids) > 32 {
+		return errors.New("ACK group exceeds 32 batches")
+	}
+	waiting := time.Now()
 	q.mu.Lock()
-	defer q.mu.Unlock()
+	wait := time.Since(waiting)
+	started := time.Now()
+	var commit time.Duration
+	defer func() { q.ackMetrics.finish(wait, time.Since(started), commit, err); q.mu.Unlock() }()
+	if q.closed.Load() {
+		return errors.New("spool closed")
+	}
 	tx, err := q.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	for _, id := range ids {
-		if _, err = tx.Exec("DELETE FROM batches WHERE id=?", id); err != nil {
-			return err
-		}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
 	}
-	return tx.Commit()
-}
-func (q *Queue) Stats() (Stats, error) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	var s Stats
-	var oldest int64
-	err := q.db.QueryRow("SELECT batches,results,bytes,COALESCE((SELECT created FROM batches ORDER BY id LIMIT 1),0) FROM meta WHERE id=1").Scan(&s.Batches, &s.Results, &s.Bytes, &oldest)
+	result, err := tx.Exec("DELETE FROM batches WHERE id IN ("+placeholders+")", args...)
+	if err != nil {
+		return err
+	}
+	removed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	commit, err = q.commit(tx)
 	if err == nil {
-		err = q.db.QueryRow("SELECT dropped FROM meta WHERE id=1").Scan(&s.Dropped)
+		q.ackedBatches.Add(removed)
+		q.lastAckBatches.Store(removed)
 	}
-	if oldest > 0 {
-		s.Oldest = time.UnixMilli(oldest)
-	}
-	return s, err
+	return err
 }

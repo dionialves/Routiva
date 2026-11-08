@@ -121,6 +121,8 @@ Os contadores do motor reiniciam com o processo; `queue_dropped_total` permanece
 | `queue_batches`, `queue_oldest_age_seconds` | Lotes persistidos e idade do mais antigo. |
 | `queue_dropped_total` | Descartes persistentes por tamanho/idade; também compõe `dropped_total`. |
 | `forming_results` | Resultados reunidos para o próximo lote, ainda em RAM. |
+| `sqlite_append_*`, `sqlite_read_*`, `sqlite_ack_*` | Tempos de espera, operação e commit do SQLite; consulte [diagnóstico](docs/fila-persistente.md#caminho-sqlite-e-diagnóstico). |
+| `sqlite_ack_last_batches` | Lotes removidos no último grupo de ACKs confirmado no SQLite. |
 | `storage_errors_total`, `persistence_healthy` | Falhas locais de armazenamento e estado atual (1 saudável, 0 falhando). |
 | `goroutines` | Quantidade atual de goroutines, as tarefas concorrentes do runtime Go. Não é quantidade de hosts nem de threads do sistema operacional. |
 | `heap_bytes` | Bytes atualmente alocados no heap do Go. Divida por `1048576` para MiB. Não representa toda a memória do container. |
