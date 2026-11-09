@@ -61,25 +61,19 @@ dialog::backdrop { background:rgb(3 12 20 / 68%); }
 .map-heading-copy #map-title { margin:0; overflow-wrap:anywhere; }
 
 .map-view-controls { display:flex; gap:.75rem; align-items:center; margin-left:auto; }
-#view-zoom label > span { display:none; }
-.map-view-controls :is(#map-fullscreen, #zoom, #edit) { height:42px; }
+.map-view-controls #edit { height:42px; }
 .map-view-controls #edit { display:inline-flex; align-items:center; gap:.5rem; }
-.map-view-controls #map-fullscreen { width:42px; }
 #workspace .map-viewport { height:65vh; overflow:hidden; }
 #workspace.viewing #canvas { cursor:grab; }
 #workspace.viewing #canvas:active { cursor:grabbing; }
 #map-tools { position:absolute; top:12px; right:12px; display:grid; gap:3px; }
-#map-tools button, #map-fullscreen {
+#map-tools button {
   display:grid; place-items:center; width:36px; height:36px; padding:0;
   color:var(--text); background:#081c2c; border:1px solid #294258;
 }
-#map-tools button:hover, #map-fullscreen:hover { border-color:var(--cyan); }
-#map-tools svg, #map-fullscreen svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
-#workspace:fullscreen { margin:0; overflow:auto; }
-#workspace:fullscreen.viewing { display:flex; flex-direction:column; }
-#workspace:fullscreen.viewing .map-stage { flex:1; min-height:120px; }
-#workspace.viewing .map-stage:fullscreen .map-viewport,
-#workspace:fullscreen.viewing .map-viewport { height:100%; max-height:none; position:absolute; inset:0; }
+#map-tools button:hover { border-color:var(--cyan); }
+#map-tools svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
+#workspace.viewing .map-stage:fullscreen .map-viewport { height:100%; max-height:none; position:absolute; inset:0; }
 
 #workspace:not(.viewing) .map-view-controls { display:none; }
 #editor-actions, #editor .editor-toolbar { align-items:center; margin:0; gap:.6rem; }

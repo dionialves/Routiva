@@ -162,10 +162,8 @@ function choose(node) {
 }
 
 const viewport = $('viewport');
-const zoomLabel = $('zoom').closest('label');
-const presets = Array.from($('zoom').options, option => parseFloat(option.value) / 100);
-const editorPresets = [0.1, 0.25, 0.5, 0.75, ...presets];
-const maxZoom = Math.max(...presets);
+const minZoom = 0.1;
+const maxZoom = 3;
 let camera = {x:0, y:0, scale:1};
 let followingFit = false, pan = null, animation = 0;
 
@@ -180,18 +178,8 @@ function resizeCanvas() {
 }
 
 function syncZoom() {
-  const select = $('zoom');
-  select.querySelector('[data-fit]')?.remove();
-  const percent = camera.scale * 100;
-  if (!presets.includes(camera.scale)) {
-    const digits = percent < 1 ? 2 : 1;
-    const option = new Option(Number(percent.toPrecision(digits + 2)) + '%', String(percent));
-    option.dataset.fit = '';
-    select.add(option);
-    select.value = option.value;
-  } else select.value = Math.round(percent) + '%';
   $('zoom-in').disabled = camera.scale >= maxZoom;
-  $('zoom-out').disabled = camera.scale <= (editing ? editorPresets : presets)[0];
+  $('zoom-out').disabled = camera.scale <= minZoom;
 }
 
 function stopMotion() {
@@ -234,28 +222,28 @@ function changeZoom(scale) {
   syncZoom();
   resizeCanvas();
 }
-$('zoom').onchange = () => changeZoom(parseFloat($('zoom').value) / 100);
-$('zoom-in').onclick = () => changeZoom((editing ? editorPresets : presets).find(scale => scale > camera.scale) || maxZoom);
-$('zoom-out').onclick = () => changeZoom((editing ? editorPresets : presets).filter(scale => scale < camera.scale).pop() || presets[0]);
+function stepZoom(delta) {
+  const scale = Number((camera.scale + delta).toFixed(10));
+  changeZoom(Math.max(minZoom, Math.min(maxZoom, scale)));
+}
+$('zoom-in').onclick = () => stepZoom(0.1);
+$('zoom-out').onclick = () => stepZoom(-0.1);
 new ResizeObserver(() => {
   if (current && viewport.clientWidth) {
     if (followingFit) fitToView(); else resizeCanvas();
   }
 }).observe(viewport);
-$('map-fullscreen').onclick = $('maximize-map').onclick = async event => {
-  const target = event.currentTarget === $('maximize-map') ? $('map-stage') : $('workspace');
+$('maximize-map').onclick = async () => {
+  const target = $('map-stage');
   try {
     if (document.fullscreenElement === target) await document.exitFullscreen();
     else await target.requestFullscreen();
   } catch { window.notify('Tela cheia indisponível neste navegador.', 'error'); }
 };
 document.addEventListener('fullscreenchange', () => {
-  const label = document.fullscreenElement ? 'Sair da tela cheia' : 'Tela cheia';
   const mapLabel = document.fullscreenElement === $('map-stage') ? 'Restaurar mapa' : 'Maximizar mapa';
   $('maximize-map').title = mapLabel;
   $('maximize-map').setAttribute('aria-label', mapLabel);
-  $('map-fullscreen').title = label;
-  $('map-fullscreen').setAttribute('aria-label', label);
 });
 viewport.onpointerdown = event => {
   if (event.button !== 0 || (editing ? tool !== 'pan' : event.target.closest('g'))) return;
@@ -278,8 +266,8 @@ $('canvas').onpointermove = event => {
   selected = drag.node.id;
   selectedLink = null;
   drag.moved = true;
-  drag.node.x = Math.round(Math.max(0, Math.min(current.layout.width, point.x + drag.dx)));
-  drag.node.y = Math.round(Math.max(0, Math.min(current.layout.height, point.y + drag.dy)));
+  drag.node.x = Math.round(point.x + drag.dx);
+  drag.node.y = Math.round(point.y + drag.dy);
   draw();
 };
 $('canvas').onpointerup = event => {
@@ -322,7 +310,7 @@ function openMap(map, edit = false) {
   tool = 'select';
   selectedLink = null;
   past.length = future.length = 0;
-  baseline = JSON.stringify(current?.layout);
+  baseline = map ? JSON.stringify({...current.layout, camera:current.layout.camera ?? null}) : null;
   states.clear();
   $('detail').replaceChildren();
   $('editor').hidden = !edit;
@@ -333,24 +321,20 @@ function openMap(map, edit = false) {
   $('map-description').textContent = edit ? 'Edite a topologia, adicione elementos, conecte e organize o mapa.' : 'Visualização do mapa de topologia da rede.';
   $('map-title').textContent = map?.layout.name || '';
   stopMotion();
-  if ((!map || edit) && document.fullscreenElement === $('workspace')) document.exitFullscreen();
+  if ((!map || edit) && document.fullscreenElement === $('map-stage')) document.exitFullscreen();
   pan = null;
   $('workspace').classList.toggle('viewing', !!map && !edit);
-  $('maximize-map').hidden = $('map-fullscreen').hidden = edit;
-  $('editor-zoom').hidden = true;
-  $(edit ? 'editor-zoom' : 'view-zoom').append(zoomLabel);
-  $('zoom').querySelector('[data-fit]')?.remove();
-  $('zoom').value = '100%';
+  $('maximize-map').hidden = edit;
   if (map) {
     viewport.scrollTo(0, 0);
-    camera = {x:viewport.clientWidth / 2, y:viewport.clientHeight / 2, scale:1};
+    camera = map.layout.camera ? {...map.layout.camera} : {x:0, y:0, scale:1};
     syncZoom();
     resizeCanvas();
   }
   $('status').textContent = edit ? 'Editando topologia' : map ? 'Consultando incidentes…'
     : '';
   draw();
-  if (edit && map?.layout.nodes.length) fitToView();
+  if (map && !map.layout.camera) fitToView();
   refresh(generation);
 }
 
@@ -394,7 +378,7 @@ function renderList() {
     const title = document.createElement('strong');
     title.textContent = layout.name;
     row.insertCell().append(title);
-    for (const value of [layout.width + ' × ' + layout.height + ' px', layout.nodes.length, layout.links.length,
+    for (const value of [layout.nodes.length, layout.links.length,
       map.updatedAt ? new Date(map.updatedAt).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'}) : '—']) {
       row.insertCell().textContent = value;
     }
@@ -475,23 +459,15 @@ createForm.onsubmit = async event => {
   event.preventDefault();
   if ($('submit-create').disabled) return;
   const name = $('create-name').value.trim();
-  for (const field of createFields) {
-    let message = '';
-    if (field.type === 'number' && !field.validity.valid)
-      message = 'Informe um inteiro entre 1 e 2147483647.';
-    else if (field.id === 'create-name' && !name) message = 'Informe o nome do mapa.';
-    fieldError(field, message);
-  }
-  const invalid = createForm.querySelector('[aria-invalid="true"]');
-  if (invalid) { invalid.focus(); return; }
-  const width = $('create-width').valueAsNumber, height = $('create-height').valueAsNumber;
+  fieldError($('create-name'), name ? '' : 'Informe o nome do mapa.');
+  if (!name) { $('create-name').focus(); return; }
   $('create-error').textContent = '';
   createForm.setAttribute('aria-busy', 'true');
   createFields.forEach(field => { field.readOnly = true; });
   $('submit-create').disabled = $('cancel-create').disabled = true;
   $('submit-create').textContent = 'Criando…';
   try {
-    const saved = await persist({layout:{name, width, height, publication:'RASCUNHO', nodes:[], links:[]}});
+    const saved = await persist({layout:{name, publication:'RASCUNHO', nodes:[], links:[]}});
     createDialog.close();
     openMap(saved, true);
     $('add').focus();
@@ -510,8 +486,8 @@ function showProperties() {
   const layout = current?.layout;
   $('map-error').textContent = '';
   $('name').value = layout?.name || '';
-  $('width').value = layout?.width || 1200;
-  $('height').value = layout?.height || 700;
+  $('initial-view').querySelector('[value=saved]').hidden = !layout.camera;
+  $('initial-view').value = followingFit ? 'fit' : 'current';
   $('map-dialog').showModal();
   $('name').focus();
 }
@@ -520,20 +496,28 @@ $('close-map').onclick = () => $('map-dialog').close();
 $('map-form').onsubmit = async event => {
   event.preventDefault();
   const name = $('name').value.trim();
-  const width = $('width').valueAsNumber, height = $('height').valueAsNumber;
   if (!name) { $('map-error').textContent = 'Informe o nome do mapa.'; return; }
-  if (current.layout.nodes.some(n => n.x > width || n.y > height)) {
-    $('map-error').textContent = 'Reposicione os elementos que ficariam fora do mapa.';
-    return;
-  }
   checkpoint();
-  Object.assign(current.layout, {name, width, height});
+  current.layout.name = name;
+  const mode = $('initial-view').value;
+  if (mode === 'fit') {
+    current.layout.camera = null;
+    fitToView();
+  } else {
+    stopMotion();
+    if (mode === 'saved') camera = {...current.layout.camera};
+    current.layout.camera = {...camera};
+    syncZoom();
+  }
   draw();
   resizeCanvas();
   $('map-dialog').close();
 };
+function layoutForSave() {
+  return {...current.layout, camera:followingFit ? null : {...camera}};
+}
 function mayLeave() {
-  return !editing || baseline === JSON.stringify(current.layout) || confirm('Descartar alterações não salvas?');
+  return !editing || baseline === JSON.stringify(layoutForSave()) || confirm('Descartar alterações não salvas?');
 }
 $('back').onclick = () => { if (mayLeave()) openMap(null); };
 $('edit').onclick = () => openMap(current, true);
@@ -560,15 +544,14 @@ document.addEventListener('keydown', event => {
 });
 
 $('add').onclick = () => {
-  const {width,height} = current.layout;
   pendingNode = {id:'element-' + Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-'),
-    name:'', x:Math.round(Math.max(0,Math.min(width,camera.x))), y:Math.round(Math.max(0,Math.min(height,camera.y)))};
+    name:'', x:Math.round(camera.x), y:Math.round(camera.y)};
   // Keep newly created elements individually reachable before they are arranged.
   const origin = {...pendingNode};
   for (let slot = 1; slot <= current.layout.nodes.length && current.layout.nodes.some(n =>
     Math.abs(n.x - pendingNode.x) < 18 && Math.abs(n.y - pendingNode.y) < 20); slot++) {
-    pendingNode.x = Math.round((origin.x + slot * 120) % width);
-    pendingNode.y = Math.round((origin.y + slot * 48) % height);
+    pendingNode.x = origin.x + slot * 120;
+    pendingNode.y = origin.y + slot * 48;
   }
   openElement(pendingNode);
 };
@@ -686,7 +669,7 @@ $('save').onclick = async () => {
   $('save').disabled = true;
   $('save').setAttribute('aria-busy', 'true');
   $('save-label').textContent = 'Salvando…';
-  try { openMap(await persist(current)); window.notify('Mapa salvo.'); }
+  try { openMap(await persist({...current, layout:layoutForSave()})); window.notify('Mapa salvo.'); }
   catch (error) { $('status').textContent = error.message; }
   finally {
     $('workspace').inert = false;

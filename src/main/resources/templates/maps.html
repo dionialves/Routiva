@@ -22,7 +22,7 @@
         <button type="button" id="create" class="map-action" disabled>Novo mapa</button>
       </div>
       <div class="table-scroll" role="region" aria-label="Mapas cadastrados" tabindex="0"><table class="hosts-table">
-        <thead><tr><th>Nome do mapa</th><th>Dimensões</th><th>Elementos</th><th>Conexões</th><th>Atualizado em</th><th>Status</th><th>Ações</th></tr></thead>
+        <thead><tr><th>Nome do mapa</th><th>Elementos</th><th>Conexões</th><th>Atualizado em</th><th>Status</th><th>Ações</th></tr></thead>
         <tbody id="maps"></tbody>
       </table></div>
       <p id="maps-empty" hidden>Nenhum mapa encontrado.</p>
@@ -39,8 +39,7 @@
         <p id="map-description">Visualização do mapa de topologia da rede.</p>
       </div>
       <div class="map-view-controls">
-      <button id="map-fullscreen" title="Tela cheia" aria-label="Tela cheia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/></svg></button>
-      <span id="view-zoom"></span><button id="edit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-1 5 5-1L21 7l-4-4Zm10-10 4 4"/></svg>Editar</button></div>
+      <button id="edit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-1 5 5-1L21 7l-4-4Zm10-10 4 4"/></svg>Editar</button></div>
       <div id="editor-actions" class="settings-actions" hidden><button id="properties"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8m5 0h3M4 17h3m5 0h8M17 7a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M12 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/></svg>Propriedades do mapa</button><button id="cancel">Cancelar</button><button id="save" class="map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="map-save-icon" d="M3 3h14l4 4v14H3Zm4 0v6h9V3M7 21v-8h10v8"/></svg><span id="save-label">Salvar mapa</span></button></div></div>
     <div id="editor" hidden><div class="settings-actions editor-toolbar" role="group" aria-label="Ferramentas de edição">
       <button id="add" aria-haspopup="dialog" aria-controls="element-dialog"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8m-4-4h8M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"/></svg>Adicionar elemento</button>
@@ -50,7 +49,6 @@
       <button id="delete-item" title="Excluir seleção" aria-label="Excluir seleção"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg></button>
       <button id="undo" title="Desfazer (Ctrl+Z)" aria-label="Desfazer"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 4-5 5 5 5M3 9h11c7 0 8 9 2 11"/></svg></button><button id="redo" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 5 5-5 5m5-5H10c-7 0-8 9-2 11"/></svg></button>
     </div><p id="hint"></p></div>
-  <div class="settings-actions" id="editor-zoom"><label><span aria-hidden="true">Zoom</span><select id="zoom" aria-label="Zoom" title="Zoom"><option>100%</option><option>150%</option><option>200%</option><option>300%</option></select></label></div>
   <div class="map-stage" id="map-stage"><div class="map-viewport" id="viewport"><svg id="canvas" viewBox="0 0 1200 700" aria-label="Topologia de rede"></svg></div>
     <div id="map-tools" role="group" aria-label="Navegação do mapa">
       <button id="fit" title="Ajustar à tela" aria-label="Ajustar à tela"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4m10 6h-4m-6 10v-4M2 12h4"/></svg></button>
@@ -65,17 +63,10 @@
   <dialog id="create-dialog" class="settings-panel" aria-labelledby="create-title" aria-describedby="create-description">
     <form id="create-form" class="connection-form" novalidate>
       <div><h2 id="create-title">Novo mapa</h2>
-        <p id="create-description">Defina o nome e o tamanho inicial do mapa para começar a organizar sua topologia.</p>
+        <p id="create-description">Dê um nome ao mapa para começar a organizar sua topologia.</p>
       </div>
       <label>Nome do mapa<input id="create-name" placeholder="Ex.: Backbone Oeste" required maxlength="120" autofocus aria-describedby="create-name-error">
         <small id="create-name-error"></small></label>
-      <fieldset><legend>Dimensões iniciais</legend><div class="map-dimensions">
-        <label>Largura (px)<input id="create-width" type="number" required min="1" max="2147483647" step="1" value="1200" aria-describedby="create-width-error">
-          <small id="create-width-error"></small></label>
-        <label>Altura (px)<input id="create-height" type="number" required min="1" max="2147483647" step="1" value="700" aria-describedby="create-height-error">
-          <small id="create-height-error"></small></label>
-      </div></fieldset>
-      <p class="map-size-note"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v2"/></svg>Você poderá ajustar o mapa posteriormente no editor.</p>
       <p id="create-error" role="alert"></p>
       <div class="settings-actions"><button type="button" id="cancel-create">Cancelar</button>
         <button type="submit" id="submit-create">Criar mapa</button></div>
@@ -84,8 +75,11 @@
   <dialog id="map-dialog" class="settings-panel" aria-labelledby="map-dialog-title"><form class="connection-form" id="map-form">
     <h2 id="map-dialog-title">Propriedades do mapa</h2>
     <label>Nome do mapa<input id="name" required maxlength="120"></label>
-    <fieldset><legend>Dimensões</legend><div class="map-dimensions"><label>Largura (px)<input id="width" type="number" required min="1" max="2147483647" value="1200"></label>
-    <label>Altura (px)<input id="height" type="number" required min="1" max="2147483647" value="700"></label></div></fieldset>
+    <label>Visualização inicial<select id="initial-view">
+      <option value="fit">Enquadrar todos os elementos</option>
+      <option value="saved">Manter visualização salva</option>
+      <option value="current">Usar posição e zoom atuais</option>
+    </select></label>
     <div class="settings-actions"><button type="button" id="close-map">Cancelar</button><button type="submit" class="map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Aplicar alterações</span></button></div>
     <p id="map-error" role="alert"></p>
   </form></dialog>

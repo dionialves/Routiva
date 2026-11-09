@@ -45,8 +45,8 @@ class DashboardTests {
             .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(1))
             .andExpect(jsonPath("$.layout.publication").value("PUBLICADO"))
             .andExpect(jsonPath("$.updatedAt").isNumber())
-            .andExpect(jsonPath("$.layout.width").value(1200))
-            .andExpect(jsonPath("$.layout.height").value(700))
+            .andExpect(jsonPath("$.layout.width").doesNotExist())
+            .andExpect(jsonPath("$.layout.height").doesNotExist())
             .andExpect(jsonPath("$.layout.nodes[0].id").value("a"))
             .andReturn().getResponse().getContentAsString();
         mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.links[0].to").value("b"));
@@ -61,21 +61,22 @@ class DashboardTests {
 
     @Test
     @org.springframework.transaction.annotation.Transactional
-    void savesCustomCanvasWithLinkedUnassignedAndGroupedElements() throws Exception {
+    void savesCameraAndElementsBeyondLegacyCanvasBounds() throws Exception {
         String draft = """
-            {"layout":{"name":"Rede","width":2400,"height":1000,
-            "nodes":[{"id":"one","name":"Centro","x":1900,"y":840},
+            {"layout":{"name":"Rede","width":2400,"height":1000,"camera":{"x":-900,"y":300,"scale":0.4},
+            "nodes":[{"id":"one","name":"Centro","x":-1900,"y":3840},
                      {"id":"two","groupId":"a","name":"POP","x":1500,"y":720},
                      {"id":"three","hostId":"router","labelPosition":"RIGHT","name":"Host","x":300,"y":80}],
             "links":[{"from":"one","to":"two"}]}}
             """;
         mvc.perform(post("/api/maps").contentType("application/json").content(draft))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.layout.width").value(2400))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.layout.nodes[0].x").value(-1900))
             .andExpect(jsonPath("$.layout.links[0].from").value("one"));
         mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.nodes[2].hostId").value("router"))
+            .andExpect(jsonPath("$[0].layout.camera.scale").value(0.4))
             .andExpect(jsonPath("$[0].layout.nodes[2].labelPosition").value("RIGHT"))
             .andExpect(jsonPath("$[0].layout.nodes[0].labelPosition").value("BELOW"));
-        mvc.perform(post("/api/maps").contentType("application/json").content(draft.replace("1900", "2401")))
+        mvc.perform(post("/api/maps").contentType("application/json").content(draft.replace("0.4", "0")))
             .andExpect(status().isBadRequest());
     }
 
