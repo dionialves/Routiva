@@ -125,3 +125,13 @@ dialog::backdrop { background:rgb(3 12 20 / 68%); }
   .element-appearance { grid-template-columns:1fr; gap:8px; }
   #element-form .settings-actions { gap:6px; }
 }
+
+#canvas .alignment-guide {
+  stroke:var(--cyan); stroke-width:1; stroke-dasharray:6 4;
+  vector-effect:non-scaling-stroke; pointer-events:none;
+}
+
+#canvas .selection-box {
+  fill:rgb(78 205 224 / 12%); stroke:var(--cyan); stroke-width:1;
+  vector-effect:non-scaling-stroke; pointer-events:none;
+}

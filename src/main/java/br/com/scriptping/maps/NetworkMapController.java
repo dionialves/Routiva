@@ -29,9 +29,10 @@ public class NetworkMapController {
     public record Camera(double x, double y, double scale) {}
 
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"width", "height"})
-    public record Layout(Publication publication, String name, Camera camera, List<Node> nodes, List<Link> links) {
+    public record Layout(Publication publication, String name, Camera camera, Integer minimumSeverity, List<Node> nodes, List<Link> links) {
         public Layout {
             if (publication == null) publication = Publication.PUBLICADO;
+            if (minimumSeverity == null) minimumSeverity = 0;
         }
     }
     public record Saved(String id, long revision, Layout layout, Long updatedAt) {}
@@ -99,7 +100,8 @@ public class NetworkMapController {
     public Saved save(@RequestBody Saved input) throws JsonProcessingException {
         var layout = input.layout();
         if (layout == null || layout.name() == null || layout.name().isBlank() || layout.name().length() > 120
-            || layout.nodes() == null || layout.links() == null) throw invalid();
+            || layout.nodes() == null || layout.links() == null
+            || layout.minimumSeverity() < 0 || layout.minimumSeverity() > 5) throw invalid();
         var camera = layout.camera();
         if (camera != null && (!Double.isFinite(camera.x()) || !Double.isFinite(camera.y())
             || !Double.isFinite(camera.scale()) || camera.scale() <= 0 || camera.scale() > 3)) throw invalid();

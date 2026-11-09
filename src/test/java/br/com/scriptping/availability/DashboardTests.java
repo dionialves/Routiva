@@ -81,6 +81,26 @@ class DashboardTests {
     }
 
     @Test
+    @org.springframework.transaction.annotation.Transactional
+    void savesMinimumMapSeverityAndRejectsInvalidValues() throws Exception {
+        String draft = """
+            {"layout":{"name":"Filtro","minimumSeverity":2,"nodes":[],"links":[]}}
+            """;
+        mvc.perform(post("/api/maps").contentType("application/json").content(draft))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.layout.minimumSeverity").value(2));
+        mvc.perform(get("/api/maps"))
+            .andExpect(jsonPath("$[0].layout.minimumSeverity").value(2));
+        for (String value : java.util.List.of("-1", "6")) {
+            mvc.perform(post("/api/maps").contentType("application/json")
+                .content(draft.replace("\"minimumSeverity\":2", "\"minimumSeverity\":" + value)))
+                .andExpect(status().isBadRequest());
+        }
+        mvc.perform(post("/api/maps").contentType("application/json")
+            .content(draft.replace("\"minimumSeverity\":2,", "")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.layout.minimumSeverity").value(0));
+    }
+
+    @Test
     void availabilityRouteIsAccessible() throws Exception {
         String html = mvc.perform(get("/disponibilidade")).andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);

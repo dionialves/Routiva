@@ -2,10 +2,12 @@
 
 const $ = id => document.getElementById(id);
 const labels = ['Sem dados', 'Sem incidentes', 'Não classificado', 'Informação', 'Atenção', 'Média', 'Alta', 'Desastre'];
-const colors = ['#687486', '#58bd83', '#a7a9c0', '#7499ff', '#ffc859', '#ffa059', '#e97659', '#ed4545'];
+const colors = ['#687486', '#58bd83', '#a7a9c0', '#7499ff', '#ffc859', '#ffa059', '#ff0000', '#ed4545'];
 let maps = [], groups = [], current, editing = false, tool = "select", selected, selectedLink, drag;
 let inventory = [], pendingNode, baseline;
 const past = [], future = [];
+const selection = new Set();
+let marquee;
 let states = new Map(), generation = 0, timer;
 
 async function api(path, body) {
@@ -25,14 +27,14 @@ function svg(tag, attributes) {
   return el;
 }
 
-function hostLevel(host) {
+function hostLevel(host, minimumSeverity = current?.layout.minimumSeverity ?? 0) {
   if (!host.incidents) return -2;
-  return host.incidents.reduce((level, issue) => Math.max(level, issue.severity), -1);
+  return host.incidents.reduce((level, issue) => issue.severity >= minimumSeverity ? Math.max(level, issue.severity) : level, -1);
 }
 
 function groupLevel(hosts) {
   if (!hosts.length) return -2;
-  const levels = hosts.map(hostLevel);
+  const levels = hosts.map(host => hostLevel(host));
   const worst = Math.max(...levels);
   return worst === -1 && levels.includes(-2) ? -2 : worst;
 }
@@ -46,28 +48,12 @@ function restore(source, destination) {
   if (!source.length) return;
   destination.push(JSON.stringify(current.layout));
   current.layout = JSON.parse(source.pop());
+  selection.clear();
   selected = selectedLink = drag = null;
   draw();
 }
 function nodeHosts(node) {
   return states.get(node.hostId ? 'host:' + node.hostId : node.groupId) || [];
-}
-function details() {
-  const node = current?.layout.nodes.find(n => n.id === selected);
-  $('detail').replaceChildren();
-  if (!node || editing) return;
-  const title = document.createElement('h2');
-  title.textContent = node.name;
-  $('detail').append(title);
-  if (!node.groupId && !node.hostId) return;
-  const hosts = [...nodeHosts(node)].sort((a,b) => hostLevel(b) - hostLevel(a));
-  if (!hosts.length) $('detail').append('Sem dados de incidentes disponíveis.');
-  for (const host of hosts) {
-    const row = document.createElement('p');
-    const issues = (host.incidents || []).map(i => labels[i.severity + 2] + ' — ' + i.name);
-    row.textContent = host.name + ' · ' + (issues.join(' / ') || labels[hostLevel(host) + 2]);
-    $('detail').append(row);
-  }
 }
 
 const labelPositions = {
@@ -84,6 +70,33 @@ function drawNode(group, name, position, fill, isSelected = false) {
     'stroke-width':3}), label);
 }
 
+function alignDraggedNode(node, x, y, nodes, scale) {
+  const peers = nodes.filter(other => other.id !== node.id);
+  const tolerance = 6 / scale;
+  const guides = [];
+  const position = {x:Math.round(x), y:Math.round(y)};
+  for (const axis of ['x', 'y']) {
+    const nearest = peers.reduce((best, other) =>
+      Math.abs(other[axis] - position[axis]) <= tolerance &&
+      (!best || Math.abs(other[axis] - position[axis]) < Math.abs(best[axis] - position[axis]))
+        ? other : best, null);
+    if (!nearest) continue;
+    position[axis] = nearest[axis];
+    guides.push(axis);
+  }
+  Object.assign(node, position);
+  return guides.map(axis => {
+    const otherAxis = axis === 'x' ? 'y' : 'x';
+    const aligned = peers.filter(other => other[axis] === node[axis]);
+    const values = [node[otherAxis], ...aligned.map(other => other[otherAxis])];
+    const from = Math.min(...values) - 24 / scale;
+    const to = Math.max(...values) + 24 / scale;
+    return axis === 'x'
+      ? {x1:node.x, y1:from, x2:node.x, y2:to}
+      : {x1:from, y1:node.y, x2:to, y2:node.y};
+  });
+}
+
 function draw() {
   const canvas = $('canvas');
   canvas.replaceChildren();
@@ -96,10 +109,13 @@ function draw() {
       $(id).setAttribute('aria-pressed', String(tool === mode));
     $('undo').disabled = !past.length;
     $('redo').disabled = !future.length;
-    $('delete-item').disabled = !selected && !selectedLink;
+    $('delete-item').disabled = !selection.size && !selected && !selectedLink;
     $('counts').textContent = nodes.length + ' elementos　│　' + links.length + ' conexões';
     $('hint').textContent = tool === 'connect' ? (selected ? 'Selecione o destino. Esc cancela.' : 'Selecione a origem. Esc cancela.')
-      : tool === 'pan' ? 'Arraste para mover o mapa.' : 'Selecione para mover ou excluir. Clique novamente para editar.';
+      : tool === 'pan' ? 'Arraste para mover o mapa.' : 'Arraste no fundo para selecionar vários. Shift, Ctrl ou ⌘ + clique adiciona ou remove. Arraste a seleção para mover.';
+  }
+  for (const guide of drag?.guides || []) {
+    canvas.append(svg('line', {...guide, class:'alignment-guide', 'aria-hidden':'true'}));
   }
   const byId = new Map(nodes.map(n => [n.id, n]));
   for (const link of links) {
@@ -110,7 +126,7 @@ function draw() {
       line.setAttribute('tabindex', 0);
       line.setAttribute('role', 'button');
       line.setAttribute('aria-label', 'Conexão entre ' + a.name + ' e ' + b.name);
-      line.onclick = () => { selectedLink = link; selected = null; draw(); };
+      line.onclick = () => { selectedLink = link; selected = null; selection.clear(); draw(); };
       line.onkeydown = e => { if (e.key === 'Enter') line.onclick(); };
     }
     canvas.append(line);
@@ -119,33 +135,64 @@ function draw() {
     const monitored = !editing && (n.hostId || n.groupId);
     const level = monitored ? groupLevel(nodeHosts(n)) + 2 : 1;
     const description = monitored ? n.name + ' · ' + labels[level] : n.name;
-    const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')', tabindex:0, role:'button',
-      'aria-label':description});
+    const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
+      ...(editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
-    drawNode(g, n.name, n.labelPosition, editing || monitored ? colors[level] : colors[0], selected === n.id);
+    drawNode(g, n.name, n.labelPosition, editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id);
     g.onkeydown = event => {
-      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n); }
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n, event.shiftKey || event.ctrlKey || event.metaKey); }
     };
     g.onpointerdown = event => {
       if (event.button !== 0 || (editing && tool === 'pan')) return;
       if (editing && tool === 'select') {
+        const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+        const wasSingle = selection.size === 1 && selection.has(n.id);
+        if (additive) {
+          choose(n, true);
+          return;
+        }
+        if (!selection.has(n.id)) {
+          selection.clear();
+          selection.add(n.id);
+        }
+        selected = n.id;
+        selectedLink = null;
         canvas.setPointerCapture(event.pointerId);
         const point = new DOMPoint(event.clientX,event.clientY).matrixTransform(canvas.getScreenCTM().inverse());
-        drag = {node:n, dx:n.x-point.x, dy:n.y-point.y, pointer:event.pointerId, x:event.clientX, y:event.clientY, moved:false};
+        drag = {node:n, dx:n.x-point.x, dy:n.y-point.y, pointer:event.pointerId, x:event.clientX, y:event.clientY, moved:false, wasSingle,
+          positions:current.layout.nodes.filter(node => selection.has(node.id))
+            .map(node => ({node, x:node.x, y:node.y}))};
+        draw();
         return;
       }
       choose(n);
     };
     canvas.append(g);
   }
-  details();
+  if (marquee) {
+    canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
+      y:Math.min(marquee.start.y, marquee.end.y),
+      width:Math.abs(marquee.end.x - marquee.start.x),
+      height:Math.abs(marquee.end.y - marquee.start.y), class:'selection-box', 'aria-hidden':'true'}));
+  }
 }
 
-function choose(node) {
-  if (editing && tool === 'pan') return;
+function choose(node, additive = false) {
+  if (!editing || tool === 'pan') return;
   const origin = selected;
+  if (tool === 'select' && additive) {
+    if (selection.has(node.id)) selection.delete(node.id);
+    else selection.add(node.id);
+    selected = selection.values().next().value || null;
+    selectedLink = null;
+    draw();
+    return;
+  }
+  const wasSingle = selection.size === 1 && selection.has(node.id);
+  selection.clear();
+  selection.add(node.id);
   selected = node.id;
   selectedLink = null;
   if (editing && tool === 'connect' && origin && origin !== node.id) {
@@ -155,7 +202,7 @@ function choose(node) {
       current.layout.links.push({from:origin, to:node.id});
     }
     tool = 'select';
-  } else if (editing && tool === 'select' && origin === node.id) {
+  } else if (editing && tool === 'select' && wasSingle && origin === node.id) {
     openElement(node);
   }
   draw();
@@ -258,7 +305,33 @@ viewport.onpointermove = event => {
   resizeCanvas();
 };
 viewport.onlostpointercapture = () => { pan = null; };
+$('canvas').onpointerdown = event => {
+  if (!editing || tool !== 'select' || event.button !== 0 || event.target !== $('canvas')) return;
+  const point = new DOMPoint(event.clientX, event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());
+  marquee = {pointer:event.pointerId, start:point, end:point,
+    initial:new Set(event.shiftKey || event.ctrlKey || event.metaKey ? selection : [])};
+  selectedLink = null;
+  $('canvas').setPointerCapture(event.pointerId);
+  selection.clear();
+  for (const id of marquee.initial) selection.add(id);
+  selected = selection.values().next().value || null;
+  draw();
+};
 $('canvas').onpointermove = event => {
+  if (marquee?.pointer === event.pointerId) {
+    marquee.end = new DOMPoint(event.clientX, event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());
+    selection.clear();
+    for (const id of marquee.initial) selection.add(id);
+    for (const node of current.layout.nodes) {
+      if (node.x >= Math.min(marquee.start.x, marquee.end.x) &&
+          node.x <= Math.max(marquee.start.x, marquee.end.x) &&
+          node.y >= Math.min(marquee.start.y, marquee.end.y) &&
+          node.y <= Math.max(marquee.start.y, marquee.end.y)) selection.add(node.id);
+    }
+    selected = selection.values().next().value || null;
+    draw();
+    return;
+  }
   if (!drag || drag.pointer !== event.pointerId) return;
   if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
   const point = new DOMPoint(event.clientX, event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());
@@ -266,17 +339,36 @@ $('canvas').onpointermove = event => {
   selected = drag.node.id;
   selectedLink = null;
   drag.moved = true;
-  drag.node.x = Math.round(point.x + drag.dx);
-  drag.node.y = Math.round(point.y + drag.dy);
+  drag.guides = alignDraggedNode(drag.node, point.x + drag.dx, point.y + drag.dy,
+    current.layout.nodes.filter(node => node === drag.node || !selection.has(node.id)), camera.scale);
+  const origin = drag.positions.find(position => position.node === drag.node);
+  const dx = drag.node.x - origin.x, dy = drag.node.y - origin.y;
+  for (const position of drag.positions) {
+    position.node.x = position.x + dx;
+    position.node.y = position.y + dy;
+  }
   draw();
 };
 $('canvas').onpointerup = event => {
+  if (marquee?.pointer === event.pointerId) {
+    marquee = null;
+    draw();
+    return;
+  }
   if (drag?.pointer !== event.pointerId) return;
-  const {node, moved} = drag;
+  const {node, moved, wasSingle} = drag;
   drag = null;
-  if (!moved) choose(node);
+  if (!moved && wasSingle) openElement(node);
+  draw();
 };
-$('canvas').onlostpointercapture = () => { drag = null; };
+function endDrag() {
+  if (!drag && !marquee) return;
+  drag = null;
+  marquee = null;
+  draw();
+}
+$('canvas').onlostpointercapture = endDrag;
+$('canvas').onpointercancel = endDrag;
 
 async function refresh(token) {
   if (!current || editing || token !== generation) return;
@@ -306,13 +398,14 @@ function openMap(map, edit = false) {
   generation++;
   current = map ? JSON.parse(JSON.stringify(map)) : null;
   editing = edit;
+  selection.clear();
+  marquee = null;
   selected = drag = null;
   tool = 'select';
   selectedLink = null;
   past.length = future.length = 0;
   baseline = map ? JSON.stringify({...current.layout, camera:current.layout.camera ?? null}) : null;
   states.clear();
-  $('detail').replaceChildren();
   $('editor').hidden = !edit;
   $('library').hidden = !!map;
   $('workspace').hidden = !map;
@@ -486,6 +579,7 @@ function showProperties() {
   const layout = current?.layout;
   $('map-error').textContent = '';
   $('name').value = layout?.name || '';
+  $('minimum-severity').value = String(layout?.minimumSeverity ?? 0);
   $('initial-view').querySelector('[value=saved]').hidden = !layout.camera;
   $('initial-view').value = followingFit ? 'fit' : 'current';
   $('map-dialog').showModal();
@@ -499,6 +593,7 @@ $('map-form').onsubmit = async event => {
   if (!name) { $('map-error').textContent = 'Informe o nome do mapa.'; return; }
   checkpoint();
   current.layout.name = name;
+  current.layout.minimumSeverity = Number($('minimum-severity').value);
   const mode = $('initial-view').value;
   if (mode === 'fit') {
     current.layout.camera = null;
@@ -524,7 +619,9 @@ $('edit').onclick = () => openMap(current, true);
 $('cancel').onclick = () => { if (mayLeave()) openMap(maps.find(m => m.id === current.id)); };
 
 function setTool(mode) {
+  drag = marquee = null;
   tool = mode;
+  selection.clear();
   selected = selectedLink = null;
   draw();
 }
@@ -621,6 +718,8 @@ $('element-form').onsubmit = event => {
   if (pendingNode) current.layout.nodes.push(node);
   pendingNode = null;
   selected = node.id;
+  selection.clear();
+  selection.add(node.id);
   selectedLink = null;
   tool = 'select';
   $('element-dialog').close();
@@ -629,13 +728,15 @@ $('element-form').onsubmit = event => {
   refresh(++generation);
 };
 function deleteSelection() {
-  if ((!selected && !selectedLink) || !confirm(selectedLink ? 'Excluir a conexão?' : 'Excluir o elemento e suas conexões?')) return;
+  if ((!selection.size && !selected && !selectedLink) || !confirm(selectedLink ? 'Excluir a conexão?' : selection.size > 1 ? 'Excluir os elementos selecionados e suas conexões?' : 'Excluir o elemento e suas conexões?')) return;
   checkpoint();
   if (selectedLink) current.layout.links = current.layout.links.filter(l => l !== selectedLink);
   else {
-    current.layout.nodes = current.layout.nodes.filter(n => n.id !== selected);
-    current.layout.links = current.layout.links.filter(l => l.from !== selected && l.to !== selected);
+    const ids = new Set(selection.size ? selection : [selected]);
+    current.layout.nodes = current.layout.nodes.filter(n => !ids.has(n.id));
+    current.layout.links = current.layout.links.filter(l => !ids.has(l.from) && !ids.has(l.to));
   }
+  selection.clear();
   selected = selectedLink = null;
   if ($('element-dialog').open) $('element-dialog').close();
   draw();
