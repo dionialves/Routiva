@@ -2,7 +2,7 @@
 
 const $ = id => document.getElementById(id);
 const labels = ['Sem dados', 'Sem incidentes', 'Não classificado', 'Informação', 'Atenção', 'Média', 'Alta', 'Desastre'];
-const colors = ['#687486', '#58bd83', '#a7a9c0', '#7499ff', '#ffc859', '#ffa059', '#ff0000', '#ed4545'];
+const colors = ['#687486', '#58bd83', '#a7a9c0', '#00bbd3', '#ffc859', '#ffa059', '#ff0000', '#ed4545'];
 let maps = [], groups = [], current, editing = false, tool = "select", selected, selectedLink, drag;
 let inventory = [], pendingNode, baseline;
 const past = [], future = [];
