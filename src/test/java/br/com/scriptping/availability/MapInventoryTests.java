@@ -1,6 +1,8 @@
 package br.com.scriptping.availability;
 
 import br.com.scriptping.maps.NetworkMapController;
+import br.com.scriptping.maps.NetworkMapService;
+import br.com.scriptping.maps.NetworkMapModels;
 import br.com.scriptping.zabbix.Host;
 import br.com.scriptping.zabbix.ZabbixClient;
 import br.com.scriptping.zabbix.ZabbixService;
@@ -17,7 +19,7 @@ class MapInventoryTests {
     void resolvesHostAndGroupBindingsFromSelectedInventoryInOneIncidentQuery() {
         var inventory = mock(ZabbixService.class);
         var zabbix = mock(ZabbixClient.class);
-        var controller = new NetworkMapController(null, null, inventory, zabbix);
+        var controller = new NetworkMapController(new NetworkMapService(null, null, inventory, zabbix));
         var group = new Host.Group("g", "Rede");
         when(inventory.hosts()).thenReturn(List.of(
             new Host("1", "Switch", "10.0.0.1", List.of(group)),
@@ -25,9 +27,9 @@ class MapInventoryTests {
             new Host("3", "Outro", "", List.of())));
         var incident = new ZabbixClient.Incident("Temperatura", 4);
         when(zabbix.activeIncidents(List.of("1", "2"))).thenReturn(Map.of("1", List.of(), "2", List.of(incident)));
-        assertThat(controller.hosts()).contains(new NetworkMapController.HostOption("2", "Router", "10.0.0.2"));
-        var result = controller.states(new NetworkMapController.Targets(Set.of("g"), Set.of("1", "2", "unknown")));
-        assertThat(result).extracting(NetworkMapController.HostState::id).containsExactly("1", "2");
+        assertThat(controller.hosts()).contains(new NetworkMapModels.HostOption("2", "Router", "10.0.0.2"));
+        var result = controller.states(new NetworkMapModels.Targets(Set.of("g"), Set.of("1", "2", "unknown")));
+        assertThat(result).extracting(NetworkMapModels.HostState::id).containsExactly("1", "2");
         assertThat(result.getLast().incidents()).containsExactly(incident);
         verify(zabbix).activeIncidents(List.of("1", "2"));
     }
