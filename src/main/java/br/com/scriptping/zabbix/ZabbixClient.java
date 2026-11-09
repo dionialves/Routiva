@@ -76,6 +76,39 @@ public class ZabbixClient {
         return fetchInventory(groupIds, hostIds, true);
     }
 
+    public record Incident(String name, int severity) {}
+
+    public synchronized Map<String, List<Incident>> activeIncidents(List<String> hostIds) {
+        var result = new HashMap<String, List<Incident>>();
+        if (hostIds.isEmpty()) return result;
+        detectVersion();
+        if (session == null) login();
+        var visible = authenticatedRequest("host.get", Map.of("hostids", hostIds,
+            "output", List.of("hostid"), "filter", Map.of("status", "0")));
+        visible.forEach(h -> result.put(h.get("hostid").asText(), new ArrayList<>()));
+        if (result.isEmpty()) return result;
+        var problems = authenticatedRequest("problem.get", Map.of("hostids", result.keySet(),
+            "source", 0, "object", 0, "recent", false, "output", List.of("objectid", "name", "severity")));
+        var byTrigger = new HashMap<String, List<Incident>>();
+        for (var problem : problems) {
+            byTrigger.computeIfAbsent(problem.get("objectid").asText(), key -> new ArrayList<>())
+                .add(new Incident(problem.get("name").asText(), problem.get("severity").asInt()));
+        }
+        if (!byTrigger.isEmpty()) {
+            var triggers = authenticatedRequest("trigger.get", Map.of("triggerids", byTrigger.keySet(),
+                "output", List.of("triggerid"), "selectHosts", List.of("hostid")));
+            for (var trigger : triggers) {
+                var incidents = byTrigger.remove(trigger.get("triggerid").asText());
+                for (var host : trigger.get("hosts")) {
+                    var list = result.get(host.get("hostid").asText());
+                    if (list != null) list.addAll(incidents);
+                }
+            }
+            if (!byTrigger.isEmpty()) throw new IllegalStateException("Incidentes sem host identificado");
+        }
+        return result;
+    }
+
     public boolean configured() {
         return !url.isBlank() && !username.isBlank() && !password.isBlank();
     }

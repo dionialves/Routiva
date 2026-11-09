@@ -6,6 +6,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 public class DashboardController {
 
+    @GetMapping("/mapas")
+    public String maps() { return "maps"; }
+
     @GetMapping("/")
     public String home() {
         return "redirect:/disponibilidade";

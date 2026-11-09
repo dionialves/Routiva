@@ -171,3 +171,11 @@ UPDATE ping_aggregation_progress SET raw_cursor_id=cursor_id WHERE raw_cursor_id
 -- Bounded receipt retention follows this order without scanning all receipts.
 CREATE INDEX IF NOT EXISTS idx_collector_batch_retention
 ON collector_batch(committed_at, collector_id, batch_id);
+
+CREATE TABLE IF NOT EXISTS network_map (
+    id VARCHAR(36) PRIMARY KEY,
+    revision BIGINT NOT NULL,
+    layout TEXT NOT NULL
+);
+
+ALTER TABLE network_map ADD COLUMN IF NOT EXISTS updated_at_ms BIGINT;

@@ -183,6 +183,24 @@ class ZabbixClientTests {
         }
     }
 
+    @Test
+    void mapsActiveNonIcmpProblemsUsingEventSeverityAndClearsRecoveredProblems() throws Exception {
+        try (var api = new FakeApi(false)) {
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            api.problems = """
+                [{"objectid":"42","name":"Temperatura alta","severity":"4"}]
+                """;
+            api.triggers = """
+                [{"triggerid":"42","hosts":[{"hostid":"1"}]}]
+                """;
+            var states = client.activeIncidents(List.of("1", "2"));
+            assertThat(states.get("1")).containsExactly(new ZabbixClient.Incident("Temperatura alta", 4));
+            assertThat(states).doesNotContainKey("2");
+            api.problems = "[]";
+            assertThat(client.activeIncidents(List.of("1")).get("1")).isEmpty();
+        }
+    }
+
     private static class FakeApi implements AutoCloseable {
 
         final HttpServer server;
@@ -193,6 +211,7 @@ class ZabbixClientTests {
         volatile boolean alwaysExpire;
         String inventory = INVENTORY;
         com.fasterxml.jackson.databind.JsonNode lastHostParams;
+        String problems = "[]";
         String triggers = "[]";
         final String version;
 
@@ -257,6 +276,7 @@ class ZabbixClientTests {
                             "{\"error\":{\"code\":-32602,\"data\":\"Session terminated, re-login, please.\"}}";
                     } else if (method.equals("trigger.get")) response =
                         "{\"result\":" + triggers + "}";
+                    else if (method.equals("problem.get")) response = "{\"result\":" + problems + "}";
                     else if (method.equals("hostgroup.get")) response = "{\"result\":[{\"groupid\":\"2\",\"name\":\"Zulu\"},{\"groupid\":\"1\",\"name\":\"alpha\"}]}";
                     else response = version.startsWith("6.0.") ? inventory.replace("hostgroups", "groups") : inventory;
                 }

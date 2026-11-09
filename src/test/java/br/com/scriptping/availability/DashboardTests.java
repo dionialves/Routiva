@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import org.junit.jupiter.api.Test;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +32,52 @@ import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 )
 @AutoConfigureMockMvc
 class DashboardTests {
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void savesAndReopensTopologyAndRejectsStaleEdits() throws Exception {
+        mvc.perform(get("/mapas")).andExpect(status().isOk()).andExpect(view().name("maps"));
+        String draft = """
+            {"layout":{"name":"Backbone","nodes":[{"groupId":"a","name":"A","x":40,"y":80},
+            {"groupId":"b","name":"B","x":60,"y":90}],"links":[{"from":"a","to":"b"}]}}
+            """;
+        String saved = mvc.perform(post("/api/maps").contentType("application/json").content(draft))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(1))
+            .andExpect(jsonPath("$.layout.publication").value("PUBLICADO"))
+            .andExpect(jsonPath("$.updatedAt").isNumber())
+            .andExpect(jsonPath("$.layout.width").value(1200))
+            .andExpect(jsonPath("$.layout.height").value(700))
+            .andExpect(jsonPath("$.layout.nodes[0].id").value("a"))
+            .andReturn().getResponse().getContentAsString();
+        mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.links[0].to").value("b"));
+        mvc.perform(post("/api/maps").contentType("application/json").content(saved.replace("PUBLICADO", "RASCUNHO")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(2));
+        mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.publication").value("RASCUNHO"));
+        mvc.perform(post("/api/maps").contentType("application/json").content(saved.replace("PUBLICADO", "EM_EDICAO")))
+            .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/maps").contentType("application/json").content(saved))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void savesCustomCanvasWithLinkedUnassignedAndGroupedElements() throws Exception {
+        String draft = """
+            {"layout":{"name":"Rede","width":2400,"height":1000,
+            "nodes":[{"id":"one","name":"Centro","x":1900,"y":840},
+                     {"id":"two","groupId":"a","name":"POP","x":1500,"y":720},
+                     {"id":"three","hostId":"router","labelPosition":"RIGHT","name":"Host","x":300,"y":80}],
+            "links":[{"from":"one","to":"two"}]}}
+            """;
+        mvc.perform(post("/api/maps").contentType("application/json").content(draft))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.layout.width").value(2400))
+            .andExpect(jsonPath("$.layout.links[0].from").value("one"));
+        mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.nodes[2].hostId").value("router"))
+            .andExpect(jsonPath("$[0].layout.nodes[2].labelPosition").value("RIGHT"))
+            .andExpect(jsonPath("$[0].layout.nodes[0].labelPosition").value("BELOW"));
+        mvc.perform(post("/api/maps").contentType("application/json").content(draft.replace("1900", "2401")))
+            .andExpect(status().isBadRequest());
+    }
 
     @Test
     void availabilityRouteIsAccessible() throws Exception {

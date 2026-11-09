@@ -824,7 +824,7 @@ main.settings-page { max-width: 1100px; }
 .connection-form { display: grid; gap: 16px; max-width: 640px; }
 .settings-panel label:not(.selection-row):not(.selection-all) { display: grid; gap: 8px; }
 .settings-panel input:not([type=checkbox]), .settings-panel select { width: 100%; min-height: 42px; padding: 10px; border: 1px solid #34495e; border-radius: 6px; font: inherit; }
-.settings-panel button { background: #254c79; color: white; border: 0; padding: 12px 18px; border-radius: 6px; cursor: pointer; font: inherit; }
+.settings-panel button, .map-action { background: #254c79; color: white; border: 0; padding: 12px 18px; border-radius: 6px; cursor: pointer; font: inherit; }
 .settings-panel button:disabled { opacity: .5; cursor: default; }
 .settings-panel input[type=checkbox] { width: 18px; height: 18px; flex-shrink: 0; }
 .selection-list { max-height: 480px; overflow: auto; margin: 16px 0; border-top: 1px solid var(--border); }

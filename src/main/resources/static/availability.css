@@ -124,16 +124,16 @@
 /* Searchable host-group selector. */
 .availability-page .group-filter { display:flex; flex-direction:column; gap:8px; min-width:230px; font-size:12px; color:#b0c1d2; }
 .group-picker { position:relative; }
-.availability-page .group-picker-trigger { display:flex; align-items:center; justify-content:space-between; gap:14px; width:100%; height:40px; padding:9px 12px; background:#081c2c; border:1px solid #28485e; border-radius:8px; color:#f8fafc; font-size:13px; text-align:left; }
+.group-picker .group-picker-trigger { display:flex; align-items:center; justify-content:space-between; gap:14px; width:100%; height:40px; padding:9px 12px; background:#081c2c; border:1px solid #28485e; border-radius:8px; color:#f8fafc; font-size:13px; text-align:left; }
 #group-selection { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:320px; }
 .group-picker-panel { position:absolute; top:calc(100% + 6px); left:0; width:100%; min-width:230px; z-index:35; padding:8px; border:1px solid #31556c; border-radius:8px; background:#091c2b; }
 .group-picker-panel[hidden] { display:none; }
 .group-picker-panel input { width:100%; height:38px; padding:8px 10px; border:1px solid #31556c; border-radius:5px; background:#071725; color:#f8fafc; font:inherit; font-size:13px; margin-bottom:7px; }
 .group-picker-panel input::placeholder { color:#94a3b8; }
 .group-picker-results { max-height:260px; overflow-y:auto; overscroll-behavior:contain; }
-.availability-page .group-picker-results button { display:block; width:100%; border:0; border-radius:4px; background:transparent; text-align:left; font-size:13px; padding:9px 10px; color:#d5e4f0; overflow-wrap:anywhere; }
-.availability-page .group-picker-results button[aria-selected=true] { color:#00d1ff; background:#103348; }
-.availability-page .group-picker-results button:hover,.availability-page .group-picker-results button.is-active { background:#16445d; color:#fff; }
+.group-picker .group-picker-results button { display:block; width:100%; border:0; border-radius:4px; background:transparent; text-align:left; font-size:13px; padding:9px 10px; color:#d5e4f0; overflow-wrap:anywhere; }
+.group-picker .group-picker-results button[aria-selected=true] { color:#00d1ff; background:#103348; }
+.group-picker .group-picker-results button:hover,.group-picker .group-picker-results button.is-active { background:#16445d; color:#fff; }
 .group-picker-panel p { margin:10px; font-size:12px; color:#94a3b8; }
 @media(max-width:760px) { .availability-page .group-filter { min-width:0; width:100%; } .group-picker-panel { min-width:0; } }
 
