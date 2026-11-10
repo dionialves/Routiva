@@ -14,7 +14,7 @@ class HistoricalAvailabilityTests extends MinuteTestSupport {
         drain(1);
         for (var period : AvailabilityPeriod.OPTIONS) {
             var report = queries.viewAt(List.of(host), period.minutes(), now).report();
-            assertThat(report.series()).hasSizeBetween(5, 50);
+            assertThat(report.series()).hasSizeBetween(5, 181);
             assertThat(report.total().technical()).isEqualTo(50d);
             assertThat(report.series().stream().mapToLong(p -> p.metrics().totalPings()).sum()).isEqualTo(2);
             assertThat(report.series().getFirst().from()).isEqualTo(report.from());
@@ -96,7 +96,7 @@ class HistoricalAvailabilityTests extends MinuteTestSupport {
         }
     }
 
-    @Test void calendarMonthsLeapYearsAndMondayWeeksUseSaoPaulo() {
+    @Test void calendarMonthsAndDayGroupsUseSaoPaulo() {
         long leap = ZonedDateTime.of(2024,2,29,13,17,0,0,AvailabilityPeriod.ZONE).toInstant().toEpochMilli();
         var year = AvailabilityPeriod.of(525600);
         assertThat(Instant.ofEpochMilli(year.from(leap)).atZone(AvailabilityPeriod.ZONE).toLocalDate())
@@ -108,10 +108,14 @@ class HistoricalAvailabilityTests extends MinuteTestSupport {
             assertThat(start.getHour()).isZero();
             assertThat(start.plusMonths(1).toInstant().toEpochMilli()).isEqualTo(interval.to());
         }
-        var weeks = AvailabilityPeriod.of(129600);
-        for (var interval : weeks.intervals(weeks.from(leap),leap)) if (!interval.partial())
-            assertThat(Instant.ofEpochMilli(interval.from()).atZone(AvailabilityPeriod.ZONE).getDayOfWeek())
-                .isEqualTo(DayOfWeek.MONDAY);
+        for (int months : List.of(3, 6)) {
+            var period = AvailabilityPeriod.of(months * 43200);
+            for (var interval : period.intervals(period.from(leap), leap)) if (!interval.partial()) {
+                var start = Instant.ofEpochMilli(interval.from()).atZone(AvailabilityPeriod.ZONE);
+                assertThat(start.toLocalTime()).isEqualTo(LocalTime.MIDNIGHT);
+                assertThat(start.plusDays(months / 3).toInstant().toEpochMilli()).isEqualTo(interval.to());
+            }
+        }
     }
 
     @Test void rollupsRespectHostTargetSelectionAndClipCalendarEdges() {

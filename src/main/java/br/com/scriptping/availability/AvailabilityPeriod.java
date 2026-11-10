@@ -1,7 +1,6 @@
 package br.com.scriptping.availability;
 
 import java.time.*;
-import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 
 /** Calendar periods and chart boundaries share one explicit business timezone. */
@@ -11,16 +10,16 @@ public record AvailabilityPeriod(int minutes, String label, int bucketMinutes, i
         new AvailabilityPeriod(5, "Últimos 5 minutos", 1, 0),
         new AvailabilityPeriod(15, "Últimos 15 minutos", 1, 0),
         new AvailabilityPeriod(30, "Últimos 30 minutos", 1, 0),
-        new AvailabilityPeriod(60, "Última 1 hora", 2, 0),
-        new AvailabilityPeriod(180, "Últimas 3 horas", 5, 0),
-        new AvailabilityPeriod(360, "Últimas 6 horas", 10, 0),
-        new AvailabilityPeriod(720, "Últimas 12 horas", 15, 0),
-        new AvailabilityPeriod(1440, "Último 1 dia", 30, 0),
-        new AvailabilityPeriod(2880, "Últimos 2 dias", 60, 0),
-        new AvailabilityPeriod(10080, "Últimos 7 dias", 240, 0),
-        new AvailabilityPeriod(43200, "Últimos 30 dias", 1440, 0),
-        new AvailabilityPeriod(129600, "Últimos 3 meses", 10080, 3),
-        new AvailabilityPeriod(259200, "Últimos 6 meses", 10080, 6),
+        new AvailabilityPeriod(60, "Última 1 hora", 1, 0),
+        new AvailabilityPeriod(180, "Últimas 3 horas", 1, 0),
+        new AvailabilityPeriod(360, "Últimas 6 horas", 5, 0),
+        new AvailabilityPeriod(720, "Últimas 12 horas", 10, 0),
+        new AvailabilityPeriod(1440, "Último 1 dia", 10, 0),
+        new AvailabilityPeriod(2880, "Últimos 2 dias", 30, 0),
+        new AvailabilityPeriod(10080, "Últimos 7 dias", 60, 0),
+        new AvailabilityPeriod(43200, "Últimos 30 dias", 720, 0),
+        new AvailabilityPeriod(129600, "Últimos 3 meses", 1440, 3),
+        new AvailabilityPeriod(259200, "Últimos 6 meses", 2880, 6),
         new AvailabilityPeriod(525600, "Último 1 ano", 0, 12),
         new AvailabilityPeriod(1051200, "Últimos 2 anos", 0, 24));
 
@@ -39,10 +38,10 @@ public record AvailabilityPeriod(int minutes, String label, int bucketMinutes, i
     public String grouping() {
         return switch (bucketMinutes) {
             case 0 -> "Mensal";
-            case 10080 -> "Semanal";
+            case 2880 -> "2 dias";
             case 1440 -> "Diário";
             case 60 -> "1 hora";
-            case 240 -> "4 horas";
+            case 720 -> "12 horas";
             case 1 -> "1 minuto";
             default -> bucketMinutes + " minutos";
         };
@@ -53,9 +52,11 @@ public record AvailabilityPeriod(int minutes, String label, int bucketMinutes, i
         var result = new ArrayList<Interval>();
         var start = Instant.ofEpochMilli(from).atZone(ZONE);
         if (bucketMinutes == 0) start = start.withDayOfMonth(1).toLocalDate().atStartOfDay(ZONE);
-        else if (bucketMinutes == 10080) start = start.toLocalDate()
-            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay(ZONE);
-        else if (bucketMinutes == 1440) start = start.toLocalDate().atStartOfDay(ZONE);
+        else if (bucketMinutes >= 1440) {
+            var date = start.toLocalDate();
+            long daysPerBucket = bucketMinutes / 1440;
+            start = date.minusDays(Math.floorMod(date.toEpochDay(), daysPerBucket)).atStartOfDay(ZONE);
+        }
         else {
             var midnight = start.toLocalDate().atStartOfDay(ZONE);
             long elapsed = Duration.between(midnight, start).toMinutes();
@@ -63,8 +64,7 @@ public record AvailabilityPeriod(int minutes, String label, int bucketMinutes, i
         }
         while (start.toInstant().toEpochMilli() < to) {
             var next = bucketMinutes == 0 ? start.plusMonths(1)
-                : bucketMinutes == 10080 ? start.plusWeeks(1)
-                : bucketMinutes == 1440 ? start.plusDays(1) : start.plusMinutes(bucketMinutes);
+                : bucketMinutes >= 1440 ? start.plusDays(bucketMinutes / 1440) : start.plusMinutes(bucketMinutes);
             long a = start.toInstant().toEpochMilli(), b = next.toInstant().toEpochMilli();
             result.add(new Interval(Math.max(a, from), Math.min(b, to), a < from || b > to));
             start = next;

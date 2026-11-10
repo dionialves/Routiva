@@ -7,7 +7,7 @@ import static br.com.scriptping.availability.HostAvailabilityService.*;
 /** Immutable, durable generation. Raw sums preserve weighting for every host selection. */
 public record AvailabilitySnapshot(int format, String version, long builtAt, long to,
     IndicatorLoadStatus load, List<Host> hosts, Map<Integer, PeriodData> periods) {
-    public static final int FORMAT = 1;
+    public static final int FORMAT = 2;
 
     public AvailabilitySnapshot {
         hosts = List.copyOf(hosts);
