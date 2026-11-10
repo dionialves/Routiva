@@ -92,15 +92,14 @@ public class ZabbixClient {
             if (target.getValue().isEmpty()) continue;
             var rows = authenticatedRequest("host.get", Map.of(target.getKey(), target.getValue(),
                 "output", List.of("hostid", "name", "status"),
-                legacyGroups ? "selectGroups" : "selectHostGroups", List.of("groupid", "name"),
-                "selectInterfaces", List.of("available")));
+                legacyGroups ? "selectGroups" : "selectHostGroups", List.of("groupid", "name")));
             for (var row : rows) {
                 var groups = new ArrayList<Host.Group>();
                 for (var group : row.path(legacyGroups ? "groups" : "hostgroups"))
                     groups.add(new Host.Group(group.path("groupid").asText(), group.path("name").asText()));
-                boolean available = false;
-                for (var iface : row.path("interfaces")) available |= iface.path("available").asInt() == 1;
-                String monitoring = row.path("status").asInt() != 0 ? "disabled" : available ? "monitored" : "unknown";
+                // Interface availability does not describe monitoring status (e.g. ICMP-only hosts).
+                // Map health is determined by active incidents after applying the map threshold.
+                String monitoring = row.path("status").asInt() != 0 ? "disabled" : "monitored";
                 var host = new MapHost(row.path("hostid").asText(), row.path("name").asText(), List.copyOf(groups), monitoring);
                 hosts.put(host.id(), host);
             }
