@@ -33,10 +33,14 @@ test('legacy maps include all severities by default', () => {
   assert.equal(vm.runInContext('hostLevel(host)', context), 0);
 });
 
-test('POP severity can include every active event independently of display threshold', () => {
-  context.current = {layout: {minimumSeverity: 5}};
-  context.hosts = [host([2])];
-  assert.equal(vm.runInContext('groupLevel(hosts, 0)', context), 2);
-  context.hosts = [{incidents: [], monitoring: 'unknown'}];
-  assert.equal(vm.runInContext('groupLevel(hosts, 0)', context), -2);
+test('POP colors respect map threshold, including information and unknown monitoring', () => {
+  context.current = {layout: {minimumSeverity: 1}};
+  context.hosts = [host([0])];
+  assert.equal(vm.runInContext('groupLevel(hosts)', context), -1);
+  context.hosts.push(host([1]));
+  assert.equal(vm.runInContext('groupLevel(hosts)', context), 1);
+  context.current.layout.minimumSeverity = 5;
+  assert.equal(vm.runInContext('groupLevel(hosts)', context), -1);
+  context.hosts = [{incidents: [{severity: 0}], monitoring: 'unknown'}];
+  assert.equal(vm.runInContext('groupLevel(hosts)', context), -2);
 });

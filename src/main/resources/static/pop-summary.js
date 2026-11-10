@@ -1,16 +1,17 @@
 'use strict';
 
-// Keep aggregation independent of the DOM and of map severity display filters.
-function summarizePop(hosts) {
+// Apply the map threshold before calculating counts, event totals and worst severity.
+function summarizePop(hosts, minimumSeverity = 0) {
   const unique = [...new Map(hosts.map(host => [host.id, host])).values()];
   const events = new Map();
   let affected = 0, operational = 0, disabled = 0, unknown = 0;
   for (const host of unique) {
-    if (host.incidents?.length) affected++;
+    const incidents = (host.incidents || []).filter(issue => issue.severity >= minimumSeverity);
+    if (incidents.length) affected++;
     if (host.monitoring === 'disabled') disabled++;
     else if (host.monitoring !== 'monitored' || !host.incidents) unknown++;
-    else if (!host.incidents.length) operational++;
-    for (const issue of host.incidents || []) {
+    else if (!incidents.length) operational++;
+    for (const issue of incidents) {
       const key = issue.eventId || `${host.id}:${issue.name}:${issue.openedAt}`;
       if (!events.has(key)) events.set(key, {...issue, hosts: new Set()});
       events.get(key).hosts.add(host.name);
@@ -44,8 +45,8 @@ function popIcon(name, size = 16) {
 }
 
 class PopSummary {
-  constructor({stage, hosts, groupName, freshness, colors, labels}) {
-    Object.assign(this, {stage, hosts, groupName, freshness, colors, labels});
+  constructor({stage, hosts, groupName, freshness, colors, labels, minimumSeverity = () => 0}) {
+    Object.assign(this, {stage, hosts, groupName, freshness, colors, labels, minimumSeverity});
     this.box = document.createElement('section');
     this.box.className = 'pop-summary';
     this.box.id = 'map-pop-summary';
@@ -129,7 +130,7 @@ class PopSummary {
   }
   render() {
     if (!this.node) return;
-    const summary = summarizePop(this.hosts(this.node));
+    const summary = summarizePop(this.hosts(this.node), this.minimumSeverity?.() ?? 0);
     const fresh = this.freshness();
     const el = (tag, text, className) => {
       const item = document.createElement(tag);

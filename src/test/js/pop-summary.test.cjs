@@ -119,14 +119,14 @@ class PopElement {
   }
 }
 
-function renderPreview(hosts, fresh = {updatedAt: Date.now(), failed: false}) {
+function renderPreview(hosts, fresh = {updatedAt: Date.now(), failed: false}, minimumSeverity = 0) {
   const dom = {createElement: tag => new PopElement(tag), createElementNS: (_, tag) => new PopElement(tag)};
-  const preview = vm.createContext({document: dom, hosts, fresh});
+  const preview = vm.createContext({document: dom, hosts, fresh, minimumSeverity});
   vm.runInContext(fs.readFileSync('src/main/resources/static/pop-summary.js', 'utf8'), preview);
   preview.box = new PopElement('section');
   vm.runInContext(`subject = Object.assign(Object.create(PopSummary.prototype), {
     node: {name: 'POP <safe>', groupId:'g'}, box, hosts: () => hosts, groupName: () => 'Group',
-    freshness: () => fresh, colors: ['gray','green','neutral','info','warning','average','high','disaster'],
+    freshness: () => fresh, minimumSeverity: () => minimumSeverity, colors: ['gray','green','neutral','info','warning','average','high','disaster'],
     labels: ['Unknown','OK','Unclassified','Info','Warning','Average','High','Disaster']
   }); subject.render();`, preview);
   return preview;
@@ -165,4 +165,36 @@ test('loading, unavailable and cached failure states do not invent healthy count
   const empty = renderPreview([host('a', [])]);
   assert.ok(empty.box.querySelector('.pop-empty').textContent.includes('Nenhum problema ativo identificado no Zabbix.'));
   assert.equal(empty.box.querySelector('.pop-incidents'), null);
+});
+
+
+test('map threshold filters incidents, affected hosts and counts without changing inventory or monitoring', () => {
+  const hosts = [host('a', [issue('low', 0, 100)]),
+    host('b', [issue('info', 1, 200), issue('low2', 0, 100)]),
+    host('c', [issue('low3', 0, 100)], 'unknown'),
+    host('d', [issue('low4', 0, 100)], 'disabled')];
+  const filtered = context.summarizePop(hosts, 1);
+  assert.equal(filtered.total, 4);
+  assert.equal(filtered.affected, 1);
+  assert.equal(filtered.operational, 1);
+  assert.equal(filtered.unknown, 1);
+  assert.equal(filtered.disabled, 1);
+  assert.equal(filtered.incidents.length, 1);
+  assert.equal(filtered.incidents[0].eventId, 'info');
+  assert.equal(hosts[1].incidents.length, 2);
+  assert.equal(context.summarizePop(hosts, 0).incidents.length, 5);
+});
+
+test('rendered badge, severity, list and expansion all use the current map threshold', () => {
+  const hosts = [host('a', Array.from({length: 7}, (_, i) => issue(String(i), i === 6 ? 1 : 0, 1000)))];
+  const preview = renderPreview(hosts, undefined, 1);
+  assert.equal(preview.box.querySelector('.pop-badge').textContent, '1 incidente');
+  assert.equal(preview.box.style['--pop-severity'], 'info');
+  assert.equal(preview.box.querySelector('.pop-incidents').children.length, 1);
+  assert.equal(preview.box.querySelector('.pop-more'), null);
+  preview.minimumSeverity = 2;
+  vm.runInContext('subject.render()', preview);
+  assert.equal(preview.box.querySelector('.pop-badge').textContent, '0 incidentes');
+  assert.equal(preview.box.querySelector('.pop-incidents'), null);
+  assert.ok(preview.box.querySelector('.pop-empty'));
 });

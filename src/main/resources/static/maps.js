@@ -12,6 +12,7 @@ let states = new Map(), generation = 0, timer;
 let summaryUpdatedAt = 0, summaryFailed = false;
 const popSummary = new PopSummary({
   stage: $('map-stage'), hosts: nodeHosts,
+  minimumSeverity: () => current?.layout.minimumSeverity ?? 0,
   groupName: id => groups.find(group => group.id === id)?.name || id,
   freshness: () => ({updatedAt: summaryUpdatedAt, failed: summaryFailed}), colors, labels
 });
@@ -34,8 +35,9 @@ function svg(tag, attributes) {
 }
 
 function hostLevel(host, minimumSeverity = current?.layout.minimumSeverity ?? 0) {
-  if (!host.incidents || (host.monitoring && host.monitoring !== 'monitored' && !host.incidents.length)) return -2;
-  return host.incidents.reduce((level, issue) => issue.severity >= minimumSeverity ? Math.max(level, issue.severity) : level, -1);
+  if (!host.incidents) return -2;
+  const level = host.incidents.reduce((level, issue) => issue.severity >= minimumSeverity ? Math.max(level, issue.severity) : level, -1);
+  return level === -1 && host.monitoring && host.monitoring !== 'monitored' ? -2 : level;
 }
 
 function groupLevel(hosts, minimumSeverity = current?.layout.minimumSeverity ?? 0) {
@@ -139,7 +141,7 @@ function draw() {
   }
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
-    const level = monitored ? groupLevel(nodeHosts(n), n.groupId ? 0 : undefined) + 2 : 1;
+    const level = monitored ? groupLevel(nodeHosts(n)) + 2 : 1;
     const description = monitored ? n.name + ' · ' + labels[level] : n.name;
     const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
       ...(editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
