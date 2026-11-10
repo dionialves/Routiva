@@ -1,13 +1,10 @@
 package br.com.scriptping;
 
-import br.com.scriptping.ingestion.CollectorBatchRepository;
-import br.com.scriptping.ingestion.SampleIngestionService;
-import br.com.scriptping.ingestion.SampleIngestionRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
-import br.com.scriptping.aggregation.MinuteRetention;
+import br.com.scriptping.cleanup.RawCleanup;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,9 +19,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
         "zabbix.password=",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
-        "monitor.retention-hours=48",
+        "monitor.keep-raw=yes",
+        "monitor.raw-retention-minutes=2880",
         "monitor.cleanup-batch-size=2",
-        "monitor.cleanup-max-batches=3",
     }
 )
 class SampleStoreRetentionTests {
@@ -41,16 +38,16 @@ class SampleStoreRetentionTests {
 
 
     @Autowired
-    MinuteRetention retention;
+    RawCleanup retention;
 
     @Autowired
     JdbcTemplate jdbc;
 
     @Autowired
-    SampleIngestionRepository repository;
+    br.com.scriptping.cleanup.CleanupStore store;
 
     @Autowired
-    CollectorBatchRepository receipts;
+    br.com.scriptping.cleanup.CleanupQueue queue;
 
     @Autowired
     javax.sql.DataSource dataSource;
@@ -79,40 +76,13 @@ class SampleStoreRetentionTests {
     }
 
     @Test
-    void retentionCanBeChangedThroughConfiguration() {
+    void defaultPolicyPurgesRecentProcessedRowsOnly() {
         long now = System.currentTimeMillis();
-        insert("custom-old", now - Duration.ofHours(3).toMillis(), 10d, null);
-        insert("custom-recent", now - Duration.ofHours(1).toMillis(), 10d, null);
+        insert("processed", now, 10d, null);
         markProcessed();
-        retention.cleanup(new SampleIngestionService(repository, receipts, 2, 600, 20d).retentionCutoff(now));
-        assertThat(
-            jdbc.queryForList(
-                "SELECT host_id FROM ping_sample WHERE host_id LIKE 'custom-%' ORDER BY host_id",
-                String.class
-            )
-        ).containsExactly("custom-recent");
-    }
-
-    @Test
-    void retentionNeverExceeds48HoursEvenWithHigherConfiguration() {
-        long now = System.currentTimeMillis();
-        insert("over-limit", now - Duration.ofHours(49).toMillis(), 10d, null);
-        insert("within-limit", now - Duration.ofHours(47).toMillis(), 10d, null);
-        markProcessed();
-        retention.cleanup(new SampleIngestionService(repository, receipts, 168, 600, 20d).retentionCutoff(now));
-        assertThat(
-            jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class)
-        ).containsExactly("within-limit");
-    }
-
-    @Test
-    void rejectsNonPositiveRetentionOrCleanupInterval() {
-        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-            new SampleIngestionService(repository, receipts, 0, 600, 20d)
-        ).isInstanceOf(IllegalArgumentException.class);
-        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-            new SampleIngestionService(repository, receipts, 48, 0, 20d)
-        ).isInstanceOf(IllegalArgumentException.class);
+        insert("pending", now, 10d, null);
+        new RawCleanup(store, queue, true, false, 2880, 2).cleanup();
+        assertThat(jdbc.queryForList("SELECT host_id FROM ping_sample", String.class)).containsExactly("pending");
     }
 
     @Test
@@ -124,9 +94,6 @@ class SampleStoreRetentionTests {
         markProcessed();
         insert("unprocessed", expired, 10d, null);
 
-        retention.cleanup(now - Duration.ofHours(48).toMillis());
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample WHERE host_id LIKE 'expired-%'", Long.class))
-            .isEqualTo(4); // Three independent transactions, two rows each.
         retention.cleanup(now - Duration.ofHours(48).toMillis());
         assertThat(jdbc.queryForList("SELECT host_id FROM ping_sample ORDER BY host_id", String.class))
             .containsExactly("recent", "unprocessed");
@@ -180,7 +147,7 @@ class SampleStoreRetentionTests {
             now - Duration.ofDays(8).toMillis());
         retention.cleanup(now - Duration.ofHours(48).toMillis());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch WHERE collector_id='expired'", Long.class))
-            .isEqualTo(2);
+            .isZero();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM collector_batch WHERE collector_id='protected'", Long.class))
             .isEqualTo(1);
     }

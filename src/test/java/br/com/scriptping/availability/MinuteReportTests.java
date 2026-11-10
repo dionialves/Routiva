@@ -28,7 +28,7 @@ class MinuteReportTests extends MinuteTestSupport {
     @Test void queryingAnotherPeriodAndRestartNeedNoCheckpointOrWarmup() {
         insert(end-2*3600000L,12d,null);insert(end-10000,8d,null);drain(10);
         startAggregation();
-        var restarted=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),48,60000);
+        var restarted=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),60000);
         assertThat(restarted.viewAt(List.of(host),60,now).report().total().latency()).isEqualTo(8);
         assertThat(restarted.viewAt(List.of(host),480,now).report().total().latency()).isEqualTo(10);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE LOWER(table_name) LIKE 'analytics_checkpoint%'",Long.class)).isZero();
@@ -77,7 +77,7 @@ class MinuteReportTests extends MinuteTestSupport {
     @Test void classificationHonorsConfiguredLossThresholdsAndHistoricalLimit() {
         var rules=new PacketLossPolicy();rules.setHourNormalMaxPercent(40);rules.setHourCriticalMinPercent(80);
         insert(host,end-2000,10d,null,5);insert(end-1000,null,"Tempo esgotado");drain(10);
-        var configured=new PacketLossAnalysisService(summaries,rules,48,60000);
+        var configured=new PacketLossAnalysisService(summaries,rules,60000);
         var view=configured.viewAt(List.of(host),5,now);
         assertThat(view.hosts().getFirst().status()).isEqualTo("DEGRADADO");
         assertThat(view.report().total().degraded()).isEqualTo(1);

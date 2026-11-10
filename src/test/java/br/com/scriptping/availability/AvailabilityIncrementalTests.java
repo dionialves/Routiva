@@ -55,7 +55,7 @@ class AvailabilityIncrementalTests extends MinuteTestSupport {
         insert(end+5000,5d,null);
         aggregateAt(now+60000);
         var instrumented=mock(MinuteAggregationService.class,org.mockito.AdditionalAnswers.delegatesTo(summaries));
-        var updater=new PacketLossAnalysisService(instrumented,new PacketLossPolicy(),48,60000);
+        var updater=new PacketLossAnalysisService(instrumented,new PacketLossPolicy(),60000);
         var next=updater.advanceAt(List.of(host),initial,now+60000);
         var reads=mockingDetails(instrumented).getInvocations().stream()
             .filter(call -> call.getMethod().getName().equals("historicalBuckets")).toList();

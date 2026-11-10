@@ -16,7 +16,7 @@ class AvailabilitySnapshotBenchmarkTests extends MinuteTestSupport {
                 List.of(new Host.Group("g"+(i%10),"Group "+(i%10))))).toList();
         jdbc=org.mockito.Mockito.spy(jdbc);
         startAggregation();
-        queries=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),48,60000);
+        queries=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),60000);
         // 720,000 minute rows, 12,000 hourly rows and 365,000 daily rows.
         jdbc.update("""
             INSERT INTO ping_minute

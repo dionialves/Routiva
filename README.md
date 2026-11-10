@@ -334,7 +334,7 @@ A coleta usa **1 ping por segundo por host** (`PING_INTERVAL_MS=1000`) no proces
 
 Java sincroniza o inventário por gRPC, recebe lotes e confirma depois do commit. A fila SQLite limitada e o reenvio após reinícios separam o motor da latência do banco. Não há execução de comandos externos de ping. Timeouts são perdas; erros internos e tentativas puladas ficam fora do denominador. Detalhes, limites, métricas e evidências de teste estão em [Operação do coletor](docs/coletor-icmp.md).
 
-Os dados originais continuam no PostgreSQL, com novas colunas opcionais para identidade, status e horários da tentativa. A retenção permanece limitada a 48 horas e a limpeza ocorre a cada 600 segundos, preservando os pings ainda não agregados. A capacidade do banco e das consultas agregadas não está certificada para 10.000 hosts.
+Os dados originais continuam no PostgreSQL, com novas colunas opcionais para identidade, status e horários da tentativa. A limpeza horária remove os pings já agregados conforme a política de retenção. A capacidade do banco e das consultas agregadas não está certificada para 10.000 hosts.
 
 As tabelas, colunas, filtros, ordenação e controles de atualização foram preservados. O cabeçalho permite atualizar agora ou escolher 5, 10, 15 ou 60 segundos, com preferência salva no navegador. Esse intervalo atualiza a tela; ele não muda o intervalo dos pings.
 
@@ -371,11 +371,11 @@ Apesar do prefixo `hour-`, os dois valores se aplicam igualmente às janelas de 
 
 As demais propriedades `monitor.loss.*` controlam a coleta e o diagnóstico, sem criar outros níveis ou gatilhos de perda. Para ajustar a cadência de coleta, use `PING_INTERVAL_MS`.
 
-A retenção provisória continua no mesmo arquivo:
+A política de retenção usa as seguintes propriedades.
 
 ```properties
-monitor.retention-hours=${PING_RETENTION_HOURS:48}
-monitor.cleanup-interval-seconds=${PING_CLEANUP_INTERVAL_SECONDS:600}
+monitor.keep-raw=${PING_KEEP_RAW:no}
+monitor.raw-retention-minutes=${PING_RAW_RETENTION_MINUTES:2880}
 ```
 
 Valores no `.env` prevalecem sobre esses dois padrões. Para mudar regras no properties, reconstrua a imagem: `docker compose up -d --build --wait app`. Para alterar só o `.env`, recrie o serviço com `docker compose up -d app`.
@@ -422,8 +422,8 @@ A rotação continua diária ou por tamanho, configurável pelas variáveis `IND
 | INDICATORS_LOG_MAX_FILE_SIZE | 10MB | Tamanho para rotação de cada arquivo |
 | INDICATORS_LOG_MAX_HISTORY | 7 | Retenção dos arquivos arquivados, em dias |
 | INDICATORS_LOG_TOTAL_SIZE_CAP | 100MB | Limite total dos arquivos arquivados; não inclui o ativo |
-| PING_RETENTION_HOURS | 48 | Retenção em horas, limitada a no máximo 48 |
-| PING_CLEANUP_INTERVAL_SECONDS | 600 | Intervalo provisório de limpeza em segundos |
+| PING_KEEP_RAW | no | Com yes, conserva os pings agregados pelo prazo configurado |
+| PING_RAW_RETENTION_MINUTES | 2880 | Prazo desde a medição quando PING_KEEP_RAW=yes |
 | SERVER_ADDRESS | 127.0.0.1 | Interface de escuta da aplicação |
 | PORT | 8080 | Porta web no modo Java local |
 | APP_BIND_ADDRESS | 0.0.0.0 | Interface publicada pelo Docker; use 127.0.0.1 com Nginx local |

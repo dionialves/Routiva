@@ -20,9 +20,8 @@ public class PacketLossAnalysisService {
     private final long freshness;
 
     public PacketLossAnalysisService(MinuteAggregationService store, PacketLossPolicy policy,
-        @Value("${monitor.retention-hours:48}") long retentionHours,
         @Value("${indicators.aggregation.interval-ms:60000}") long aggregationInterval) {
-        if (retentionHours<1 || aggregationInterval<1) throw new IllegalArgumentException("Invalid aggregation interval or retention");
+        if (aggregationInterval<1) throw new IllegalArgumentException("Invalid aggregation interval");
         policy.validate();
         this.store=store; this.policy=policy; this.freshness=aggregationInterval+120000L;
     }

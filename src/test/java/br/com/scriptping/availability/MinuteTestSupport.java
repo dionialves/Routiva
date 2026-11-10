@@ -17,14 +17,14 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.core.io.ClassPathResource;
 import br.com.scriptping.aggregation.MinuteAggregationService;
-import br.com.scriptping.aggregation.MinuteRetention;
+import br.com.scriptping.cleanup.RawCleanup;
 
 abstract class MinuteTestSupport {
     DriverManagerDataSource ds;
     JdbcTemplate jdbc;
     AnnotationConfigApplicationContext context;
     MinuteAggregationService summaries;
-    MinuteRetention retention;
+    RawCleanup retention;
     PacketLossAnalysisService queries;
     String postgresSchema;
     final long now=java.time.Instant.parse("2026-10-29T16:00:37Z").toEpochMilli();
@@ -42,14 +42,14 @@ abstract class MinuteTestSupport {
         new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(ds);
         jdbc=new JdbcTemplate(ds);
         startAggregation();
-        queries=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),48,60000);
+        queries=new PacketLossAnalysisService(summaries,new PacketLossPolicy(),60000);
     }
     void startAggregation() {
         if (context != null) {
             context.close();
         }
         context = new AnnotationConfigApplicationContext();
-        context.register(TransactionConfiguration.class, MinuteAggregationService.class, MinuteRetention.class);
+        context.register(TransactionConfiguration.class, MinuteAggregationService.class, RawCleanup.class, br.com.scriptping.cleanup.CleanupStore.class, br.com.scriptping.cleanup.CleanupQueue.class);
         context.register(SampleIngestionService.class);
         context.registerBean(JdbcTemplate.class, () -> jdbc);
         context.registerBean("entityManagerFactory", LocalContainerEntityManagerFactoryBean.class, () -> {
@@ -64,7 +64,7 @@ abstract class MinuteTestSupport {
             () -> new JpaTransactionManager(context.getBean(jakarta.persistence.EntityManagerFactory.class)));
         context.refresh();
         summaries = context.getBean(MinuteAggregationService.class);
-        retention = context.getBean(MinuteRetention.class);
+        retention = context.getBean(RawCleanup.class);
     }
 
     @EnableJpaRepositories(basePackageClasses = {MinuteAggregationService.class, SampleIngestionService.class})

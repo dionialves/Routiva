@@ -55,7 +55,7 @@ class HistoricalAvailabilityTests extends MinuteTestSupport {
         // The fallback is valid even before the first migration transaction finishes.
         assertThat(queries.viewAt(List.of(host), 525600, now).report().total().totalPings()).isEqualTo(2);
         startAggregation();
-        queries = new PacketLossAnalysisService(summaries,new PacketLossPolicy(),48,60000);
+        queries = new PacketLossAnalysisService(summaries,new PacketLossPolicy(),60000);
         insert(old, 5d, null); // Previously error-only minute gains its first valid observation.
         insert(old + 60000, 25d, null);
         drain(1);

@@ -14,14 +14,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.annotation.Propagation;
 
 @Service
 @DependsOnDatabaseInitialization
 public class SampleIngestionService {
 
-    // A retenção configurada nunca pode ultrapassar 48 horas.
-    private final Duration retention;
+    private static final Duration REPLAY_WINDOW = Duration.ofHours(48);
     private final double latencyLimit;
     private final SampleIngestionRepository repository;
     private final CollectorBatchRepository receipts;
@@ -29,8 +27,6 @@ public class SampleIngestionService {
     public SampleIngestionService(
         SampleIngestionRepository repository,
         CollectorBatchRepository receipts,
-        @Value("${monitor.retention-hours:48}") long retentionHours,
-        @Value("${monitor.cleanup-interval-seconds:600}") long cleanupSeconds,
         @Value("${monitor.latency-limit-ms:20}") double latencyLimit
     ) {
         if (
@@ -39,15 +35,8 @@ public class SampleIngestionService {
             "monitor.latency-limit-ms deve estar entre 0 e 60000 ms."
         );
         this.latencyLimit = latencyLimit;
-        if (cleanupSeconds < 1) throw new IllegalArgumentException(
-            "monitor.cleanup-interval-seconds deve ser positivo."
-        );
-        if (retentionHours < 1) throw new IllegalArgumentException(
-            "monitor.retention-hours deve ser positivo."
-        );
         this.repository = repository;
         this.receipts = receipts;
-        this.retention = Duration.ofHours(Math.min(retentionHours, 48));
     }
 
     public double latencyLimit() {
@@ -80,7 +69,7 @@ public class SampleIngestionService {
         repository.lockIngestion();
         timing.lockNanos = System.nanoTime() - started;
         started = System.nanoTime();
-        long now = System.currentTimeMillis(), cutoff = retentionCutoff(now);
+        long now = System.currentTimeMillis(), cutoff = now - REPLAY_WINDOW.toMillis();
         var identities = new HashSet<CollectorBatchKey>();
         var pendingReceipts = new ArrayList<CollectorBatchReceipt>();
         var rows = new ArrayList<Row>();
@@ -175,20 +164,5 @@ public class SampleIngestionService {
         var id = new CollectorBatchKey(batch.getCollectorId(), batch.getBatchId());
         if (!receipts.existsById(id)) receipts.save(new CollectorBatchReceipt(id,
             System.currentTimeMillis(), reason.substring(0, Math.min(reason.length(), 255))));
-    }
-
-    public long retentionCutoff(long now) {
-        return now - retention.toMillis();
-    }
-
-    public record Cleanup(int samples, int receipts) {}
-
-    /** One short transaction, with no locks on ingestion or aggregation guards. */
-    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 5)
-    public Cleanup deleteExpiredSamplesAndReceipts(long cutoff, long processedCursor, int batchSize) {
-        if (batchSize < 1 || batchSize > 10000) throw new IllegalArgumentException("Invalid cleanup batch size");
-        int deleted = repository.deleteExpiredSamples(cutoff, processedCursor, batchSize);
-        int expiredReceipts = receipts.deleteExpired(cutoff - Duration.ofDays(7).toMillis(), batchSize);
-        return new Cleanup(deleted, expiredReceipts);
     }
 }

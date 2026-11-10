@@ -16,9 +16,6 @@ interface MinuteAggregationRepository extends JpaRepository<PingMinute, MinuteKe
     @Query(value = "select id from ping_ingestion_guard where id = 1 for update", nativeQuery = true)
     int lockIngestion();
 
-    @Query(value = "SELECT raw_cursor_id FROM ping_aggregation_progress WHERE id=1", nativeQuery = true)
-    long processedRawCursor();
-
     @Query("select coalesce(max(s.id), 0L) from PingSampleRow s")
     long latestSampleId();
 

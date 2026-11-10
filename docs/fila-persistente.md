@@ -164,42 +164,13 @@ Não misture gravadores de versões diferentes. Os testes verificam a transiçã
 
 ## Limpeza incremental dos dados brutos
 
-A limpeza dos pings brutos lê o cursor confirmado sem `FOR UPDATE`. Ela não bloqueia `ping_aggregation_progress` nem `ping_ingestion_guard`. Cada lote usa uma transação independente com prazo de cinco segundos e apaga somente registros expirados cujo ID já foi agregado. Os resumos não são apagados.
+O pacote `cleanup` agenda uma rodada a cada hora cheia. O planejador lê o cursor bruto confirmado e identifica os IDs elegíveis em páginas pelo índice de data e ID. A fila em memória executa os pacotes em sequência em uma thread dedicada. Cada exclusão confirma sua própria transação. A descoberta busca a próxima página após o commit e reduz pela metade a janela de tempo quando a consulta excede cinco segundos. O cursor e o corte de retenção ficam fixos durante toda a rodada, inclusive nas tentativas após timeout. Pings agregados depois desse cursor entram na próxima rodada horária.
 
 | Variável | Padrão | Efeito |
-|---|---:|---|
-| PING_CLEANUP_ENABLED | true | Habilita a limpeza agendada; false permite suspendê-la |
-| PING_CLEANUP_INTERVAL_SECONDS | 600 | Espera após o fim de cada ciclo |
-| PING_CLEANUP_BATCH_SIZE | 1000 | Máximo por tabela e transação; de 1 a 10.000 |
-| PING_CLEANUP_MAX_BATCHES | 10 | Máximo de transações por ciclo; de 1 a 100 |
+|---|---|---|
+| PING_KEEP_RAW | no | Com no, todos os pings já agregados são elegíveis. Com yes, aplica o prazo desde a medição. |
+| PING_RAW_RETENTION_MINUTES | 2880 | Permanência em minutos quando a retenção está ativa. |
+| PING_CLEANUP_ENABLED | true | Habilita o agendamento. |
+| PING_CLEANUP_BATCH_SIZE | 1000 | Máximo de registros por exclusão, de 1 a 10.000. |
 
-O padrão remove até 10.000 pings brutos e até 10.000 recibos por ciclo, com commit entre lotes. O agendamento tem uma thread própria. Falha ou timeout interrompe o ciclo, preservando os lotes já confirmados e repetindo o restante no próximo ciclo. Recibos continuam respeitando sete dias além da janela de aceitação. Um índice por data e identidade evita varrer todos os recibos para selecionar o lote.
-
-Em bases grandes, a remoção é gradual. Aumentar limites pode aumentar a disputa de disco com a ingestão; ajuste usando as medições do servidor. Alterações no `.env` exigem recriar o serviço app. A nova configuração só é reconhecida após instalar a versão corrigida.
-
-`RETENTION_BATCH_COMMITTED` registra `page`, `raw_deleted`, `receipts_deleted`, `raw_cursor` e `elapsed_ms` depois do commit. `RETENTION_BATCH_FAILED` indica repetição no próximo ciclo. Consulte `/var/log/routiva/indicators.log` no serviço app (localmente, `logs/indicators.log`).
-
-O problema anterior era um DELETE sem limite na mesma transação que segurava o progresso; mesmo com todo o legado agregado, ele impedia novos lotes de obter ACK. Os testes de regressão mantêm esse registro bloqueado em outra conexão e verificam que a limpeza termina, preserva os resumos e respeita seus limites, incluindo execução em PostgreSQL 17.
-
-## Acompanhamento
-
-```sh
-docker compose exec -T collector routiva-collector --health | jq '{
-  coletor: .collector_id,
-  lotes: .metrics.queue_batches,
-  bytes: .metrics.queue_bytes,
-  limite_bytes: .metrics.queue_max_bytes,
-  idade_segundos: .metrics.queue_oldest_age_seconds,
-  descartes_fila: .metrics.queue_dropped_total,
-  persistencia_ok: .metrics.persistence_healthy,
-  erros_gravacao: .metrics.storage_errors_total
-}'
-```
-
-`pending` continua representando pings em andamento. `result_buffer` inclui o buffer do motor e lotes persistidos; `forming_results` informa a parte em formação. Contadores do motor reiniciam com o processo, mesmo que a identidade da fila permaneça igual. Descarte indica lacuna de observação, não perda de rede. A saúde do app fica DOWN em falha de persistência; o fluxo continua apto a escoar lotes já gravados.
-
-## Validação da restauração
-
-Testes cobrem gravação bruta antes da análise, deduplicação por lote e tentativa, horários originais, rollback de dados e recibo, correção de minutos atrasados e preservação de resumos existentes. Um teste mantém o progresso bloqueado em outra conexão e confirma que a ingestão bruta conclui sem esperar. A suíte de agregação verifica IDs brutos abaixo da revisão herdada da versão direta e o processamento de todas as páginas.
-
-A validação inclui H2 e PostgreSQL 17 isolado. O teste sintético separa o tempo de persistência de 20.000 resultados de 10.000 hosts do tempo total com agregação. Esses ensaios não certificam ICMP real, recuperação sustentada nem vazão no banco de produção. O comportamento da fila Go permanece o mesmo, incluindo recuperação após reinícios, limites, exclusão mútua e ACK após persistência.
+Após interrupção ou falha, a próxima rodada redescobre o trabalho pendente no banco. Os recibos de ingestão expiram após nove dias para proteger o replay. Os resumos por minuto permanecem disponíveis.
