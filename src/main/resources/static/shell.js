@@ -84,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const route = window.location.pathname.replace(/\/$/, '') || '/';
   sidebar.querySelectorAll('.side-nav a').forEach(link => {
     const target = new URL(link.href, window.location.href).pathname;
-    const active = route === target || (target === '/configuracao/zabbix' && route === `${target}/hosts`);
+    const active = route === target || (target === '/diagnostico/grupos' && route.startsWith(target + '/')) || (target === '/configuracao/zabbix' && route === `${target}/hosts`);
     link.classList.toggle('active', active);
     if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
   });

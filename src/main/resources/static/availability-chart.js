@@ -43,7 +43,7 @@
       select.addEventListener('change', () => { this.index = null; this.selection = null; this.draw(); });
       this.observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
         const width = Math.round(container.getBoundingClientRect().width);
-        if (width !== this.width) this.draw();
+        if (this.report && width !== this.width) this.draw();
       });
       this.observer?.observe(container);
     }
@@ -53,7 +53,8 @@
     }
     clear() { this.report = null; this.index = null; this.selection = null; this.container.replaceChildren(); }
     draw() {
-      if (!this.report || this.report.evaluatedAt == null) { this.container.replaceChildren(); return; }
+      if (!this.report) return;
+      if (this.report.evaluatedAt == null) { this.container.replaceChildren(); return; }
       const report = this.report, container = this.container;
       const points = aggregate(report, Number(this.select.value) || 1);
       this.width = Math.round(container.getBoundingClientRect().width);

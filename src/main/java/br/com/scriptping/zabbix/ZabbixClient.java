@@ -147,6 +147,22 @@ public class ZabbixClient {
         return result;
     }
 
+    public synchronized Map<String, Map<String, String>> diagnosticInventory(List<String> ids) {
+        var result = new HashMap<String, Map<String, String>>();
+        if (ids.isEmpty()) return result;
+        detectVersion();
+        if (session == null) login();
+        var rows = authenticatedRequest("host.get", Map.of("hostids", ids,
+            "output", List.of("hostid"), "selectInventory", List.of("model", "os", "software")));
+        for (var row : rows) {
+            var inventory = row.path("inventory");
+            String version = inventory.path("software").asText("");
+            if (version.isBlank()) version = inventory.path("os").asText("");
+            result.put(row.path("hostid").asText(), Map.of("model", inventory.path("model").asText(""), "version", version));
+        }
+        return result;
+    }
+
     public boolean configured() {
         return !url.isBlank() && !username.isBlank() && !password.isBlank();
     }

@@ -34,6 +34,18 @@ import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 class DashboardTests {
 
     @Test
+    void rendersDiagnosticsAndSharedAvailabilityComponents() throws Exception {
+        mvc.perform(get("/diagnostico/grupos")).andExpect(status().isOk())
+            .andExpect(view().name("diagnostics"))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("diagnostic-groups")));
+        mvc.perform(get("/diagnostico/grupos/pop")).andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("operational-details")));
+        mvc.perform(get("/disponibilidade")).andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("operational-details")));
+    }
+
+
+    @Test
     @org.springframework.transaction.annotation.Transactional
     void savesAndReopensTopologyAndRejectsStaleEdits() throws Exception {
         mvc.perform(get("/mapas")).andExpect(status().isOk()).andExpect(view().name("maps"));
