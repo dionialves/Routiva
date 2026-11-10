@@ -203,7 +203,7 @@ class ZabbixClientTests {
     }
 
     @Test
-    void mapHostsIncludesDisabledAndUnknownWithoutInventingAvailability() throws Exception {
+    void mapHostsUsesEnabledStatusRegardlessOfInterfaceAvailability() throws Exception {
         try (var api = new FakeApi(false)) {
             var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
             api.inventory = """
@@ -213,7 +213,7 @@ class ZabbixClientTests {
                 """;
             var hosts = client.mapHosts(java.util.Set.of("g"), java.util.Set.of("1"));
             assertThat(hosts).extracting(ZabbixClient.MapHost::id).containsExactly("1", "2", "3");
-            assertThat(hosts).extracting(ZabbixClient.MapHost::monitoring).containsExactly("monitored", "disabled", "unknown");
+            assertThat(hosts).extracting(ZabbixClient.MapHost::monitoring).containsExactly("monitored", "disabled", "monitored");
             assertThat(api.lastHostParams.has("filter")).isFalse();
             assertThat(api.methods.stream().filter("host.get"::equals).count()).isEqualTo(2);
             var incidents = client.activeIncidents(List.of("1", "2", "3"), true);
