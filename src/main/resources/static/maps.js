@@ -280,7 +280,15 @@ new ResizeObserver(() => {
     if (followingFit) fitToView(); else resizeCanvas();
   }
 }).observe(viewport);
-$('maximize-map').onclick = async () => {
+function setMapExpanded(expanded) {
+  $('workspace').classList.toggle('map-expanded', expanded);
+  const button = $('maximize-map');
+  button.setAttribute('aria-pressed', String(expanded));
+  button.title = expanded ? 'Restaurar tamanho do mapa' : 'Ampliar mapa na página';
+  button.setAttribute('aria-label', button.title);
+}
+$('maximize-map').onclick = () => setMapExpanded(!$('workspace').classList.contains('map-expanded'));
+$('fullscreen-map').onclick = async () => {
   const target = $('map-stage');
   try {
     if (document.fullscreenElement === target) await document.exitFullscreen();
@@ -288,9 +296,9 @@ $('maximize-map').onclick = async () => {
   } catch { window.notify('Tela cheia indisponível neste navegador.', 'error'); }
 };
 document.addEventListener('fullscreenchange', () => {
-  const mapLabel = document.fullscreenElement === $('map-stage') ? 'Restaurar mapa' : 'Maximizar mapa';
-  $('maximize-map').title = mapLabel;
-  $('maximize-map').setAttribute('aria-label', mapLabel);
+  const mapLabel = document.fullscreenElement === $('map-stage') ? 'Sair da tela cheia' : 'Exibir em tela cheia';
+  $('fullscreen-map').title = mapLabel;
+  $('fullscreen-map').setAttribute('aria-label', mapLabel);
 });
 viewport.onpointerdown = event => {
   if (event.button !== 0 || (editing ? tool !== 'pan' : event.target.closest('g'))) return;
@@ -417,7 +425,8 @@ function openMap(map, edit = false) {
   if ((!map || edit) && document.fullscreenElement === $('map-stage')) document.exitFullscreen();
   pan = null;
   $('workspace').classList.toggle('viewing', !!map && !edit);
-  $('maximize-map').hidden = edit;
+  setMapExpanded(false);
+  $('fullscreen-map').hidden = $('maximize-map').hidden = edit;
   if (map) {
     viewport.scrollTo(0, 0);
     camera = map.layout.camera ? {...map.layout.camera} : {x:0, y:0, scale:1};
