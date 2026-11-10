@@ -44,3 +44,32 @@ test('POP colors respect map threshold, including information and unknown monito
   context.hosts = [{incidents: [{severity: 0}], monitoring: 'unknown'}];
   assert.equal(vm.runInContext('groupLevel(hosts)', context), -2);
 });
+
+test('draw paints POP circles using the map threshold rather than unclassified incidents', () => {
+  const canvas = {children: [], replaceChildren() { this.children = []; }, append(child) { this.children.push(child); }, dataset: {}};
+  const elements = new Map([['canvas', canvas], ['map-title', {}]]);
+  const node = {id: 'pop', groupId: 'g', name: 'POP', x: 0, y: 0};
+  const hosts = [{incidents: [{severity: 0}], monitoring: 'monitored'}];
+  const drawContext = vm.createContext({
+    current: {layout: {name: 'Map', minimumSeverity: 1, nodes: [node], links: []}},
+    editing: false, drag: null, marquee: null, selection: new Set(), selected: null,
+    colors: ['gray', 'green', 'unclassified', 'information'],
+    labels: ['Sem dados', 'Sem incidentes', 'Não classificado', 'Informação'],
+    $: id => elements.get(id), nodeHosts: () => hosts,
+    svg: (tag, attributes) => ({tag, attributes, children: [], append(...children) { this.children.push(...children); }}),
+    popSummary: {bind() {}},
+    drawNode: (element, name, position, fill) => { element.fill = fill; }
+  });
+  vm.runInContext(source.slice(source.indexOf('function hostLevel('), source.indexOf('function checkpoint(')), drawContext);
+  vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')), drawContext);
+  vm.runInContext('draw()', drawContext);
+  assert.equal(canvas.children[0].fill, 'green');
+  assert.equal(canvas.children[0].attributes['aria-label'], 'POP · Sem incidentes');
+  hosts[0].incidents.push({severity: 1});
+  vm.runInContext('draw()', drawContext);
+  assert.equal(canvas.children[0].fill, 'information');
+  hosts[0].incidents = [{severity: 0}];
+  drawContext.current.layout.minimumSeverity = 0;
+  vm.runInContext('draw()', drawContext);
+  assert.equal(canvas.children[0].fill, 'unclassified');
+});
