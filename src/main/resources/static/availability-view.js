@@ -40,7 +40,10 @@ window.AvailabilityView = (() => {
     for (const row of view.hosts) {
       const tr = document.createElement('tr'), th = document.createElement('th'), name = document.createElement('span'), ip = document.createElement('small');
       th.scope = 'row'; name.className = 'availability-host-name'; name.textContent = row.name; ip.textContent = row.ip || 'Sem IP'; th.append(name,ip); tr.append(th);
-      const group = document.createElement('td'); group.textContent = (row.groups || []).map(g=>g.name).join(', ') || 'Sem grupo'; group.className='host-groups'; tr.append(group);
+      const group = document.createElement('td'), groupText = document.createElement('span');
+      groupText.textContent = (row.groups || []).map(g=>g.name).join(', ') || 'Sem grupo';
+      groupText.className = 'host-groups-text'; groupText.title = groupText.textContent;
+      group.className = 'host-groups'; group.append(groupText); tr.append(group);
       for (const key of ['operational','technical','loss','latency']) {
         const td = document.createElement('td'); td.className='availability-number';
         const wrap = document.createElement('div'); wrap.className='availability-percent';

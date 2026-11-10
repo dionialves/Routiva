@@ -43,7 +43,15 @@
 .host-search input { width:100%; height:36px; background:#081c2c; border:1px solid #234357; border-radius:6px; color:#f8fafc; padding:8px 12px; font:inherit; font-size:12px; }
 .host-search input::placeholder { color:#94a3b8; }
 #host-count { margin-left:auto; color:#a8bdd0; font-size:12px; }
-.availability-page .hosts-table { min-width:940px; font-size:12px; }
+.availability-page .hosts-table { width:100%; min-width:1200px; table-layout:fixed; font-size:12px; }
+.availability-page .hosts-table thead th:nth-child(1) { width:23%; }
+.availability-page .hosts-table thead th:nth-child(2) { width:20%; }
+.availability-page .hosts-table thead th:nth-child(3),
+.availability-page .hosts-table thead th:nth-child(4) { width:13%; }
+.availability-page .hosts-table thead th:nth-child(5) { width:10%; }
+.availability-page .hosts-table thead th:nth-child(6) { width:9%; }
+.availability-page .hosts-table thead th:nth-child(7) { width:12%; }
+.availability-page .hosts-table tr > :last-child { text-align:right; }
 .availability-page .hosts-table th,.availability-page .hosts-table td { padding:14px 10px; border-bottom:1px solid #173244; }
 .availability-page .hosts-table thead th { background:#112b3c; }
 .availability-page .hosts-table thead button { padding:0; border:0; background:transparent; font-size:11px; white-space:nowrap; color:#b9cbdd; }
@@ -51,9 +59,10 @@
 .availability-page .hosts-table tbody th .availability-host-name { color:#b1d7ed; overflow-wrap:anywhere; text-decoration:none; }
 .availability-page .hosts-table tbody th small { display:block; margin-top:5px; font-size:10px; color:#8da6bc; font-weight:400; }
 .availability-page .hosts-table tbody tr:hover { background:#112b3c; }
-.host-groups { max-width:150px; color:#b0c1d2; overflow-wrap:anywhere; }
+.availability-page .host-groups { color:#b0c1d2; }
+.host-groups-text { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .availability-percent { display:flex; gap:8px; align-items:center; justify-content:flex-end; white-space:nowrap; }
-.availability-meter { display:block; width:55px; height:6px; background:#1c3b4e; border-radius:4px; overflow:hidden; }
+.availability-meter { display:block; flex-shrink:0; width:55px; height:6px; background:#1c3b4e; border-radius:4px; overflow:hidden; }
 .availability-meter span { display:block; height:100%; background:#14b8a6; border-radius:4px; }
 .availability-meter.technical span { background:#00d1ff; }
 .host-status { white-space:nowrap; font-size:11px; color:#aabed0; }
