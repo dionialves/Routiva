@@ -188,16 +188,38 @@ class ZabbixClientTests {
         try (var api = new FakeApi(false)) {
             var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
             api.problems = """
-                [{"objectid":"42","name":"Temperatura alta","severity":"4"}]
+                [{"eventid":"e1","objectid":"42","name":"Temperatura alta","severity":"4","clock":"100","r_eventid":"0"},
+                 {"eventid":"e2","objectid":"42","name":"Recuperado","severity":"5","clock":"90","r_eventid":"99"}]
                 """;
             api.triggers = """
                 [{"triggerid":"42","hosts":[{"hostid":"1"}]}]
                 """;
             var states = client.activeIncidents(List.of("1", "2"));
-            assertThat(states.get("1")).containsExactly(new ZabbixClient.Incident("Temperatura alta", 4));
+            assertThat(states.get("1")).containsExactly(new ZabbixClient.Incident("Temperatura alta", 4, "e1", 100000));
             assertThat(states).doesNotContainKey("2");
             api.problems = "[]";
             assertThat(client.activeIncidents(List.of("1")).get("1")).isEmpty();
+        }
+    }
+
+    @Test
+    void mapHostsIncludesDisabledAndUnknownWithoutInventingAvailability() throws Exception {
+        try (var api = new FakeApi(false)) {
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            api.inventory = """
+                {"result":[{"hostid":"1","name":"Switch","status":"0","hostgroups":[{"groupid":"g","name":"POP"}],"interfaces":[{"available":"1"}]},
+                 {"hostid":"2","name":"Disabled","status":"1","hostgroups":[],"interfaces":[]},
+                 {"hostid":"3","name":"Unknown","status":"0","hostgroups":[],"interfaces":[{"available":"0"}]}]}
+                """;
+            var hosts = client.mapHosts(java.util.Set.of("g"), java.util.Set.of("1"));
+            assertThat(hosts).extracting(ZabbixClient.MapHost::id).containsExactly("1", "2", "3");
+            assertThat(hosts).extracting(ZabbixClient.MapHost::monitoring).containsExactly("monitored", "disabled", "unknown");
+            assertThat(api.lastHostParams.has("filter")).isFalse();
+            assertThat(api.methods.stream().filter("host.get"::equals).count()).isEqualTo(2);
+            var incidents = client.activeIncidents(List.of("1", "2", "3"), true);
+            assertThat(incidents).containsKeys("1", "2", "3");
+            assertThat(api.lastHostParams.has("filter")).isFalse();
+            assertThat(api.violations).isEmpty();
         }
     }
 

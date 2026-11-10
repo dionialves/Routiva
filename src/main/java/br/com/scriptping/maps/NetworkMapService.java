@@ -65,6 +65,24 @@ public class NetworkMapService {
         }
     }
 
+    public List<HostState> summaries(Targets targets) {
+        if (targets.groups() == null || targets.hosts() == null) throw invalid();
+        var allowedGroups = groups().stream().map(Host.Group::id).collect(java.util.stream.Collectors.toSet());
+        var allowedHosts = inventory.hosts().stream().map(Host::id).collect(java.util.stream.Collectors.toSet());
+        var groupIds = new HashSet<>(targets.groups());
+        groupIds.retainAll(allowedGroups);
+        var hostIds = new HashSet<>(targets.hosts());
+        hostIds.retainAll(allowedHosts);
+        try {
+            var hosts = zabbix.mapHosts(groupIds, hostIds);
+            var problems = zabbix.activeIncidents(hosts.stream().map(ZabbixClient.MapHost::id).toList(), true);
+            return hosts.stream().map(h -> new HostState(h.id(), h.name(), h.groups(),
+                problems.get(h.id()), h.monitoring())).toList();
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Zabbix indisponível", e);
+        }
+    }
+
     @Transactional(rollbackFor = JsonProcessingException.class)
     public Saved save(Saved input) throws JsonProcessingException {
         var layout = input.layout();

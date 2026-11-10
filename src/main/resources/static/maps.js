@@ -9,6 +9,12 @@ const past = [], future = [];
 const selection = new Set();
 let marquee;
 let states = new Map(), generation = 0, timer;
+let summaryUpdatedAt = 0, summaryFailed = false;
+const popSummary = new PopSummary({
+  stage: $('map-stage'), hosts: nodeHosts,
+  groupName: id => groups.find(group => group.id === id)?.name || id,
+  freshness: () => ({updatedAt: summaryUpdatedAt, failed: summaryFailed}), colors, labels
+});
 
 async function api(path, body) {
   const options = body === undefined ? {} : {
@@ -28,13 +34,13 @@ function svg(tag, attributes) {
 }
 
 function hostLevel(host, minimumSeverity = current?.layout.minimumSeverity ?? 0) {
-  if (!host.incidents) return -2;
+  if (!host.incidents || (host.monitoring && host.monitoring !== 'monitored' && !host.incidents.length)) return -2;
   return host.incidents.reduce((level, issue) => issue.severity >= minimumSeverity ? Math.max(level, issue.severity) : level, -1);
 }
 
-function groupLevel(hosts) {
+function groupLevel(hosts, minimumSeverity = current?.layout.minimumSeverity ?? 0) {
   if (!hosts.length) return -2;
-  const levels = hosts.map(host => hostLevel(host));
+  const levels = hosts.map(host => hostLevel(host, minimumSeverity));
   const worst = Math.max(...levels);
   return worst === -1 && levels.includes(-2) ? -2 : worst;
 }
@@ -133,7 +139,7 @@ function draw() {
   }
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
-    const level = monitored ? groupLevel(nodeHosts(n)) + 2 : 1;
+    const level = monitored ? groupLevel(nodeHosts(n), n.groupId ? 0 : undefined) + 2 : 1;
     const description = monitored ? n.name + ' · ' + labels[level] : n.name;
     const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
       ...(editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
@@ -169,6 +175,7 @@ function draw() {
       }
       choose(n);
     };
+    if (!editing && n.groupId && !n.hostId) popSummary.bind(g, n);
     canvas.append(g);
   }
   if (marquee) {
@@ -383,8 +390,10 @@ async function refresh(token) {
   try {
     const ids = [...new Set(current.layout.nodes.map(n => n.groupId).filter(Boolean))];
     const hostsIds = [...new Set(current.layout.nodes.map(n => n.hostId).filter(Boolean))];
-    const hosts = ids.length || hostsIds.length ? await api('/states', {groups:ids, hosts:hostsIds}) : [];
+    const hosts = ids.length || hostsIds.length ? await api('/summaries', {groups:ids, hosts:hostsIds}) : [];
     if (token !== generation) return;
+    summaryUpdatedAt = Date.now();
+    summaryFailed = false;
     states = new Map();
     for (const host of hosts) states.set('host:' + host.id, [host]);
     for (const host of hosts) for (const group of host.groups) {
@@ -394,14 +403,18 @@ async function refresh(token) {
     $('status').textContent = ids.length || hostsIds.length ? 'Incidentes atualizados às ' + new Date().toLocaleTimeString('pt-BR') : '';
   } catch {
     if (token !== generation) return;
-    states.clear();
+    summaryFailed = true;
     $('status').textContent = 'Consulta ao Zabbix indisponível. Nova tentativa em um minuto.';
   }
   draw();
+  popSummary.render();
   timer = setTimeout(() => refresh(token), 60000);
 }
 
 function openMap(map, edit = false) {
+  popSummary.close();
+  summaryUpdatedAt = 0;
+  summaryFailed = false;
   clearTimeout(timer);
   generation++;
   current = map ? JSON.parse(JSON.stringify(map)) : null;

@@ -76,23 +76,62 @@ public class ZabbixClient {
         return fetchInventory(groupIds, hostIds, true);
     }
 
-    public record Incident(String name, int severity) {}
+    public record Incident(String name, int severity, String eventId, long openedAt) {
+        public Incident(String name, int severity) { this(name, severity, "", 0); }
+    }
+
+    public record MapHost(String id, String name, List<Host.Group> groups, String monitoring) {}
+
+    public synchronized List<MapHost> mapHosts(Set<String> groupIds, Set<String> hostIds) {
+        if (groupIds.isEmpty() && hostIds.isEmpty()) return List.of();
+        detectVersion();
+        if (session == null) login();
+        Map<String, MapHost> hosts = new LinkedHashMap<>();
+        // Separate batch queries implement the union of group and explicit host bindings.
+        for (var target : List.of(Map.entry("groupids", groupIds), Map.entry("hostids", hostIds))) {
+            if (target.getValue().isEmpty()) continue;
+            var rows = authenticatedRequest("host.get", Map.of(target.getKey(), target.getValue(),
+                "output", List.of("hostid", "name", "status"),
+                legacyGroups ? "selectGroups" : "selectHostGroups", List.of("groupid", "name"),
+                "selectInterfaces", List.of("available")));
+            for (var row : rows) {
+                var groups = new ArrayList<Host.Group>();
+                for (var group : row.path(legacyGroups ? "groups" : "hostgroups"))
+                    groups.add(new Host.Group(group.path("groupid").asText(), group.path("name").asText()));
+                boolean available = false;
+                for (var iface : row.path("interfaces")) available |= iface.path("available").asInt() == 1;
+                String monitoring = row.path("status").asInt() != 0 ? "disabled" : available ? "monitored" : "unknown";
+                var host = new MapHost(row.path("hostid").asText(), row.path("name").asText(), List.copyOf(groups), monitoring);
+                hosts.put(host.id(), host);
+            }
+        }
+        return List.copyOf(hosts.values());
+    }
 
     public synchronized Map<String, List<Incident>> activeIncidents(List<String> hostIds) {
+        return activeIncidents(hostIds, false);
+    }
+
+    public synchronized Map<String, List<Incident>> activeIncidents(List<String> hostIds, boolean includeDisabled) {
         var result = new HashMap<String, List<Incident>>();
         if (hostIds.isEmpty()) return result;
         detectVersion();
         if (session == null) login();
-        var visible = authenticatedRequest("host.get", Map.of("hostids", hostIds,
-            "output", List.of("hostid"), "filter", Map.of("status", "0")));
+        var params = new LinkedHashMap<String, Object>();
+        params.put("hostids", hostIds);
+        params.put("output", List.of("hostid"));
+        if (!includeDisabled) params.put("filter", Map.of("status", "0"));
+        var visible = authenticatedRequest("host.get", params);
         visible.forEach(h -> result.put(h.get("hostid").asText(), new ArrayList<>()));
         if (result.isEmpty()) return result;
         var problems = authenticatedRequest("problem.get", Map.of("hostids", result.keySet(),
-            "source", 0, "object", 0, "recent", false, "output", List.of("objectid", "name", "severity")));
+            "source", 0, "object", 0, "recent", false, "output", List.of("eventid", "objectid", "name", "severity", "clock", "r_eventid")));
         var byTrigger = new HashMap<String, List<Incident>>();
         for (var problem : problems) {
+            if (!problem.path("r_eventid").asText("0").equals("0")) continue;
             byTrigger.computeIfAbsent(problem.get("objectid").asText(), key -> new ArrayList<>())
-                .add(new Incident(problem.get("name").asText(), problem.get("severity").asInt()));
+                .add(new Incident(problem.get("name").asText(), problem.get("severity").asInt(),
+                    problem.path("eventid").asText(""), problem.path("clock").asLong() * 1000));
         }
         if (!byTrigger.isEmpty()) {
             var triggers = authenticatedRequest("trigger.get", Map.of("triggerids", byTrigger.keySet(),

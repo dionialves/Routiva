@@ -32,3 +32,11 @@ test('legacy maps include all severities by default', () => {
   context.host = host([0]);
   assert.equal(vm.runInContext('hostLevel(host)', context), 0);
 });
+
+test('POP severity can include every active event independently of display threshold', () => {
+  context.current = {layout: {minimumSeverity: 5}};
+  context.hosts = [host([2])];
+  assert.equal(vm.runInContext('groupLevel(hosts, 0)', context), 2);
+  context.hosts = [{incidents: [], monitoring: 'unknown'}];
+  assert.equal(vm.runInContext('groupLevel(hosts, 0)', context), -2);
+});

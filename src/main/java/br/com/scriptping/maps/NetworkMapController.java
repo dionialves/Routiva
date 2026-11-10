@@ -42,6 +42,11 @@ public class NetworkMapController {
         return service.states(targets);
     }
 
+    @PostMapping("/summaries")
+    public List<HostState> summaries(@RequestBody Targets targets) {
+        return service.summaries(targets);
+    }
+
     @PostMapping
     public Saved save(@RequestBody Saved input) throws JsonProcessingException {
         return service.save(input);
