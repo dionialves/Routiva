@@ -780,14 +780,6 @@ $('save').onclick = async () => {
   }
 };
 
-function menu(open) {
-  document.body.classList.toggle('availability-menu-open', open);
-  $('menu-backdrop').hidden = !open;
-  $('mobile-menu').setAttribute('aria-expanded', String(open));
-}
-$('mobile-menu').onclick = () => menu($('menu-backdrop').hidden);
-$('menu-backdrop').onclick = () => menu(false);
-
 (async () => {
   try {
     [maps, groups, inventory] = await Promise.all([api(''), api('/groups'), api('/hosts')]);

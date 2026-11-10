@@ -1,5 +1,5 @@
-.availability-dashboard { background:#071725; }
-.availability-dashboard .app-workspace { background:#071725; }
+.availability-dashboard { background:var(--app-bg); }
+.availability-dashboard .app-workspace { background:var(--app-bg); }
 .availability-dashboard .availability-page { max-width:1700px; margin:auto; padding-top:20px; }
 .availability-heading { display:flex; justify-content:space-between; align-items:center; gap:24px; margin-bottom:28px; }
 .availability-heading h1 { font-size:30px; letter-spacing:-.8px; margin:5px 0 10px; }
@@ -91,19 +91,9 @@
 .availability-page.is-loading .table-scroll { min-height:180px; background:repeating-linear-gradient(0deg,transparent 0 37px,#102839 37px 65px); }
 .chart-is-expanded { overflow:hidden; }
 .availability-page .chart-expanded { position:fixed; inset:24px; z-index:50; overflow:auto; margin:0; background:#071b2a; }
-#mobile-menu,#menu-backdrop { display:none; }
 @media(max-width:1150px) { .availability-page .availability-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .availability-heading { flex-wrap:wrap; } }
 @media(max-width:760px) {
- .availability-dashboard .sidebar { width:240px; transform:translateX(-100%); }
  .availability-dashboard .app-workspace { margin-left:0; }
- .availability-dashboard .topbar { padding-left:60px; }
- .availability-dashboard .sidebar .brand-product,.availability-dashboard .sidebar .side-nav span { display:initial; }
- .availability-dashboard .sidebar .brand { padding:22px; }
- .availability-dashboard .sidebar .brand-logo { width:190px; }
- .availability-dashboard .sidebar .side-nav a,.availability-dashboard .sidebar .settings-menu>summary { padding:14px 18px; justify-content:flex-start; }
- .availability-dashboard.availability-menu-open .sidebar { transform:translateX(0); z-index:45; }
- .availability-dashboard #mobile-menu { display:block; position:absolute; top:18px; left:16px; z-index:30; background:#102334; color:#d8edfa; border:1px solid #29485d; border-radius:6px; padding:8px 10px; }
- .availability-dashboard #menu-backdrop:not([hidden]) { display:block; position:fixed; inset:0; width:100%; height:100%; background:#0008; border:0; z-index:40; }
  .availability-page .availability-filters label { min-width:0; width:100%; flex:auto; }
  .availability-page .availability-filters { flex-direction:column; }
  .availability-heading { gap:16px; }
@@ -136,9 +126,6 @@
 .group-picker .group-picker-results button:hover,.group-picker .group-picker-results button.is-active { background:#16445d; color:#fff; }
 .group-picker-panel p { margin:10px; font-size:12px; color:#94a3b8; }
 @media(max-width:760px) { .availability-page .group-filter { min-width:0; width:100%; } .group-picker-panel { min-width:0; } }
-
-/* Keep the shared sidebar width and contain the expanded brand within its padding. */
-.availability-dashboard .sidebar .brand-logo { max-width:100%; height:auto; aspect-ratio:212 / 59; }
 
 .metric-times { margin:16px 0 8px; padding-top:12px; border-top:1px solid #203e50; font-size:12px; }
 .metric-times > div { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:6px 0; flex-wrap:wrap; }

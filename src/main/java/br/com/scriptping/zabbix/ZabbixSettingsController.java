@@ -25,6 +25,7 @@ public class ZabbixSettingsController {
         if (session.getAttribute("zabbixCsrf") == null) session.setAttribute("zabbixCsrf", UUID.randomUUID().toString());
         var s = settings.current();
         model.addAttribute("csrf", session.getAttribute("zabbixCsrf"));
+        model.addAttribute("configured", client.configured());
         model.addAttribute("url", s.url());
         model.addAttribute("username", s.username());
         model.addAttribute("hasPassword", !s.password().isBlank());
@@ -66,10 +67,15 @@ public class ZabbixSettingsController {
     @GetMapping("/inventario")
     @ResponseBody
     public Map<String, Object> inventory() {
-        var groups = client.groups();
-        var hosts = client.discover(groups.stream().map(Host.Group::id).collect(java.util.stream.Collectors.toSet()));
+        return monitor.inventory();
+    }
+
+    /** Last persisted operation remains available even when the remote API is offline. */
+    @GetMapping("/resultado")
+    @ResponseBody
+    public Map<String, Object> lastResult() {
         var state = settings.current();
-        return Map.of("groups", groups, "hosts", hosts, "selectedGroups", state.groups(), "selectedHosts", state.hosts());
+        return Map.of("result", state.importResult(), "imported", state.imported());
     }
 
     @PostMapping("/api/{action}")
@@ -86,11 +92,26 @@ public class ZabbixSettingsController {
                 case "conexao" -> { monitor.connection(url, username, password); message = "Conexão salva."; }
                 case "teste" -> { client.testConnection(); message = "Conexão e autenticação realizadas com sucesso."; }
                 case "sincronizar" -> { client.testConnection(); monitor.sync(); message = monitor.status(); }
-                case "selecao" -> { monitor.selectInventory(groups == null ? Set.of() : groups, hosts == null ? Set.of() : hosts); message = "Seleção salva. Sincronize para importar os hosts autorizados."; }
+                case "selecao" -> { return org.springframework.http.ResponseEntity.ok(monitor.saveAndImport(hosts == null ? Set.of() : hosts)); }
                 default -> throw new ResponseStatusException(HttpStatus.NOT_FOUND);
             }
             return org.springframework.http.ResponseEntity.ok(Map.of("message", message));
         } catch (ResponseStatusException ex) { throw ex;
+        } catch (Exception ex) {
+            return org.springframework.http.ResponseEntity.badRequest().body(Map.of("message", failure(ex)));
+        }
+    }
+
+    public record ImportRequest(Set<String> hosts) {}
+
+    @PostMapping("/api/importar")
+    @ResponseBody
+    public org.springframework.http.ResponseEntity<Map<String, Object>> importHosts(
+        @RequestHeader("X-Zabbix-CSRF") String csrf, @RequestBody ImportRequest body, HttpSession session) {
+        if (!csrf.equals(session.getAttribute("zabbixCsrf"))) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        try {
+            return org.springframework.http.ResponseEntity.ok(monitor.saveAndImport(
+                body.hosts() == null ? Set.of() : body.hosts()));
         } catch (Exception ex) {
             return org.springframework.http.ResponseEntity.badRequest().body(Map.of("message", failure(ex)));
         }

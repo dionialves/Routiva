@@ -1,124 +1,239 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const form = document.querySelector('#connection-form');
-  const search = document.querySelector('#selection-search');
-  const list = document.querySelector('#group-list');
-  let groups = [], hosts = [], selected = new Set(), enabled = new Set();
-  const expanded = new Set();
-  const normalize = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const members = group => hosts.filter(host => host.groups.some(g => g.id === group.id));
-  function visible(group) {
-    const query = normalize(search.value.trim());
-    return normalize(group.name).includes(query) ? members(group) : members(group).filter(h => normalize(`${h.name} ${h.ip}`).includes(query));
+/* One host ID has one selection, including when it belongs to several groups. */
+class ZabbixSelection {
+  constructor() {
+    this.selected = new Set();
+    this.saved = new Set();
+    this.imported = new Map();
+    this.groups = [];
+    this.hosts = new Map();
+    this.members = new Map();
+    this.loaded = false;
   }
-  function matches(group) { return normalize(group.name).includes(normalize(search.value.trim())) || visible(group).length > 0; }
-  function element(tag, className, text) {
-    const node = document.createElement(tag); node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
+  load(data) {
+    if (!this.loaded) {
+      this.selected = new Set(data.selectedHosts);
+      this.saved = new Set(data.selectedHosts);
+    }
+    this.imported = new Map(data.imported.map(h => [h.id, h]));
+    this.hosts = new Map(data.hosts.map(h => [h.id, h]));
+    this.groups = [...data.groups];
+    this.members = new Map(this.groups.map(g => [g.id, []]));
+    for (const host of this.hosts.values()) {
+      for (const group of host.groups) this.members.get(group.id)?.push(host);
+    }
+    const missing = [...new Set([...this.selected, ...this.saved])]
+      .filter(id => !this.hosts.has(id))
+      .map(id => ({ ...(this.imported.get(id) || { id, name: id, ip: '' }), missing: true }));
+    if (missing.length) {
+      this.groups.push({ id: '__missing', name: 'Ausentes da origem' });
+      this.members.set('__missing', missing);
+    }
+    this.loaded = true;
   }
-  function removeUnusedHosts() {
-    const eligible = new Set(groups.filter(g => enabled.has(g.id)).flatMap(g => members(g).map(h => h.id)));
-    selected.forEach(id => { if (!eligible.has(id)) selected.delete(id); });
+  toggle(id, checked) { checked ? this.selected.add(id) : this.selected.delete(id); }
+  toggleGroup(id, checked) {
+    (this.members.get(id) || []).forEach(h => this.toggle(h.id, checked));
+  }
+  changes() {
+    return [...new Set([...this.saved, ...this.selected])]
+      .filter(id => this.saved.has(id) !== this.selected.has(id)).length;
+  }
+  cancel() { this.selected = new Set(this.saved); }
+  commit(data) {
+    this.saved = new Set(data.selectedHosts);
+    this.selected = new Set(data.selectedHosts);
+    this.imported = new Map(data.imported.map(h => [h.id, h]));
+  }
+}
+if (typeof module !== 'undefined') module.exports = { ZabbixSelection };
+if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', () => {
+  const $ = id => document.getElementById(id);
+  const state = new ZabbixSelection();
+  const results = new ZabbixImportResults(document, window.AppIcon);
+  const form = $('connection-form');
+  let current = null, page = 0, busy = false;
+  let configured = document.querySelector('.settings-page').dataset.configured === 'true';
+  const pageSize = 50;
+  const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const node = (tag, text, className = '') => {
+    const el = document.createElement(tag);
+    el.textContent = text; el.className = className;
+    return el;
+  };
+  function checkbox(label, checked, partial, change) {
+    const input = document.createElement('input');
+    input.type = 'checkbox'; input.checked = checked; input.indeterminate = partial;
+    input.setAttribute('aria-label', label); input.disabled = busy;
+    input.addEventListener('change', () => { change(input.checked); render(); });
+    return input;
+  }
+  function connection(status, text) {
+    $('connection-status').dataset.state = status;
+    $('connection-status-text').textContent = text;
+  }
+  function renderGroups() {
+    const list = $('group-list'); list.replaceChildren();
+    const query = normalize($('group-search').value);
+    state.groups.filter(g => normalize(g.name).includes(query)).forEach(group => {
+      const hosts = state.members.get(group.id) || [];
+      const count = hosts.filter(h => state.selected.has(h.id)).length;
+      const row = node('div', '', `zabbix-group${current === group.id ? ' active' : ''}`);
+      const check = checkbox(`Selecionar grupo ${group.name}`, hosts.length > 0 && count === hosts.length,
+        count > 0 && count < hosts.length, checked => state.toggleGroup(group.id, checked));
+      const button = node('button', group.name); button.type = 'button';
+      button.setAttribute('aria-pressed', String(current === group.id));
+      button.addEventListener('click', () => { current = group.id; page = 0; render(); });
+      row.append(check, button, node('small', `${count}/${hosts.length}`)); list.append(row);
+    });
+    if (!list.children.length) list.append(node('p', state.groups.length ? 'Nenhum grupo corresponde à pesquisa.' : 'Sem grupos encontrados.'));
+  }
+  function renderHosts() {
+    const group = state.groups.find(g => g.id === current);
+    const members = state.members.get(current) || [];
+    $('group-title').textContent = group ? `${group.name} · ${members.length} hosts` : 'Selecione um grupo';
+    const count = members.filter(h => state.selected.has(h.id)).length;
+    $('group-all').checked = members.length > 0 && count === members.length;
+    $('group-all').indeterminate = count > 0 && count < members.length;
+    $('group-all').disabled = busy || !members.length;
+    const query = normalize($('host-search').value);
+    const filter = $('selection-filter').value;
+    const matches = members.filter(h => normalize(`${h.name} ${h.hostname || ''} ${h.ip}`).includes(query)
+      && (filter === 'all' || state.selected.has(h.id) === (filter === 'selected')));
+    const pages = Math.max(1, Math.ceil(matches.length / pageSize));
+    page = Math.min(page, pages - 1);
+    const list = $('host-list'); list.replaceChildren();
+    matches.slice(page * pageSize, (page + 1) * pageSize).forEach(host => {
+      const row = node('tr');
+      const cell = node('td');
+      const input = checkbox(`Selecionar host ${host.name}`, state.selected.has(host.id), false,
+        checked => state.toggle(host.id, checked));
+      input.id = `host-select-${host.id}`; cell.append(input);
+      const name = node('td'), label = node('label', host.name);
+      label.htmlFor = input.id; name.append(label);
+      row.append(cell, name, node('td', host.ip || 'Sem IP'),
+        node('td', `${state.imported.has(host.id) ? 'Importado' : 'Não importado'}${host.missing ? ' · Ausente da origem' : ''}`));
+      list.append(row);
+    });
+    if (!matches.length) {
+      const row = node('tr'), cell = node('td', members.length ? 'Nenhum host corresponde ao filtro.' : 'Nenhum host neste grupo.', 'table-empty');
+      cell.colSpan = 4; row.append(cell); list.append(row);
+    }
+    $('page-label').textContent = `${matches.length} resultados · Página ${page + 1} de ${pages}`;
+    $('previous-page').disabled = page === 0; $('next-page').disabled = page + 1 >= pages;
   }
   function render() {
-    const focusKey = document.activeElement?.dataset?.focusKey;
-    list.replaceChildren();
-    groups.filter(matches).forEach(group => {
-      const items = members(group), filtered = visible(group);
-      const section = element('div', 'inventory-group');
-      const heading = element('div', 'group-heading');
-      const checkbox = element('input', ''); checkbox.type = 'checkbox'; checkbox.dataset.focusKey = `group-${group.id}`;
-      checkbox.setAttribute('aria-label', `Selecionar grupo ${group.name}`);
-      checkbox.checked = enabled.has(group.id);
-      checkbox.indeterminate = checkbox.checked && items.some(h => selected.has(h.id)) && !items.every(h => selected.has(h.id));
-      checkbox.addEventListener('click', e => e.stopPropagation());
-      checkbox.addEventListener('change', () => {
-        checkbox.checked ? enabled.add(group.id) : enabled.delete(group.id);
-        if (checkbox.checked) items.forEach(h => selected.add(h.id));
-        removeUnusedHosts(); render();
-      });
-      const toggle = element('button', 'group-toggle', group.name); toggle.type = 'button';
-      const open = expanded.has(group.id) || !!search.value.trim();
-      toggle.setAttribute('aria-expanded', String(open));
-      toggle.setAttribute('aria-controls', `group-${group.id}`);
-      const body = element('div', 'group-hosts'); body.id = `group-${group.id}`; body.hidden = !open;
-      const chevron = element('span', '', open ? '⌄' : '›'); chevron.setAttribute('aria-hidden', 'true');
-      const expand = () => {
-        body.hidden = !body.hidden;
-        body.hidden ? expanded.delete(group.id) : expanded.add(group.id);
-        toggle.setAttribute('aria-expanded', String(!body.hidden)); chevron.textContent = body.hidden ? '›' : '⌄';
-      };
-      heading.addEventListener('click', expand);
-      heading.append(checkbox, toggle, element('span', 'group-count', String(items.length)), chevron);
-      filtered.forEach(host => {
-        const row = element('label', 'inventory-host-row');
-        const input = element('input', ''); input.type = 'checkbox'; input.dataset.focusKey = `host-${group.id}-${host.id}`; input.checked = enabled.has(group.id) && selected.has(host.id); input.disabled = !enabled.has(group.id);
-        input.addEventListener('change', () => { input.checked ? selected.add(host.id) : selected.delete(host.id); render(); });
-        row.append(input, element('span', '', host.name), element('small', '', host.ip || 'Sem IP')); body.append(row);
-      });
-      if (!items.length) body.append(element('p', 'group-empty', 'Nenhum host neste grupo.'));
-      section.append(heading, body); list.append(section);
-    });
-    if (focusKey) [...list.querySelectorAll('input')].find(input => input.dataset.focusKey === focusKey)?.focus();
-    const count = new Set(groups.filter(matches).flatMap(g => visible(g).map(h => h.id))).size;
-    document.querySelector('#inventory-empty').hidden = list.children.length > 0;
-    document.querySelector('#selection-count').textContent = `${selected.size} hosts selecionados · ${count} hosts nos resultados`;
+    const focus = document.activeElement;
+    const label = focus?.getAttribute('aria-label');
+    renderGroups(); renderHosts();
+    $('groups-total').textContent = state.groups.filter(g => g.id !== '__missing').length;
+    $('hosts-total').textContent = state.hosts.size;
+    $('hosts-selected').textContent = state.selected.size;
+    const fresh = [...state.selected].filter(id => state.hosts.has(id) && !state.imported.has(id)).length;
+    $('selection-count').textContent = `${state.selected.size} hosts selecionados`;
+    $('selection-changes').textContent = `${fresh} novos · ${state.changes()} seleções alteradas${state.changes() ? ' · Alterações pendentes' : ''}`;
+    $('save-selection-text').textContent = busy ? 'Aguarde…' : 'Salvar e importar';
+    $('refresh-inventory').disabled = busy || !configured;
+    $('test-connection').disabled = busy || !configured;
+    $('save-selection').disabled = busy || !state.loaded;
+    $('cancel-selection').disabled = busy || !state.changes();
+    if (label && !focus.isConnected) {
+      [...document.querySelectorAll('input[aria-label]')].find(el => el.getAttribute('aria-label') === label)?.focus();
+    }
   }
-  async function loadInventory() {
-    const response = await fetch('/configuracao/zabbix/inventario');
-    if (!response.ok) throw new Error('Não foi possível carregar os grupos e hosts. Tente sincronizar novamente.');
-    const data = await response.json();
-    groups = data.groups; hosts = data.hosts; selected = new Set(data.selectedHosts); enabled = new Set(data.selectedGroups);
-    document.querySelector('#inventory-panel').hidden = false;
-    document.querySelector('#inventory-hint').hidden = true;
-    render();
+  function result(data) {
+    results.load(data, [...state.imported.values()]);
   }
-  search.addEventListener('input', render);
-  function selectVisible(checked) {
-    const matching = groups.filter(matches);
-    matching.forEach(g => {
-      if (!search.value.trim() || normalize(g.name).includes(normalize(search.value.trim()))) {
-        checked ? enabled.add(g.id) : enabled.delete(g.id);
-        if (checked) members(g).forEach(h => selected.add(h.id));
-      } else if (checked) {
-        enabled.add(g.id);
-        visible(g).forEach(h => selected.add(h.id));
-      } else if (enabled.has(g.id)) {
-        visible(g).forEach(h => selected.delete(h.id));
-      }
-    });
-    removeUnusedHosts(); render();
+  async function request(action, data) {
+    const response = await fetch(`/configuracao/zabbix/api/${action}`, { method: 'POST', body: data });
+    const body = await response.json().catch(() => ({ message: 'Resposta inválida do servidor.' }));
+    if (!response.ok) throw new Error(body.message || 'Não foi possível concluir a operação.');
+    return body;
   }
-  document.querySelector('#select-visible').addEventListener('click', () => selectVisible(true));
-  document.querySelector('#clear-visible').addEventListener('click', () => selectVisible(false));
-  let busy = false;
-  async function action(name) {
-    if (busy) { window.notify('Aguarde a conclusão da operação em andamento.'); return; }
+  async function run(operation) {
+    if (busy) return;
     busy = true;
-    const data = name === 'conexao' ? new URLSearchParams(new FormData(form)) : new URLSearchParams();
-    if (name !== 'conexao') data.set('csrf', form.elements.csrf.value);
-    if (name === 'selecao') { enabled.forEach(id => data.append('groups', id)); selected.forEach(id => data.append('hosts', id)); }
-    form.setAttribute('aria-busy', 'true');
-    try {
-      const response = await fetch(`/configuracao/zabbix/api/${name}`, { method: 'POST', body: data });
-      const result = await response.json().catch(() => ({ message: 'Não foi possível concluir a operação. Atualize a página e tente novamente.' }));
-      if (!response.ok) throw new Error(result.message);
-      window.notify(result.message);
-      if (name === 'conexao') {
-        form.elements.password.value = ''; form.elements.password.placeholder = 'Deixe em branco para manter a senha salva';
-        document.querySelector('#inventory-panel').hidden = true; document.querySelector('#inventory-hint').hidden = false;
-      }
-      if (name === 'sincronizar') {
-        document.querySelector('#sync-status').textContent = result.message;
-        document.querySelector('#last-sync').textContent = new Date().toLocaleString('pt-BR');
-        await loadInventory();
-      }
-    } catch (error) { window.notify(error.message || 'Não foi possível concluir a operação.', 'error'); }
-    finally { busy = false; form.setAttribute('aria-busy', 'false'); }
+    $('refresh-inventory').disabled = true;
+    form.querySelectorAll('button').forEach(el => { el.disabled = true; });
+    $('inventory-panel').setAttribute('aria-busy', 'true');
+    render();
+    try { await operation(); }
+    catch (error) { $('inventory-feedback').textContent = error.message; window.notify(error.message, 'error'); }
+    finally {
+      busy = false; $('refresh-inventory').disabled = !configured;
+      form.querySelectorAll('button').forEach(el => { el.disabled = false; });
+      $('inventory-panel').setAttribute('aria-busy', 'false'); render();
+    }
   }
-  form.addEventListener('submit', event => { event.preventDefault(); action('conexao'); });
-  document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => action(button.dataset.action)));
-  const time = document.querySelector('#last-sync');
-  if (time.dataset.timestamp) time.textContent = new Date(Number(time.dataset.timestamp)).toLocaleString('pt-BR');
-  if (document.querySelector('.settings-page').dataset.synced === 'true') loadInventory().catch(error => window.notify(error.message, 'error'));
+  async function refresh() {
+    connection('loading', 'Verificando conexão…');
+    $('inventory-feedback').textContent = 'Consultando grupos e hosts…';
+    try {
+      const response = await fetch('/configuracao/zabbix/inventario');
+      if (!response.ok) throw new Error('Falha ao consultar o Zabbix. Verifique a conexão e tente novamente.');
+      const data = await response.json(); state.load(data);
+      if (!state.groups.some(g => g.id === current)) current = state.groups[0]?.id;
+      $('last-query').textContent = new Date(data.queriedAt).toLocaleString('pt-BR');
+      connection('connected', 'Conectado'); $('inventory-feedback').textContent = '';
+      result(data.result);
+    } catch (error) { connection('error', 'Falha de conexão'); throw error; }
+  }
+  $('refresh-inventory').addEventListener('click', () => run(refresh));
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    run(async () => {
+      const previousUrl = form.dataset.savedUrl || form.elements.url.defaultValue;
+      if (previousUrl !== form.elements.url.value.trim() && state.changes()
+        && !window.confirm('A troca de servidor descarta a seleção pendente. Continuar?')) return;
+      const data = await request('conexao', new URLSearchParams(new FormData(form)));
+      $('connection-feedback').textContent = data.message;
+      form.elements.password.value = '';
+      form.elements.password.placeholder = 'Deixe em branco para manter a senha salva';
+      if (previousUrl !== form.elements.url.value.trim()) {
+        Object.assign(state, new ZabbixSelection()); current = null; result(null);
+      }
+      configured = true;
+      form.dataset.savedUrl = form.elements.url.value.trim();
+      connection('loading', 'Conexão salva; aguardando consulta');
+    });
+  });
+  $('test-connection').addEventListener('click', () => run(async () => {
+    connection('loading', 'Verificando conexão…');
+    try {
+      const data = await request('teste', new URLSearchParams({ csrf: form.elements.csrf.value }));
+      $('connection-feedback').textContent = data.message; connection('connected', 'Conectado');
+    } catch (error) { connection('error', 'Falha de conexão'); throw error; }
+  }));
+  $('save-selection').addEventListener('click', () => run(async () => {
+    $('inventory-feedback').textContent = 'Salvando seleção e importando hosts…';
+    const reply = await fetch('/configuracao/zabbix/api/importar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Zabbix-CSRF': form.elements.csrf.value },
+      body: JSON.stringify({ hosts: [...state.selected] })
+    });
+    const response = await reply.json();
+    if (!reply.ok) throw new Error(response.message || 'Seleção não confirmada pelo servidor.');
+    state.commit(response); result(response.result); $('inventory-feedback').textContent = '';
+  }));
+  $('cancel-selection').addEventListener('click', () => { state.cancel(); render(); });
+  $('group-all').addEventListener('change', () => { state.toggleGroup(current, $('group-all').checked); render(); });
+  $('group-search').addEventListener('input', renderGroups);
+  ['host-search', 'selection-filter'].forEach(id => $(id).addEventListener(id === 'host-search' ? 'input' : 'change', () => { page = 0; renderHosts(); }));
+  $('previous-page').addEventListener('click', () => { page--; renderHosts(); });
+  $('next-page').addEventListener('click', () => { page++; renderHosts(); });
+  window.addEventListener('beforeunload', event => {
+    if (state.changes() || busy) { event.preventDefault(); event.returnValue = ''; }
+  });
+  render();
+  run(async () => {
+    try {
+      const response = await fetch('/configuracao/zabbix/resultado');
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      results.load(data.result, data.imported);
+    } catch {
+      $('inventory-feedback').textContent = 'Não foi possível recuperar o último resultado salvo.';
+    }
+    if (configured) await refresh();
+    else $('inventory-feedback').textContent = 'Configure e salve a conexão para consultar os grupos e hosts.';
+  });
 });

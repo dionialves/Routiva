@@ -1,22 +1,72 @@
 <!doctype html>
 <html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Integração Zabbix • TraceOne</title><link rel="stylesheet" href="/style.css"><script src="/shell.js" defer></script><script src="/zabbix-settings.js" defer></script></head>
-<body><aside th:replace="~{shell :: sidebar('settings')}"></aside><div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
-<main class="page-content settings-page" th:attr="data-synced=${lastSync != null}">
-<div class="page-heading"><div><p class="eyebrow">CONFIGURAÇÃO</p><h1>Integração Zabbix</h1><p>Configure a autenticação e escolha os grupos e hosts que deseja monitorar.</p></div></div>
-<span hidden th:if="${message}" th:text="${message}" data-notification="success"></span>
-<span hidden th:if="${error}" th:text="${error}" data-notification="error"></span>
-<section class="settings-panel"><h2>Dados de autenticação</h2>
-<form id="connection-form" class="connection-form"><input type="hidden" name="csrf" th:value="${csrf}">
-<label class="connection-url">URL da API Zabbix<input type="url" name="url" th:value="${url}" placeholder="https://zabbix.exemplo.com/api_jsonrpc.php" required></label>
-<label>Usuário<input name="username" th:value="${username}" autocomplete="username" required></label>
-<label>Senha<input type="password" name="password" autocomplete="new-password" th:placeholder="${hasPassword} ? 'Deixe em branco para manter a senha salva' : 'Informe a senha'"></label>
-<div class="settings-actions connection-url"><button type="submit">Salvar</button><button type="button" data-action="teste">Testar</button><button type="button" data-action="sincronizar">Sincronizar</button></div>
-</form><p>Salve as alterações de autenticação antes de testar ou sincronizar.</p>
-<p id="sync-status" th:text="${syncStatus}"></p><p>Última sincronização: <time id="last-sync" th:attr="data-timestamp=${lastSync}">Ainda não realizada</time></p></section>
-<section class="settings-panel" id="inventory-panel" hidden><h2>Grupos e hosts</h2><p>Selecione um grupo para marcar seus hosts. Clique na linha para expandir os detalhes.</p>
-<div class="settings-actions inventory-toolbar"><label>Pesquisar grupos ou hosts<input id="selection-search" type="search" placeholder="Nome do grupo, host ou IP"></label><button type="button" id="select-visible">Selecionar visíveis</button><button type="button" id="clear-visible">Desmarcar visíveis</button></div>
-<div class="inventory-head"><span></span><span>Nome do grupo</span><span>Quantidade de hosts</span><span></span></div><div id="group-list"></div>
-<p id="inventory-empty" hidden>Nenhum grupo ou host encontrado.</p><p id="selection-count" role="status"></p><p>Salve a seleção antes de sincronizar para importar os hosts escolhidos.</p><div class="settings-actions"><button type="button" data-action="selecao">Salvar seleção</button></div></section>
-<p id="inventory-hint">Salve a autenticação e sincronize para carregar os grupos e hosts.</p>
-</main></div></body></html>
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Integração Zabbix • TraceOne</title>
+  <link rel="stylesheet" href="/style.css?v=20261109-2"><link rel="stylesheet" href="/zabbix-settings.css">
+  <script src="/shell.js?v=20261109-2" defer></script><script src="/zabbix-import-results.js" defer></script><script src="/zabbix-settings.js" defer></script>
+</head>
+<body>
+<aside th:replace="~{shell :: sidebar('settings')}"></aside>
+<div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
+<main class="page-content settings-page" th:attr="data-configured=${configured}">
+  <div class="page-heading"><div><p class="eyebrow">CONFIGURAÇÃO</p><h1>Integração Zabbix</h1><p>Configure a integração e gerencie os grupos e hosts importados do Zabbix.</p></div></div>
+  <div class="zabbix-status">
+    <span id="connection-status" class="connection-badge" data-state="unconfigured" role="status"><svg th:replace="~{shell :: icon('wifi')}"></svg><span id="connection-status-text">Não configurado</span></span>
+    <span>Última consulta: <time id="last-query">Ainda não realizada</time></span>
+    <button type="button" id="refresh-inventory" class="button-primary"><svg th:replace="~{shell :: icon('refresh')}"></svg>Atualizar do Zabbix</button>
+  </div>
+  <details class="settings-panel" id="connection-details" th:open="${!configured}">
+    <summary><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Configuração da conexão</summary>
+    <form id="connection-form" class="connection-form">
+      <input type="hidden" name="csrf" th:value="${csrf}">
+      <label class="connection-url">URL da API Zabbix<input type="url" name="url" th:value="${url}" placeholder="https://zabbix.exemplo.com/api_jsonrpc.php" required></label>
+      <label>Usuário<input name="username" th:value="${username}" autocomplete="username" required></label>
+      <label>Senha<input type="password" name="password" autocomplete="new-password" th:placeholder="${hasPassword} ? 'Deixe em branco para manter a senha salva' : 'Informe a senha'"></label>
+      <div class="settings-actions connection-url"><button type="submit" class="button-primary">Salvar configuração</button><button type="button" id="test-connection"><svg th:replace="~{shell :: icon('wifi')}"></svg>Testar conexão</button></div>
+    </form>
+    <p>Salve os parâmetros antes de testar a conexão.</p><p id="connection-feedback" role="status"></p>
+  </details>
+  <section class="settings-panel zabbix-manager" id="inventory-panel" aria-label="Gerenciamento de grupos e hosts">
+    <div class="zabbix-summary" id="inventory-summary" role="status">
+      <span><svg th:replace="~{shell :: icon('layers')}"></svg>Grupos disponíveis: <strong id="groups-total">0</strong></span>
+      <span><svg th:replace="~{shell :: icon('monitor')}"></svg>Hosts disponíveis: <strong id="hosts-total">0</strong></span>
+      <span><svg th:replace="~{shell :: icon('check-circle')}"></svg>Hosts selecionados: <strong id="hosts-selected">0</strong></span>
+    </div>
+    <p id="inventory-feedback" role="status"></p>
+    <div class="zabbix-columns">
+      <section class="zabbix-groups" aria-label="Grupos de hosts">
+        <h2>Grupos de hosts</h2>
+        <label class="search-field"><span class="visually-hidden">Pesquisar grupos</span><svg th:replace="~{shell :: icon('search')}"></svg><input id="group-search" type="search" placeholder="Pesquisar grupos…"></label>
+        <div id="group-list" class="zabbix-scroll"></div>
+      </section>
+      <section class="zabbix-hosts" aria-label="Hosts do grupo">
+        <h2 id="group-title">Selecione um grupo</h2>
+        <div class="zabbix-filters">
+          <label class="search-field"><span class="visually-hidden">Pesquisar hosts</span><svg th:replace="~{shell :: icon('search')}"></svg><input id="host-search" type="search" placeholder="Pesquisar hosts…"></label>
+          <label class="inline-field">Exibir<select id="selection-filter"><option value="all">Todos</option><option value="selected">Selecionados</option><option value="unselected">Não selecionados</option></select></label>
+        </div>
+        <label class="zabbix-select-all"><input type="checkbox" id="group-all">Selecionar todos os hosts do grupo</label>
+        <div class="zabbix-scroll host-table-scroll"><table class="integration-table host-selection-table"><thead><tr><th scope="col"><span class="visually-hidden">Seleção</span></th><th scope="col">Host</th><th scope="col">IP</th><th scope="col">Situação</th></tr></thead><tbody id="host-list"></tbody></table></div>
+        <div class="zabbix-pagination"><button id="previous-page" type="button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="page-label"></span><button id="next-page" type="button">Próxima<svg th:replace="~{shell :: icon('chevron-right')}"></svg></button></div>
+      </section>
+    </div>
+    <section id="import-result" class="import-results" aria-labelledby="import-results-title" hidden>
+      <div class="import-results-heading">
+        <div><h2 id="import-results-title"><svg th:replace="~{shell :: icon('file')}"></svg>Resultado da importação</h2><p id="import-execution" role="status" aria-live="polite"></p></div>
+        <div class="import-results-tools">
+          <label class="search-field"><span class="visually-hidden">Pesquisar nas mensagens</span><svg th:replace="~{shell :: icon('search')}"></svg><input id="import-search" type="search" placeholder="Pesquisar nas mensagens…"></label>
+          <label class="inline-field severity-field"><svg th:replace="~{shell :: icon('filter')}"></svg><span>Severidade</span><select id="import-severity"><option value="all">Todas</option><option value="error">Erro</option><option value="warning">Aviso</option><option value="success">Sucesso</option><option value="info">Informação</option></select></label>
+        </div>
+      </div>
+      <div id="import-summary" class="import-summary"></div>
+      <div id="import-filters" class="import-filters" role="group" aria-label="Filtrar resultados"></div>
+      <div class="import-table-scroll"><table class="integration-table import-table"><thead><tr><th scope="col" id="import-sort-heading" aria-sort="ascending"><button type="button" id="import-sort">Host/ID<svg th:replace="~{shell :: icon('sort')}"></svg></button></th><th scope="col">Categoria</th><th scope="col">Mensagem</th><th scope="col">Status</th></tr></thead><tbody id="import-log"></tbody></table></div>
+      <div class="zabbix-pagination"><button id="import-previous" type="button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="import-page"></span><button id="import-next" type="button">Próxima<svg th:replace="~{shell :: icon('chevron-right')}"></svg></button></div>
+    </section>
+    <p class="selection-policy">Desmarcar interrompe futuras sincronizações e preserva os dados históricos.</p>
+    <div class="zabbix-actions"><div class="selection-action-summary"><svg th:replace="~{shell :: icon('monitor')}"></svg><div><strong id="selection-count" role="status"></strong><small id="selection-changes"></small></div></div><button id="cancel-selection" type="button">Cancelar alterações</button><button id="save-selection" type="button" class="button-primary"><svg th:replace="~{shell :: icon('download')}"></svg><span id="save-selection-text">Salvar e importar</span></button></div>
+  </section>
+</main></div>
+<dialog id="import-details" class="import-details" aria-labelledby="import-details-title"><div class="import-detail-heading"><h2 id="import-details-title">Detalhes do resultado</h2><form method="dialog"><button type="submit" class="icon-button" aria-label="Fechar detalhes"><svg th:replace="~{shell :: icon('close')}"></svg></button></form></div><dl id="import-detail-fields"></dl></dialog>
+</body></html>

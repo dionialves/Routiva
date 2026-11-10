@@ -39,3 +39,106 @@ window.notify = (message, type = 'success') => {
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-notification]').forEach(el => window.notify(el.textContent, el.dataset.notification));
 });
+
+// All application icons use the same outline SVG sprite.
+window.AppIcon = name => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'ui-icon');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `/icons.svg#${name}`);
+  svg.append(use);
+  return svg;
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sidebar = document.getElementById?.('sidebar');
+  if (!sidebar) return;
+  const collapse = document.getElementById('sidebar-collapse');
+  const mobileToggle = document.getElementById('mobile-nav-toggle');
+  const close = document.getElementById('sidebar-close');
+  const mobile = window.matchMedia('(max-width: 760px)');
+  const root = document.documentElement;
+  const read = key => { try { return sessionStorage.getItem(key); } catch { return null; } };
+  const write = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* Storage may be unavailable. */ } };
+  const groups = [...sidebar.querySelectorAll('[data-sidebar-group]')];
+  const backdrop = document.createElement('button');
+  backdrop.className = 'sidebar-backdrop'; backdrop.type = 'button'; backdrop.hidden = true;
+  backdrop.setAttribute('aria-label', 'Fechar menu'); backdrop.setAttribute('aria-hidden', 'true'); backdrop.tabIndex = -1;
+  document.body.append(backdrop);
+  let collapsed = read('traceone.sidebar.collapsed') === 'true';
+  let drawerOpen = false;
+  const isCollapsed = () => collapsed && !mobile.matches;
+  const setGroup = (group, open, persist = true) => {
+    const toggle = group.querySelector('button');
+    const panel = document.getElementById(toggle.getAttribute('aria-controls'));
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.hidden = !open;
+    group.classList.toggle('expanded', open);
+    if (isCollapsed() && open) panel.style.top = `${Math.min(toggle.getBoundingClientRect().top, window.innerHeight - 140)}px`;
+    else panel.style.removeProperty('top');
+    if (persist) write(`traceone.sidebar.${group.dataset.sidebarGroup}`, String(open));
+  };
+  // Resolve the active item from the URL, including the legacy /hosts alias.
+  const route = window.location.pathname.replace(/\/$/, '') || '/';
+  sidebar.querySelectorAll('.side-nav a').forEach(link => {
+    const target = new URL(link.href, window.location.href).pathname;
+    const active = route === target || (target === '/configuracao/zabbix' && route === `${target}/hosts`);
+    link.classList.toggle('active', active);
+    if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+  });
+  groups.forEach(group => {
+    const active = !!group.querySelector('[aria-current="page"]');
+    group.classList.toggle('contains-active', active);
+    setGroup(group, !isCollapsed() && (active || read(`traceone.sidebar.${group.dataset.sidebarGroup}`) === 'true'), false);
+    group.querySelector('button').addEventListener('click', () => {
+      const open = group.querySelector('button').getAttribute('aria-expanded') !== 'true';
+      if (isCollapsed()) groups.filter(g => g !== group).forEach(g => setGroup(g, false, false));
+      setGroup(group, open);
+    });
+  });
+  const setDrawer = open => {
+    drawerOpen = open && mobile.matches;
+    root.classList.toggle('sidebar-drawer-open', drawerOpen);
+    backdrop.hidden = !drawerOpen;
+    mobileToggle.setAttribute('aria-expanded', String(drawerOpen));
+    sidebar.toggleAttribute('inert', mobile.matches && !drawerOpen);
+    sidebar.setAttribute('aria-hidden', String(mobile.matches && !drawerOpen));
+    const workspace = document.querySelector('.app-workspace');
+    workspace.toggleAttribute('inert', drawerOpen);
+    if (drawerOpen) workspace.setAttribute('aria-hidden', 'true'); else workspace.removeAttribute('aria-hidden');
+    if (drawerOpen) { sidebar.setAttribute('role', 'dialog'); sidebar.setAttribute('aria-modal', 'true'); close.focus(); }
+    else { sidebar.removeAttribute('role'); sidebar.removeAttribute('aria-modal'); }
+  };
+  const apply = () => {
+    root.classList.toggle('sidebar-collapsed', isCollapsed());
+    collapse.setAttribute('aria-expanded', String(!isCollapsed()));
+    collapse.setAttribute('aria-label', isCollapsed() ? 'Expandir menu' : 'Recolher menu');
+    collapse.title = isCollapsed() ? 'Expandir menu' : 'Recolher menu';
+    groups.forEach(group => setGroup(group, !isCollapsed() && (!!group.querySelector('[aria-current="page"]') || read(`traceone.sidebar.${group.dataset.sidebarGroup}`) === 'true'), false));
+    setDrawer(false);
+  };
+  collapse.addEventListener('click', () => { collapsed = !collapsed; write('traceone.sidebar.collapsed', String(collapsed)); apply(); });
+  mobileToggle.addEventListener('click', () => setDrawer(!drawerOpen));
+  const dismiss = () => { setDrawer(false); mobileToggle.focus(); };
+  close.addEventListener('click', dismiss); backdrop.addEventListener('click', dismiss);
+  mobile.addEventListener('change', apply);
+  document.addEventListener('click', event => {
+    if (isCollapsed() && !sidebar.contains(event.target)) groups.forEach(g => setGroup(g, false, false));
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      if (drawerOpen) dismiss();
+      else groups.filter(g => g.querySelector('button').getAttribute('aria-expanded') === 'true' && isCollapsed())
+        .forEach(g => { setGroup(g, false, false); g.querySelector('button').focus(); });
+    }
+    if (event.key === 'Tab' && drawerOpen) {
+      const items = [...sidebar.querySelectorAll('a, button, summary')].filter(el => el.getClientRects().length && !el.disabled);
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  });
+  apply();
+});

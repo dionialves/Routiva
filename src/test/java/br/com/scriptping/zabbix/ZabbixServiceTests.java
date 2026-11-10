@@ -113,6 +113,76 @@ class ZabbixServiceTests {
     }
 
     @Test
+    void refreshDoesNotSaveOrChangeCollector() {
+        when(client.groups()).thenReturn(List.of(group));
+        when(client.discover(Set.of("g"))).thenReturn(List.of(host));
+        var result = monitor.inventory();
+        assertThat(result.get("selectedHosts")).isEqualTo(Set.of("h"));
+        verify(settings, never()).save(any());
+        verifyNoInteractions(collector);
+    }
+
+    @Test
+    void saveImportsImmediatelyDeduplicatesAndRepeatedRequestsAreIdempotent() {
+        var added = new Host("new", "New", "10.0.0.2", List.of(group));
+        when(client.groups()).thenReturn(List.of(group));
+        when(client.discover(Set.of("g"))).thenReturn(List.of(host, added, added));
+        when(client.fetchSelected(Set.of("g"), Set.of("h", "new"))).thenReturn(List.of(host, added, added));
+        var first = monitor.saveAndImport(Set.of("h", "new"));
+        assertThat(((java.util.Map<?, ?>) first.get("result")).get("imported")).isEqualTo(1);
+        assertThat(state.inventory()).extracting(Host::id).containsExactlyInAnyOrder("h", "new");
+        var second = monitor.saveAndImport(Set.of("h", "new"));
+        assertThat(((java.util.Map<?, ?>) second.get("result")).get("imported")).isEqualTo(0);
+        verify(collector, atLeastOnce()).synchronize(state.inventory());
+    }
+
+    @Test
+    void partialImportKeepsMissingSelectionsAndReportsInvalidTargets() {
+        var invalid = new Host("bad", "Bad", "", List.of(group));
+        when(client.groups()).thenReturn(List.of(group));
+        when(client.discover(Set.of("g"))).thenReturn(List.of(invalid));
+        when(client.fetchSelected(Set.of("g"), Set.of("h", "bad"))).thenReturn(List.of(invalid));
+        var result = monitor.saveAndImport(Set.of("h", "bad"));
+        assertThat(state.hosts()).containsExactlyInAnyOrder("h", "bad");
+        assertThat(state.inventory()).containsExactly(host);
+        assertThat(((java.util.Map<?, ?>) result.get("result")).get("state")).isEqualTo("partial");
+        assertThat(state.imported()).containsExactly(host);
+        @SuppressWarnings("unchecked")
+        var entries = (List<ZabbixService.ImportEntry>) state.importResult().get("entries");
+        assertThat(entries).hasSize(2);
+        assertThat(entries).filteredOn(e -> e.id().equals("bad")).singleElement().satisfies(e -> {
+            assertThat(e.name()).isEqualTo("Bad");
+            assertThat(e.ip()).isEmpty();
+            assertThat(e.category()).isEqualTo("Erro de validação");
+            assertThat(e.severity()).isEqualTo("error");
+        });
+        assertThat(entries).filteredOn(e -> e.id().equals("h")).singleElement()
+            .satisfies(e -> assertThat(e.outcome()).isEqualTo("missing"));
+    }
+
+    @Test
+    void importFailureIsPersistedSeparatelyFromSuccessfulSelectionSave() {
+        when(client.groups()).thenReturn(List.of(group));
+        when(client.discover(Set.of("g"))).thenReturn(List.of(host));
+        when(client.fetchSelected(Set.of("g"), Set.of("h"))).thenThrow(new IllegalStateException("offline"));
+        var response = monitor.saveAndImport(Set.of("h"));
+        assertThat(state.hosts()).containsExactly("h");
+        assertThat(state.inventory()).containsExactly(host);
+        assertThat(state.importResult()).extractingByKey("state").isEqualTo("failed");
+        assertThat(response.get("selectedHosts")).isEqualTo(Set.of("h"));
+    }
+
+    @Test
+    void deselectionPreservesImportedRecordsAndStopsCollection() {
+        when(client.groups()).thenReturn(List.of(group));
+        when(client.discover(Set.of("g"))).thenReturn(List.of(host));
+        monitor.saveAndImport(Set.of());
+        assertThat(state.inventory()).isEmpty();
+        assertThat(state.imported()).containsExactly(host);
+        verify(collector, atLeastOnce()).synchronize(List.of());
+    }
+
+    @Test
     void authorizationRequiresBothHostAndGroupAndRemovesUnselectedGroupMetadata() {
         var other = new Host.Group("other", "Other");
         var shared = new Host("h", "Router", "10.0.0.1", List.of(group, other), true);

@@ -28,13 +28,16 @@ class ZabbixSettingsRepositoryTests {
         repository.deleteAll();
         try {
             // Existing installations already store this JSON in a single row.
+            var legacy = mapper.valueToTree(original);
+            ((com.fasterxml.jackson.databind.node.ObjectNode) legacy).remove(List.of("imported", "importResult"));
+            ((com.fasterxml.jackson.databind.node.ObjectNode) legacy.path("inventory").get(0)).remove("hostname");
             jdbc.update("INSERT INTO zabbix_settings (id, payload) VALUES (1, ?)",
-                mapper.writeValueAsString(original));
+                mapper.writeValueAsString(legacy));
             var settings = new ZabbixSettings(repository, mapper, "", "", "");
             assertThat(settings.current()).isEqualTo(original);
 
             var changed = new ZabbixSettings.State(original.url(), "updated", "new-secret",
-                Set.of(), Set.of(), List.of(), 456L);
+                Set.of(), Set.of(), List.of(), 456L, List.of(host), java.util.Map.of());
             settings.save(changed);
             assertThat(new ZabbixSettings(repository, mapper, "", "", "").current()).isEqualTo(changed);
             assertThat(repository.count()).isEqualTo(1);

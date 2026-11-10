@@ -7,8 +7,15 @@ public record Host(
     String name,
     String ip,
     List<Group> groups,
-    boolean acknowledgedIcmpProblem
+    boolean acknowledgedIcmpProblem,
+    String hostname
 ) {
+    public Host { hostname = hostname == null ? name : hostname; }
+
+    public Host(String id, String name, String ip, List<Group> groups, boolean acknowledgedIcmpProblem) {
+        this(id, name, ip, groups, acknowledgedIcmpProblem, name);
+    }
+
     public Host(String id, String name, String ip, List<Group> groups) {
         this(id, name, ip, groups, false);
     }

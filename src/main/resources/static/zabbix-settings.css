@@ -1,0 +1,174 @@
+/* Integration workspace: compact inventory and structured execution results. */
+.settings-page { font-size: 13px; }
+.settings-page .page-heading { margin-bottom: 16px; }
+.settings-page h1 { font-size: 28px; letter-spacing: -.5px; margin: 4px 0; }
+.settings-page h2 { font-size: 16px; margin: 0 0 12px; letter-spacing: -.2px; }
+.settings-page .ui-icon { width: 16px; height: 16px; flex-basis: 16px; }
+.settings-page button, .import-details button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--border-strong); border-radius: 6px; padding: 7px 13px; min-height: 34px; font-size: 12px; font-weight: 500; background: var(--surface-bg); color: var(--text); cursor: pointer; transition: background .16s ease, border-color .16s ease; }
+.settings-page button:hover:not(:disabled) { background: var(--hover-bg); border-color: var(--focus); }
+.settings-page button:disabled { color: var(--disabled-text); opacity: .6; cursor: default; }
+.settings-page button.button-primary { background: var(--primary); border-color: var(--primary-hover); color: var(--text); }
+.settings-page button.button-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.zabbix-status { margin-bottom: 16px; gap: 18px; font-size: 12px; }
+.connection-badge { display: inline-flex; align-items: center; gap: 7px; border-radius: 20px; padding: 6px 11px; font-size: 11px; font-weight: 600; background: var(--surface-bg); color: var(--muted); }
+#connection-status[data-state=connected] { color: var(--success); background: var(--success-bg); }
+#connection-status[data-state=error] { color: var(--error); background: var(--error-bg); }
+#connection-status[data-state=loading] .ui-icon, #inventory-panel[aria-busy=true] ~ .ui-icon { animation: icon-pulse 1s ease-in-out infinite alternate; }
+.settings-page .settings-panel { background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 9px; margin: 14px 0; padding: 18px 22px; }
+.settings-page #connection-details { padding: 0; }
+#connection-details summary { display: flex; align-items: center; gap: 12px; padding: 12px 18px; list-style: none; font-size: 13px; }
+#connection-details summary::-webkit-details-marker { display: none; }
+#connection-details summary .ui-icon { transition: transform .18s ease; }
+#connection-details[open] summary .ui-icon { transform: rotate(90deg); }
+#connection-details .connection-form { padding: 0 20px; margin: 12px 0; grid-template-columns: 1fr 1fr; }
+#connection-details > p { padding: 0 20px; }
+.settings-page .settings-panel input:not([type=checkbox]), .settings-page .settings-panel select { font-size: 12px; min-height: 34px; height: 34px; padding: 6px 10px; background: var(--app-bg); border: 1px solid var(--border-strong); border-radius: 5px; color: var(--text); }
+.settings-page input[type=checkbox] { width: 16px; height: 16px; margin: 0; accent-color: var(--focus); cursor: pointer; }
+.settings-page input[type=checkbox]:disabled { cursor: default; }
+.zabbix-manager .zabbix-summary { margin: -2px 0 16px; padding: 0 0 16px; gap: 0; font-size: 12px; }
+.zabbix-summary > span { display: inline-flex; align-items: center; gap: 8px; padding: 0 24px; border-right: 1px solid var(--border-strong); }
+.zabbix-summary > span:first-child { padding-left: 8px; }
+.zabbix-summary > span:last-child { border: 0; }
+.zabbix-summary .ui-icon { width: 22px; height: 22px; flex-basis: 22px; color: var(--focus); margin-right: 5px; }
+#inventory-feedback:empty, #connection-feedback:empty { display: none; }
+#inventory-feedback { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+#inventory-panel[aria-busy=true] #inventory-feedback:not(:empty)::before { content: ''; width: 12px; height: 12px; border: 2px solid var(--border-strong); border-top-color: var(--focus); border-radius: 50%; animation: icon-spin .8s linear infinite; flex-shrink: 0; }
+.zabbix-columns { grid-template-columns: minmax(230px, 35fr) minmax(0, 65fr); gap: 22px; }
+.zabbix-groups { padding-right: 22px; border-right: 1px solid var(--border); }
+.settings-page .search-field { display: flex !important; position: relative; align-items: center; min-width: 0; }
+.search-field > .ui-icon { position: absolute; left: 11px; color: var(--muted); pointer-events: none; }
+.settings-page .search-field input { padding-left: 35px !important; width: 100%; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.zabbix-scroll { height: clamp(200px, 30vh, 340px); scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; margin-top: 10px; }
+.zabbix-groups .zabbix-scroll { height: clamp(250px, calc(30vh + 50px), 390px); }
+.zabbix-group { gap: 10px; padding: 3px 9px; min-height: 36px; border-radius: 5px; }
+.zabbix-group.active { background: var(--selected-bg); }
+.zabbix-group:hover:not(.active) { background: var(--hover-bg); }
+.settings-page .zabbix-group button { min-width: 0; justify-content: flex-start; background: transparent; border: 0; border-radius: 0; padding: 4px 0; font-size: 12px; }
+.settings-page .zabbix-group button:hover:not(:disabled) { background: transparent; }
+.zabbix-group small { font-size: 11px; }
+.zabbix-filters { align-items: center; gap: 18px; }
+.zabbix-filters .search-field { flex: 1; }
+.settings-page .inline-field { display: flex !important; align-items: center; gap: 8px; font-size: 12px; }
+.zabbix-filters .inline-field { min-width: 168px; }
+.zabbix-select-all { margin-top: 10px; font-size: 12px; }
+.zabbix-manager .host-table-scroll { border-radius: 5px; border: 1px solid var(--border); margin-top: 10px; }
+.integration-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.integration-table thead { position: sticky; top: 0; z-index: 1; background: var(--surface-bg); }
+.integration-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--text); }
+.integration-table th, .integration-table td { border-bottom: 1px solid var(--border); padding: 8px 12px; }
+.integration-table tr:last-child td { border-bottom: 0; }
+.integration-table tbody tr:hover { background: var(--hover-bg); }
+.host-selection-table th:first-child { width: 32px; }
+.host-selection-table td:first-child { padding-right: 0; }
+.host-selection-table td:last-child { color: var(--muted); }
+.settings-page .host-selection-table td label { display: block; cursor: pointer; overflow-wrap: anywhere; }
+.zabbix-pagination { gap: 14px; font-size: 11px; color: var(--muted); margin-top: 10px; }
+.settings-page .zabbix-pagination button { min-height: 30px; padding: 4px 10px; }
+.import-results { border-top: 1px solid var(--border-strong); margin-top: 18px; padding-top: 18px; }
+.import-results-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.import-results-heading h2 { display: flex; align-items: center; gap: 12px; margin: 2px 0; }
+.import-results-heading h2 .ui-icon { width: 22px; height: 22px; flex-basis: 22px; color: var(--focus); }
+#import-execution { font-size: 11px; margin: 5px 0 0; }
+#import-execution[data-state=failed] { color: var(--error); }
+#import-execution[data-state=partial] { color: var(--warning); }
+.import-results-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.import-results-tools .search-field { min-width: 230px; flex: 1; }
+.severity-field .ui-icon { color: var(--muted); }
+.import-summary { display: grid; grid-template-columns: minmax(170px,1.3fr) repeat(5, minmax(115px,1fr)); gap: 12px; }
+.import-metric { display: flex; align-items: center; gap: 10px; min-height: 70px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--tone) 35%, var(--border)); border-radius: 7px; background: color-mix(in srgb, var(--tone) 8%, var(--panel-bg)); }
+.tone-success { --tone: var(--success); }
+.tone-warning { --tone: var(--warning); }
+.tone-error { --tone: var(--error); }
+.tone-info { --tone: var(--focus); }
+.tone-neutral { --tone: var(--muted); }
+.import-metric-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; color: var(--tone); background: color-mix(in srgb, var(--tone) 12%, transparent); }
+.import-metric-icon .ui-icon { width: 21px; height: 21px; flex-basis: 21px; }
+.import-metric > div > span { font-size: 11px; display: block; }
+.import-metric strong { display: block; font-size: 20px; line-height: 1.3; }
+.import-metric small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+.import-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.settings-page .filter-pill { border-radius: 22px; padding: 5px 15px; min-height: 30px; font-size: 11px; }
+.settings-page .filter-pill[aria-pressed=true] { background: var(--primary); border-color: var(--primary-hover); color: var(--text); }
+.import-table-scroll { max-height: 260px; overflow: auto; border: 1px solid var(--border-strong); border-radius: 6px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.import-table { min-width: 670px; }
+.import-table th:nth-child(1) { width: 23%; }
+.import-table th:nth-child(2) { width: 20%; }
+.import-table th:nth-child(4) { width: 100px; }
+.settings-page #import-sort { background: transparent; border: 0; color: inherit; padding: 0; min-height: auto; font-size: 11px; }
+.settings-page .result-host-button { background: transparent; border: 0; padding: 0; min-height: auto; justify-content: flex-start; text-align: left; font-size: 12px; }
+.settings-page .result-host-button:hover:not(:disabled) { background: transparent; color: var(--focus); }
+.import-table td:first-child small { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+.import-table tbody tr { cursor: pointer; }
+.result-category { display: inline-flex; align-items: center; gap: 8px; }
+.result-category .ui-icon { color: var(--tone); }
+.status-badge { display: inline-flex; padding: 2px 9px; font-size: 10px; border-radius: 5px; color: var(--tone); background: color-mix(in srgb, var(--tone) 15%, transparent); border: 1px solid color-mix(in srgb, var(--tone) 25%, transparent); white-space: nowrap; }
+.integration-table .table-empty { padding: 25px 16px; color: var(--muted); text-align: center; }
+.selection-policy { font-size: 11px; margin: 16px 0 10px; }
+.zabbix-actions { background: var(--panel-bg); gap: 12px; margin: 0 -22px -18px; padding: 16px 22px; border-radius: 0 0 9px 9px; border-color: var(--border-strong); }
+.selection-action-summary { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 190px; }
+.selection-action-summary > .ui-icon { width: 22px; height: 22px; flex-basis: 22px; color: var(--focus); }
+#selection-count { display: block; font-size: 13px; }
+#selection-changes { display: block; font-size: 10px; color: var(--muted); }
+.zabbix-actions #save-selection { min-height: 38px; font-size: 13px; font-weight: 600; }
+.import-details { width: min(540px, calc(100vw - 32px)); color: var(--text); background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 22px; }
+.import-details::backdrop { background: #0009; }
+.import-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.import-detail-heading h2 { margin: 0; font-size: 18px; }
+.import-details dt { color: var(--muted); margin: 14px 0 3px; font-size: 12px; }
+.import-details dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+@keyframes icon-spin { to { transform: rotate(360deg); } }
+@keyframes icon-pulse { to { opacity: .4; } }
+@media (max-width: 1200px) {
+  .import-summary { grid-template-columns: repeat(3, 1fr); }
+  .zabbix-filters { gap: 8px; flex-wrap: wrap; }
+  .zabbix-filters .search-field { min-width: 180px; }
+}
+@media (max-width: 900px) {
+  .zabbix-summary > span { padding: 0 10px; font-size: 11px; }
+  .zabbix-columns { grid-template-columns: minmax(190px, 35fr) minmax(0, 65fr); gap: 16px; }
+  .zabbix-groups { padding-right: 16px; }
+}
+@media (max-width: 760px) {
+  .settings-page .settings-panel { padding: 16px; }
+  .settings-page h1 { font-size: 25px; }
+  .zabbix-status { gap: 10px; }
+  .zabbix-summary { row-gap: 12px; }
+  .zabbix-summary > span { border: 0; padding: 0; width: 100%; }
+  .zabbix-summary > span:first-child { padding: 0; }
+  .zabbix-columns { grid-template-columns: 1fr; gap: 20px; }
+  .zabbix-groups { border: 0; padding: 0; }
+  .zabbix-groups .zabbix-scroll { height: 180px; }
+  .zabbix-filters .search-field { flex-basis: 100%; }
+  .host-selection-table { min-width: 490px; }
+  .import-results-heading, .import-results-tools { width: 100%; }
+  .import-results-tools .search-field { min-width: 0; flex-basis: 100%; }
+  .import-summary { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+  .import-metric { padding: 9px; gap: 7px; }
+  .import-metric-icon { width: 28px; height: 28px; flex-basis: 28px; }
+  .import-metric-icon .ui-icon { width: 18px; height: 18px; }
+  .zabbix-actions { position: static; margin: 0 -16px -16px; padding: 14px 16px; }
+  .selection-action-summary { flex-basis: 100%; }
+  .zabbix-actions > button { flex: 1; }
+  #connection-details .connection-form { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-page button, #connection-details summary .ui-icon { transition: none; }
+  #connection-status[data-state=loading] .ui-icon, #inventory-panel[aria-busy=true] #inventory-feedback::before { animation: none; }
+}
+
+#import-result { white-space: normal; }
+.host-selection-table { min-width: 500px; }
+@media (min-width: 761px) and (max-width: 1050px) {
+  .zabbix-columns { grid-template-columns: 1fr; }
+  .zabbix-groups { border-right: 0; padding-right: 0; }
+  .zabbix-groups .zabbix-scroll { height: 180px; }
+  .zabbix-summary { row-gap: 10px; }
+  .zabbix-summary > span { border: 0; }
+}
+@media (min-width: 1051px) {
+  main.settings-page { margin-top: -42px; }
+  .settings-page .page-heading { padding-right: 150px; }
+  .zabbix-manager .host-table-scroll { height: clamp(190px, 24vh, 280px); }
+  .zabbix-groups .zabbix-scroll { height: clamp(240px, calc(24vh + 50px), 330px); }
+}

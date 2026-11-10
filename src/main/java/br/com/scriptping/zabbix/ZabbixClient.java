@@ -277,7 +277,8 @@ public class ZabbixClient {
                     h.path("name").asText(h.path("host").asText()),
                     ip,
                     List.copyOf(groups),
-                    acknowledgedHosts.contains(h.path("hostid").asText())
+                    acknowledgedHosts.contains(h.path("hostid").asText()),
+                    h.path("host").asText()
                 )
             );
         }

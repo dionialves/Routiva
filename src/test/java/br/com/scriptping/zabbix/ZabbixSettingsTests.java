@@ -71,6 +71,7 @@ class ZabbixSettingsTests {
         var host = new Host("h", "Roteador", "10.0.0.1", List.of(group));
         when(client.groups()).thenReturn(List.of(group));
         when(client.discover(Set.of("g"))).thenReturn(List.of(host));
+        when(client.fetchSelected(Set.of("g"), Set.of("h"))).thenReturn(List.of(host));
         var session = new MockHttpSession();
         mvc.perform(get("/configuracao/zabbix").session(session)).andExpect(status().isOk());
         String csrf = (String) session.getAttribute("zabbixCsrf");
@@ -87,6 +88,44 @@ class ZabbixSettingsTests {
         mvc.perform(post("/configuracao/zabbix/api/selecao").session(session).param("csrf", csrf))
             .andExpect(status().isOk());
         assertThat(settings.current().hosts()).isEmpty();
+    }
+
+    @Test void jsonImportValidatesCsrfAndConfirmsPersistedHosts() throws Exception {
+        var g = new Host.Group("json", "JSON");
+        var h = new Host("json-host", "Host", "10.1.1.1", List.of(g));
+        when(client.groups()).thenReturn(List.of(g));
+        when(client.discover(Set.of("json"))).thenReturn(List.of(h));
+        when(client.fetchSelected(Set.of("json"), Set.of("json-host"))).thenReturn(List.of(h));
+        var session = new MockHttpSession();
+        mvc.perform(get("/configuracao/zabbix").session(session)).andExpect(status().isOk());
+        mvc.perform(post("/configuracao/zabbix/api/importar").session(session)
+            .header("X-Zabbix-CSRF", "wrong").contentType("application/json")
+            .content("{\"hosts\":[\"json-host\"]}")).andExpect(status().isForbidden());
+        mvc.perform(post("/configuracao/zabbix/api/importar").session(session)
+            .header("X-Zabbix-CSRF", session.getAttribute("zabbixCsrf")).contentType("application/json")
+            .content("{\"hosts\":[\"json-host\"]}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.result.state").value("completed"))
+            .andExpect(jsonPath("$.imported[?(@.id == 'json-host')]").isNotEmpty());
+        var restored = new ZabbixSettings(repository, mapper, "", "", "");
+        assertThat(restored.current().hosts()).containsExactly("json-host");
+        assertThat(restored.current().inventory()).containsExactly(h);
+        when(client.groups()).thenThrow(new IllegalStateException("offline"));
+        mvc.perform(get("/configuracao/zabbix/resultado").session(session))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.result.selectionSaved").value(true))
+            .andExpect(jsonPath("$.result.entries[0].name").value("Host"))
+            .andExpect(jsonPath("$.result.entries[0].ip").value("10.1.1.1"))
+            .andExpect(jsonPath("$.result.entries[0].outcome").value("imported"))
+            .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("secret"))));
+    }
+
+    @Test void everyPageUsesOneSharedMobileNavigation() throws Exception {
+        for (String route : List.of("/disponibilidade", "/mapas", "/configuracao/zabbix")) {
+            String html = mvc.perform(get(route)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+            assertThat(html.split("id=\"mobile-nav-toggle\"", -1)).hasSize(2);
+            assertThat(html).doesNotContain("id=\"mobile-menu\"", "id=\"menu-backdrop\"");
+            assertThat(html).contains("aria-controls=\"settings-submenu\"", "/icons.svg#settings");
+        }
     }
 
     @Test void synchronizationHasNoScheduledTrigger() throws Exception {
