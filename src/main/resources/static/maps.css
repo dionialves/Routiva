@@ -73,6 +73,9 @@ dialog::backdrop { background:rgb(3 12 20 / 68%); }
 }
 #map-tools button:hover { border-color:var(--cyan); }
 #map-tools svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
+#refresh-map[aria-busy=true] { cursor:progress; }
+#refresh-map[aria-busy=true] svg { animation:map-refresh-spin 1s linear infinite; }
+@keyframes map-refresh-spin { to { transform:rotate(360deg); } }
 #workspace.map-expanded .page-heading { display:none; }
 body:has(#workspace.map-expanded) { overflow:hidden; }
 #workspace.map-expanded .map-stage { position:fixed; inset:0; z-index:100; }

@@ -390,8 +390,21 @@ function endDrag() {
 $('canvas').onlostpointercapture = endDrag;
 $('canvas').onpointercancel = endDrag;
 
+function setRefreshBusy(busy) {
+  $('refresh-map').disabled = busy;
+  $('refresh-map').setAttribute('aria-busy', String(busy));
+}
+
+$('refresh-map').onclick = () => {
+  if (!current || editing || $('refresh-map').disabled) return;
+  return refresh(++generation);
+};
+
 async function refresh(token) {
   if (!current || editing || token !== generation) return;
+  clearTimeout(timer);
+  setRefreshBusy(true);
+  $('status').textContent = 'Consultando incidentes…';
   try {
     const ids = [...new Set(current.layout.nodes.map(n => n.groupId).filter(Boolean))];
     const hostsIds = [...new Set(current.layout.nodes.map(n => n.hostId).filter(Boolean))];
@@ -410,6 +423,8 @@ async function refresh(token) {
     if (token !== generation) return;
     summaryFailed = true;
     $('status').textContent = 'Consulta ao Zabbix indisponível. Nova tentativa em um minuto.';
+  } finally {
+    if (token === generation) setRefreshBusy(false);
   }
   draw();
   popSummary.render();
@@ -422,6 +437,7 @@ function openMap(map, edit = false) {
   summaryFailed = false;
   clearTimeout(timer);
   generation++;
+  setRefreshBusy(false);
   current = map ? JSON.parse(JSON.stringify(map)) : null;
   editing = edit;
   selection.clear();
@@ -444,7 +460,7 @@ function openMap(map, edit = false) {
   pan = null;
   $('workspace').classList.toggle('viewing', !!map && !edit);
   setMapExpanded(false);
-  $('fullscreen-map').hidden = $('maximize-map').hidden = edit;
+  $('refresh-map').hidden = $('fullscreen-map').hidden = $('maximize-map').hidden = edit;
   if (map) {
     viewport.scrollTo(0, 0);
     camera = map.layout.camera ? {...map.layout.camera} : {x:0, y:0, scale:1};
