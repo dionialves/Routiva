@@ -293,10 +293,13 @@ function setMapExpanded(expanded) {
   $('workspace').classList.toggle('map-expanded', expanded);
   const button = $('maximize-map');
   button.setAttribute('aria-pressed', String(expanded));
-  button.title = expanded ? 'Restaurar tamanho do mapa' : 'Ampliar mapa na página';
+  button.title = expanded ? 'Restaurar tamanho do mapa' : 'Maximizar mapa';
   button.setAttribute('aria-label', button.title);
 }
 $('maximize-map').onclick = () => setMapExpanded(!$('workspace').classList.contains('map-expanded'));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !document.fullscreenElement) setMapExpanded(false);
+});
 $('fullscreen-map').onclick = async () => {
   const target = $('map-stage');
   try {

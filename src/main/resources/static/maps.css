@@ -74,7 +74,9 @@ dialog::backdrop { background:rgb(3 12 20 / 68%); }
 #map-tools button:hover { border-color:var(--cyan); }
 #map-tools svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
 #workspace.map-expanded .page-heading { display:none; }
-#workspace.map-expanded .map-viewport { height:90dvh; max-height:none; }
+body:has(#workspace.map-expanded) { overflow:hidden; }
+#workspace.map-expanded .map-stage { position:fixed; inset:0; z-index:100; }
+#workspace.map-expanded .map-viewport { position:absolute; inset:0; height:100%; max-height:none; border-radius:0; }
 #map-tools button[hidden], .map-stage:fullscreen #maximize-map { display:none; }
 #workspace.viewing .map-stage:fullscreen .map-viewport { height:100%; max-height:none; position:absolute; inset:0; }
 
