@@ -19,7 +19,7 @@ public class IncidentsController {
     }
 
     public record Row(String eventId, String name, int severity, String severityLabel,
-                      long timestamp, List<Host> hosts) {}
+                      long timestamp, List<Host> hosts, boolean acknowledged) {}
     private static final List<String> SEVERITIES = List.of("Não classificada", "Informação", "Atenção", "Média", "Alta", "Desastre");
 
     @Value("${spring.jackson.time-zone:America/Sao_Paulo}")
@@ -89,7 +89,7 @@ public class IncidentsController {
                 int level = event.severity();
                 rows.add(new Row(event.eventId(), event.name(), level,
                     level >= 0 && level < SEVERITIES.size() ? SEVERITIES.get(level) : "Desconhecida",
-                    event.openedAt(), List.copyOf(eventHosts.get(key))));
+                    event.openedAt(), List.copyOf(eventHosts.get(key)), event.acknowledged()));
             });
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).cacheControl(CacheControl.noStore())

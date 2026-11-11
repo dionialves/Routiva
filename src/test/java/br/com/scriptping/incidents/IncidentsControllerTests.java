@@ -20,12 +20,13 @@ class IncidentsControllerTests {
 
     @Test void deduplicatesSharedEventsAndRendersTemplate() {
         when(inventory.hosts()).thenReturn(List.of(a, b));
-        var event = new ZabbixClient.Incident("Link <down>", 4, "99", 1000);
+        var event = new ZabbixClient.Incident("Link <down>", 4, "99", 1000, true);
         when(client.activeIncidents(List.of("1", "2"))).thenReturn(Map.of("1", List.of(event), "2", List.of(event)));
         var model = new ExtendedModelMap();
         controller.page("g", "", "", "4", model, new MockHttpServletResponse());
         var rows = controller.incidents("g", "", "", "4", "date", "desc", 1, 10).getBody().rows();
         assertEquals(1, rows.size());
+        assertTrue(rows.getFirst().acknowledged());
         assertEquals(2, ((IncidentsController.Row) rows.getFirst()).hosts().size());
         var resolver = new ClassLoaderTemplateResolver();
         resolver.setPrefix("templates/"); resolver.setSuffix(".html"); resolver.setTemplateMode("HTML");
@@ -33,6 +34,7 @@ class IncidentsControllerTests {
         var context = new Context(Locale.forLanguageTag("pt-BR"), model);
         String html = engine.process("incidents", context);
         assertTrue(html.contains("incident-rows"));
+        assertTrue(html.contains("Rec.</th>"));
         assertTrue(html.contains("Router A"));
         assertTrue(html.contains("incident-group-search"));
     }

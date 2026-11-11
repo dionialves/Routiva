@@ -51,10 +51,11 @@ async function surface(respond, options = {}) {
 const row = { eventId: '1', name: '<script>original trigger</script>', severity: 4, severityLabel: 'Alta', timestamp: Date.now() - 87 * 60000, hosts: [{ name: 'Router', ip: '10.0.0.1' }] };
 function response(params) { return { ok: true, json: async () => ({ rows: [row], total: 32, page: Number(params.get('page')), pages: 4, size: 10, updatedAt: Date.now(), warning: '' }) }; }
 
-test('renders five columns safely and calculates durations locally', async () => {
+test('renders six columns safely and calculates durations locally', async () => {
   const ui = await surface(response);
   const cells = ui.rows()[0].children[0].children;
-  assert.equal(cells.length, 5);
+  assert.equal(cells.length, 6);
+  assert.equal(cells[5].textContent, 'Não');
   assert.equal(cells[3].children[0].textContent, row.name);
   assert.equal(cells[3].children[0].title, row.name);
   assert.equal(cells[4].children[0].children[1].textContent, '1 h 27 min');
@@ -211,4 +212,11 @@ test('first picker option selects every available group or host even with a sear
   hostAll.children[0].checked = true; hostAll.children[0].emit('change');
   assert.ok(ui.elements['incident-host'].options.every(option => option.selected));
   assert.equal(JSON.parse(ui.storage.get('routiva.incidents.filters')).hostId, '1,2');
+});
+
+test('shows acknowledged incidents in the rightmost column', async () => {
+  const ui = await surface(params => ({ ok: true, json: async () => ({ rows: [{ ...row, acknowledged: true }], total: 1, page: 1, pages: 1, updatedAt: Date.now(), warning: '' }) }));
+  const cells = ui.rows()[0].children[0].children;
+  assert.equal(cells[5].textContent, 'Sim');
+  assert.equal(cells[5].title, 'Incidente reconhecido');
 });
