@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
 const flush = () => new Promise(resolve => setImmediate(resolve));
-async function surface(report = null) {
+async function surface(report = null, { storage = new Map(), search = '', storageUnavailable = false } = {}) {
   class Element {
     constructor() { this.children=[]; this.listeners={}; this.dataset={}; this.style={}; this.value='1440'; this.checked=true; this.classList={toggle(){},remove(){}}; }
     append(...items) { this.children.push(...items); }
@@ -16,6 +16,7 @@ async function surface(report = null) {
     closest() { return this; }
   }
   const elements = new Proxy({}, {get:(target,key)=>target[key] ||= new Element()});
+  elements.period.options = ['60', '1440', '10080'].map(value => ({ value }));
   const timers = new Map(), requests=[]; let serial=0;
   const live = [{id:'h',ping:30,loss:2,state:'Respondendo',measuredAt:Date.now()}];
   const data = {
@@ -27,7 +28,9 @@ async function surface(report = null) {
   class Clock extends Date { static now() { return now; } }
   const context={
     document:{hidden:false,body:new Element(),addEventListener(){},getElementById:id=>elements[id],createElement:()=>new Element(),createElementNS:()=>new Element(),createDocumentFragment:()=>new Element(),createTextNode:text=>text},
-    location:{pathname:'/diagnostico/grupos/g'},addEventListener(){},
+    location:{pathname:'/diagnostico/grupos/g',search},addEventListener(){},URLSearchParams,
+    localStorage:{getItem:key=>{if(storageUnavailable)throw Error('unavailable');return storage.get(key);},setItem:(key,value)=>{if(storageUnavailable)throw Error('unavailable');storage.set(key,value);}},
+    history:{replaceState(_state,_title,url){context.location.search=url.slice(url.indexOf('?'));}},
     AppIcon:()=>new Element(),AvailabilityView:{format:(v,u='%')=>v==null?'Sem dados':v+u,times(){}},
     AvailabilityChart:{paths:require('../../main/resources/static/availability-chart.js').paths,Chart:class { clear(){} update(){} draw(){} }},
     AbortSignal:{timeout(){}},Date:Clock,
@@ -37,8 +40,30 @@ async function surface(report = null) {
   context.window=context;
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../main/resources/static/diagnostics.js'),'utf8'),context);
   await flush();
-  return {elements,timers,requests,live,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
+  return {elements,timers,requests,live,location:context.location,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
 }
+test('period survives reload even when the original URL specified another period',async()=>{
+  const storage=new Map();
+  const ui=await surface(null,{storage,search:'?minutes=1440&other=kept'});
+  ui.elements.period.value='60';ui.elements.period.emit('change');await flush();
+  assert.equal(storage.get('routiva.diagnostics.period'),'60');
+  assert.equal(new URLSearchParams(ui.location.search).get('other'),'kept');
+  const reloaded=await surface(null,{storage,search:ui.location.search});
+  assert.equal(reloaded.elements.period.value,'60');
+  assert.ok(reloaded.requests.includes('/api/availability?minutes=60&groupId=g'));
+  const reopened=await surface(null,{storage});
+  assert.equal(reopened.elements.period.value,'60');
+});
+test('explicit valid period overrides storage and invalid preferences use the default',async()=>{
+  const storage=new Map([['routiva.diagnostics.period','60']]);
+  const explicit=await surface(null,{storage,search:'?minutes=10080'});
+  assert.equal(explicit.elements.period.value,'10080');
+  storage.set('routiva.diagnostics.period','invalid');
+  const invalid=await surface(null,{storage,search:'?minutes=invalid'});
+  assert.equal(invalid.elements.period.value,'1440');
+  const unavailable=await surface(null,{storageUnavailable:true});
+  assert.ok(unavailable.requests.includes('/api/availability?minutes=1440&groupId=g'));
+});
 test('live badges use configured thresholds and incidents do not imply connectivity',async()=>{
   const ui=await surface();
   ui.elements['diagnostic-ping'].emit('click'); await flush();

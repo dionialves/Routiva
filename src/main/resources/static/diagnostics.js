@@ -6,7 +6,16 @@
   const format = window.AvailabilityView.format;
   const groupId = decodeURIComponent(location.pathname.split('/')[3] || '');
   const selectedPeriod = location.search ? new URLSearchParams(location.search).get('minutes') : null;
-  if (selectedPeriod && Array.from($('period').options || []).some(o => o.value === selectedPeriod)) $('period').value = selectedPeriod;
+  const periodStorageKey = 'routiva.diagnostics.period';
+  const periods = Array.from($('period').options || [], option => option.value);
+  let savedPeriod;
+  try { savedPeriod = localStorage.getItem(periodStorageKey); } catch {}
+  $('period').value = periods.includes(selectedPeriod) ? selectedPeriod
+    : periods.includes(savedPeriod) ? savedPeriod : '1440';
+  function savePeriod() {
+    try { localStorage.setItem(periodStorageKey, $('period').value); } catch {}
+  }
+  savePeriod();
   let hosts = [], report, busy = false, stopped = false, historyVersion = 0;
   const cells = new Map();
   let refreshTimer, liveTimer, liveBusy = false, pollGeneration = 0;
@@ -276,7 +285,13 @@
     if (groupId && !$('group-details').hidden) history().catch(e => feedback(e.message, true));
     else start().catch(e => feedback(e.message, true));
   });
-  $('period').addEventListener('change', () => history().catch(e => feedback(e.message, true)));
+  $('period').addEventListener('change', () => {
+    savePeriod();
+    const params = new URLSearchParams(location.search);
+    params.set('minutes', $('period').value);
+    window.history.replaceState(null, '', location.pathname + '?' + params);
+    history().catch(e => feedback(e.message, true));
+  });
   $('chart-lines').addEventListener('click', () => { chart.mode='lines'; chart.draw(); $('chart-lines').setAttribute('aria-pressed','true'); $('chart-bars').setAttribute('aria-pressed','false'); });
   $('chart-bars').addEventListener('click', () => { chart.mode='bars'; chart.draw(); $('chart-bars').setAttribute('aria-pressed','true'); $('chart-lines').setAttribute('aria-pressed','false'); });
   $('chart-expand').addEventListener('click', () => { chart.expanded=!chart.expanded;
