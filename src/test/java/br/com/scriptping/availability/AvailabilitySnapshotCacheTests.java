@@ -9,6 +9,31 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
+    @Test void acknowledgedHostRemainsVisibleWithoutContributingMeasurements() {
+        var acknowledged = new Host("ack", "Reconhecido", "127.0.0.2", host.groups(), true);
+        insert(end-60000, 10d, null);
+        insert(acknowledged, end-60000, null, "Tempo esgotado", 20);
+        drain(10);
+        var builder = mock(PacketLossAnalysisService.class);
+        var monitor = mock(ZabbixService.class);
+        var repository = new AvailabilitySnapshotRepository(jdbc, new ObjectMapper());
+        var hosts = List.of(host, acknowledged);
+        when(monitor.hosts()).thenReturn(hosts);
+        when(builder.advance(anyList(), nullable(AvailabilitySnapshot.class)))
+            .thenReturn(queries.buildAt(hosts, AvailabilityDashboard.MINUTES, now));
+        var cache = new AvailabilitySnapshotCache(builder, repository, monitor);
+        cache.refresh();
+        cache.restore();
+        var view = cache.query(1440, "").view();
+        assertThat(view.hosts()).extracting(AvailabilityDashboard.Row::id).containsExactly(host.id(), "ack");
+        assertThat(view.hosts().get(1).status()).isEqualTo("RECONHECIDO");
+        assertThat(view.hosts().get(1).metrics().total()).isZero();
+        assertThat(view.report().total().technical()).isEqualTo(100d);
+        var group = cache.groupTotals(1440, hosts).groups().getFirst();
+        assertThat(group.hosts()).isEqualTo(1);
+        assertThat(group.metrics().technical()).isEqualTo(100d);
+    }
+
     @Test void archivedHostContributesToIndicatorsButNotActiveRowsAfterRestore() {
         var archived = new Host("old", "Removido", "127.0.0.2", host.groups());
         insert(end-60000, 10d, null);
@@ -129,14 +154,16 @@ class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
         }
     }
 
-    @Test void periodClassificationDoesNotUseOtherWindowsOrCurrentAcknowledgement() {
+    @Test void acknowledgementPreservesHistoricalPeriodsButExcludesHostFromIndicators() {
         var acknowledged=new Host(host.id(),host.name(),host.ip(),host.groups(),true);
         for (int i=0;i<200;i++) insert(end-3600000, 10d, null);
         insert(end-60000, null, "Tempo esgotado"); drain(1000);
         var snapshot=queries.buildAt(List.of(acknowledged), AvailabilityDashboard.MINUTES, now);
-        assertThat(snapshot.view(5, List.of(acknowledged)).hosts().getFirst().status()).isEqualTo("CRITICO");
-        assertThat(snapshot.view(1440, List.of(acknowledged)).hosts().getFirst().status()).isEqualTo("DEGRADADO");
-        assertThat(snapshot.view(1440, List.of(acknowledged)).report().total().loss()).isCloseTo(100d/201, within(0.00001));
+        assertThat(snapshot.view(5, List.of(acknowledged)).hosts().getFirst().status()).isEqualTo("RECONHECIDO");
+        assertThat(snapshot.view(1440, List.of(acknowledged)).report().total().total()).isZero();
+        assertThat(snapshot.periods().get(5).hosts().get(host.id()).status()).isEqualTo("CRITICO");
+        assertThat(snapshot.periods().get(1440).hosts().get(host.id()).status()).isEqualTo("DEGRADADO");
+        assertThat(snapshot.periods().get(1440).hosts().get(host.id()).total().metrics().loss()).isCloseTo(100d/201, within(0.00001));
     }
 
     @Test void coverageIncludesMissingHostsWithoutConvertingGapsToDowntimeAndTargetChangesAreIsolated() {

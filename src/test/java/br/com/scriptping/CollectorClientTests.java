@@ -19,6 +19,19 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class CollectorClientTests {
 
+    @org.junit.jupiter.api.Test
+    void acknowledgedHostsAreRemovedFromCollectorConfigurationAndCanReturn() {
+        var client = new CollectorClient(mock(SampleIngestionService.class), "unused", "", "", "", "", false, 1000, 1500);
+        var active = new br.com.scriptping.zabbix.Host("1", "Host", "127.0.0.1", java.util.List.of(), false);
+        var acknowledged = new br.com.scriptping.zabbix.Host("1", "Host", "127.0.0.1", java.util.List.of(), true);
+        client.synchronize(java.util.List.of(active));
+        assertThat((java.util.List<?>) ReflectionTestUtils.getField(client, "hosts")).hasSize(1);
+        client.synchronize(java.util.List.of(acknowledged));
+        assertThat((java.util.List<?>) ReflectionTestUtils.getField(client, "hosts")).isEmpty();
+        client.synchronize(java.util.List.of(active));
+        assertThat((java.util.List<?>) ReflectionTestUtils.getField(client, "hosts")).hasSize(1);
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void databaseFailureRetriesOffCallbackAndAckFollowsSuccessfulCommit(boolean reconnect) throws Exception {

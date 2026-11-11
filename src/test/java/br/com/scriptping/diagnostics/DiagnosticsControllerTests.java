@@ -30,6 +30,21 @@ class DiagnosticsControllerTests {
     private void sample(long id, String target, long age, Double latency, String error) {
         jdbc.getJdbcTemplate().update("INSERT INTO ping_sample VALUES(?,?,?,?,?,?)", id,"h",target,System.currentTimeMillis()-age,latency,error);
     }
+    @Test void acknowledgedHostAndIncidentRemainVisibleWithoutLiveMeasurements() throws Exception {
+        when(inventory.hosts()).thenReturn(List.of(new Host("h", "Router", "10.0.0.1",
+            List.of(new Host.Group("g", "POP")), true)));
+        when(client.activeIncidents(List.of("h"))).thenReturn(Map.of("h", List.of(
+            new ZabbixClient.Incident("Incidente reconhecido", 4))));
+        sample(1, "10.0.0.1", 0, 5d, null);
+        mvc.perform(get("/api/diagnostics/groups/g/details")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.hosts[0].id").value("h"))
+            .andExpect(jsonPath("$.incidents.h").value(1));
+        mvc.perform(get("/api/diagnostics/groups/g/live")).andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].state").value("Não monitorado — incidente reconhecido"))
+            .andExpect(jsonPath("$[0].ping").isEmpty())
+            .andExpect(jsonPath("$[0].loss").isEmpty());
+    }
+
     @Test void liveUsesCurrentIpAndExcludesInternalErrorsFromLoss() throws Exception {
         sample(1,"10.0.0.1",3000,null,"Tempo esgotado");
         sample(2,"10.0.0.1",2000,null,"Erro interno");

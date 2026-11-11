@@ -56,6 +56,7 @@ public class DiagnosticsController {
                 samples.computeIfAbsent(sample.hostId(), key -> new ArrayList<>()).add(sample);
             });
         var result = hosts.stream().map(h -> {
+            if (h.acknowledgedIcmpProblem()) return new Live(h.id(), null, null, null, "Não monitorado — incidente reconhecido");
             var rows = samples.getOrDefault(h.id(), List.of()).stream().filter(s -> s.target().equals(h.ip())).toList();
             if (rows.isEmpty()) return new Live(h.id(), null, null, null, "Sem dados recentes");
             var latest = rows.getFirst();

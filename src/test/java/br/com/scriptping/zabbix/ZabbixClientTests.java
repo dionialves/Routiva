@@ -83,11 +83,9 @@ class ZabbixClientTests {
         try (var api = new FakeApi(false)) {
             var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
             for (String name : List.of(
-                "High ICMP ping packet loss",
-                "ICMP ping response time is too high",
-                "Unavailable by ICMP ping",
-                "Latência alta",
-                "Perda de pacotes"
+                "High ICMP ping loss",
+                "High ICMP ping response time",
+                "Unavailable by ICMP ping"
             )) {
                 api.triggers =
                     "[{\"hosts\":[{\"hostid\":\"1\"}],\"lastEvent\":{\"acknowledged\":\"1\",\"name\":\"" +
@@ -98,9 +96,14 @@ class ZabbixClientTests {
             api.triggers =
                 "[{\"hosts\":[{\"hostid\":\"1\"}],\"lastEvent\":{\"acknowledged\":\"0\",\"name\":\"Unavailable by ICMP ping\"}}]";
             assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).isFalse();
-            api.triggers =
-                "[{\"hosts\":[{\"hostid\":\"1\"}],\"lastEvent\":{\"acknowledged\":\"1\",\"name\":\"Disk space low\"}}]";
-            assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).isFalse();
+            for (String name : List.of("Disk space low", "High ICMP ping packet loss",
+                "ICMP ping response time is too high", "Latência alta", "Perda de pacotes",
+                "High latency", "Unavailable by ICMP ping on another service")) {
+                api.triggers =
+                    "[{\"hosts\":[{\"hostid\":\"1\"}],\"lastEvent\":{\"acknowledged\":\"1\",\"name\":\"" +
+                    name + "\"}}]";
+                assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).as(name).isFalse();
+            }
             api.triggers = "[]";
             assertThat(client.fetch().getFirst().acknowledgedIcmpProblem()).isFalse();
         }

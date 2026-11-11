@@ -238,19 +238,11 @@ public class ZabbixClient {
     }
 
     static boolean isIcmpProblem(String name) {
-        String normalized = java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD)
-            .replaceAll("\\p{M}", "")
-            .toLowerCase(Locale.ROOT);
-        return (
-            normalized.contains("packet loss") ||
-            normalized.contains("perda de pacote") ||
-            normalized.contains("perca de pacote") ||
-            normalized.contains("latency") ||
-            normalized.contains("latencia") ||
-            (normalized.contains("response time") && normalized.contains("icmp")) ||
-            normalized.contains("unavailable by icmp ping") ||
-            (normalized.contains("indisponivel") && normalized.contains("icmp"))
-        );
+        return Set.of(
+            "high icmp ping loss",
+            "high icmp ping response time",
+            "unavailable by icmp ping"
+        ).contains(name.strip().toLowerCase(Locale.ROOT));
     }
 
     public synchronized List<Host> fetch() {

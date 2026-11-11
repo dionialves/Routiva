@@ -35,7 +35,7 @@ window.AvailabilityView = (() => {
   }
   const states = {
     NORMAL:['Normal','normal'], DEGRADADO:['Atenção','warning'], CRITICO:['Crítico','critical'],
-    SEM_DADOS:['Sem dados','neutral'], SEM_IP:['Sem IP válido','neutral'], RECONHECIDO:['Incidente reconhecido','neutral'],
+    SEM_DADOS:['Sem dados','neutral'], SEM_IP:['Sem IP válido','neutral'], RECONHECIDO:['Não monitorado — incidente reconhecido','neutral'],
     FALHA_COLETA:['Falha na coleta','neutral'], ATRASADO:['Coleta atrasada','warning']
   };
   let tableVersion;

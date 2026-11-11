@@ -58,8 +58,15 @@ public record AvailabilitySnapshot(int format, String version, long builtAt, lon
         Arrays.fill(points, Observation.EMPTY);
         var rows = new ArrayList<AvailabilityDashboard.Row>();
         long retainedFrom = to;
+        int participants = 0;
         for (var host : selection) {
             var data = period.hosts.get(host.id());
+            if (host.acknowledgedIcmpProblem()) {
+                if (activeHostIds.contains(host.id())) rows.add(new AvailabilityDashboard.Row(host.id(), host.name(),
+                    Observation.EMPTY.metrics(), host.ip(), host.groups(), "RECONHECIDO", false, false));
+                continue;
+            }
+            participants++;
             total = total.plus(data.total);
             retainedFrom = Math.min(retainedFrom, data.retainedFrom);
             for (int i=0; i<points.length; i++) points[i] = points[i].plus(data.points.get(i));
@@ -72,7 +79,7 @@ public record AvailabilitySnapshot(int format, String version, long builtAt, lon
             series.add(new Point(interval.from(), interval.from(), interval.to(), interval.partial(), false, points[i].metrics()));
         }
         var option = AvailabilityPeriod.of(minutes);
-        long observed = selection.isEmpty() ? 0 : total.validMinutes*60_000L/selection.size();
+        long observed = participants == 0 ? 0 : total.validMinutes*60_000L/participants;
         var report = new Report(period.from, to, option.bucketMinutes()*60_000L, total.metrics(),
             List.copyOf(series), version+":"+minutes+":"+selection.stream().map(Host::id).sorted().toList(),
             load.evaluatedAt(), total.lastSampleAt, retainedFrom, load, option.grouping(), observed);

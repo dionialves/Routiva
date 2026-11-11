@@ -132,6 +132,7 @@ public class AvailabilitySnapshotCache {
             for (var group : new HashSet<>(host.groups())) {
                 var aggregate = totals.computeIfAbsent(group.id(), key -> new Aggregate());
                 aggregate.name = group.name();
+                if (host.acknowledgedIcmpProblem()) continue;
                 if (activeIds.contains(host.id())) aggregate.hosts++;
                 aggregate.participants++;
                 if (data != null && sameTarget) {
@@ -143,7 +144,7 @@ public class AvailabilitySnapshotCache {
         }
         var rows = new ArrayList<GroupTotal>();
         totals.forEach((id, a) -> rows.add(new GroupTotal(id, a.name, a.hosts, a.total.metrics(),
-            a.total.validMinutes() * 60_000L / a.participants,
+            a.participants == 0 ? 0 : a.total.validMinutes() * 60_000L / a.participants,
             a.total.metrics().total() == 0 ? "SEM_DADOS" : a.severity == 2 ? "CRITICO" : a.severity == 1 ? "DEGRADADO" : "NORMAL")));
         return new GroupTotals(period == null ? 0 : period.from(), generation == null ? 0 : generation.snapshot.to(),
             generation == null ? "" : generation.snapshot.version(), List.copyOf(rows));

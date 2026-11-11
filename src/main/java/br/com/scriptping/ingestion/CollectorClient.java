@@ -103,7 +103,7 @@ public class CollectorClient implements HealthIndicator {
     }
 
     public synchronized void synchronize(List<Host> hosts) {
-        this.hosts = List.copyOf(hosts);
+        this.hosts = hosts.stream().filter(h -> !h.acknowledgedIcmpProblem()).toList();
         if (connected) sendConfiguration();
     }
 
