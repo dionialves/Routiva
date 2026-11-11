@@ -25,6 +25,8 @@
 .incidents-table th button { padding:0; background:none; border:0; color:inherit; font:inherit; }
 .incidents-table th svg { width:16px; height:16px; color:#90afc3; }
 .incidents-page .incidents-table td { padding:8px 16px; height:49px; box-sizing:border-box; border-bottom:1px solid #18374a; vertical-align:middle; }
+.incidents-page .incidents-table th:last-child,
+.incidents-page .incidents-table td:last-child { text-align:right; white-space:nowrap; }
 .incidents-table tbody tr { --severity:#8793ad; transition:background .15s; }
 .incidents-table tbody tr:nth-child(even) { background:#0a1b281f; }
 .incidents-table tbody tr:hover { background:#153b50; }
@@ -95,4 +97,4 @@
   .incident-group-field,.incident-host-field,.incident-severity-field { grid-column:1; grid-row:auto; }
 }
 
-.incident-acknowledged { display:inline-flex; align-items:center; justify-content:center; border-radius:20px; padding:3px 10px; background:#10b98125; color:#86efcb; font-size:12px; font-weight:600; white-space:nowrap; }
+.incident-acknowledged { display:inline-flex; align-items:center; justify-content:center; margin-right:-10px; border-radius:20px; padding:3px 10px; background:#10b98125; color:#86efcb; font-size:12px; font-weight:600; white-space:nowrap; }
