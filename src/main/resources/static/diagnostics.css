@@ -2,9 +2,10 @@
 #diagnostic-groups[hidden],#group-details[hidden],#back-groups[hidden]{display:none}
 
 .diagnostic-groups-table th:first-child { width: 65%; }
-.diagnostic-groups-table td:last-child { text-align: right; }
-.diagnostic-groups-table a { color: inherit; text-decoration: none; }
-.diagnostic-groups-table a:hover { color: var(--accent, #14b8a6); text-decoration: underline; }
+.availability-page .diagnostic-groups-table tr > :last-child { text-align:left; }
+.availability-page .diagnostic-groups-table tbody th a,
+.availability-page .diagnostic-groups-table tbody th a:visited { color:#00d3fd; text-decoration:none; }
+.availability-page .diagnostic-groups-table tbody th a:hover { color:#00d3fd; text-decoration:underline; }
 
 /* Diagnostics uses the shared shell, report cards and SVG chart primitives. */
 .diagnostics-dashboard { --diagnostic-green:#10b981; --diagnostic-cyan:#06b6d4; }
@@ -131,3 +132,40 @@
 .diagnostic-badge.incident-severity-3 { color:#ffa059; background:#ffa05926; }
 .diagnostic-badge.incident-severity-4 { color:#ff0000; background:#ff000026; }
 .diagnostic-badge.incident-severity-5 { color:#ed4545; background:#ed454526; }
+
+/* Group overview keeps the availability table primitives and a single compact panel. */
+#diagnostic-groups > h2 { margin:0 0 14px; font-size:17px; }
+.group-filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:16px; }
+.group-filters label { display:flex; align-items:center; gap:8px; min-width:0; }
+.group-filters .host-search { flex:1 1 260px; max-width:none; margin:0; order:0; }
+.group-filters .host-search input { width:100%; min-width:0; }
+.group-filters svg { width:17px; height:17px; flex-shrink:0; color:#94b3c5; }
+.group-filters select,.group-filters input { min-height:36px; font-size:12px; }
+.group-filters .group-period { flex:0 1 230px; }
+.group-period select { width:100%; }
+#groups-refresh { display:grid; place-items:center; width:36px; height:36px; padding:8px; }
+.diagnostics-dashboard .diagnostic-groups-table { min-width:1100px; table-layout:auto; font-size:12px; }
+.diagnostics-dashboard .diagnostic-groups-table th:first-child { width:auto; min-width:170px; }
+.diagnostic-groups-table thead th { background:#102a3d; padding:12px 10px; }
+.diagnostic-groups-table th button { display:inline-flex; align-items:center; gap:5px; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-align:inherit; cursor:pointer; }
+.diagnostic-groups-table th button svg { width:13px; height:13px; color:#7b9aad; }
+.diagnostic-groups-table tbody td,.diagnostic-groups-table tbody th { padding:14px 10px; height:46px; border-bottom:1px solid #193647; white-space:nowrap; }
+.diagnostic-groups-table td:nth-child(n+2):nth-child(-n+7),.diagnostic-groups-table thead th:nth-child(n+2):nth-child(-n+7) { text-align:right; font-variant-numeric:tabular-nums; }
+.availability-page .diagnostic-groups-table tbody td:nth-child(7),
+.availability-page .diagnostic-groups-table thead th:nth-child(7) { text-align:center; }
+.diagnostic-groups-table tbody th a { display:inline-block; }
+.diagnostic-groups-table .diagnostic-badge { border-radius:5px; min-width:28px; padding:3px 7px; }
+.group-skeleton span { display:block; height:12px; min-width:40px; background:#1d3b4e; border-radius:4px; animation:group-pulse 1.2s ease-in-out infinite alternate; }
+#groups-refresh.refreshing svg { animation:group-spin 1s linear infinite; }
+#diagnostic-groups .pagination { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; font-size:12px; }
+#diagnostic-groups .pagination button { font-size:12px; }
+@keyframes group-pulse { to { opacity:.35; } }
+@keyframes group-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .group-skeleton span,#groups-refresh.refreshing svg { animation:none; } }
+@media(max-width:650px) { .group-filters .host-search { flex-basis:100%; } .group-filters .group-period { flex:1; } #groups-page-status { text-align:center; } }
+.availability-page .diagnostic-groups-table thead th:nth-child(n) { width:auto; }
+.group-filters select { color:#c1d3e0; background:#0b202e; border:1px solid #254052; border-radius:6px; padding:7px 10px; font-family:inherit; color-scheme:dark; }
+.group-filters select:focus-visible { outline:2px solid #06b6d4; outline-offset:2px; }
+#diagnostic-groups .pagination { border:0; padding:0; background:transparent; }
+
+.diagnostic-groups-table .diagnostic-incidents { display:flex; flex-flow:row nowrap; align-items:center; justify-content:center; gap:6px; direction:ltr; }

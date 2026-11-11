@@ -2,6 +2,14 @@
 window.AvailabilityView = (() => {
   const $ = id => document.getElementById(id);
   const format = (value, unit = '%') => value == null ? 'Sem dados' : value.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + unit;
+  function meter(value, key) {
+    const track = document.createElement('span'), fill = document.createElement('span');
+    track.className = 'availability-meter ' + key;
+    track.setAttribute('aria-hidden', 'true');
+    fill.style.width = Math.max(0, Math.min(100, value)) + '%';
+    track.append(fill);
+    return track;
+  }
   function duration(seconds) {
     const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds % 3600 / 60), rest = seconds % 60;
     return [hours ? `${hours} h` : '', minutes ? `${minutes} min` : '', rest || (!hours && !minutes) ? `${rest} s` : ''].filter(Boolean).join(' ');
@@ -48,7 +56,7 @@ window.AvailabilityView = (() => {
         const td = document.createElement('td'); td.className='availability-number';
         const wrap = document.createElement('div'); wrap.className='availability-percent';
         if (['operational','technical'].includes(key) && row.metrics[key] != null) {
-          const track=document.createElement('span'), fill=document.createElement('span'); track.className='availability-meter '+key; track.setAttribute('aria-hidden','true'); fill.style.width=Math.max(0,Math.min(100,row.metrics[key]))+'%'; track.append(fill); wrap.append(track);
+          wrap.append(meter(row.metrics[key], key));
         }
         const value=document.createElement('span'); value.textContent=format(row.metrics[key],key==='latency'?' ms':'%'); wrap.append(value); td.append(wrap); tr.append(td);
       }
@@ -63,5 +71,5 @@ window.AvailabilityView = (() => {
     $('previous').disabled=page.number<=1; $('next').disabled=page.number>=page.pages;
   }
   function reset() {tableVersion=null; $('availability-hosts').replaceChildren(); $('hosts-empty').hidden=true; $('previous').disabled=true; $('next').disabled=true;}
-  return {table,reset,format,times};
+  return {table,reset,format,times,meter};
 })();

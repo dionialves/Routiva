@@ -1,9 +1,12 @@
 /* Group diagnostics shares the availability report, cards and chart renderer. */
 (() => {
   'use strict';
+  if (!location.pathname.split('/')[3]) return;
   const $ = id => document.getElementById(id);
   const format = window.AvailabilityView.format;
   const groupId = decodeURIComponent(location.pathname.split('/')[3] || '');
+  const selectedPeriod = location.search ? new URLSearchParams(location.search).get('minutes') : null;
+  if (selectedPeriod && Array.from($('period').options || []).some(o => o.value === selectedPeriod)) $('period').value = selectedPeriod;
   let hosts = [], report, busy = false, stopped = false, historyVersion = 0;
   const cells = new Map();
   let refreshTimer, liveTimer, liveBusy = false, pollGeneration = 0;
@@ -287,52 +290,6 @@
   window.addEventListener('pageshow', event => { if (event.persisted && groupId) { stopped=false; poll(); scheduleRefresh(); } });
   async function start() {
     const groups = await get('/api/diagnostics/groups');
-    if (!groupId) {
-      $('diagnostic-status').textContent = groups.length ? '' : 'Nenhum grupo monitorado. Importe os hosts na integração Zabbix.';
-      let page = 1;
-      const pageSize = 50;
-      const normalize = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
-      function renderGroups() {
-        const query = normalize($('group-search').value.trim());
-        const filtered = groups.filter(group => normalize(group.name).includes(query));
-        const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
-        page = Math.max(1, Math.min(page, pages));
-        const offset = (page - 1) * pageSize;
-        const fragment = document.createDocumentFragment();
-        for (const group of filtered.slice(offset, offset + pageSize)) {
-          const tr = document.createElement('tr');
-          const name = textCell(tr, '', true);
-          const link = document.createElement('a');
-          link.href = `/diagnostico/grupos/${encodeURIComponent(group.id)}`;
-          link.textContent = group.name;
-          name.append(link);
-          textCell(tr, group.hosts).className = 'availability-number';
-          const action = textCell(tr, '');
-          const open = document.createElement('a');
-          open.href = link.href;
-          open.textContent = 'Ver diagnóstico →';
-          open.setAttribute('aria-label', `Ver diagnóstico de ${group.name}`);
-          action.append(open);
-          fragment.append(tr);
-        }
-        $('group-rows').replaceChildren(fragment);
-        $('group-count').textContent = `${filtered.length} de ${groups.length} grupos`;
-        $('groups-empty').hidden = filtered.length !== 0;
-        $('groups-empty').textContent = groups.length
-          ? 'Nenhum grupo corresponde à pesquisa.'
-          : 'Nenhum grupo monitorado. Importe os hosts na integração Zabbix.';
-        $('groups-page-status').textContent = filtered.length
-          ? `${offset + 1}–${Math.min(offset + pageSize, filtered.length)} de ${filtered.length} · Página ${page} de ${pages}`
-          : 'Página 1 de 1';
-        $('groups-previous').disabled = page <= 1;
-        $('groups-next').disabled = page >= pages;
-      }
-      $('group-search').addEventListener('input', () => { page = 1; renderGroups(); });
-      $('groups-previous').addEventListener('click', () => { page--; renderGroups(); });
-      $('groups-next').addEventListener('click', () => { page++; renderGroups(); });
-      renderGroups();
-      return;
-    }
     const group = groups.find(g => g.id===groupId);
     if (!group) throw new Error('Grupo não encontrado no inventário monitorado.');
     $('diagnostic-title').textContent=group.name; $('diagnostic-description').textContent='Indicadores do grupo e comunicação dos hosts em tempo real.';

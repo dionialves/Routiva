@@ -3,60 +3,81 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
+const tick = () => new Promise(resolve => setImmediate(resolve));
 
-async function surface(groups) {
+async function surface(respond) {
   class Element {
-    constructor() { this.children = []; this.listeners = {}; this.value = ''; }
+    constructor() { this.children = []; this.listeners = {}; this.value = ''; this.dataset = {}; this.style = {}; this.classList = { add() {}, remove() {} }; this.attributes = {}; }
     append(...items) { this.children.push(...items); }
     replaceChildren(...items) { this.children = items; }
-    setAttribute() {}
+    setAttribute(key, value) { this.attributes[key] = value; }
     addEventListener(name, fn) { this.listeners[name] = fn; }
     emit(name) { this.listeners[name]?.(); }
+    closest() { return this; }
   }
   const elements = new Proxy({}, { get: (target, key) => target[key] ||= new Element() });
+  const sorts = ['name', 'hosts', 'operational'].map(key => { const el = new Element(); el.dataset.groupSort = key; return el; });
+  const requests = [];
+  elements['group-period'].value = '1440';
   const context = {
-    document: { addEventListener() {}, getElementById: id => elements[id], createElement: () => new Element(), createDocumentFragment: () => new Element() },
+    document: { getElementById: id => elements[id], createElement: () => new Element(), createDocumentFragment: () => new Element(), querySelectorAll: () => sorts },
     location: { pathname: '/diagnostico/grupos' },
-    AvailabilityView: { format() {} }, AvailabilityChart: { Chart: class {} },
-    addEventListener() {}, AbortSignal: { timeout() {} },
-    fetch: async () => ({ ok: true, json: async () => groups }),
+    addEventListener() {}, URLSearchParams, AbortController, setTimeout, clearTimeout,
+    fetch: async url => { const params = new URL(url, 'http://localhost').searchParams; requests.push(params); return { ok: true, json: async () => respond(params) }; },
   };
   context.window = context;
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/diagnostics.js'), 'utf8'), context);
-  await new Promise(resolve => setImmediate(resolve));
-  return { elements, rows: () => elements['group-rows'].children[0].children };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/availability-view.js'), 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/diagnostics-groups.js'), 'utf8'), context);
+  await tick();
+  return { elements, requests, sorts, rows: () => elements['group-rows'].children[0].children };
 }
+const row = { id: 'real/id', name: 'São Paulo', hosts: 3, metrics: { healthy: 90, degraded: 5, lost: 5, errors: 2, operational: 90, technical: 95, loss: 5, latency: 2 }, observedMillis: 60000, incidents: 1, severities: { 5: 1 }, status: 'CRITICO' };
+const response = (rows = [row]) => ({ rows, number: 1, pages: 3, total: rows.length ? 45 : 0, from: 1, to: 60001, warning: '' });
 
-test('group list limits pages to 50, navigates and searches all pages ignoring accents', async () => {
-  const groups = Array.from({ length: 105 }, (_, i) => ({ id: `g${i}`, name: i === 104 ? 'São Paulo' : `Grupo ${i}`, hosts: i + 1 }));
-  const ui = await surface(groups), el = ui.elements;
-  assert.equal(ui.rows().length, 50);
-  assert.equal(el['groups-previous'].disabled, true);
-  el['groups-next'].emit('click');
-  assert.equal(ui.rows().length, 50);
-  assert.match(el['groups-page-status'].textContent, /Página 2 de 3/);
-  el['groups-next'].emit('click');
-  assert.equal(ui.rows().length, 5);
-  assert.equal(el['groups-next'].disabled, true);
-  el['groups-previous'].emit('click');
-  assert.match(el['groups-page-status'].textContent, /Página 2 de 3/);
-  el['group-search'].value = 'sao paulo'; el['group-search'].emit('input');
+test('uses server pagination, preserves filters on refresh and resets page on sorting', async () => {
+  const ui = await surface(params => ({ ...response(), number: Number(params.get('page')) }));
   assert.equal(ui.rows().length, 1);
-  assert.equal(ui.rows()[0].children[0].children[0].href, '/diagnostico/grupos/g104');
-  assert.equal(ui.rows()[0].children[1].textContent, 105);
-  assert.match(el['groups-page-status'].textContent, /Página 1 de 1/);
-  el['group-search'].value = 'ausente'; el['group-search'].emit('input');
-  assert.equal(ui.rows().length, 0);
-  assert.equal(el['groups-empty'].hidden, false);
-  assert.match(el['groups-empty'].textContent, /pesquisa/);
-  el['group-search'].value = ''; el['group-search'].emit('input');
-  assert.equal(ui.rows().length, 50);
+  assert.equal(ui.rows()[0].children.length, 8);
+  assert.equal(ui.rows()[0].children[0].children[0].href, '/diagnostico/grupos/real%2Fid?minutes=1440');
+  assert.equal(ui.rows()[0].children[2].children[0].children[0].children[0].style.width, '90%');
+  ui.elements['groups-next'].emit('click'); await tick();
+  assert.equal(ui.requests.at(-1).get('page'), '2');
+  ui.elements['groups-refresh'].emit('click'); await tick();
+  assert.equal(ui.requests.at(-1).get('page'), '2');
+  ui.sorts[2].emit('click'); await tick();
+  assert.equal(ui.requests.at(-1).get('sort'), 'operational');
+  assert.equal(ui.requests.at(-1).get('page'), '1');
+  ui.sorts[2].emit('click'); await tick();
+  assert.equal(ui.requests.at(-1).get('direction'), 'desc');
+  ui.elements['group-search'].value = 'sao'; ui.elements['group-search'].emit('input');
+  ui.elements['group-search'].value = 'sao paulo'; ui.elements['group-search'].emit('input');
+  const before = ui.requests.length;
+  await new Promise(resolve => setTimeout(resolve, 330));
+  assert.equal(ui.requests.length, before + 1);
+  assert.equal(ui.requests.at(-1).get('q'), 'sao paulo');
+  ui.elements['group-period'].value = '10080'; ui.elements['group-period'].emit('change'); await tick();
+  assert.equal(ui.requests.at(-1).get('minutes'), '10080');
 });
 
-test('empty inventory has a helpful empty state and disabled pagination', async () => {
-  const { elements } = await surface([]);
-  assert.equal(elements['groups-previous'].disabled, true);
-  assert.equal(elements['groups-next'].disabled, true);
-  assert.equal(elements['groups-empty'].hidden, false);
-  assert.match(elements['groups-empty'].textContent, /Nenhum grupo monitorado/);
+test('empty results and unavailable metrics do not show fictitious zeros', async () => {
+  const empty = await surface(() => ({ ...response([]), pages: 1 }));
+  assert.equal(empty.elements['groups-empty'].hidden, false);
+  assert.equal(empty.elements['groups-previous'].disabled, true);
+  assert.equal(empty.elements['groups-next'].disabled, true);
+  assert.match(empty.elements['groups-empty'].textContent, /Nenhum grupo encontrado/);
+  const ui = await surface(() => response([{ ...row, metrics: {}, incidents: null, severities: {}, status: 'SEM_DADOS' }]));
+  assert.equal(ui.rows()[0].children[2].children[0].children[0].textContent, '—');
+  assert.equal(ui.rows()[0].children[6].children[0].textContent, '—');
+  assert.equal(ui.rows()[0].children[7].children[0].textContent, 'Sem dados');
+});
+
+test('failures expose retry and preserve the last successful rows', async () => {
+  let fail = false;
+  const ui = await surface(() => { if (fail) throw new Error('Conexão indisponível'); return response(); });
+  fail = true; ui.elements['groups-refresh'].emit('click'); await tick();
+  assert.equal(ui.rows().length, 1);
+  assert.equal(ui.elements['diagnostic-retry'].hidden, false);
+  assert.match(ui.elements['diagnostic-status'].textContent, /indisponível/);
+  fail = false; ui.elements['diagnostic-retry'].emit('click'); await tick();
+  assert.equal(ui.elements['diagnostic-retry'].hidden, true);
 });

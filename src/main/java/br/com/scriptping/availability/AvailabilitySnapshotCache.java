@@ -95,6 +95,46 @@ public class AvailabilitySnapshotCache {
         return new AvailabilityDashboard.Result(generation.groups, view);
     }
 
+    public record GroupTotal(String id, String name, int hosts, HostAvailabilityService.Metrics metrics,
+        long observedMillis, String status) {}
+    public record GroupTotals(long from, long to, String version, List<GroupTotal> groups) {}
+
+    /** One generation, one pass over memberships; no time series or raw history reads. */
+    public GroupTotals groupTotals(int minutes, List<Host> inventory) {
+        AvailabilityPeriod.of(minutes);
+        var generation = current;
+        var period = generation == null ? null : generation.snapshot.periods().get(minutes);
+        class Aggregate {
+            String name;
+            int hosts, severity;
+            AvailabilitySnapshot.Observation total = AvailabilitySnapshot.Observation.EMPTY;
+        }
+        var targets = new HashMap<String, String>();
+        if (generation != null) generation.snapshot.hosts().forEach(h -> targets.put(h.id(), h.ip()));
+        var totals = new LinkedHashMap<String, Aggregate>();
+        for (var host : inventory) {
+            var data = period == null ? null : period.hosts().get(host.id());
+            // Never attach measurements from a previous inventory target to a changed IP.
+            boolean sameTarget = targets.containsKey(host.id()) && Objects.equals(targets.get(host.id()), host.ip());
+            for (var group : new HashSet<>(host.groups())) {
+                var aggregate = totals.computeIfAbsent(group.id(), key -> new Aggregate());
+                aggregate.name = group.name();
+                aggregate.hosts++;
+                if (data != null && sameTarget) {
+                    aggregate.total = aggregate.total.plus(data.total());
+                    aggregate.severity = Math.max(aggregate.severity,
+                        "CRITICO".equals(data.status()) ? 2 : "DEGRADADO".equals(data.status()) ? 1 : 0);
+                }
+            }
+        }
+        var rows = new ArrayList<GroupTotal>();
+        totals.forEach((id, a) -> rows.add(new GroupTotal(id, a.name, a.hosts, a.total.metrics(),
+            a.total.validMinutes() * 60_000L / a.hosts,
+            a.total.metrics().total() == 0 ? "SEM_DADOS" : a.severity == 2 ? "CRITICO" : a.severity == 1 ? "DEGRADADO" : "NORMAL")));
+        return new GroupTotals(period == null ? 0 : period.from(), generation == null ? 0 : generation.snapshot.to(),
+            generation == null ? "" : generation.snapshot.version(), List.copyOf(rows));
+    }
+
     public HostAvailabilityService.Report host(String id, int minutes) {
         var generation=current;
         if (generation==null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Carregando indicadores");
