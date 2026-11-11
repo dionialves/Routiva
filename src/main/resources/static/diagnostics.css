@@ -173,3 +173,8 @@
 
 a.diagnostic-badge { text-decoration: none; }
 a.diagnostic-badge:hover { text-decoration: underline; }
+
+.group-filters .incident-group-field { flex:1 1 260px; }
+.group-filters .incident-group-field > span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.group-filters .incident-picker-panel input[type="search"] { width:100%; box-sizing:border-box; }
+.group-filters .incident-picker-options input { min-height:0; }

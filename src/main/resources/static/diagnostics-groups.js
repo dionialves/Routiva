@@ -5,7 +5,24 @@
   const $ = id => document.getElementById(id);
   const states = { NORMAL: ['Normal', 'normal'], DEGRADADO: ['Atenção', 'warning'], CRITICO: ['Crítico', 'critical'], SEM_DADOS: ['Sem dados', 'neutral'] };
   const severityLabels = ['Não classificada', 'Informação', 'Atenção', 'Média', 'Alta', 'Desastre'];
-  let page = 1, sort = 'name', direction = 'asc', version = 0, debounce, controller;
+  let page = 1, sort = 'name', direction = 'asc', version = 0, controller;
+  const group = $('incident-group');
+  const storageKey = 'routiva.diagnostics.groups.filters';
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey));
+    if (saved && typeof saved === 'object') {
+      for (const id of ['group-status', 'group-period']) {
+        if ([...$(id).options].some(option => option.value === saved[id])) $(id).value = saved[id];
+      }
+      for (const option of group.options) option.selected = Array.isArray(saved.groups) && saved.groups.includes(option.value);
+    }
+  } catch {}
+  function saveFilters() {
+    try { localStorage.setItem(storageKey, JSON.stringify({
+      groups: [...group.options].filter(option => option.selected).map(option => option.value),
+      'group-status': $('group-status').value, 'group-period': $('group-period').value,
+    })); } catch {}
+  }
   const number = value => value == null ? '—' : value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const format = (value, unit) => value == null ? '—' : number(value) + unit;
   const duration = millis => {
@@ -122,7 +139,7 @@
     $('groups-refresh').classList.add('refreshing');
     feedback('');
     if (initial) skeleton();
-    const params = new URLSearchParams({ minutes: $('group-period').value || '1440', q: $('group-search').value.trim(), status: $('group-status').value, sort, direction, page });
+    const params = new URLSearchParams({ minutes: $('group-period').value || '1440', groupId: [...group.options].filter(option => option.selected).map(option => option.value).join(','), status: $('group-status').value, sort, direction, page });
     try {
       const response = await fetch(`/api/diagnostics/group-indicators?${params}`, { cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error('Não foi possível atualizar os grupos. Tente novamente.');
@@ -141,13 +158,8 @@
       }
     }
   }
-  const reset = () => { page = 1; load(); };
-  $('group-search').addEventListener('input', () => {
-    clearTimeout(debounce);
-    // Invalidate in-flight responses immediately while waiting for the debounce.
-    version++; controller?.abort();
-    debounce = setTimeout(reset, 300);
-  });
+  const reset = () => { page = 1; saveFilters(); load(); };
+  window.setupMultiPicker('group', group, 'Todos os grupos', reset);
   $('group-status').addEventListener('change', reset);
   $('group-period').addEventListener('change', reset);
   $('groups-refresh').addEventListener('click', () => load());
@@ -160,7 +172,7 @@
     document.querySelectorAll('[data-group-sort]').forEach(item => item.closest('th').setAttribute('aria-sort', item === button ? direction === 'asc' ? 'ascending' : 'descending' : 'none'));
     reset();
   }));
-  window.addEventListener('pagehide', () => { version++; controller?.abort(); clearTimeout(debounce); });
+  window.addEventListener('pagehide', () => { version++; controller?.abort(); });
   window.addEventListener('pageshow', event => { if (event.persisted) load(); });
   load(true);
 })();

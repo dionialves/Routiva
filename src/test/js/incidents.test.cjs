@@ -44,6 +44,7 @@ async function surface(respond, options = {}) {
     fetch: async url => { const params = new URL(url, 'http://localhost').searchParams; requests.push(params); return respond(params); },
   };
   context.window = context;
+  vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/static/multi-picker.js'), 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/incidents.js', 'utf8'), context);
   await tick();
   return { elements, fields, requests, sorts, events, timers, intervals, severityOptions, storage, rows: () => elements['incident-rows'].children };
@@ -51,14 +52,17 @@ async function surface(respond, options = {}) {
 const row = { eventId: '1', name: '<script>original trigger</script>', severity: 4, severityLabel: 'Alta', timestamp: Date.now() - 87 * 60000, hosts: [{ name: 'Router', ip: '10.0.0.1' }] };
 function response(params) { return { ok: true, json: async () => ({ rows: [row], total: 32, page: Number(params.get('page')), pages: 4, size: 10, updatedAt: Date.now(), warning: '' }) }; }
 
-test('renders six columns safely and calculates durations locally', async () => {
+test('renders seven columns safely and calculates durations locally', async () => {
   const ui = await surface(response);
   const cells = ui.rows()[0].children[0].children;
-  assert.equal(cells.length, 6);
-  assert.equal(cells[5].textContent, 'Não');
-  assert.equal(cells[3].children[0].textContent, row.name);
-  assert.equal(cells[3].children[0].title, row.name);
-  assert.equal(cells[4].children[0].children[1].textContent, '1 h 27 min');
+  assert.equal(cells.length, 7);
+  assert.equal(cells[2].children[0].textContent, 'Router');
+  assert.equal(cells[2].children[0].children.length, 0);
+  assert.equal(cells[3].children[0].textContent, '10.0.0.1');
+  assert.equal(cells[6].textContent, 'Não');
+  assert.equal(cells[4].children[0].textContent, row.name);
+  assert.equal(cells[4].children[0].title, row.name);
+  assert.equal(cells[5].children[0].children[1].textContent, '1 h 27 min');
   assert.equal(ui.elements['incident-total'].textContent, '32 encontrados');
   assert.equal(ui.requests[0].get('page'), '2');
   ui.intervals[0](); assert.equal(ui.requests.length, 1);
@@ -217,7 +221,7 @@ test('first picker option selects every available group or host even with a sear
 test('shows acknowledged incidents in the rightmost column', async () => {
   const ui = await surface(params => ({ ok: true, json: async () => ({ rows: [{ ...row, acknowledged: true }], total: 1, page: 1, pages: 1, updatedAt: Date.now(), warning: '' }) }));
   const cells = ui.rows()[0].children[0].children;
-  assert.equal(cells[5].children[0].textContent, 'Sim');
-  assert.equal(cells[5].children[0].className, 'incident-acknowledged');
-  assert.equal(cells[5].title, 'Incidente reconhecido');
+  assert.equal(cells[6].children[0].textContent, 'Sim');
+  assert.equal(cells[6].children[0].className, 'incident-acknowledged');
+  assert.equal(cells[6].title, 'Incidente reconhecido');
 });

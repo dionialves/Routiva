@@ -22,7 +22,11 @@ public class DiagnosticsController {
     }
 
     @GetMapping({"/diagnostico/grupos", "/diagnostico/grupos/{id}"})
-    public String page() { return "diagnostics"; }
+    public String page(org.springframework.ui.Model model) {
+        model.addAttribute("groups", inventory.hosts().stream().flatMap(h -> h.groups().stream()).distinct()
+            .sorted(Comparator.comparing(Host.Group::name, String.CASE_INSENSITIVE_ORDER)).toList());
+        return "diagnostics";
+    }
 
     private List<Host> hosts(String id) {
         var hosts = inventory.hosts().stream()

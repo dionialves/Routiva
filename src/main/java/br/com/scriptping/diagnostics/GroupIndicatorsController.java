@@ -31,7 +31,7 @@ public class GroupIndicatorsController {
 
     @GetMapping("/api/diagnostics/group-indicators")
     public ResponseEntity<Page> indicators(@RequestParam(defaultValue = "1440") int minutes,
-        @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "") String status,
+        @RequestParam(defaultValue = "") String groupId, @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "") String status,
         @RequestParam(defaultValue = "name") String sort, @RequestParam(defaultValue = "asc") String direction,
         @RequestParam(defaultValue = "1") int page) {
         try { AvailabilityPeriod.of(minutes); }
@@ -67,8 +67,9 @@ public class GroupIndicatorsController {
             rows.add(new Row(group.id(), group.name(), group.hosts(), group.metrics(), group.observedMillis(),
                 known && !unavailable.contains(group.id()) ? events.size() : null, severities, state));
         }
+        var selectedGroups = new HashSet<>(Arrays.asList(groupId.split(",")));
         String query = normalize(q.strip());
-        var selected = rows.stream().filter(r -> normalize(r.name() + " " + r.id()).contains(query))
+        var selected = rows.stream().filter(r -> groupId.isBlank() || selectedGroups.contains(r.id())).filter(r -> normalize(r.name() + " " + r.id()).contains(query))
             .filter(r -> status.isEmpty() || r.status().equals(status)).sorted(order(sort, direction.equals("desc"))).toList();
         int pages = Math.max(1, (selected.size() + 19) / 20), number = Math.max(1, Math.min(page, pages));
         String warning = !known || !unavailable.isEmpty() ? "Incidentes indisponíveis ou incompletos. O estado pode não refletir todos os problemas ativos." : "";

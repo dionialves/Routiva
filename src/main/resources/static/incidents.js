@@ -94,63 +94,6 @@
       if (!visible) option.selected = false;
     }
   }
-  function setupPicker(kind, select, allLabel) {
-    const menu = $(`incident-${kind}-picker`);
-    const search = $(`incident-${kind}-search`);
-    const container = $(`incident-${kind}-options`);
-    const summary = $(`incident-${kind}-summary`);
-    const allRow = document.createElement('label');
-    allRow.className = 'incident-picker-all';
-    const allCheckbox = document.createElement('input'); allCheckbox.type = 'checkbox';
-    const allText = document.createElement('span');
-    allText.textContent = kind === 'group' ? 'Todos os grupos de hosts' : 'Todos os Hosts';
-    allRow.append(allCheckbox, allText); container.append(allRow);
-    allCheckbox.addEventListener('change', () => {
-      for (const option of select.options) {
-        if (!option.disabled) option.selected = allCheckbox.checked;
-      }
-      if (kind === 'group') { filterHosts(); refreshHostPicker(); }
-      refresh(); scheduleFilters();
-    });
-    const entries = [...select.options].map(option => {
-      const label = document.createElement('label');
-      const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
-      const text = document.createElement('span'); text.textContent = option.textContent;
-      label.append(checkbox, text); container.append(label);
-      checkbox.addEventListener('change', () => {
-        option.selected = checkbox.checked;
-        if (kind === 'group') { filterHosts(); refreshHostPicker(); }
-        refresh(); scheduleFilters();
-      });
-      return { option, checkbox, label };
-    });
-    function refresh() {
-      const query = search.value.trim().toLocaleLowerCase('pt-BR');
-      let visible = 0;
-      for (const { option, checkbox, label } of entries) {
-        checkbox.checked = option.selected;
-        label.hidden = option.disabled || !option.textContent.toLocaleLowerCase('pt-BR').includes(query);
-        if (!label.hidden) visible++;
-      }
-      const available = entries.filter(entry => !entry.option.disabled);
-      const selected = available.filter(entry => entry.option.selected);
-      allCheckbox.disabled = available.length === 0;
-      allCheckbox.checked = available.length > 0 && selected.length === available.length;
-      allCheckbox.indeterminate = selected.length > 0 && selected.length < available.length;
-      summary.textContent = !selected.length ? allLabel : selected.length === 1
-        ? selected[0].option.textContent : `${selected.length} ${kind === 'group' ? 'grupos selecionados' : 'hosts selecionados'}`;
-      $(`incident-${kind}-empty`).hidden = visible !== 0;
-    }
-    search.addEventListener('input', refresh);
-    menu.addEventListener('toggle', () => {
-      if (menu.open) search.focus();
-    });
-    menu.addEventListener('keydown', event => {
-      if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
-    });
-    document.addEventListener('click', event => { if (!menu.contains(event.target)) menu.open = false; });
-    refresh(); return refresh;
-  }
   function cell(tr, text) {
     const td = document.createElement('td');
     if (text != null) td.textContent = text;
@@ -161,7 +104,7 @@
     for (let i = 0; i < 6; i++) {
       const tr = document.createElement('tr'); tr.className = 'incident-skeleton';
       tr.setAttribute('aria-hidden', 'true');
-      for (let j = 0; j < 6; j++) cell(tr).append(document.createElement('span'));
+      for (let j = 0; j < 7; j++) cell(tr).append(document.createElement('span'));
       $('incident-rows').append(tr);
     }
   }
@@ -191,13 +134,13 @@
       const severity = document.createElement('span'); severity.className = 'incident-severity';
       severity.append(icon(severityIcons[row.severity] || 'help'), document.createTextNode(row.severityLabel));
       cell(tr).append(severity);
-      const hosts = cell(tr);
+      const hosts = cell(tr), addresses = cell(tr);
       for (const item of row.hosts) {
-        const wrap = document.createElement('div'); wrap.className = 'incident-host';
-        const device = document.createElement('span'); device.className = 'incident-device'; device.append(icon('server'));
-        const text = document.createElement('span'), name = document.createElement('strong'), ip = document.createElement('small');
-        name.textContent = item.name; name.title = item.name; ip.textContent = item.ip;
-        text.append(name, ip); wrap.append(device, text); hosts.append(wrap);
+        const name = document.createElement('div'); name.className = 'incident-host';
+        name.textContent = item.name; name.title = item.name;
+        const ip = document.createElement('div'); ip.className = 'incident-ip';
+        ip.textContent = item.ip; ip.title = item.ip;
+        hosts.append(name); addresses.append(ip);
       }
       const description = document.createElement('span'); description.className = 'incident-description';
       description.textContent = row.name; description.title = row.name;
@@ -282,8 +225,8 @@
     saveFilters();
     filterTimer = setTimeout(applyFilters, 300);
   }
-  const refreshHostPicker = setupPicker('host', host, 'Todos os hosts');
-  setupPicker('group', group, 'Todos os grupos');
+  const refreshHostPicker = window.setupMultiPicker('host', host, 'Todos os hosts', scheduleFilters);
+  window.setupMultiPicker('group', group, 'Todos os grupos', () => { filterHosts(); refreshHostPicker(); scheduleFilters(); });
   group.addEventListener('change', () => { filterHosts(); refreshHostPicker(); });
   severityOptions.forEach(option => option.addEventListener('change', () => {
     updateSeveritySummary(); scheduleFilters();

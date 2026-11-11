@@ -24,7 +24,7 @@
 .incidents-page .incidents-table th { background:#102e40; padding:12px 16px; color:#bbd3e4; font-weight:500; text-align:left; }
 .incidents-table th button { padding:0; background:none; border:0; color:inherit; font:inherit; }
 .incidents-table th svg { width:16px; height:16px; color:#90afc3; }
-.incidents-page .incidents-table td { padding:8px 16px; height:49px; box-sizing:border-box; border-bottom:1px solid #18374a; vertical-align:middle; }
+.incidents-page .incidents-table td { padding:5px 16px; height:38px; box-sizing:border-box; border-bottom:1px solid #18374a; vertical-align:middle; }
 .incidents-page .incidents-table th:last-child,
 .incidents-page .incidents-table td:last-child { text-align:right; white-space:nowrap; }
 .incidents-table tbody tr { --severity:#8793ad; transition:background .15s; }
@@ -40,13 +40,9 @@
 .incidents-table tr[data-severity="5"] { --severity:#ff5364; }
 .incident-severity { display:inline-flex; align-items:center; gap:7px; color:var(--severity); background:color-mix(in srgb,var(--severity) 22%,transparent); border-radius:20px; padding:5px 12px; font-weight:600; white-space:nowrap; }
 .incident-severity svg,.incident-duration svg { width:15px; height:15px; flex-shrink:0; }
-.incident-host { display:flex; align-items:center; gap:12px; min-width:0; }
-.incident-host + .incident-host { margin-top:7px; }
-.incident-device { background:#1b4052; color:#c8e4f1; width:34px; height:34px; flex-shrink:0; border:1px solid #295063; border-radius:6px; display:grid; place-items:center; }
-.incident-device svg { width:20px; height:20px; }
-.incident-host > span:last-child { min-width:0; }
-.incident-host strong { display:block; font-size:12px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.incident-host small { display:block; font-size:11px; color:#9fb2c4; margin-top:3px; }
+.incident-host,.incident-ip { min-width:0; line-height:20px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.incident-host { font-weight:600; }
+.incident-ip { color:#9fb2c4; font-variant-numeric:tabular-nums; }
 .incident-description { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .incident-duration { font-size:12px; padding:4px 9px; }
 #incident-page-status { font-size:12px; color:#b0c1d2; }
@@ -77,21 +73,6 @@
 .incident-group-field { grid-column:1; grid-row:1; }
 .incident-host-field { grid-column:2; grid-row:1; }
 .incident-severity-field { grid-column:3; grid-row:1; }
-.incident-picker-field { min-width:0; display:grid; gap:6px; font-size:13px; font-weight:500; }
-.incident-picker { position:relative; min-width:0; }
-.incident-picker summary { display:flex; align-items:center; justify-content:space-between; gap:8px; height:38px; box-sizing:border-box; padding:8px 12px; border:1px solid #486071; border-radius:5px; background:#20313f; color:#eef4fa; cursor:pointer; list-style:none; }
-.incident-picker summary::-webkit-details-marker { display:none; }
-.incident-picker summary span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.incident-picker summary svg { width:15px; height:15px; flex-shrink:0; }
-.incident-picker-panel { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:25; padding:10px; background:#0c2030; border:1px solid #486071; border-radius:7px; box-shadow:0 10px 24px #0007; }
-.incident-picker-options { max-height:260px; overflow:auto; margin-top:8px; }
-.incidents-filters .incident-picker-options label { display:flex; gap:10px; align-items:center; padding:8px; cursor:pointer; border-radius:4px; }
-.incidents-filters .incident-picker-options label[hidden] { display:none; }
-.incident-picker-options label:hover { background:#174054; }
-.incidents-filters .incident-picker-options input { width:16px; height:16px; flex-shrink:0; padding:0; accent-color:#00b9c8; }
-.incident-picker-options span { overflow-wrap:anywhere; }
-.incident-picker-panel p { color:#a6bdcf; font-size:12px; }
-.incident-picker summary:focus-visible { outline:2px solid #00c9d8; outline-offset:3px; }
 @media (max-width:700px) {
   .incidents-filters form { grid-template-columns:minmax(0,1fr); }
   .incident-group-field,.incident-host-field,.incident-severity-field { grid-column:1; grid-row:auto; }

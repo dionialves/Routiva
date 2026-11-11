@@ -20,7 +20,7 @@ class GroupIndicatorsControllerTests {
         var incident = new ZabbixClient.Incident("Falha", 5, "event1", 1);
         when(client.activeIncidents(anyList())).thenReturn(Map.of("a",List.of(incident),"b",List.of(incident)));
         var controller = new GroupIndicatorsController(cache,inventory,client,4,2);
-        var response = controller.indicators(1440,"sao","CRITICO","incidents","desc",99).getBody();
+        var response = controller.indicators(1440,"","sao","CRITICO","incidents","desc",99).getBody();
         assertThat(response.total()).isEqualTo(1);
         assertThat(response.number()).isEqualTo(1);
         var row = response.rows().getFirst();
@@ -28,9 +28,9 @@ class GroupIndicatorsControllerTests {
         assertThat(row.severities()).containsEntry(5,1L);
         assertThat(row.status()).isEqualTo("CRITICO");
         verify(client).activeIncidents(List.of("a","b"));
-        assertThat(controller.indicators(1440,"g","NORMAL","name","asc",1).getBody().rows()).isEmpty();
+        assertThat(controller.indicators(1440,"","g","NORMAL","name","asc",1).getBody().rows()).isEmpty();
         when(client.activeIncidents(anyList())).thenThrow(new IllegalStateException());
-        var failed = controller.indicators(1440,"g","","name","asc",1).getBody();
+        var failed = controller.indicators(1440,"","g","","name","asc",1).getBody();
         assertThat(failed.rows().getFirst().incidents()).isNull();
         assertThat(failed.warning()).contains("Incidentes indisponíveis");
     }
@@ -45,7 +45,11 @@ class GroupIndicatorsControllerTests {
         for (int i=0; i<45; i++) rows.add(new AvailabilitySnapshotCache.GroupTotal("g"+i,"Grupo "+i,i,metrics,0,"SEM_DADOS"));
         when(cache.groupTotals(eq(1440),anyList())).thenReturn(new AvailabilitySnapshotCache.GroupTotals(0,0,"v",rows));
         var controller = new GroupIndicatorsController(cache,inventory,client,4,2);
-        var result = controller.indicators(1440,"","SEM_DADOS","hosts","desc",2).getBody();
+        var result = controller.indicators(1440,"","","SEM_DADOS","hosts","desc",2).getBody();
+        var filtered = controller.indicators(1440,"g1,g10","","","name","asc",1).getBody();
+        assertThat(filtered.total()).isEqualTo(2);
+        assertThat(filtered.rows()).extracting(GroupIndicatorsController.Row::id).containsExactly("g1", "g10");
+        assertThat(controller.indicators(1440,"missing","","","name","asc",1).getBody().rows()).isEmpty();
         assertThat(result.total()).isEqualTo(45);
         assertThat(result.pages()).isEqualTo(3);
         assertThat(result.rows()).hasSize(20);
