@@ -57,8 +57,15 @@ public class AvailabilitySnapshotCache {
     public synchronized void refresh() {
         long started=System.nanoTime();
         try {
-            var snapshot=builder.advance(List.copyOf(monitor.hosts()), current==null ? null : current.snapshot);
+            var catalogue = new LinkedHashMap<String, Host>();
+            monitor.historicalHosts().forEach(h -> catalogue.put(h.id(), h));
+            var active = List.copyOf(monitor.hosts());
+            active.forEach(h -> catalogue.put(h.id(), h));
+            var snapshot=builder.advance(List.copyOf(catalogue.values()), current==null ? null : current.snapshot);
             if (snapshot==null || snapshot.load().evaluatedAt()==null) return;
+            snapshot = new AvailabilitySnapshot(snapshot.format(), snapshot.version(), snapshot.builtAt(),
+                snapshot.to(), snapshot.load(), snapshot.hosts(), snapshot.periods(),
+                active.stream().map(Host::id).collect(java.util.stream.Collectors.toSet()));
             var next=new Generation(snapshot);
             var encoded=repository.encode(snapshot);
             repository.save(snapshot, encoded); // Proxy returns only after the durable commit.
@@ -106,20 +113,27 @@ public class AvailabilitySnapshotCache {
         var period = generation == null ? null : generation.snapshot.periods().get(minutes);
         class Aggregate {
             String name;
-            int hosts, severity;
+            int hosts, participants, severity;
             AvailabilitySnapshot.Observation total = AvailabilitySnapshot.Observation.EMPTY;
         }
         var targets = new HashMap<String, String>();
         if (generation != null) generation.snapshot.hosts().forEach(h -> targets.put(h.id(), h.ip()));
         var totals = new LinkedHashMap<String, Aggregate>();
-        for (var host : inventory) {
+        var activeIds = inventory.stream().map(Host::id).collect(java.util.stream.Collectors.toSet());
+        var catalogue = new LinkedHashMap<String, Host>();
+        if (generation != null) generation.snapshot.hosts().stream()
+            .filter(h -> !generation.snapshot.activeHostIds().contains(h.id()))
+            .forEach(h -> catalogue.put(h.id(), h));
+        inventory.forEach(h -> catalogue.put(h.id(), h));
+        for (var host : catalogue.values()) {
             var data = period == null ? null : period.hosts().get(host.id());
             // Never attach measurements from a previous inventory target to a changed IP.
             boolean sameTarget = targets.containsKey(host.id()) && Objects.equals(targets.get(host.id()), host.ip());
             for (var group : new HashSet<>(host.groups())) {
                 var aggregate = totals.computeIfAbsent(group.id(), key -> new Aggregate());
                 aggregate.name = group.name();
-                aggregate.hosts++;
+                if (activeIds.contains(host.id())) aggregate.hosts++;
+                aggregate.participants++;
                 if (data != null && sameTarget) {
                     aggregate.total = aggregate.total.plus(data.total());
                     aggregate.severity = Math.max(aggregate.severity,
@@ -129,7 +143,7 @@ public class AvailabilitySnapshotCache {
         }
         var rows = new ArrayList<GroupTotal>();
         totals.forEach((id, a) -> rows.add(new GroupTotal(id, a.name, a.hosts, a.total.metrics(),
-            a.total.validMinutes() * 60_000L / a.hosts,
+            a.total.validMinutes() * 60_000L / a.participants,
             a.total.metrics().total() == 0 ? "SEM_DADOS" : a.severity == 2 ? "CRITICO" : a.severity == 1 ? "DEGRADADO" : "NORMAL")));
         return new GroupTotals(period == null ? 0 : period.from(), generation == null ? 0 : generation.snapshot.to(),
             generation == null ? "" : generation.snapshot.version(), List.copyOf(rows));

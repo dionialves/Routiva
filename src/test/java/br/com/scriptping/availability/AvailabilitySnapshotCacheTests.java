@@ -9,6 +9,32 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
+    @Test void archivedHostContributesToIndicatorsButNotActiveRowsAfterRestore() {
+        var archived = new Host("old", "Removido", "127.0.0.2", host.groups());
+        insert(end-60000, 10d, null);
+        insert(archived, end-60000, null, "Tempo esgotado", 20);
+        drain(10);
+        var builder = mock(PacketLossAnalysisService.class);
+        var monitor = mock(ZabbixService.class);
+        var repository = new AvailabilitySnapshotRepository(jdbc, new ObjectMapper());
+        when(monitor.hosts()).thenReturn(List.of(host));
+        when(monitor.historicalHosts()).thenReturn(List.of(host, archived));
+        when(builder.advance(eq(List.of(host, archived)), nullable(AvailabilitySnapshot.class)))
+            .thenReturn(queries.buildAt(List.of(host, archived), AvailabilityDashboard.MINUTES, now));
+        var cache = new AvailabilitySnapshotCache(builder, repository, monitor);
+        cache.refresh();
+        var restored = new AvailabilitySnapshotCache(builder, repository, monitor);
+        restored.restore();
+        var view = restored.query(1440, "").view();
+        assertThat(view.hosts()).extracting(AvailabilityDashboard.Row::id).containsExactly(host.id());
+        assertThat(view.report().total().technical()).isEqualTo(50d);
+        assertThat(restored.host(archived.id(), 1440).total().technical()).isZero();
+        var group = restored.groupTotals(1440, List.of(host)).groups().getFirst();
+        assertThat(group.hosts()).isEqualTo(1);
+        assertThat(group.metrics().technical()).isEqualTo(50d);
+        assertThat(restored.groupTotals(1440, List.of()).groups().getFirst().hosts()).isZero();
+    }
+
     @Test void persistsRestoresEveryPeriodAndServesAllHttpSelectionsWithoutStorage() {
         var other=new Host("b", "Produção B", "127.0.0.2", List.of(new Host.Group("other", "Outro")));
         insert(end-60000, 10d, null);

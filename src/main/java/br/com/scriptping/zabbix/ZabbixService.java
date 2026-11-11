@@ -86,7 +86,12 @@ public class ZabbixService {
         try {
             var s = settings.current();
             var inventory = authorized(zabbix.fetchSelected(s.groups(), s.hosts()), s.groups(), s.hosts());
-            settings.save(new ZabbixSettings.State(s.url(), s.username(), s.password(), s.groups(), s.hosts(), inventory, System.currentTimeMillis()));
+            var historical = new LinkedHashMap<String, Host>();
+            s.imported().forEach(h -> historical.put(h.id(), h));
+            s.inventory().forEach(h -> historical.put(h.id(), h));
+            inventory.forEach(h -> historical.put(h.id(), h));
+            settings.save(new ZabbixSettings.State(s.url(), s.username(), s.password(), s.groups(), s.hosts(),
+                inventory, System.currentTimeMillis(), List.copyOf(historical.values()), s.importResult()));
             collector.synchronize(inventory);
             status = "Sincronização concluída: " + inventory.size() + " hosts autorizados";
         } catch (Exception ex) {
@@ -123,8 +128,6 @@ public class ZabbixService {
             zabbix.fetchSelected(groupIds, ids).forEach(h -> available.put(h.id(), h));
             var imported = new LinkedHashMap<String, Host>();
             s.imported().forEach(h -> imported.put(h.id(), h));
-            var previous = new HashMap<String, Host>();
-            active.forEach(h -> previous.put(h.id(), h));
             var next = new ArrayList<Host>();
             var errors = new ArrayList<Map<String, String>>();
             var entries = new ArrayList<ImportEntry>();
@@ -135,9 +138,8 @@ public class ZabbixService {
                 if (host == null) {
                     ignored++;
                     entries.add(entry(id, imported.get(id), "missing", "Origem", "warning",
-                        "Ausente da origem; dados anteriores preservados.", timestamp));
-                    errors.add(Map.of("id", id, "reason", "Ausente da origem; dados anteriores preservados."));
-                    if (previous.containsKey(id)) next.add(previous.get(id));
+                        "Ausente da origem; monitoramento desativado e histórico preservado.", timestamp));
+                    errors.add(Map.of("id", id, "reason", "Ausente da origem; monitoramento desativado e histórico preservado."));
                     continue;
                 }
                 if (!br.com.scriptping.IpAddress.isValid(host.ip()) || host.ip().contains(":")) {
@@ -201,6 +203,28 @@ public class ZabbixService {
                                      String severity, String message, long timestamp) {
         return new ImportEntry(id, host == null ? "" : host.name(), host == null ? "" : host.ip(),
             host == null ? "" : host.hostname(), outcome, category, severity, message, timestamp);
+    }
+
+    /** Reconciles legacy inventories too; remote failures never deactivate hosts. */
+    @org.springframework.scheduling.annotation.Scheduled(
+        fixedDelayString = "${zabbix.sync-interval-ms:60000}",
+        initialDelayString = "${zabbix.sync-initial-delay-ms:60000}", scheduler = "taskScheduler")
+    public void reconcile() {
+        if (!zabbix.configured()) return;
+        try { sync(); }
+        catch (RuntimeException ex) {
+            org.slf4j.LoggerFactory.getLogger(ZabbixService.class)
+                .warn("Falha na reconciliação Zabbix; inventário anterior preservado", ex);
+        }
+    }
+
+    /** Historical catalogue is independent of collection authorization. */
+    public List<Host> historicalHosts() {
+        var s = settings.current();
+        var hosts = new LinkedHashMap<String, Host>();
+        s.imported().forEach(h -> hosts.put(h.id(), h));
+        s.inventory().forEach(h -> hosts.put(h.id(), h));
+        return List.copyOf(hosts.values());
     }
 
     public List<Host> hosts() { return settings.current().inventory(); }

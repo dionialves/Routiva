@@ -105,6 +105,26 @@ class ZabbixServiceTests {
     }
 
     @Test
+    void reconciliationRepairsLegacyActiveInventoryAndPreservesHistoryOnRepeatedRuns() {
+        when(client.configured()).thenReturn(true);
+        when(client.fetchSelected(Set.of("g"), Set.of("h"))).thenReturn(List.of());
+        monitor.reconcile();
+        monitor.reconcile();
+        assertThat(monitor.hosts()).isEmpty();
+        assertThat(monitor.historicalHosts()).containsExactly(host);
+        verify(collector, times(2)).synchronize(List.of());
+    }
+
+    @Test
+    void failedReconciliationKeepsLegacyInventoryUntilSuccessfulRemoteConfirmation() {
+        when(client.configured()).thenReturn(true);
+        when(client.fetchSelected(anySet(), anySet())).thenThrow(new IllegalStateException("offline"));
+        monitor.reconcile();
+        assertThat(monitor.hosts()).containsExactly(host);
+        verifyNoInteractions(collector);
+    }
+
+    @Test
     void unconfiguredSyncCannotFetchOrPersistAnything() {
         assertThatIllegalArgumentException().isThrownBy(monitor::sync);
         verify(client, never()).fetchSelected(anySet(), anySet());
@@ -137,14 +157,15 @@ class ZabbixServiceTests {
     }
 
     @Test
-    void partialImportKeepsMissingSelectionsAndReportsInvalidTargets() {
+    void partialImportDeactivatesMissingHostsAndReportsInvalidTargets() {
         var invalid = new Host("bad", "Bad", "", List.of(group));
         when(client.groups()).thenReturn(List.of(group));
         when(client.discover(Set.of("g"))).thenReturn(List.of(invalid));
         when(client.fetchSelected(Set.of("g"), Set.of("h", "bad"))).thenReturn(List.of(invalid));
         var result = monitor.saveAndImport(Set.of("h", "bad"));
         assertThat(state.hosts()).containsExactlyInAnyOrder("h", "bad");
-        assertThat(state.inventory()).containsExactly(host);
+        assertThat(state.inventory()).isEmpty();
+        assertThat(monitor.historicalHosts()).containsExactly(host);
         assertThat(((java.util.Map<?, ?>) result.get("result")).get("state")).isEqualTo("partial");
         assertThat(state.imported()).containsExactly(host);
         @SuppressWarnings("unchecked")

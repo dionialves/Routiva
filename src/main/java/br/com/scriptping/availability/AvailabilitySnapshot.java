@@ -6,12 +6,18 @@ import static br.com.scriptping.availability.HostAvailabilityService.*;
 
 /** Immutable, durable generation. Raw sums preserve weighting for every host selection. */
 public record AvailabilitySnapshot(int format, String version, long builtAt, long to,
-    IndicatorLoadStatus load, List<Host> hosts, Map<Integer, PeriodData> periods) {
+    IndicatorLoadStatus load, List<Host> hosts, Map<Integer, PeriodData> periods, Set<String> activeHostIds) {
     public static final int FORMAT = 2;
 
     public AvailabilitySnapshot {
+        activeHostIds = activeHostIds == null ? hosts.stream().map(Host::id).collect(java.util.stream.Collectors.toUnmodifiableSet()) : Set.copyOf(activeHostIds);
         hosts = List.copyOf(hosts);
         periods = Map.copyOf(periods);
+    }
+
+    public AvailabilitySnapshot(int format, String version, long builtAt, long to,
+        IndicatorLoadStatus load, List<Host> hosts, Map<Integer, PeriodData> periods) {
+        this(format, version, builtAt, to, load, hosts, periods, null);
     }
 
     public record Observation(long healthy, long degraded, long lost, long errors,
@@ -57,7 +63,7 @@ public record AvailabilitySnapshot(int format, String version, long builtAt, lon
             total = total.plus(data.total);
             retainedFrom = Math.min(retainedFrom, data.retainedFrom);
             for (int i=0; i<points.length; i++) points[i] = points[i].plus(data.points.get(i));
-            rows.add(new AvailabilityDashboard.Row(host.id(), host.name(), data.total.metrics(),
+            if (activeHostIds.contains(host.id())) rows.add(new AvailabilityDashboard.Row(host.id(), host.name(), data.total.metrics(),
                 host.ip(), host.groups(), data.status, data.fresh, data.collectorHealthy));
         }
         var series = new ArrayList<Point>();
