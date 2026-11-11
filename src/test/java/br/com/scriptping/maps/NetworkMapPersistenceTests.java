@@ -53,6 +53,14 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
+    void persistsAcknowledgedIncidentVisibility() throws Exception {
+        var layout = new Layout(null, "Rede", null, 0, false, List.of(), List.of());
+        var saved = service.save(new Saved(null, 0, layout, null));
+        assertThat(service.maps()).containsExactly(saved);
+        assertThat(service.maps().getFirst().layout().showAcknowledged()).isFalse();
+    }
+
+    @Test
     void readsLegacyJsonAndOrdersTimestampsWithNullsLast() {
         String legacy = "{\"name\":\"Legado\",\"width\":800,\"height\":600,\"nodes\":[],\"links\":[]}";
         jdbc.update("INSERT INTO network_map VALUES (?, ?, ?, ?)", "legacy", 7, legacy, null);
@@ -64,6 +72,7 @@ class NetworkMapPersistenceTests {
         assertThat(saved.revision()).isEqualTo(7);
         assertThat(saved.layout().publication()).isEqualTo(Publication.PUBLICADO);
         assertThat(saved.layout().minimumSeverity()).isZero();
+        assertThat(saved.layout().showAcknowledged()).isTrue();
         assertThat(saved.updatedAt()).isNull();
     }
 

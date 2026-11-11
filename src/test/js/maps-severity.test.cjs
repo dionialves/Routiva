@@ -73,3 +73,17 @@ test('draw paints POP circles using the map threshold rather than unclassified i
   vm.runInContext('draw()', drawContext);
   assert.equal(canvas.children[0].fill, 'unclassified');
 });
+
+test('acknowledged incidents affect host and group colors only when enabled', () => {
+  context.current = {layout: {showAcknowledged: false}};
+  context.host = {incidents: [{severity: 5, acknowledged: true}, {severity: 2, acknowledged: false}]};
+  assert.equal(vm.runInContext('hostLevel(host)', context), 2);
+  context.hosts = [context.host];
+  assert.equal(vm.runInContext('groupLevel(hosts)', context), 2);
+  context.host.incidents.pop();
+  assert.equal(vm.runInContext('hostLevel(host)', context), -1);
+  context.current.layout.showAcknowledged = true;
+  assert.equal(vm.runInContext('hostLevel(host)', context), 5);
+  context.current.layout = {};
+  assert.equal(vm.runInContext('hostLevel(host)', context), 5);
+});

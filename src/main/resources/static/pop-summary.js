@@ -1,12 +1,12 @@
 'use strict';
 
 // Apply the map threshold before calculating counts, event totals and worst severity.
-function summarizePop(hosts, minimumSeverity = 0) {
+function summarizePop(hosts, minimumSeverity = 0, showAcknowledged = true) {
   const unique = [...new Map(hosts.map(host => [host.id, host])).values()];
   const events = new Map();
   let affected = 0, operational = 0, disabled = 0, unknown = 0;
   for (const host of unique) {
-    const incidents = (host.incidents || []).filter(issue => issue.severity >= minimumSeverity);
+    const incidents = (host.incidents || []).filter(issue => issue.severity >= minimumSeverity && (showAcknowledged || !issue.acknowledged));
     if (incidents.length) affected++;
     if (host.monitoring === 'disabled') disabled++;
     else if (host.monitoring !== 'monitored' || !host.incidents) unknown++;
@@ -45,8 +45,8 @@ function popIcon(name, size = 16) {
 }
 
 class PopSummary {
-  constructor({stage, hosts, groupName, freshness, colors, labels, minimumSeverity = () => 0}) {
-    Object.assign(this, {stage, hosts, groupName, freshness, colors, labels, minimumSeverity});
+  constructor({stage, hosts, groupName, freshness, colors, labels, minimumSeverity = () => 0, showAcknowledged = () => true}) {
+    Object.assign(this, {stage, hosts, groupName, freshness, colors, labels, minimumSeverity, showAcknowledged});
     this.box = document.createElement('section');
     this.box.className = 'pop-summary';
     this.box.id = 'map-pop-summary';
@@ -130,7 +130,7 @@ class PopSummary {
   }
   render() {
     if (!this.node) return;
-    const summary = summarizePop(this.hosts(this.node), this.minimumSeverity?.() ?? 0);
+    const summary = summarizePop(this.hosts(this.node), this.minimumSeverity?.() ?? 0, this.showAcknowledged?.() ?? true);
     const fresh = this.freshness();
     const el = (tag, text, className) => {
       const item = document.createElement(tag);

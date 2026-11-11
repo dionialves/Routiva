@@ -23,10 +23,15 @@ public final class NetworkMapModels {
     public record Camera(double x, double y, double scale) {}
 
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"width", "height"})
-    public record Layout(Publication publication, String name, Camera camera, Integer minimumSeverity, List<Node> nodes, List<Link> links) {
+    public record Layout(Publication publication, String name, Camera camera, Integer minimumSeverity, Boolean showAcknowledged, List<Node> nodes, List<Link> links) {
+        public Layout(Publication publication, String name, Camera camera, Integer minimumSeverity, List<Node> nodes, List<Link> links) {
+            this(publication, name, camera, minimumSeverity, true, nodes, links);
+        }
+
         public Layout {
             if (publication == null) publication = Publication.PUBLICADO;
             if (minimumSeverity == null) minimumSeverity = 0;
+            if (showAcknowledged == null) showAcknowledged = true;
         }
     }
     public record Saved(String id, long revision, Layout layout, Long updatedAt) {}

@@ -13,6 +13,7 @@ let summaryUpdatedAt = 0, summaryFailed = false;
 const popSummary = new PopSummary({
   stage: $('map-stage'), hosts: nodeHosts,
   minimumSeverity: () => current?.layout.minimumSeverity ?? 0,
+  showAcknowledged: () => current?.layout.showAcknowledged ?? true,
   groupName: id => groups.find(group => group.id === id)?.name || id,
   freshness: () => ({updatedAt: summaryUpdatedAt, failed: summaryFailed}), colors, labels
 });
@@ -36,7 +37,7 @@ function svg(tag, attributes) {
 
 function hostLevel(host, minimumSeverity = current?.layout.minimumSeverity ?? 0) {
   if (!host.incidents) return -2;
-  const level = host.incidents.reduce((level, issue) => issue.severity >= minimumSeverity ? Math.max(level, issue.severity) : level, -1);
+  const level = host.incidents.reduce((level, issue) => issue.severity >= minimumSeverity && (current?.layout.showAcknowledged !== false || !issue.acknowledged) ? Math.max(level, issue.severity) : level, -1);
   return level === -1 && host.monitoring && host.monitoring !== 'monitored' ? -2 : level;
 }
 
@@ -623,6 +624,7 @@ function showProperties() {
   $('map-error').textContent = '';
   $('name').value = layout?.name || '';
   $('minimum-severity').value = String(layout?.minimumSeverity ?? 0);
+  $('show-acknowledged').checked = layout?.showAcknowledged ?? true;
   $('initial-view').querySelector('[value=saved]').hidden = !layout.camera;
   $('initial-view').value = followingFit ? 'fit' : 'current';
   $('map-dialog').showModal();
@@ -637,6 +639,7 @@ $('map-form').onsubmit = async event => {
   checkpoint();
   current.layout.name = name;
   current.layout.minimumSeverity = Number($('minimum-severity').value);
+  current.layout.showAcknowledged = $('show-acknowledged').checked;
   const mode = $('initial-view').value;
   if (mode === 'fit') {
     current.layout.camera = null;

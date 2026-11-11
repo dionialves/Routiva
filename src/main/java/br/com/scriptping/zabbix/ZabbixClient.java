@@ -76,7 +76,10 @@ public class ZabbixClient {
         return fetchInventory(groupIds, hostIds, true);
     }
 
-    public record Incident(String name, int severity, String eventId, long openedAt) {
+    public record Incident(String name, int severity, String eventId, long openedAt, boolean acknowledged) {
+        public Incident(String name, int severity, String eventId, long openedAt) {
+            this(name, severity, eventId, openedAt, false);
+        }
         public Incident(String name, int severity) { this(name, severity, "", 0); }
     }
 
@@ -124,13 +127,13 @@ public class ZabbixClient {
         visible.forEach(h -> result.put(h.get("hostid").asText(), new ArrayList<>()));
         if (result.isEmpty()) return result;
         var problems = authenticatedRequest("problem.get", Map.of("hostids", result.keySet(),
-            "source", 0, "object", 0, "recent", false, "output", List.of("eventid", "objectid", "name", "severity", "clock", "r_eventid")));
+            "source", 0, "object", 0, "recent", false, "output", List.of("eventid", "objectid", "name", "severity", "clock", "r_eventid", "acknowledged")));
         var byTrigger = new HashMap<String, List<Incident>>();
         for (var problem : problems) {
             if (!problem.path("r_eventid").asText("0").equals("0")) continue;
             byTrigger.computeIfAbsent(problem.get("objectid").asText(), key -> new ArrayList<>())
                 .add(new Incident(problem.get("name").asText(), problem.get("severity").asInt(),
-                    problem.path("eventid").asText(""), problem.path("clock").asLong() * 1000));
+                    problem.path("eventid").asText(""), problem.path("clock").asLong() * 1000, problem.path("acknowledged").asInt() == 1));
         }
         if (!byTrigger.isEmpty()) {
             var triggers = authenticatedRequest("trigger.get", Map.of("triggerids", byTrigger.keySet(),

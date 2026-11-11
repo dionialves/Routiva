@@ -215,3 +215,6 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .pop-summary .pop-spinner { width:14px; height:14px; border:1.7px solid var(--border); border-top-color:var(--muted); border-radius:50%; animation:pop-spin 1s linear infinite; }
 @keyframes pop-spin { to { transform:rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pop-summary .pop-spinner { animation:none; } }
+
+.connection-form .map-checkbox { display:flex; flex-direction:row; align-items:center; gap:8px; }
+.connection-form .map-checkbox input { width:auto; margin:0; }

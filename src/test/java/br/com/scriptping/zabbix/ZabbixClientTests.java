@@ -200,6 +200,8 @@ class ZabbixClientTests {
             var states = client.activeIncidents(List.of("1", "2"));
             assertThat(states.get("1")).containsExactly(new ZabbixClient.Incident("Temperatura alta", 4, "e1", 100000));
             assertThat(states).doesNotContainKey("2");
+            api.problems = api.problems.replace("\"r_eventid\":\"0\"", "\"r_eventid\":\"0\",\"acknowledged\":\"1\"");
+            assertThat(client.activeIncidents(List.of("1")).get("1").getFirst().acknowledged()).isTrue();
             api.problems = "[]";
             assertThat(client.activeIncidents(List.of("1")).get("1")).isEmpty();
         }

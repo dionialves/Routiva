@@ -222,3 +222,15 @@ test('POP details link opens the encoded group diagnosis in a separate tab', () 
   assert.equal(link.attributes.rel, 'noopener noreferrer');
   assert.ok(link.attributes['aria-label'].includes('nova aba'));
 });
+
+test('hides acknowledged incidents from the list, counts and worst severity', () => {
+  const hosts = [host('a', [{...issue('ack', 5, 100), acknowledged: true}]),
+    host('b', [issue('open', 2, 200)])];
+  const filtered = context.summarizePop(hosts, 0, false);
+  assert.equal(filtered.affected, 1);
+  assert.equal(filtered.operational, 1);
+  assert.equal(filtered.incidents.length, 1);
+  assert.equal(filtered.incidents[0].eventId, 'open');
+  assert.equal(context.summarizePop(hosts, 0, true).incidents[0].eventId, 'ack');
+  assert.equal(context.summarizePop(hosts).incidents.length, 2);
+});
