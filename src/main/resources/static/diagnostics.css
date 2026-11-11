@@ -169,3 +169,6 @@
 #diagnostic-groups .pagination { border:0; padding:0; background:transparent; }
 
 .diagnostic-groups-table .diagnostic-incidents { display:flex; flex-flow:row nowrap; align-items:center; justify-content:center; gap:6px; direction:ltr; }
+
+a.diagnostic-badge { text-decoration: none; }
+a.diagnostic-badge:hover { text-decoration: underline; }

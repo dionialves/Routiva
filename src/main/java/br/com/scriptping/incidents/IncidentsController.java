@@ -1,0 +1,111 @@
+package br.com.scriptping.incidents;
+
+import br.com.scriptping.zabbix.*;
+import java.util.*;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.*;
+import org.springframework.beans.factory.annotation.Value;
+
+@Controller
+public class IncidentsController {
+    private final ZabbixService inventory;
+    private final ZabbixClient zabbix;
+    public IncidentsController(ZabbixService inventory, ZabbixClient zabbix) {
+        this.inventory = inventory;
+        this.zabbix = zabbix;
+    }
+
+    public record Row(String eventId, String name, int severity, String severityLabel,
+                      long timestamp, List<Host> hosts) {}
+    private static final List<String> SEVERITIES = List.of("Não classificada", "Informação", "Atenção", "Média", "Alta", "Desastre");
+
+    @Value("${spring.jackson.time-zone:America/Sao_Paulo}")
+    private String timeZone = "America/Sao_Paulo";
+
+    public record Page(List<Row> rows, int total, int page, int pages, int size, long updatedAt, String warning) {}
+
+    @GetMapping("/incidentes")
+    public String page(@RequestParam(defaultValue = "") String groupId,
+                       @RequestParam(defaultValue = "") String hostId,
+                       @RequestParam(defaultValue = "") String q,
+                       @RequestParam(defaultValue = "") String severity,
+                       Model model, HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        var hosts = inventory.hosts();
+        var groups = hosts.stream().flatMap(h -> h.groups().stream()).distinct()
+            .sorted(Comparator.comparing(Host.Group::name, String.CASE_INSENSITIVE_ORDER)).toList();
+        model.addAttribute("groups", groups);
+        model.addAttribute("hosts", hosts);
+        model.addAttribute("groupId", groupId);
+        model.addAttribute("hostId", hostId);
+        model.addAttribute("q", q);
+        model.addAttribute("severity", severity);
+        model.addAttribute("severities", SEVERITIES);
+        model.addAttribute("timeZone", timeZone);
+        return "incidents";
+    }
+
+    @GetMapping("/api/incidents")
+    @ResponseBody
+    public ResponseEntity<Page> incidents(@RequestParam(defaultValue = "") String groupId,
+            @RequestParam(defaultValue = "") String hostId, @RequestParam(defaultValue = "") String q,
+            @RequestParam(defaultValue = "") String severity, @RequestParam(defaultValue = "date") String sort,
+            @RequestParam(defaultValue = "desc") String direction, @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        size = Set.of(10, 25, 50, 100).contains(size) ? size : 50;
+        var selectedGroups = Set.copyOf(Arrays.asList(groupId.split(",")));
+        var selectedHosts = Set.copyOf(Arrays.asList(hostId.split(",")));
+        var selected = inventory.hosts().stream()
+            .filter(h -> groupId.isEmpty() || h.groups().stream().anyMatch(g -> selectedGroups.contains(g.id())))
+            .filter(h -> hostId.isEmpty() || selectedHosts.contains(h.id())).toList();
+        var rows = new ArrayList<Row>();
+        String warning = "";
+        try {
+            var events = zabbix.activeIncidents(selected.stream().map(Host::id).toList());
+            var eventHosts = new LinkedHashMap<String, List<Host>>();
+            var unique = new LinkedHashMap<String, ZabbixClient.Incident>();
+            for (var host : selected) {
+                if (!events.containsKey(host.id())) warning = "Dados parciais: alguns hosts não estão disponíveis no Zabbix.";
+                for (var incident : events.getOrDefault(host.id(), List.of())) {
+                    if (incident.eventId().isBlank()) {
+                        warning = "Dados parciais: eventos sem identificador não puderam ser apresentados.";
+                        continue;
+                    }
+                    unique.put(incident.eventId(), incident);
+                    var related = eventHosts.computeIfAbsent(incident.eventId(), ignored -> new ArrayList<>());
+                    if (!related.contains(host)) related.add(host);
+                }
+            }
+            String query = q.strip().toLowerCase(Locale.ROOT);
+            var selectedSeverities = Set.copyOf(Arrays.asList(severity.split(",")));
+            unique.forEach((key, event) -> {
+                if (!severity.isEmpty() && !selectedSeverities.contains(Integer.toString(event.severity()))) return;
+                if (!query.isEmpty() && !event.name().toLowerCase(Locale.ROOT).contains(query)
+                    && eventHosts.get(key).stream().noneMatch(h -> h.name().toLowerCase(Locale.ROOT).contains(query)
+                        || h.ip().toLowerCase(Locale.ROOT).contains(query))) return;
+                int level = event.severity();
+                rows.add(new Row(event.eventId(), event.name(), level,
+                    level >= 0 && level < SEVERITIES.size() ? SEVERITIES.get(level) : "Desconhecida",
+                    event.openedAt(), List.copyOf(eventHosts.get(key))));
+            });
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).cacheControl(CacheControl.noStore())
+                .body(new Page(List.of(), 0, 1, 1, size, 0, "Não foi possível atualizar os incidentes do Zabbix"));
+        }
+        Comparator<Row> order = Comparator.comparingLong(Row::timestamp);
+        // Longer durations correspond to earlier opening timestamps.
+        boolean ascendingTime = "asc".equals(direction) != "duration".equals(sort);
+        if (!ascendingTime) order = order.reversed();
+        rows.sort(order.thenComparing(Row::eventId));
+        int total = rows.size();
+        int pages = Math.max(1, (total + size - 1) / size);
+        page = Math.clamp(page, 1, pages);
+        int from = Math.min(total, (page - 1) * size);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new Page(
+            List.copyOf(rows.subList(from, Math.min(total, from + size))), total, page, pages, size,
+            System.currentTimeMillis(), warning));
+    }
+}

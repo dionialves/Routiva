@@ -81,7 +81,8 @@
         for (let severity = 5; severity >= 0; severity--) {
           const count = severities[severity];
           if (!count) continue;
-          const item = document.createElement('span');
+          const item = document.createElement('a');
+          item.href = `/incidentes?groupId=${encodeURIComponent(groupId)}&hostId=${encodeURIComponent(host.id)}&severity=${severity}`;
           item.className = `diagnostic-badge incident-severity-${severity}`;
           item.textContent = count;
           item.title = `${labels[severity]}: ${count} ${count === 1 ? 'incidente' : 'incidentes'}`;
@@ -89,7 +90,13 @@
           badges.append(item);
         }
         incidentCell.append(badges);
-      } else badge(incidentCell, incident ?? 'Indisponível');
+      } else {
+        const link = document.createElement('a');
+        link.href = `/incidentes?groupId=${encodeURIComponent(groupId)}&hostId=${encodeURIComponent(host.id)}`;
+        link.className = 'diagnostic-badge neutral';
+        link.textContent = incident ?? 'Indisponível';
+        incidentCell.append(link);
+      }
       const ping = textCell(tr, ''), loss = textCell(tr, '');
       badge(ping, 'Aguardando'); badge(loss, 'Aguardando');
       cells.set(host.id, [ping, loss, dot]);
@@ -99,6 +106,7 @@
     $('diagnostic-hosts-empty').hidden = hosts.length !== 0;
     const known = hosts.filter(h => Number.isFinite(data.incidents[h.id]));
     const incidents = known.reduce((sum, h) => sum + data.incidents[h.id], 0);
+    $('incident-count').href = `/incidentes?groupId=${encodeURIComponent(groupId)}`;
     $('incident-count').textContent = known.length === hosts.length
       ? `${incidents} incidentes ativos` : known.length ? `${incidents} incidentes · dados parciais` : 'Incidentes indisponíveis';
     feedback(data.warning, Boolean(data.warning));

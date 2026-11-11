@@ -39,4 +39,5 @@
 <symbol id="maximize" viewBox="0 0 24 24"><path d="M4 9V4h5m6 0h5v5M4 15v5h5m6 0h5v-5"/></symbol>
 <symbol id="play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
 <symbol id="stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+<symbol id="octagon-alert" viewBox="0 0 24 24"><path d="m8 3-5 5v8l5 5h8l5-5V8l-5-5Z M12 7v6m0 4h.01"/></symbol>
 </svg>

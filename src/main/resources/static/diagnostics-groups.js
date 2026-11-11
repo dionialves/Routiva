@@ -80,7 +80,8 @@
         for (let severity = 5; severity >= 0; severity--) {
           const count = row.severities[severity];
           if (!count) continue;
-          const badge = document.createElement('span');
+          const badge = document.createElement('a');
+          badge.href = `/incidentes?groupId=${encodeURIComponent(row.id)}&severity=${severity}`;
           badge.className = `diagnostic-badge incident-severity-${severity}`;
           badge.textContent = count;
           badge.title = `${severityLabels[severity]}: ${count} ${count === 1 ? 'incidente' : 'incidentes'}`;
@@ -89,7 +90,8 @@
         }
         incident.append(badges);
       } else {
-        const badge = document.createElement('span');
+        const badge = document.createElement('a');
+        badge.href = `/incidentes?groupId=${encodeURIComponent(row.id)}`;
         badge.className = 'diagnostic-badge neutral';
         badge.textContent = row.incidents ?? '—';
         badge.title = row.incidents == null ? 'Incidentes indisponíveis ou incompletos' : 'Nenhum incidente ativo';
