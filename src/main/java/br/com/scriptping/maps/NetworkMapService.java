@@ -67,14 +67,14 @@ public class NetworkMapService {
 
     public List<HostState> summaries(Targets targets) {
         if (targets.groups() == null || targets.hosts() == null) throw invalid();
-        var allowedGroups = groups().stream().map(Host.Group::id).collect(java.util.stream.Collectors.toSet());
-        var allowedHosts = inventory.hosts().stream().map(Host::id).collect(java.util.stream.Collectors.toSet());
-        var groupIds = new HashSet<>(targets.groups());
-        groupIds.retainAll(allowedGroups);
-        var hostIds = new HashSet<>(targets.hosts());
-        hostIds.retainAll(allowedHosts);
+        var hostIds = inventory.hosts().stream()
+            .filter(h -> targets.hosts().contains(h.id())
+                || h.groups().stream().anyMatch(g -> targets.groups().contains(g.id())))
+            .map(Host::id).collect(java.util.stream.Collectors.toSet());
+        if (hostIds.isEmpty()) return List.of();
         try {
-            var hosts = zabbix.mapHosts(groupIds, hostIds);
+            var hosts = zabbix.mapHosts(Set.of(), hostIds).stream()
+                .filter(h -> hostIds.contains(h.id())).toList();
             var problems = zabbix.activeIncidents(hosts.stream().map(ZabbixClient.MapHost::id).toList(), true);
             return hosts.stream().map(h -> new HostState(h.id(), h.name(), h.groups(),
                 problems.get(h.id()), h.monitoring())).toList();

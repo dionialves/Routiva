@@ -198,3 +198,27 @@ test('rendered badge, severity, list and expansion all use the current map thres
   assert.equal(preview.box.querySelector('.pop-incidents'), null);
   assert.ok(preview.box.querySelector('.pop-empty'));
 });
+
+test('six enabled hosts remain incident-free when unclassified incidents are excluded', () => {
+  const hosts = Array.from({length: 6}, (_, index) =>
+    host(String(index), index === 5 ? [issue('unclassified', 0, 100)] : []));
+  const result = context.summarizePop(hosts, 1);
+  assert.equal(result.total, 6);
+  assert.equal(result.operational, 6);
+  assert.equal(result.affected, 0);
+  assert.equal(result.unknown, 0);
+  assert.equal(result.incidents.length, 0);
+  assert.equal(context.summarizePop(hosts, 0).affected, 1);
+});
+
+test('POP details link opens the encoded group diagnosis in a separate tab', () => {
+  const preview = renderPreview([host('a', [])]);
+  preview.subject.node.groupId = 'POP /006';
+  preview.subject.render();
+  const link = preview.box.querySelector('.pop-details');
+  assert.equal(link.textContent, 'Ver detalhes do POP ↗');
+  assert.equal(link.attributes.href, '/diagnostico/grupos/POP%20%2F006');
+  assert.equal(link.attributes.target, '_blank');
+  assert.equal(link.attributes.rel, 'noopener noreferrer');
+  assert.ok(link.attributes['aria-label'].includes('nova aba'));
+});

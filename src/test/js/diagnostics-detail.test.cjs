@@ -40,7 +40,9 @@ async function surface(report = null) {
   return {elements,timers,requests,live,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
 }
 test('live badges use configured thresholds and incidents do not imply connectivity',async()=>{
-  const ui=await surface(), row=ui.row();
+  const ui=await surface();
+  ui.elements['diagnostic-ping'].emit('click'); await flush();
+  const row=ui.row();
   assert.equal(row.children.length,7);
   assert.equal(row.children[0].children[0].dataset.state,'up');
   assert.equal(row.children[4].children[0].className,'diagnostic-badge warning');
@@ -54,18 +56,23 @@ test('live badges use configured thresholds and incidents do not imply connectiv
 });
 test('cards and charts refresh every ten seconds without a toggle',async()=>{
   const ui=await surface();
-  assert.ok([...ui.timers.values()].some(t=>t.ms===2000));
+  assert.ok(![...ui.timers.values()].some(t=>t.ms===2000));
   const timer=[...ui.timers.values()].find(t=>t.ms===10000);
   assert.ok(timer);
   assert.equal(ui.elements['diagnostic-auto'].listeners.change,undefined);
+  const row=ui.row();
   const before=ui.requests.length;
   await timer.fn(); await flush();
   assert.ok(ui.requests.length>before);
   assert.ok(ui.requests.slice(before).some(url=>url.includes('/availability')));
   assert.equal(ui.elements['diagnostic-reload'].disabled,false);
+  assert.equal(ui.row(),row);
+  assert.ok(!ui.requests.slice(before).some(url=>url.includes('/details')||url.includes('/live?')));
 });
 test('live fetch failure clears previous connectivity and numeric badges',async()=>{
-  const ui=await surface();ui.setFailLive();
+  const ui=await surface();
+  ui.elements['diagnostic-ping'].emit('click'); await flush();
+  ui.setFailLive();
   [...ui.timers.values()].find(t=>t.ms===2000).fn();await flush();
   const row=ui.row();
   assert.equal(row.children[0].children[0].dataset.state,'unknown');
@@ -89,8 +96,9 @@ test('secondary charts expose real interval values and missing data through keyb
   svg.emit('keydown',{key:'Escape'});assert.equal(tooltip.hidden,true);
 });
 
-test('live averaging starts at page opening and resets only on manual reload', async () => {
+test('live averaging starts on play and resets on manual reload', async () => {
   const ui = await surface();
+  ui.elements['diagnostic-ping'].emit('click'); await flush();
   const since = () => new URL(ui.requests.filter(url => url.includes('/live?')).at(-1), 'http://localhost').searchParams.get('since');
   const opened = since();
   assert.ok(Number(opened) > 0);
@@ -101,4 +109,24 @@ test('live averaging starts at page opening and resets only on manual reload', a
   ui.elements['diagnostic-reload'].emit('click');
   await flush();
   assert.equal(Number(since()), Number(opened) + 60000);
+});
+
+
+test('ping starts paused, toggles stop and play, and ignores a pending response after stop', async () => {
+  const ui = await surface();
+  const button = ui.elements['diagnostic-ping'];
+  assert.equal(ui.requests.some(url => url.includes('/live?')), false);
+  button.emit('click');
+  assert.equal(button['aria-label'], 'Parar ping');
+  button.emit('click');
+  await flush();
+  assert.equal(button['aria-label'], 'Iniciar ping');
+  assert.equal(ui.row().children[5].children[0].textContent, 'Aguardando');
+  assert.equal([...ui.timers.values()].some(t => t.ms === 2000), false);
+  ui.advance(1000);
+  button.emit('click'); await flush();
+  assert.equal(ui.row().children[0].children[0].dataset.state, 'up');
+  button.emit('click');
+  assert.equal([...ui.timers.values()].some(t => t.ms === 2000), false);
+  assert.equal(ui.row().children[0].children[0].dataset.state, 'up');
 });

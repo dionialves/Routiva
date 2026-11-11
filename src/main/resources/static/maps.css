@@ -195,8 +195,11 @@ dialog::backdrop { background:rgb(3 12 20 / 68%); }
   color:var(--cyan); background:transparent; border:0; padding:8px 0 2px; font-size:12px; cursor:pointer;
 }
 .pop-summary .pop-more:hover { text-decoration:underline; }
-.pop-summary :is(button, .pop-incidents):focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
-.pop-summary footer { display:flex; align-items:center; justify-content:flex-start; gap:6px; padding:0; margin-top:16px; border:0; color:var(--muted); font-size:10px; }
+.pop-summary :is(button, a, .pop-incidents):focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+.pop-summary footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:16px 0 0; margin-top:16px; border:0; border-top:1px solid var(--border); color:var(--muted); font-size:10px; }
+.pop-summary .pop-updated { display:flex; align-items:center; gap:6px; }
+.pop-summary .pop-details { color:var(--cyan); font-size:11px; text-decoration:none; margin-left:auto; }
+.pop-summary .pop-details:hover { text-decoration:underline; }
 .pop-summary .pop-message { display:flex; align-items:flex-start; gap:7px; padding:9px 0; font-size:11px; color:var(--muted); }
 .pop-summary .pop-message > svg { margin-top:1px; }
 .pop-summary .pop-empty > svg { color:var(--success); }

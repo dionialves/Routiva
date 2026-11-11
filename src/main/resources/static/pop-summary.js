@@ -233,7 +233,14 @@ class PopSummary {
     const footer = el('footer');
     const refresh = popIcon('refresh', 12);
     refresh.setAttribute('stroke-width', '1.5');
-    footer.append(refresh, el('span', undefined, 'pop-freshness'));
+    const updated = el('span', undefined, 'pop-updated');
+    updated.append(refresh, el('span', undefined, 'pop-freshness'));
+    const details = el('a', 'Ver detalhes do POP ↗', 'pop-details');
+    details.setAttribute('href', `/diagnostico/grupos/${encodeURIComponent(this.node.groupId)}`);
+    details.setAttribute('target', '_blank');
+    details.setAttribute('rel', 'noopener noreferrer');
+    details.setAttribute('aria-label', `Ver detalhes do POP ${this.node.name} (abre em nova aba)`);
+    footer.append(updated, details);
     this.box.append(footer);
     this.updateFooter();
   }

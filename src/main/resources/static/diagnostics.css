@@ -122,3 +122,9 @@
 .diagnostics-dashboard #availability-chart .diagnostic-chart-empty svg { width:22px; height:22px; min-height:0; }
 
 .diagnostics-dashboard .diagnostic-charts .availability-axis { fill:#abc0d5; font-size:11px; }
+
+.diagnostic-host-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
+#diagnostic-ping { display:inline-grid; place-items:center; width:38px; height:38px; padding:8px; border:1px solid #06b6d4; border-radius:8px; color:#67e8f9; background:#06b6d412; }
+#diagnostic-ping[aria-pressed=true] { border-color:#f43f5e; color:#fda4af; background:#f43f5e18; }
+#diagnostic-ping:hover { filter:brightness(1.2); }
+#diagnostic-ping:focus-visible { outline:2px solid #67e8f9; outline-offset:3px; }

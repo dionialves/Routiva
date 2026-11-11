@@ -8,6 +8,7 @@
   const cells = new Map();
   let refreshTimer, liveTimer, liveBusy = false, pollGeneration = 0;
   let limits = {};
+  let pingRunning = false;
   let liveSince = Date.now();
   function badge(cell, value, state = 'neutral') {
     cell.replaceChildren();
@@ -75,9 +76,9 @@
     feedback(data.warning, Boolean(data.warning));
   }
   async function live() {
-    const since = liveSince;
+    const since = liveSince, generation = pollGeneration;
     const data = await get(`/api/diagnostics/groups/${encodeURIComponent(groupId)}/live?since=${since}`);
-    if (since !== liveSince) return;
+    if (!pingRunning || stopped || generation !== pollGeneration || since !== liveSince) return;
     for (const row of data) {
       const target = cells.get(row.id); if (!target) continue;
       const fresh = ['Respondendo', 'Sem resposta'].includes(row.state);
@@ -214,7 +215,7 @@
     busy = true; $('diagnostic-reload').disabled = true;
     $('diagnostic-reload').setAttribute('aria-busy', 'true');
     $('group-details').classList.toggle('initial-loading', cells.size === 0);
-    try { await details(); await Promise.all([live(), history()]); }
+    try { await details(); await Promise.all([pingRunning ? live() : Promise.resolve(), history()]); }
     catch (error) { unknownLive(); feedback(error.message, true); }
     finally {
       busy = false; $('diagnostic-reload').disabled = false;
@@ -224,23 +225,48 @@
   }
   async function poll() {
     const generation = pollGeneration;
-    if (stopped) return;
+    if (stopped || !pingRunning) return;
     if (!document.hidden && !busy && !liveBusy) {
       liveBusy = true;
       try { await live(); }
-      catch (error) { unknownLive(); }
+      catch (error) { if (pingRunning && generation === pollGeneration) unknownLive(); }
       finally { liveBusy = false; }
     }
-    if (!stopped && generation === pollGeneration) liveTimer = setTimeout(poll, 2000);
+    if (!stopped && pingRunning && generation === pollGeneration) liveTimer = setTimeout(poll, 2000);
   }
   function scheduleRefresh() {
     clearTimeout(refreshTimer);
     if (stopped) return;
     refreshTimer = setTimeout(async () => {
-      if (!document.hidden && !busy) await reload();
+      if (!document.hidden && !busy) {
+        try { await history(); }
+        catch (error) { feedback(error.message, true); }
+      }
       scheduleRefresh();
     }, 10000);
   }
+  $('diagnostic-ping').addEventListener('click', () => {
+    pingRunning = !pingRunning;
+    pollGeneration++;
+    clearTimeout(liveTimer);
+    const button = $('diagnostic-ping');
+    const label = pingRunning ? 'Parar ping' : 'Iniciar ping';
+    button.replaceChildren(window.AppIcon(pingRunning ? 'stop' : 'play'));
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', String(pingRunning));
+    button.title = label;
+    $('auto-summary').textContent = pingRunning ? 'Ping em execução · 2 s' : 'Ping parado';
+    if (pingRunning) {
+      liveSince = Date.now();
+      for (const target of cells.values()) {
+        badge(target[0], 'Aguardando'); badge(target[1], 'Aguardando');
+        target[2].dataset.state = 'unknown';
+        target[2].setAttribute('aria-label', 'Aguardando medições');
+        target[2].title = 'Aguardando medições';
+      }
+      poll();
+    }
+  });
   $('diagnostic-retry').addEventListener('click', () => { if (groupId && !$('group-details').hidden) reload(); else start().catch(e => feedback(e.message, true)); });
   $('diagnostic-reload').addEventListener('click', () => reload(true));
   $('period').addEventListener('change', () => history().catch(e => feedback(e.message, true)));
@@ -307,7 +333,7 @@
     if (!group) throw new Error('Grupo não encontrado no inventário monitorado.');
     $('diagnostic-title').textContent=group.name; $('diagnostic-description').textContent='Indicadores do grupo e comunicação dos hosts em tempo real.';
     $('group-details').hidden=false; $('diagnostic-groups').hidden=true;
-    await reload(); poll();
+    await reload();
     scheduleRefresh();
   }
   start().catch(error => feedback(error.message, true));
