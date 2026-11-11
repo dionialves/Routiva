@@ -68,6 +68,9 @@
 .host-summary > span + span { border-left:1px solid #294557; padding-left:16px; }
 .host-summary svg { width:16px; height:16px; }
 .host-summary > span:last-child svg { color:#f59e0b; }
+.host-summary #incident-count { color:#00d3fd; text-decoration:none; }
+.host-summary #incident-count:hover,
+.host-summary #incident-count:focus-visible { text-decoration:underline; text-underline-offset:3px; }
 
 .diagnostics-dashboard .diagnostic-hosts-table { table-layout:auto; min-width:1050px; font-size:13px; }
 .diagnostics-dashboard .diagnostic-hosts-table thead th { width:auto; padding:12px 10px; background:#102a3d; color:#c1d3e0; font-size:12px; }

@@ -94,3 +94,5 @@
   .incidents-filters form { grid-template-columns:minmax(0,1fr); }
   .incident-group-field,.incident-host-field,.incident-severity-field { grid-column:1; grid-row:auto; }
 }
+
+.incident-acknowledged { display:inline-flex; align-items:center; justify-content:center; border-radius:20px; padding:3px 10px; background:#10b98125; color:#86efcb; font-size:12px; font-weight:600; white-space:nowrap; }

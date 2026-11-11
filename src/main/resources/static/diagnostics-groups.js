@@ -120,7 +120,7 @@
     const timeout = setTimeout(() => requestController.abort(), 15000);
     $('diagnostic-groups').setAttribute('aria-busy', 'true');
     $('groups-refresh').classList.add('refreshing');
-    feedback('Atualizando indicadores…');
+    feedback('');
     if (initial) skeleton();
     const params = new URLSearchParams({ minutes: $('group-period').value || '1440', q: $('group-search').value.trim(), status: $('group-status').value, sort, direction, page });
     try {

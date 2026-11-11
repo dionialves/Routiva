@@ -205,7 +205,13 @@
       const elapsed = document.createElement('span'); elapsed.className = 'incident-duration';
       const value = document.createElement('span'); value.dataset.openedAt = row.timestamp;
       value.textContent = duration(row.timestamp); elapsed.append(icon('clock-3'), value); cell(tr).append(elapsed);
-      const recognition = cell(tr, row.acknowledged ? 'Sim' : 'Não');
+      const recognition = cell(tr, row.acknowledged ? '' : 'Não');
+      if (row.acknowledged) {
+        const badge = document.createElement('span');
+        badge.className = 'incident-acknowledged';
+        badge.textContent = 'Sim';
+        recognition.append(badge);
+      }
       recognition.title = row.acknowledged ? 'Incidente reconhecido' : 'Incidente não reconhecido';
       fragment.append(tr);
     }

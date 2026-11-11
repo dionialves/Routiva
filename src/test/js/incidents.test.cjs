@@ -217,6 +217,7 @@ test('first picker option selects every available group or host even with a sear
 test('shows acknowledged incidents in the rightmost column', async () => {
   const ui = await surface(params => ({ ok: true, json: async () => ({ rows: [{ ...row, acknowledged: true }], total: 1, page: 1, pages: 1, updatedAt: Date.now(), warning: '' }) }));
   const cells = ui.rows()[0].children[0].children;
-  assert.equal(cells[5].textContent, 'Sim');
+  assert.equal(cells[5].children[0].textContent, 'Sim');
+  assert.equal(cells[5].children[0].className, 'incident-acknowledged');
   assert.equal(cells[5].title, 'Incidente reconhecido');
 });
