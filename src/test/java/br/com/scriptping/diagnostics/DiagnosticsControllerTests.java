@@ -73,6 +73,16 @@ class DiagnosticsControllerTests {
         mvc.perform(get("/api/diagnostics/groups/other/details")).andExpect(status().isNotFound());
         verifyNoInteractions(client);
     }
+    @Test void detailsCountsIncidentsBySeverityPerHost() throws Exception {
+        when(client.activeIncidents(List.of("h"))).thenReturn(Map.of("h", List.of(
+            new ZabbixClient.Incident("A", 4), new ZabbixClient.Incident("B", 2),
+            new ZabbixClient.Incident("C", 4))));
+        mvc.perform(get("/api/diagnostics/groups/g/details")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.incidents.h").value(3))
+            .andExpect(jsonPath("$.incidentSeverities.h.4").value(2))
+            .andExpect(jsonPath("$.incidentSeverities.h.2").value(1))
+            .andExpect(jsonPath("$.incidentSeverities.h.5").doesNotExist());
+    }
     @Test void metadataFailureDoesNotHideHostsOrInventIncidentCounts() throws Exception {
         when(client.diagnosticInventory(List.of("h"))).thenThrow(new IllegalStateException());
         when(client.activeIncidents(List.of("h"))).thenThrow(new IllegalStateException());

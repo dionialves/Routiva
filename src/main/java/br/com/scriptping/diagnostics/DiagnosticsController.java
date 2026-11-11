@@ -78,7 +78,7 @@ public class DiagnosticsController {
     private double lossCritical = 1.0;
     public record Limits(double latency, double lossNormal, double lossCritical) {}
     public record Details(List<Host> hosts, Map<String, Map<String, String>> equipment,
-        Map<String, Integer> incidents, String warning, Limits limits) {}
+        Map<String, Integer> incidents, Map<String, Map<Integer, Long>> incidentSeverities, String warning, Limits limits) {}
     @GetMapping("/api/diagnostics/groups/{id}/details")
     @ResponseBody
     public ResponseEntity<Details> details(@PathVariable String id) {
@@ -86,11 +86,18 @@ public class DiagnosticsController {
         var ids = hosts.stream().map(Host::id).toList();
         Map<String, Map<String, String>> equipment = Map.of();
         var incidents = new HashMap<String, Integer>();
+        var incidentSeverities = new HashMap<String, Map<Integer, Long>>();
         String warning = "";
         try { equipment = zabbix.diagnosticInventory(ids); }
         catch (Exception ex) { warning = "Inventário do equipamento indisponível. "; }
-        try { zabbix.activeIncidents(ids).forEach((key, value) -> incidents.put(key, value.size())); }
+        try {
+            zabbix.activeIncidents(ids).forEach((key, value) -> {
+                incidents.put(key, value.size());
+                incidentSeverities.put(key, value.stream().collect(java.util.stream.Collectors.groupingBy(
+                    ZabbixClient.Incident::severity, java.util.stream.Collectors.counting())));
+            });
+        }
         catch (Exception ex) { warning += "Incidentes indisponíveis."; }
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new Details(hosts, equipment, incidents, warning, new Limits(latencyLimit, lossNormal, lossCritical)));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new Details(hosts, equipment, incidents, incidentSeverities, warning, new Limits(latencyLimit, lossNormal, lossCritical)));
     }
 }

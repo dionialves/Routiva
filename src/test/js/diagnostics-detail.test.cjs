@@ -20,7 +20,7 @@ async function surface(report = null) {
   const live = [{id:'h',ping:30,loss:2,state:'Respondendo',measuredAt:Date.now()}];
   const data = {
     '/api/diagnostics/groups': [{id:'g',name:'POP',hosts:1}],
-    '/api/diagnostics/groups/g/details': {hosts:[{id:'h',name:'Router',ip:'10.0.0.1'}],equipment:{},incidents:{h:2},warning:'',limits:{latency:20,lossNormal:.33,lossCritical:1}},
+    '/api/diagnostics/groups/g/details': {hosts:[{id:'h',name:'Router',ip:'10.0.0.1'}],equipment:{},incidents:{h:2},incidentSeverities:{h:{2:1,4:1}},warning:'',limits:{latency:20,lossNormal:.33,lossCritical:1}},
     '/api/diagnostics/groups/g/live':live,
   };
   let failLive=false, now=Date.now();
@@ -45,7 +45,11 @@ test('live badges use configured thresholds and incidents do not imply connectiv
   const row=ui.row();
   assert.equal(row.children.length,7);
   assert.equal(row.children[0].children[0].dataset.state,'up');
-  assert.equal(row.children[4].children[0].className,'diagnostic-badge warning');
+  assert.equal(row.children[4].children[0].className,'diagnostic-incidents');
+  assert.equal(row.children[4].children[0].children.length,2);
+  assert.equal(row.children[4].children[0].children[0].className,'diagnostic-badge incident-severity-4');
+  assert.equal(row.children[4].children[0].children[1].className,'diagnostic-badge incident-severity-2');
+  assert.equal(row.children[4].children[0].children[0]['aria-label'],'Alta: 1 incidente');
   assert.equal(row.children[5].children[0].className,'diagnostic-badge warning');
   assert.equal(row.children[6].children[0].className,'diagnostic-badge critical');
   assert.match(ui.elements['incident-count'].textContent,/2 incidentes/);
@@ -65,7 +69,7 @@ test('cards and charts refresh every ten seconds without a toggle',async()=>{
   await timer.fn(); await flush();
   assert.ok(ui.requests.length>before);
   assert.ok(ui.requests.slice(before).some(url=>url.includes('/availability')));
-  assert.equal(ui.elements['diagnostic-reload'].disabled,false);
+  assert.equal(ui.elements['diagnostic-reload'].listeners.click, undefined);
   assert.equal(ui.row(),row);
   assert.ok(!ui.requests.slice(before).some(url=>url.includes('/details')||url.includes('/live?')));
 });
@@ -96,7 +100,7 @@ test('secondary charts expose real interval values and missing data through keyb
   svg.emit('keydown',{key:'Escape'});assert.equal(tooltip.hidden,true);
 });
 
-test('live averaging starts on play and resets on manual reload', async () => {
+test('live averaging starts on play and resets only when ping is restarted', async () => {
   const ui = await surface();
   ui.elements['diagnostic-ping'].emit('click'); await flush();
   const since = () => new URL(ui.requests.filter(url => url.includes('/live?')).at(-1), 'http://localhost').searchParams.get('since');
@@ -106,9 +110,11 @@ test('live averaging starts on play and resets on manual reload', async () => {
   await [...ui.timers.values()].find(timer => timer.ms === 10000).fn();
   await flush();
   assert.equal(since(), opened);
-  ui.elements['diagnostic-reload'].emit('click');
+  ui.elements['diagnostic-ping'].emit('click');
+  ui.elements['diagnostic-ping'].emit('click');
   await flush();
   assert.equal(Number(since()), Number(opened) + 60000);
+  assert.equal(ui.requests.filter(url => url.endsWith('/details')).length, 1);
 });
 
 

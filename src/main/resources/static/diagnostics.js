@@ -60,14 +60,30 @@
       nameCell.append(dot, name); textCell(tr, host.ip || 'Sem IP');
       textCell(tr, equipment.model || 'Não informado'); textCell(tr, equipment.version || 'Não informado');
       const incident = data.incidents[host.id];
-      badge(textCell(tr, ''), incident ?? 'Indisponível', incident > 0 ? 'warning' : 'neutral');
+      const incidentCell = textCell(tr, '');
+      const severities = data.incidentSeverities?.[host.id];
+      if (incident > 0 && severities) {
+        const badges = document.createElement('div');
+        badges.className = 'diagnostic-incidents';
+        const labels = ['Não classificado', 'Informação', 'Atenção', 'Média', 'Alta', 'Desastre'];
+        for (let severity = 5; severity >= 0; severity--) {
+          const count = severities[severity];
+          if (!count) continue;
+          const item = document.createElement('span');
+          item.className = `diagnostic-badge incident-severity-${severity}`;
+          item.textContent = count;
+          item.title = `${labels[severity]}: ${count} ${count === 1 ? 'incidente' : 'incidentes'}`;
+          item.setAttribute('aria-label', item.title);
+          badges.append(item);
+        }
+        incidentCell.append(badges);
+      } else badge(incidentCell, incident ?? 'Indisponível');
       const ping = textCell(tr, ''), loss = textCell(tr, '');
       badge(ping, 'Aguardando'); badge(loss, 'Aguardando');
       cells.set(host.id, [ping, loss, dot]);
       fragment.append(tr);
     }
     $('diagnostic-hosts').replaceChildren(fragment);
-    $('host-count').textContent = `${hosts.length} hosts`;
     $('diagnostic-hosts-empty').hidden = hosts.length !== 0;
     const known = hosts.filter(h => Number.isFinite(data.incidents[h.id]));
     const incidents = known.reduce((sum, h) => sum + data.incidents[h.id], 0);
@@ -209,20 +225,6 @@
       chart.clear(); chartEmpty($('availability-chart'), 'Sem medições no período.');
     }
   }
-  async function reload(resetAverages = false) {
-    if (busy) return;
-    if (resetAverages) liveSince = Date.now();
-    busy = true; $('diagnostic-reload').disabled = true;
-    $('diagnostic-reload').setAttribute('aria-busy', 'true');
-    $('group-details').classList.toggle('initial-loading', cells.size === 0);
-    try { await details(); await Promise.all([pingRunning ? live() : Promise.resolve(), history()]); }
-    catch (error) { unknownLive(); feedback(error.message, true); }
-    finally {
-      busy = false; $('diagnostic-reload').disabled = false;
-      $('diagnostic-reload').setAttribute('aria-busy', 'false');
-      $('group-details').classList.remove('initial-loading');
-    }
-  }
   async function poll() {
     const generation = pollGeneration;
     if (stopped || !pingRunning) return;
@@ -267,8 +269,10 @@
       poll();
     }
   });
-  $('diagnostic-retry').addEventListener('click', () => { if (groupId && !$('group-details').hidden) reload(); else start().catch(e => feedback(e.message, true)); });
-  $('diagnostic-reload').addEventListener('click', () => reload(true));
+  $('diagnostic-retry').addEventListener('click', () => {
+    if (groupId && !$('group-details').hidden) history().catch(e => feedback(e.message, true));
+    else start().catch(e => feedback(e.message, true));
+  });
   $('period').addEventListener('change', () => history().catch(e => feedback(e.message, true)));
   $('chart-lines').addEventListener('click', () => { chart.mode='lines'; chart.draw(); $('chart-lines').setAttribute('aria-pressed','true'); $('chart-bars').setAttribute('aria-pressed','false'); });
   $('chart-bars').addEventListener('click', () => { chart.mode='bars'; chart.draw(); $('chart-bars').setAttribute('aria-pressed','true'); $('chart-lines').setAttribute('aria-pressed','false'); });
@@ -333,7 +337,16 @@
     if (!group) throw new Error('Grupo não encontrado no inventário monitorado.');
     $('diagnostic-title').textContent=group.name; $('diagnostic-description').textContent='Indicadores do grupo e comunicação dos hosts em tempo real.';
     $('group-details').hidden=false; $('diagnostic-groups').hidden=true;
-    await reload();
+    busy = true;
+    $('group-details').classList.toggle('initial-loading', true);
+    try {
+      await Promise.all([details(), history()]);
+    } catch (error) {
+      feedback(error.message, true);
+    } finally {
+      busy = false;
+      $('group-details').classList.remove('initial-loading');
+    }
     scheduleRefresh();
   }
   start().catch(error => feedback(error.message, true));
