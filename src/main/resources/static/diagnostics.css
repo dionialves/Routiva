@@ -11,8 +11,6 @@
 .diagnostics-dashboard { --diagnostic-green:#10b981; --diagnostic-cyan:#06b6d4; }
 .diagnostics-dashboard .availability-page { padding-top:24px; }
 .diagnostics-dashboard .availability-heading { margin-bottom:20px; }
-.diagnostics-dashboard .eyebrow { display:flex; align-items:center; gap:9px; }
-.diagnostics-dashboard .eyebrow::before { content:''; width:3px; height:12px; background:var(--diagnostic-cyan); border-radius:2px; }
 .diagnostics-dashboard .availability-heading h1 { font-size:28px; }
 #back-groups { display:inline-flex; align-items:center; gap:7px; color:#cbd5e1; font-size:13px; }
 .diagnostics-dashboard a:focus-visible,.diagnostics-dashboard button:focus-visible,.diagnostics-dashboard input:focus-visible,.diagnostics-dashboard svg[tabindex]:focus-visible,.diagnostic-info:focus-visible { outline:2px solid #06b6d4; outline-offset:4px; }

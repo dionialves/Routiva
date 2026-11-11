@@ -94,8 +94,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setGroup(group, !isCollapsed() && (active || read(`traceone.sidebar.${group.dataset.sidebarGroup}`) === 'true'), false);
     group.querySelector('button').addEventListener('click', () => {
       const open = group.querySelector('button').getAttribute('aria-expanded') !== 'true';
-      if (isCollapsed()) groups.filter(g => g !== group).forEach(g => setGroup(g, false, false));
+      groups.filter(g => g !== group).forEach(g => setGroup(g, false));
       setGroup(group, open);
+    });
+  });
+  sidebar.querySelectorAll('.side-nav a').forEach(link => {
+    link.addEventListener('click', () => {
+      groups.forEach(group => setGroup(group, false));
     });
   });
   const setDrawer = open => {
