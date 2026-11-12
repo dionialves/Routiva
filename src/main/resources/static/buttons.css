@@ -56,7 +56,10 @@ button.system-button svg { fill:none; stroke:currentColor; stroke-width:1.8; str
 button.system-button[hidden] { display:none !important; }
 #editor-actions, .settings-actions, .zabbix-actions, .ap-pagination { flex-wrap:wrap; }
 #map-tools { justify-items:end; }
-#map-tools button.system-button > span { max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+button.system-button-icon-only {
+  width:var(--button-height) !important;
+  padding:7px !important;
+}
 #maps .map-options button.system-button { width:100% !important; justify-content:flex-start !important; margin-block:3px; }
 @media(prefers-reduced-motion:reduce) { button.system-button { transition:none; } }
 
