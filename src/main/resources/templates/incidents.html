@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 <head>
-  <th:block th:replace="~{shell :: security}"></th:block><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Incidentes • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/multi-picker.css?v=20261112-standard"><link rel="stylesheet" href="/incidents.css?v=20261112-host-menu"><script src="/shell.js" defer></script><script src="/multi-picker.js?v=20261112-name-filter" defer></script><script src="/incidents.js?v=20261112-host-menu" defer></script><link rel="stylesheet" href="/query-filters.css?v=20261112-1"><link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
-<body class="availability-dashboard"><aside th:replace="~{shell :: sidebar('incidents')}"></aside><div class="app-workspace"><header th:replace="~{shell :: topbar}"></header><main class="page-content availability-page incidents-page" th:attr="data-time-zone=${timeZone}">
+  <th:block th:replace="~{shell :: security}"></th:block><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Incidentes • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/multi-picker.css?v=20261112-standard"><link rel="stylesheet" href="/incidents.css?v=20261112-incident-close-permissions"><script src="/shell.js" defer></script><script src="/multi-picker.js?v=20261112-name-filter" defer></script><script src="/incidents.js?v=20261112-incident-close-permissions" defer></script><link rel="stylesheet" href="/query-filters.css?v=20261112-1"><link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/form-dialog.css"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
+<body class="availability-dashboard"><aside th:replace="~{shell :: sidebar('incidents')}"></aside><div class="app-workspace"><header th:replace="~{shell :: topbar}"></header><main class="page-content availability-page incidents-page" th:attr="data-time-zone=${timeZone},data-can-update=${isAdmin == true}">
 <div class="availability-heading"><div><p class="eyebrow">ZABBIX</p><h1>Incidentes</h1><p>Incidentes ativos dos hosts monitorados, do mais recente ao mais antigo.</p></div></div>
 <section class="card incidents-filters query-filter-bar" aria-label="Filtros de incidentes"><form class="query-filter-row" id="incident-filters" method="get" action="/incidentes">
 <div th:replace="~{multi-picker :: groups}"></div>
@@ -13,8 +13,36 @@
 <section class="card incidents-panel" id="incidents-panel" aria-busy="true">
 <div class="incidents-heading"><div><svg th:replace="~{shell :: icon('alert')}"></svg><h2>Incidentes ativos</h2><span id="incident-total" class="incident-count">— encontrados</span></div><p id="incident-updated" role="status">Consultando Zabbix…</p></div>
 <div id="incident-warning" role="status" hidden></div><div id="incident-error" role="alert" hidden><span>Não foi possível atualizar os incidentes do Zabbix</span> <button id="incident-retry" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>Tentar novamente</button></div>
-<div class="table-scroll" tabindex="0" role="region" aria-label="Lista de incidentes"><table class="hosts-table incidents-table"><colgroup><col style="width:16%"><col style="width:13%"><col style="width:23%"><col style="width:11%"><col style="width:23%"><col style="width:9%"><col style="width:5%"></colgroup><thead><tr><th>Data</th><th>Severidade</th><th>Host</th><th scope="col">IP</th><th>Incidente</th><th>Duração</th><th scope="col" title="Reconhecimento do incidente no Zabbix">Rec.</th></tr></thead><tbody id="incident-rows"></tbody></table></div>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Lista de incidentes"><table class="hosts-table incidents-table"><colgroup><col style="width:14%"><col style="width:12%"><col style="width:21%"><col style="width:10%"><col style="width:23%"><col style="width:9%"><col style="width:5%"><col style="width:6%"></colgroup><thead><tr><th>Data</th><th>Severidade</th><th>Host</th><th scope="col">IP</th><th>Incidente</th><th>Duração</th><th scope="col" title="Reconhecimento do incidente no Zabbix">Rec.</th><th scope="col" title="Mensagens do incidente">OBS.</th></tr></thead><tbody id="incident-rows"></tbody></table></div>
 <div id="incident-empty" class="incident-empty" hidden><svg th:replace="~{shell :: icon('check-circle')}"></svg><p>Nenhum incidente ativo encontrado</p></div>
 <p id="incident-range" class="note" role="status">Carregando incidentes…</p>
 </section><noscript>Ative o JavaScript para consultar os incidentes.</noscript>
-</main></div></body></html>
+</main></div>
+<dialog id="incident-dialog" class="settings-panel form-dialog" aria-labelledby="incident-dialog-title">
+  <form id="incident-update-form" class="connection-form">
+    <header class="incident-modal-header"><h2 id="incident-dialog-title">Atualizar incidente</h2><button id="incident-dialog-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar modal"><svg th:replace="~{shell :: icon('close')}"></svg></button></header>
+    <section class="incident-modal-summary" aria-label="Identificação do incidente">
+      <div><h3 id="incident-dialog-name"></h3><p id="incident-dialog-description">Atualize o registro, severidade ou finalize o incidente.</p></div>
+      <div class="incident-modal-identity"><span id="incident-status-badge" data-state="loading">Consultando…</span><span id="incident-dialog-id"></span></div>
+    </section>
+    <div class="incident-modal-scroll">
+      <div class="incident-modal-status"><p id="incident-dialog-state" role="status" aria-live="polite"></p><button id="incident-details-retry" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg>Consultar novamente</button></div>
+      <div class="incident-modal-columns">
+        <fieldset id="incident-update-fields" disabled>
+          <legend class="sr-only">Atualização do incidente</legend>
+          <section class="incident-message-section"><label for="incident-message" class="incident-section-title"><svg th:replace="~{shell :: icon('message-square')}"></svg>Mensagem</label><textarea id="incident-message" rows="4" maxlength="1800" aria-describedby="incident-message-count" placeholder="Registre uma observação sobre este incidente..."></textarea><span id="incident-message-count" class="incident-character-count">0 / 1.800</span></section>
+          <section><label id="incident-severity-title" for="incident-new-severity" class="incident-section-title"><svg th:replace="~{shell :: icon('layers')}"></svg>Severidade</label>
+            <div class="incident-severity-control"><span id="incident-severity-dot" class="incident-severity-dot" aria-hidden="true"></span><select id="incident-new-severity" aria-labelledby="incident-severity-title" disabled><option th:each="label, state : ${severities}" th:value="${state.index}" th:text="${'● ' + label}"></option></select></div>
+          </section>
+          <section><h3 class="incident-section-title"><svg th:replace="~{shell :: icon('zap')}"></svg>Ações</h3><div class="incident-actions-panel"><label><input id="incident-recognize" type="checkbox"><span id="incident-recognize-label">Reconhecer incidente</span></label><label><input id="incident-close" type="checkbox" aria-describedby="incident-close-help">Finalizar incidente</label></div><p id="incident-close-help" class="note"></p></section>
+        </fieldset>
+        <section class="incident-modal-history" aria-labelledby="incident-history-title"><div class="incident-history-heading"><h3 id="incident-history-title" class="incident-section-title"><svg th:replace="~{shell :: icon('clock-3')}"></svg>Histórico</h3><span id="incident-history-count">0 registros</span></div>
+          <div class="table-scroll incident-history-scroll" tabindex="0" role="region" aria-label="Histórico do incidente"><table class="hosts-table incident-history-table"><colgroup><col style="width:23%"><col style="width:18%"><col style="width:25%"><col style="width:34%"></colgroup><thead><tr><th>Data</th><th>Usuário</th><th>Ação</th><th>Mensagem</th></tr></thead><tbody id="incident-history"></tbody></table></div>
+          <p id="incident-history-empty" class="note" hidden>Nenhuma atualização registrada.</p>
+        </section>
+      </div>
+    </div>
+    <footer class="incident-modal-footer"><div class="incident-footer-note"><svg th:replace="~{shell :: icon('info')}"></svg><div><p>O fechamento será processado pelo Zabbix.</p><p>A atualização se aplica somente a este incidente. Seu usuário será identificado no histórico do Zabbix.</p></div></div><p id="incident-update-error" role="alert"></p><div class="settings-actions"><button id="incident-dialog-cancel" type="button" class="system-button">Cancelar</button><button id="incident-update-save" type="submit" class="system-button system-button-primary" disabled><svg th:replace="~{shell :: icon('check')}"></svg><span id="incident-update-save-label">Atualizar incidente</span></button></div></footer>
+  </form>
+</dialog>
+</body></html>

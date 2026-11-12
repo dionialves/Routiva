@@ -42,6 +42,7 @@ public class SecurityConfiguration {
                 .requestMatchers("/login", "/login/**", "/error", "/actuator/health", "/actuator/health/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/*.css", "/*.js", "/*.svg", "/*.png", "/*.ico", "/*.woff2", "/webjars/**").permitAll()
                 .requestMatchers("/configuracao/**", "/api/users/**", "/api/ap/candidates").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/incidents/*/updates").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/ap", "/api/ap/", "/api/maps", "/api/maps/").hasRole("ADMIN")
                 .anyRequest().authenticated())
             .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {

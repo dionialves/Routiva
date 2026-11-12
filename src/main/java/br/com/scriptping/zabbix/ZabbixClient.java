@@ -16,7 +16,7 @@ public class ZabbixClient {
     private String url, username, password;
     private final RestClient client;
     private String session;
-    private boolean versionDetected, legacyAuth, legacyGroups;
+    private boolean versionDetected, legacyAuth, legacyGroups, legacyEvents;
 
     public ZabbixClient(
         @Value("${zabbix.url}") String url,
@@ -76,7 +76,10 @@ public class ZabbixClient {
         return fetchInventory(groupIds, hostIds, true);
     }
 
-    public record Incident(String name, int severity, String eventId, long openedAt, boolean acknowledged) {
+    public record Incident(String name, int severity, String eventId, long openedAt, boolean acknowledged, boolean hasMessages, int messageCount) {
+        public Incident(String name, int severity, String eventId, long openedAt, boolean acknowledged) {
+            this(name, severity, eventId, openedAt, acknowledged, false, 0);
+        }
         public Incident(String name, int severity, String eventId, long openedAt) {
             this(name, severity, eventId, openedAt, false);
         }
@@ -127,13 +130,14 @@ public class ZabbixClient {
         visible.forEach(h -> result.put(h.get("hostid").asText(), new ArrayList<>()));
         if (result.isEmpty()) return result;
         var problems = authenticatedRequest("problem.get", Map.of("hostids", result.keySet(),
-            "source", 0, "object", 0, "recent", false, "output", List.of("eventid", "objectid", "name", "severity", "clock", "r_eventid", "acknowledged")));
+            "source", 0, "object", 0, "recent", false, "selectAcknowledges", List.of("message"), "output", List.of("eventid", "objectid", "name", "severity", "clock", "r_eventid", "acknowledged")));
         var byTrigger = new HashMap<String, List<Incident>>();
         for (var problem : problems) {
             if (!problem.path("r_eventid").asText("0").equals("0")) continue;
+            int messages = messageCount(problem);
             byTrigger.computeIfAbsent(problem.get("objectid").asText(), key -> new ArrayList<>())
                 .add(new Incident(problem.get("name").asText(), problem.get("severity").asInt(),
-                    problem.path("eventid").asText(""), problem.path("clock").asLong() * 1000, problem.path("acknowledged").asInt() == 1));
+                    problem.path("eventid").asText(""), problem.path("clock").asLong() * 1000, problem.path("acknowledged").asInt() == 1, messages > 0, messages));
         }
         if (!byTrigger.isEmpty()) {
             var triggers = authenticatedRequest("trigger.get", Map.of("triggerids", byTrigger.keySet(),
@@ -148,6 +152,75 @@ public class ZabbixClient {
             if (!byTrigger.isEmpty()) throw new IllegalStateException("Incidentes sem host identificado");
         }
         return result;
+    }
+
+    private static int messageCount(JsonNode event) {
+        int count = 0;
+        for (var update : event.path("acknowledges")) {
+            if (!update.path("message").asText("").isBlank()) count++;
+        }
+        return count;
+    }
+
+    public record IncidentUpdate(long timestamp, String user, int action, String message,
+                                 int oldSeverity, int newSeverity) {}
+    public record IncidentDetails(String eventId, String name, int severity, boolean acknowledged,
+                                  boolean closed, boolean closing, boolean writable, boolean manualClose,
+                                  List<IncidentUpdate> history) {}
+
+    public synchronized IncidentDetails incidentDetails(String eventId, List<String> hostIds) {
+        if (hostIds.isEmpty()) return null;
+        detectVersion();
+        if (session == null) login();
+        var events = authenticatedRequest("event.get", Map.of("eventids", List.of(eventId),
+            "hostids", hostIds, "source", 0, "object", 0, "value", 1,
+            "output", List.of("eventid", "objectid", "name", "severity", "acknowledged", "r_eventid"),
+            legacyEvents ? "select_acknowledges" : "selectAcknowledges", "extend"));
+        if (events.isEmpty()) return null;
+        var event = events.get(0);
+        String triggerId = event.path("objectid").asText();
+        var triggers = authenticatedRequest("trigger.get", Map.of("triggerids", List.of(triggerId),
+            "output", List.of("triggerid", "manual_close")));
+        var editable = authenticatedRequest("trigger.get", Map.of("triggerids", List.of(triggerId),
+            "editable", true, "output", List.of("triggerid")));
+        var history = new ArrayList<IncidentUpdate>();
+        boolean closing = false;
+        for (var update : event.path("acknowledges")) {
+            int action = update.path("action").asInt();
+            closing |= (action & 1) != 0;
+            String user = (update.path("name").asText("") + " " + update.path("surname").asText("")).strip();
+            if (user.isEmpty()) user = update.path("username").asText("");
+            if (user.isEmpty()) user = "Usuário Zabbix #" + update.path("userid").asText("?");
+            history.add(new IncidentUpdate(update.path("clock").asLong() * 1000, user, action,
+                update.path("message").asText(""), update.path("old_severity").asInt(),
+                update.path("new_severity").asInt()));
+        }
+        history.sort(Comparator.comparingLong(IncidentUpdate::timestamp).reversed());
+        return new IncidentDetails(eventId, event.path("name").asText(), event.path("severity").asInt(),
+            event.path("acknowledged").asInt() == 1, !event.path("r_eventid").asText("0").equals("0"),
+            closing, !editable.isEmpty(), !triggers.isEmpty() && triggers.get(0).path("manual_close").asInt() == 1,
+            List.copyOf(history));
+    }
+
+    // Mutations return an object, unlike the array returned by the read methods.
+    // Only an explicit expired-session response is safe to retry; never retry transport failures.
+    public synchronized void updateIncident(String eventId, int action, String message, Integer severity) {
+        var params = new LinkedHashMap<String, Object>();
+        params.put("eventids", List.of(eventId));
+        params.put("action", action);
+        params.put("message", message);
+        if (severity != null) params.put("severity", severity);
+        if (session == null) login();
+        var root = request("event.acknowledge", params, session);
+        if (expired(root)) {
+            session = null;
+            login();
+            root = request("event.acknowledge", params, session);
+        }
+        if (root.has("error")) throw new IllegalStateException("Atualização recusada pelo Zabbix. Verifique as permissões da integração.");
+        boolean found = false;
+        for (var id : root.path("result").path("eventids")) found |= eventId.equals(id.asText());
+        if (!found) throw new IllegalStateException("O Zabbix não confirmou a atualização. Consulte o histórico antes de tentar novamente.");
     }
 
     public synchronized Map<String, Map<String, String>> diagnosticInventory(List<String> ids) {
@@ -197,6 +270,7 @@ public class ZabbixClient {
             if (major < 6) throw new IllegalArgumentException();
             legacyAuth = major == 6 && minor < 4;
             legacyGroups = major == 6 && minor < 2;
+            legacyEvents = major < 7;
         } catch (RuntimeException ex) {
             throw new IllegalStateException(
                 "Versão da API Zabbix inválida ou não suportada; use Zabbix 6.0 ou superior."

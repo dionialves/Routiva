@@ -21,15 +21,83 @@ class IncidentsControllerTests {
     private final Host a = new Host("1", "Router A", "10.0.0.1", List.of(new Host.Group("g", "POP")));
     private final Host b = new Host("2", "Router B", "10.0.0.2", a.groups());
 
+    private final org.springframework.security.core.Authentication admin =
+        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("alice", "", List.of(
+            new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN")));
+
+    private void incident(boolean writable, boolean manualClose, boolean closed) {
+        when(inventory.hosts()).thenReturn(List.of(a));
+        when(client.incidentDetails("99", List.of("1"))).thenReturn(new ZabbixClient.IncidentDetails(
+            "99", "Link", 3, false, closed, false, writable, manualClose, List.of()));
+    }
+
+    @Test void combinesActionsAndRecordsLocalActor() {
+        incident(true, true, false);
+        controller.update("99", new IncidentsController.UpdateRequest("Investigando", true, true, 4), admin);
+        verify(client).updateIncident("99", 15, "alice: Investigando", 4);
+    }
+
+    @Test void recordsReadablePrincipalInsteadOfItsJavaRepresentation() {
+        incident(true, true, false);
+        var principal = new br.com.scriptping.security.UserPrincipal(1L, "admin", "Maria Silva", 0);
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+            principal, "", admin.getAuthorities());
+        controller.update("99", new IncidentsController.UpdateRequest("Observação", false, false, 3), auth);
+        verify(client).updateIncident("99", 4, "admin: Observação", null);
+    }
+
+    @Test void acceptsMessageWithoutOtherActions() {
+        incident(false, false, false);
+        controller.update("99", new IncidentsController.UpdateRequest("Observação", false, false, null), admin);
+        verify(client).updateIncident("99", 4, "alice: Observação", null);
+    }
+
+    @Test void rejectsUnavailableCloseAndClosedEvents() {
+        incident(true, false, false);
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () ->
+            controller.update("99", new IncidentsController.UpdateRequest("", false, true, null), admin));
+        incident(true, true, true);
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () ->
+            controller.update("99", new IncidentsController.UpdateRequest("Mensagem", false, false, null), admin));
+        verify(client, never()).updateIncident(anyString(), anyInt(), anyString(), any());
+    }
+
+    @Test void rejectsEmptyUpdateAndUnauthorizedUsers() {
+        incident(true, true, false);
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () ->
+            controller.update("99", new IncidentsController.UpdateRequest(" ", false, false, 3), admin));
+        var user = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken("bob", "", List.of());
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () ->
+            controller.update("99", new IncidentsController.UpdateRequest("Mensagem", false, false, null), user));
+        verify(client, never()).updateIncident(anyString(), anyInt(), anyString(), any());
+    }
+
+    @Test void rejectsEventsOutsideInventory() {
+        when(inventory.hosts()).thenReturn(List.of(a));
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> controller.details("99"));
+        verify(client).incidentDetails("99", List.of("1"));
+    }
+
+    @Test void acceptsQueryFiltersInRequestBody() {
+        when(inventory.hosts()).thenReturn(List.of(a, b));
+        when(client.activeIncidents(List.of("1"))).thenReturn(Map.of("1", List.of(
+            new ZabbixClient.Incident("Link", 4, "99", 1000))));
+        var response = controller.groupedData(new IncidentsController.QueryRequest("g", "1", "4"));
+        assertEquals(1, response.getBody().total());
+        assertEquals("99", response.getBody().rows().getFirst().eventId());
+        verify(client).activeIncidents(List.of("1"));
+    }
+
     @Test void deduplicatesSharedEventsAndRendersTemplate() {
         when(inventory.hosts()).thenReturn(List.of(a, b));
-        var event = new ZabbixClient.Incident("Link <down>", 4, "99", 1000, true);
+        var event = new ZabbixClient.Incident("Link <down>", 4, "99", 1000, true, true, 3);
         when(client.activeIncidents(List.of("1", "2"))).thenReturn(Map.of("1", List.of(event), "2", List.of(event)));
         var model = new ExtendedModelMap();
         controller.page("g", "", "", "4", model, new MockHttpServletResponse());
         var rows = controller.incidents("g", "", "", "4", "date", "desc", 1, 10).getBody().rows();
         assertEquals(1, rows.size());
         assertTrue(rows.getFirst().acknowledged());
+        assertEquals(3, rows.getFirst().messageCount());
         assertEquals(2, ((IncidentsController.Row) rows.getFirst()).hosts().size());
         var resolver = new ClassLoaderTemplateResolver();
         resolver.setPrefix("templates/"); resolver.setSuffix(".html"); resolver.setTemplateMode("HTML");

@@ -68,6 +68,7 @@
   }
   restoreFilters();
   let applied = filters();
+  saveFilters();
   let filterTimer, queuedFilters = false, filterVersion = 0;
   let busy = false, loaded = false, stopped = false, controller, refreshTimer, durationTimer;
   const dateFormat = new Intl.DateTimeFormat('pt-BR', {
@@ -117,7 +118,7 @@
     for (let i = 0; i < 6; i++) {
       const tr = document.createElement('tr'); tr.className = 'incident-skeleton';
       tr.setAttribute('aria-hidden', 'true');
-      for (let j = 0; j < 7; j++) cell(tr).append(document.createElement('span'));
+      for (let j = 0; j < 8; j++) cell(tr).append(document.createElement('span'));
       $('incident-rows').append(tr);
     }
   }
@@ -191,7 +192,7 @@
       period.page = Math.min(period.page, Math.ceil(rows.length / size));
       const header = document.createElement('tr'); header.className = 'incident-period';
       header.dataset.period = period.id;
-      const heading = cell(header); heading.colSpan = 7;
+      const heading = cell(header); heading.colSpan = 8;
       const toggle = document.createElement('button'); toggle.type = 'button';
       toggle.setAttribute('aria-expanded', String(period.expanded));
 
@@ -214,7 +215,7 @@
         renderRows(selected, body, index);
         if (rows.length > size) {
           const footer = document.createElement('tr'); footer.className = 'incident-period-pagination';
-          const td = cell(footer); td.colSpan = 7; pagination(period, rows.length, td); body.append(footer);
+          const td = cell(footer); td.colSpan = 8; pagination(period, rows.length, td); body.append(footer);
         }
       }
       fragment.append(body);
@@ -230,8 +231,7 @@
     $('incident-empty').querySelector('p').textContent = filtered
       ? 'Nenhum incidente corresponde aos filtros selecionados' : 'Nenhum incidente ativo encontrado';
     $('incident-range').textContent = `Exibindo ${visible} de ${total} incidentes`;
-    const params = new URLSearchParams(applied);
-    history.replaceState(null, '', `/incidentes?${params}`);
+    updateLocation();
   }
   function hostName(item) {
     const name = document.createElement('div');
@@ -244,7 +244,8 @@
     const link = document.createElement('a');
     link.className = 'incident-host-link';
     link.textContent = item.name; link.title = item.name;
-    link.href = `/diagnostico/grupos?${new URLSearchParams({ groupId: groups.join(',') })}`;
+    const selectedGroup = groups.find(id => [...group.options].some(option => option.selected && option.value === id)) || groups[0];
+    link.href = `/diagnostico/grupos/${encodeURIComponent(selectedGroup)}`;
     link.setAttribute('aria-haspopup', 'true');
     link.setAttribute('aria-expanded', 'false');
     const menu = document.createElement('div');
@@ -292,9 +293,12 @@
         ip.textContent = item.ip; ip.title = item.ip;
         hosts.append(name); addresses.append(ip);
       }
-      const description = document.createElement('span'); description.className = 'incident-description';
+      const description = document.createElement('a'); description.className = 'incident-description incident-link';
+      description.href = '#incident-dialog';
+      description.setAttribute('aria-haspopup', 'dialog'); description.setAttribute('aria-controls', 'incident-dialog');
+      description.addEventListener('click', event => { event.preventDefault(); openIncident(row, description); });
       description.textContent = row.name; description.title = row.name;
-      cell(tr).append(description);
+      const descriptionCell = cell(tr); descriptionCell.className = 'incident-description-cell'; descriptionCell.append(description);
       const elapsed = document.createElement('span'); elapsed.className = 'incident-duration';
       const value = document.createElement('span'); value.dataset.openedAt = row.timestamp;
       value.textContent = duration(row.timestamp); elapsed.append(icon('clock-3'), value); cell(tr).append(elapsed);
@@ -306,20 +310,226 @@
         recognition.append(badge);
       }
       recognition.title = row.acknowledged ? 'Incidente reconhecido' : 'Incidente não reconhecido';
+      const observations = cell(tr); observations.className = 'incident-observations';
+      if (row.messageCount > 0) {
+        const messages = document.createElement('button'); messages.type = 'button';
+        messages.className = 'incident-message-button'; messages.title = `${row.messageCount} ${row.messageCount === 1 ? 'mensagem' : 'mensagens'}`;
+        messages.setAttribute('aria-label', `Ver ${messages.title} do incidente`); messages.setAttribute('aria-haspopup', 'dialog');
+        messages.append(icon('message-square'), document.createTextNode(String(row.messageCount)));
+        messages.addEventListener('click', () => openIncident(row, messages, true)); observations.append(messages);
+      }
+      else observations.textContent = '—';
       fragment.append(tr);
     }
 
+  }
+  const dialog = $('incident-dialog');
+  const updateForm = $('incident-update-form');
+  const canUpdate = document.querySelector('.incidents-page').dataset.canUpdate === 'true';
+  const severityLabels = severityOptions.map(option => option.nextElementSibling.textContent);
+  let activeIncident, detailsVersion = 0, saving = false, uncertain = false, returnFocus, detailsLoaded = false, hasIncidentDetails = false;
+  const severityColors = ['#a6afba', '#62b6ff', '#f5db27', '#ffa45c', '#ff794f', '#ff5364'];
+  function updateActions(action, item) {
+    const labels = [];
+    if (action & 1) labels.push('Fechamento solicitado');
+    if (action & 2) labels.push('Reconhecido');
+    if (action & 4) labels.push('Mensagem adicionada');
+    if (action & 8) labels.push(`Severidade: ${severityLabels[item.oldSeverity] || '—'} → ${severityLabels[item.newSeverity] || '—'}`);
+    if (action & 16) labels.push('Reconhecimento removido');
+    if (action & 32) labels.push('Suprimido');
+    if (action & 64) labels.push('Supressão removida');
+    if (action & 128) labels.push('Classificado como causa');
+    if (action & 256) labels.push('Classificado como sintoma');
+    return labels.length ? labels : ['Atualização'];
+  }
+  function canCloseIncident(incident = activeIncident) {
+    return Boolean(incident?.writable && incident?.manualClose && !incident?.closed && !incident?.closing);
+  }
+  function changedSeverity() {
+    const value = Number($('incident-new-severity').value);
+    return activeIncident?.writable && Number.isInteger(value) && value >= 0 && value <= 5
+      && value !== activeIncident.severity ? value : null;
+  }
+  function updateSaveState() {
+    const message = $('incident-message');
+    const limit = message.maxLength > 0 ? message.maxLength : 1800;
+    $('incident-message-count').textContent = `${message.value.length.toLocaleString('pt-BR')} / ${limit.toLocaleString('pt-BR')}`;
+    $('incident-severity-dot').style.setProperty('--incident-level', severityColors[Number($('incident-new-severity').value)] || severityColors[0]);
+    const valid = message.value.trim().length > 0 || changedSeverity() !== null
+      || ($('incident-recognize').checked && !activeIncident?.acknowledged)
+      || ($('incident-close').checked && canCloseIncident());
+    $('incident-update-save').disabled = !detailsLoaded || !canUpdate || saving || uncertain
+      || activeIncident?.closed || activeIncident?.closing || !valid || message.value.length > limit;
+  }
+  function renderIncidentHistory(data) {
+    const history = $('incident-history'); history.replaceChildren();
+    for (const item of [...data.history].sort((a, b) => b.timestamp - a.timestamp)) {
+      const tr = document.createElement('tr');
+      const time = document.createElement('time'); time.dateTime = new Date(item.timestamp).toISOString();
+      time.textContent = formatDate(item.timestamp); cell(tr).append(time);
+      cell(tr, item.user);
+      const actions = cell(tr);
+      for (const label of updateActions(item.action, item)) {
+        const badge = document.createElement('span'); badge.className = 'incident-action-badge';
+        badge.textContent = label; actions.append(badge);
+      }
+      const messageCell = cell(tr);
+      if (item.message) {
+        const message = document.createElement('button'); message.type = 'button';
+        message.className = 'incident-history-message'; message.textContent = item.message;
+        message.setAttribute('aria-expanded', 'false');
+        message.title = 'Clique para expandir a mensagem completa';
+        let expanded = false;
+        message.addEventListener('click', () => {
+          expanded = !expanded; message.setAttribute('aria-expanded', String(expanded));
+          message.title = expanded ? 'Clique para recolher a mensagem' : 'Clique para expandir a mensagem completa';
+        });
+        messageCell.append(message);
+      } else messageCell.textContent = '—';
+      history.append(tr);
+    }
+    $('incident-history-count').textContent = `${data.history.length} ${data.history.length === 1 ? 'registro' : 'registros'}`;
+    $('incident-history-empty').hidden = data.history.length !== 0;
+  }
+  async function readDetails(focusHistory = false) {
+    const version = ++detailsVersion;
+    const previousSeverity = hasIncidentDetails ? changedSeverity() : null;
+    detailsLoaded = false;
+    $('incident-update-fields').disabled = true; $('incident-update-save').disabled = true;
+    $('incident-details-retry').hidden = true; $('incident-dialog-state').textContent = 'Consultando Zabbix…';
+    try {
+      const response = await fetch(`/api/incidents/${encodeURIComponent(activeIncident.eventId)}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Não foi possível consultar o incidente. Verifique sua sessão e a conexão com o Zabbix.');
+      const data = await response.json();
+      if (version !== detailsVersion || !dialog.open) return;
+      activeIncident = data; detailsLoaded = true; hasIncidentDetails = true;
+      $('incident-dialog-name').textContent = data.name;
+      const status = data.closed ? 'Incidente encerrado' : data.closing ? 'Fechamento solicitado' : 'Incidente ativo';
+      $('incident-status-badge').textContent = status;
+      $('incident-status-badge').dataset.state = data.closed ? 'closed' : data.closing ? 'closing' : 'active';
+      $('incident-dialog-id').textContent = `ID: ${data.eventId}`;
+      $('incident-dialog-description').textContent = `${status} · ${data.closed || data.closing ? 'Consulte o histórico de atualizações.' : 'Atualize o registro, severidade ou finalize o incidente.'}`;
+      $('incident-dialog-state').textContent = !canUpdate ? 'Somente administradores podem atualizar incidentes.' : '';
+      renderIncidentHistory(data);
+      $('incident-update-fields').disabled = !canUpdate || data.closed || data.closing;
+      $('incident-new-severity').value = String(previousSeverity ?? data.severity);
+      $('incident-new-severity').disabled = !data.writable;
+      $('incident-recognize').disabled = data.acknowledged;
+      if (data.acknowledged) $('incident-recognize').checked = true;
+      $('incident-recognize-label').textContent = data.acknowledged ? 'Incidente já reconhecido' : 'Reconhecer incidente';
+      const closeAllowed = canCloseIncident(data);
+      $('incident-close').disabled = !closeAllowed;
+      if (!closeAllowed) $('incident-close').checked = false;
+      const closeReason = data.closed ? 'Este incidente já está encerrado.'
+        : data.closing ? 'O fechamento deste incidente já foi solicitado ao Zabbix.'
+          : !data.manualClose ? 'O Zabbix não permite o fechamento manual deste incidente.'
+            : !data.writable ? 'A conta da integração não possui permissão de escrita para finalizar este incidente.' : '';
+      $('incident-close-help').textContent = closeReason;
+      $('incident-close').title = closeReason;
+
+      if (uncertain) $('incident-dialog-state').textContent = 'Confira o histórico. Feche e reabra o modal antes de uma nova tentativa.';
+      updateSaveState();
+      if (focusHistory) $('incident-history').closest('.table-scroll').focus();
+    } catch (error) {
+      if (version !== detailsVersion || !dialog.open) return;
+      $('incident-dialog-state').textContent = error.message; $('incident-details-retry').hidden = false;
+    }
+  }
+  function openIncident(row, trigger, focusHistory = false) {
+    returnFocus = trigger; activeIncident = row; uncertain = false; detailsLoaded = false; hasIncidentDetails = false;
+    updateForm.reset(); $('incident-update-error').textContent = '';
+    $('incident-history').replaceChildren(); $('incident-history-empty').hidden = true;
+    $('incident-history-count').textContent = '0 registros';
+    $('incident-dialog-name').textContent = row.name; $('incident-dialog-id').textContent = `ID: ${row.eventId}`;
+    $('incident-status-badge').textContent = 'Consultando…'; $('incident-status-badge').dataset.state = 'loading';
+    $('incident-dialog-description').textContent = 'Consultando os dados do incidente…';
+    updateSaveState(); dialog.showModal(); readDetails(focusHistory);
+  }
+  $('incident-message').addEventListener('input', updateSaveState);
+  $('incident-new-severity').addEventListener('change', updateSaveState);
+  $('incident-recognize').addEventListener('change', updateSaveState);
+  $('incident-close').addEventListener('change', updateSaveState);
+  $('incident-details-retry').addEventListener('click', () => readDetails());
+  for (const id of ['incident-dialog-cancel', 'incident-dialog-close']) {
+    $(id).addEventListener('click', () => { if (!saving) dialog.close(); });
+  }
+  dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  dialog.addEventListener('close', () => {
+    detailsVersion++; detailsLoaded = false;
+    if (returnFocus?.isConnected) returnFocus.focus();
+    else $('incident-rows').querySelector('.incident-link')?.focus();
+  });
+  updateForm.addEventListener('submit', async event => {
+    event.preventDefault(); updateSaveState();
+    if (saving || uncertain || !canUpdate || !detailsLoaded || $('incident-update-save').disabled) return;
+    const message = $('incident-message').value.trim();
+    const severity = changedSeverity();
+    const acknowledge = $('incident-recognize').checked && !activeIncident.acknowledged;
+    const close = $('incident-close').checked && canCloseIncident();
+    saving = true; $('incident-update-error').textContent = '';
+    $('incident-update-fields').disabled = true; updateSaveState();
+    $('incident-update-save').setAttribute('aria-busy', 'true');
+    $('incident-update-save-label').textContent = 'Atualizando…';
+    $('incident-dialog-cancel').disabled = true; $('incident-dialog-close').disabled = true;
+    let confirmed = false;
+    try {
+      const token = document.querySelector('meta[name="_csrf"]')?.content;
+      const header = document.querySelector('meta[name="_csrf_header"]')?.content;
+      if (!token || !header) throw new Error('Atualize a página para renovar a sessão do formulário.');
+      const response = await fetch(`/api/incidents/${encodeURIComponent(activeIncident.eventId)}/updates`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', [header]: token },
+        body: JSON.stringify({ message, severity, acknowledge, close }),
+      });
+      if (!response.ok) {
+        uncertain = response.status >= 500;
+        throw new Error(uncertain ? 'Não foi possível confirmar a atualização. Confira o histórico antes de tentar novamente.'
+          : response.status === 403 ? 'Operação não permitida ou sessão expirada. Atualize a página.'
+            : 'O incidente mudou ou os dados são inválidos. Consulte novamente antes de atualizar.');
+      }
+      confirmed = true;
+      $('incident-message').value = ''; $('incident-recognize').checked = false; $('incident-close').checked = false;
+      $('incident-new-severity').value = String(activeIncident.severity);
+      window.notify?.(close ? 'Fechamento solicitado ao Zabbix.' : 'Incidente atualizado.');
+      if (busy) queuedFilters = true; else load();
+    } catch (error) {
+      // A transport error may happen after the server applied the update.
+      uncertain ||= error instanceof TypeError;
+      $('incident-update-error').textContent = error.message;
+    } finally {
+      await readDetails();
+      saving = false; $('incident-dialog-cancel').disabled = false; $('incident-dialog-close').disabled = false;
+      $('incident-update-save').setAttribute('aria-busy', 'false');
+      $('incident-update-save-label').textContent = 'Atualizar incidente';
+      updateSaveState();
+      if (confirmed) dialog.close();
+    }
+  });
+  function updateLocation() {
+    // Names stay in local storage. Large selections also stay off the URL and Referer header.
+    const params = new URLSearchParams();
+    for (const key of ['groupId', 'hostId', 'severity']) {
+      if (applied.get(key)) params.set(key, applied.get(key));
+    }
+    const query = params.toString();
+    history.replaceState(null, '', query && query.length <= 1500 ? `/incidentes?${query}` : '/incidentes');
   }
   async function load() {
     if (busy || stopped) return;
     clearTimeout(refreshTimer); busy = true;
     const requestFilterVersion = filterVersion;
     $('incidents-panel').setAttribute('aria-busy', 'true');
-    const params = new URLSearchParams(applied);
+    updateLocation();
+    const query = Object.fromEntries(['groupId', 'hostId', 'severity'].map(key => [key, applied.get(key) || '']));
     controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await fetch(`/api/incidents/grouped-data?${params}`, { cache: 'no-store', signal: controller.signal });
+      const token = document.querySelector('meta[name="_csrf"]')?.content;
+      const header = document.querySelector('meta[name="_csrf_header"]')?.content;
+      if (!token || !header) throw new Error('Sessão de formulário indisponível');
+      const response = await fetch('/api/incidents/grouped-data', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', [header]: token },
+        body: JSON.stringify(query), cache: 'no-store', signal: controller.signal,
+      });
       if (!response.ok) throw new Error('Zabbix indisponível');
       const data = await response.json();
       if (stopped || requestFilterVersion !== filterVersion) return;

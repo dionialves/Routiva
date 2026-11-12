@@ -202,6 +202,10 @@ class ZabbixClientTests {
             assertThat(states).doesNotContainKey("2");
             api.problems = api.problems.replace("\"r_eventid\":\"0\"", "\"r_eventid\":\"0\",\"acknowledged\":\"1\"");
             assertThat(client.activeIncidents(List.of("1")).get("1").getFirst().acknowledged()).isTrue();
+            api.problems = api.problems.replace("\"acknowledged\":\"1\"", "\"acknowledged\":\"1\",\"acknowledges\":[{\"message\":\"\"},{\"message\":\" \"},{\"message\":\"Primeira\"},{\"message\":\"Segunda\"}]");
+            var withMessages = client.activeIncidents(List.of("1")).get("1").getFirst();
+            assertThat(withMessages.messageCount()).isEqualTo(2);
+            assertThat(withMessages.hasMessages()).isTrue();
             api.problems = "[]";
             assertThat(client.activeIncidents(List.of("1")).get("1")).isEmpty();
         }
@@ -228,6 +232,40 @@ class ZabbixClientTests {
         }
     }
 
+    @Test void selectsHistoryWithVersionAppropriateParameter() throws Exception {
+        for (String version : List.of("6.0.0", "6.2.0", "6.4.0", "7.0.0")) {
+            try (var api = new FakeApi(false, version)) {
+                var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+                assertThat(client.incidentDetails("99", List.of("1"))).isNull();
+                assertThat(api.lastEventParams.has(version.startsWith("6.") ? "select_acknowledges" : "selectAcknowledges")).isTrue();
+                assertThat(api.lastEventParams.path("value").asInt()).isEqualTo(1);
+                assertThat(api.violations).isEmpty();
+            }
+        }
+    }
+
+    @Test void readsHistoryAndAcceptsObjectMutationResult() throws Exception {
+        try (var api = new FakeApi(false)) {
+            api.events = """
+                [{"eventid":"99","objectid":"8","name":"Link","severity":"4","acknowledged":"1","r_eventid":"0",
+                  "acknowledges":[{"clock":"10","action":"6","userid":"2","message":"Investigando"}]}]
+                """;
+            api.triggers = "[{\"triggerid\":\"8\",\"manual_close\":\"1\"}]";
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            var details = client.incidentDetails("99", List.of("1"));
+            assertThat(details.manualClose()).isTrue();
+            assertThat(details.writable()).isTrue();
+            assertThat(details.history().getFirst().message()).isEqualTo("Investigando");
+            assertThat(details.history().getFirst().timestamp()).isEqualTo(10000);
+            client.updateIncident("99", 14, "Mensagem", 3);
+            assertThat(api.lastUpdate.path("action").asInt()).isEqualTo(14);
+            assertThat(api.lastUpdate.path("severity").asInt()).isEqualTo(3);
+            assertThat(api.lastUpdate.path("eventids").get(0).asText()).isEqualTo("99");
+            api.rejectUpdate = true;
+            assertThatThrownBy(() -> client.updateIncident("99", 4, "Mensagem", null)).isInstanceOf(IllegalStateException.class);
+        }
+    }
+
     private static class FakeApi implements AutoCloseable {
 
         final HttpServer server;
@@ -239,6 +277,10 @@ class ZabbixClientTests {
         String inventory = INVENTORY;
         com.fasterxml.jackson.databind.JsonNode lastHostParams;
         String problems = "[]";
+        String events = "[]";
+        com.fasterxml.jackson.databind.JsonNode lastEventParams;
+        boolean rejectUpdate;
+        com.fasterxml.jackson.databind.JsonNode lastUpdate;
         String triggers = "[]";
         final String version;
 
@@ -303,6 +345,14 @@ class ZabbixClientTests {
                             "{\"error\":{\"code\":-32602,\"data\":\"Session terminated, re-login, please.\"}}";
                     } else if (method.equals("trigger.get")) response =
                         "{\"result\":" + triggers + "}";
+                    else if (method.equals("event.get")) {
+                        lastEventParams = request.path("params");
+                        response = "{\"result\":" + events + "}";
+                    }
+                    else if (method.equals("event.acknowledge")) {
+                        lastUpdate = request.path("params");
+                        response = rejectUpdate ? "{\"error\":{\"data\":\"No permissions\"}}" : "{\"result\":{\"eventids\":[\"99\"]}}";
+                    }
                     else if (method.equals("problem.get")) response = "{\"result\":" + problems + "}";
                     else if (method.equals("hostgroup.get")) response = "{\"result\":[{\"groupid\":\"2\",\"name\":\"Zulu\"},{\"groupid\":\"1\",\"name\":\"alpha\"}]}";
                     else response = version.startsWith("6.0.") ? inventory.replace("hostgroups", "groups") : inventory;

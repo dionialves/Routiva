@@ -6,7 +6,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 
 async function surface(respond, options = {}) {
   class Element {
-    constructor() { this.children = []; this.listeners = {}; this.dataset = {}; this.attributes = {}; this.value = ''; this.hidden = true; this.options = []; }
+    constructor() { this.children = []; this.listeners = {}; this.dataset = {}; this.attributes = {}; this.value = ''; this.hidden = true; this.options = []; this.style = { setProperty() {} }; }
     append(...nodes) { for (const node of nodes) this.children.push(...(node.fragment ? node.children : [node])); }
     replaceChildren(...nodes) { this.children = nodes; this.options = nodes; }
     setAttribute(k, v) { this.attributes[k] = v; }
@@ -14,6 +14,9 @@ async function surface(respond, options = {}) {
     removeEventListener(k, fn) { if (this.listeners[k] === fn) delete this.listeners[k]; }
     emit(k) { this.listeners[k]?.({ preventDefault() {} }); }
     focus() {}
+    reset() {}
+    showModal() { this.open = true; }
+    close() { this.open = false; this.emit("close"); }
     closest() { return this; }
     querySelector() { return this.p ||= new Element(); }
   }
@@ -33,31 +36,32 @@ async function surface(respond, options = {}) {
   elements['incident-group'].options.push(...(options.extraGroups || []));
   elements['incident-host'].options.push(...(options.extraHosts || []));
   elements['incident-filters'].elements = { namedItem: key => elements[{ groupId: 'incident-group', hostId: 'incident-host', q: 'incident-query' }[key]] };
-  const timers = new Map(), intervals = [], requests = [], events = {};
-  const main = new Element(); main.dataset.timeZone = 'America/Sao_Paulo';
+  const timers = new Map(), intervals = [], requests = [], events = {}, locations = [], transports = [];
+  const main = new Element(); main.dataset.timeZone = 'America/Sao_Paulo'; main.dataset.canUpdate = options.admin ? 'true' : 'false'; main.content = 'csrf';
   const context = {
     document: { getElementById: id => elements[id], createElement: () => new Element(), createElementNS: () => new Element(), createTextNode: text => ({ textContent: text }), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }), querySelector: () => main, addEventListener() {}, removeEventListener() {}, querySelectorAll: selector => selector === '[data-opened-at]' ? [] : selector === '[data-incident-severity]' ? severityOptions : sorts },
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
-    location: { search: options.search ?? '?groupId=g&page=2' }, history: { replaceState() {} },
+    location: { search: options.search ?? '?groupId=g&page=2' }, history: { replaceState(state, title, url) { locations.push(url); } },
     FormData: class { constructor() { return fields; } }, URLSearchParams, AbortController, Intl, Date: options.Date || Date,
     setTimeout(fn, ms) { const id = timers.size + 1; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); }, setInterval(fn) { intervals.push(fn); return intervals.length; }, clearInterval() {},
     addEventListener(key, fn) { events[key] = fn; },
-    fetch: async url => { const params = new URL(url, 'http://localhost').searchParams; requests.push(params); return respond(params); },
+    fetch: async (url, init) => { if (options.api && !url.includes('grouped-data')) return options.api(url, init); const params = init?.method === 'POST' ? new URLSearchParams(JSON.parse(init.body)) : new URL(url, 'http://localhost').searchParams; transports.push({ url, init }); requests.push(params); return respond(params); },
   };
   context.window = context;
   vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/static/multi-picker.js'), 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/incidents.js', 'utf8'), context);
   await tick();
-  return { elements, fields, requests, sorts, events, timers, intervals, severityOptions, storage, rows: () => elements['incident-rows'].children[0].children };
+  return { elements, fields, requests, sorts, events, timers, intervals, severityOptions, storage, locations, transports, rows: () => elements['incident-rows'].children[0].children };
 }
 const row = { eventId: '1', name: '<script>original trigger</script>', severity: 4, severityLabel: 'Alta', timestamp: Date.now() - 87 * 60000, hosts: [{ name: 'Router', ip: '10.0.0.1' }] };
 function response(params) { return { ok: true, json: async () => ({ rows: [row], total: 32, page: Number(params.get('page')), pages: 4, size: 10, updatedAt: Date.now(), warning: '' }) }; }
 
-test('renders seven columns safely and calculates durations locally', async () => {
+test('renders eight columns safely and calculates durations locally', async () => {
   const ui = await surface(response);
   const cells = ui.rows().find(node => node.dataset.severity != null).children;
-  assert.equal(cells.length, 7);
+  assert.equal(cells.length, 8);
+  assert.equal(cells[7].textContent, "—");
   assert.equal(cells[2].children[0].textContent, 'Router');
   assert.equal(cells[2].children[0].children.length, 0);
   assert.equal(cells[3].children[0].textContent, '10.0.0.1');
@@ -306,4 +310,135 @@ test('restores incident names with commas and preserves selection through refres
   [...ui.timers.values()].find(timer => timer.ms === 60000).fn(); await tick();
   assert.equal(ui.elements['incident-name-summary'].textContent, name);
   assert.equal(ui.elements['incident-total'].textContent, '1 encontrados');
+});
+
+const details = { eventId: '1', name: 'Link', severity: 4, acknowledged: false, closed: false,
+  closing: false, writable: true, manualClose: true,
+  history: [{ timestamp: Date.now(), user: 'Operador', action: 6, message: '<script>mensagem</script>' }] };
+
+test('incident link opens modal with safely rendered history and date remains plain text', async () => {
+  const ui = await surface(() => ({ ok: true, json: async () => ({ rows: [{ ...row, hasMessages: true, messageCount: 3 }], total: 1, updatedAt: Date.now(), warning: '' }) }), {
+    admin: true, api: async () => ({ ok: true, json: async () => details }),
+  });
+  const cells = ui.rows().find(node => node.dataset.severity != null).children;
+  assert.equal(cells[4].children.length, 1);
+  assert.equal(cells[7].children[0].children[1].textContent, "3");
+  assert.equal(cells[7].children[0].attributes["aria-label"], "Ver 3 mensagens do incidente");
+  assert.equal(cells[0].children.length, 0);
+  assert.equal(cells[4].children[0].className, 'incident-description incident-link');
+  cells[4].children[0].emit('click'); await tick();
+  assert.equal(ui.elements['incident-dialog'].open, true);
+  assert.equal(ui.elements['incident-history'].children[0].children[3].children[0].textContent, '<script>mensagem</script>');
+  assert.equal(ui.elements['incident-update-save'].disabled, true);
+});
+
+test('modal disables manual close and severity without Zabbix write permissions', async () => {
+  const ui = await surface(response, { admin: true,
+    api: async () => ({ ok: true, json: async () => ({ ...details, writable: false }) }),
+  });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  assert.equal(ui.elements['incident-close'].disabled, true);
+  assert.equal(ui.elements['incident-new-severity'].disabled, true);
+  assert.equal(ui.elements['incident-update-save'].disabled, true);
+});
+
+test('uncertain update preserves message and prevents duplicate submission', async () => {
+  let posts = 0;
+  const ui = await surface(response, { admin: true, api: async (url, init) => {
+    if (init.method === 'POST') { posts++; return { ok: false, status: 502 }; }
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  ui.elements['incident-message'].value = 'Investigando';
+  await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
+  assert.equal(posts, 1);
+  assert.equal(ui.elements['incident-message'].value, 'Investigando');
+  assert.equal(ui.elements['incident-update-save'].disabled, true);
+  await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
+  assert.equal(posts, 1);
+});
+
+
+test('large saved selections use a short POST URL and never copy incident names into headers', async () => {
+  const names = Array.from({ length: 300 }, (_, i) => `Incidente São Paulo ${i} ${'x'.repeat(100)}`);
+  const hosts = Array.from({ length: 800 }, (_, i) => ({ value: String(i + 2), textContent: `Host ${i}`, dataset: { groups: 'g' } }));
+  const ui = await surface(response, { search: '', extraHosts: hosts,
+    saved: { incidentNames: JSON.stringify(names), hostId: hosts.map(host => host.value).join(',') } });
+  const request = ui.transports[0];
+  assert.equal(request.url, '/api/incidents/grouped-data');
+  assert.equal(request.init.method, 'POST');
+  assert.equal(ui.requests[0].has('incidentNames'), false);
+  assert.equal(ui.requests[0].get('hostId'), hosts.map(host => host.value).join(','));
+  assert.equal(ui.locations[0], '/incidentes');
+  assert.ok(ui.locations.every(url => url.length < 1600 && !url.includes('incidentNames')));
+  assert.equal(ui.elements['incident-name-summary'].textContent, '300 incidentes selecionados');
+});
+
+
+test('only changed severity is sent and confirmed update closes the modal', async () => {
+  const sent = [];
+  const ui = await surface(response, { admin: true, api: async (url, init) => {
+    if (init.method === 'POST') { sent.push(JSON.parse(init.body)); return { ok: true }; }
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  assert.equal(ui.elements['incident-update-save'].disabled, true);
+  ui.elements['incident-new-severity'].value = '2'; ui.elements['incident-new-severity'].emit('change');
+  assert.equal(ui.elements['incident-update-save'].disabled, false);
+  ui.elements['incident-new-severity'].value = '4'; ui.elements['incident-new-severity'].emit('change');
+  assert.equal(ui.elements['incident-update-save'].disabled, true);
+  ui.elements['incident-message'].value = 'Observação'; ui.elements['incident-message'].emit('input');
+  assert.equal(ui.elements['incident-message-count'].textContent, '10 / 1.800');
+  await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].severity, null);
+  assert.equal(ui.elements['incident-dialog'].open, false);
+});
+
+test('history message expands without changing the original content and recognized state is checked', async () => {
+  const message = 'Linha longa '.repeat(200) + '\nOutra linha';
+  const ui = await surface(response, { admin: true, api: async () => ({ ok: true, json: async () => ({
+    ...details, acknowledged: true, history: [{ ...details.history[0], message }],
+  }) }) });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  assert.equal(ui.elements['incident-recognize'].checked, true);
+  assert.equal(ui.elements['incident-recognize'].disabled, true);
+  assert.equal(ui.elements['incident-history-count'].textContent, '1 registro');
+  const preview = ui.elements['incident-history'].children[0].children[3].children[0];
+  assert.equal(preview.attributes['aria-expanded'], 'false'); preview.emit('click');
+  assert.equal(preview.attributes['aria-expanded'], 'true'); assert.equal(preview.textContent, message);
+  preview.emit('click'); assert.equal(preview.attributes['aria-expanded'], 'false');
+});
+
+
+test('Zabbix manual close restriction disables closing while keeping comments available', async () => {
+  const sent = [];
+  const ui = await surface(response, { admin: true, api: async (url, init) => {
+    if (init.method === 'POST') { sent.push(JSON.parse(init.body)); return { ok: true }; }
+    return { ok: true, json: async () => ({ ...details, manualClose: false }) };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  assert.equal(ui.elements['incident-close'].disabled, true);
+  assert.equal(ui.elements['incident-close'].checked, false);
+  assert.match(ui.elements['incident-close-help'].textContent, /não permite o fechamento manual/);
+  assert.equal(ui.elements['incident-new-severity'].disabled, false);
+  assert.equal(ui.elements['incident-update-fields'].disabled, false);
+  ui.elements['incident-message'].value = 'Investigando';
+  ui.elements['incident-close'].checked = true;
+  await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
+  assert.equal(sent[0].close, false);
+});
+
+test('closed and closing events explicitly disable the closing checkbox with a reason', async () => {
+  for (const state of ['closed', 'closing']) {
+    const ui = await surface(response, { admin: true,
+      api: async () => ({ ok: true, json: async () => ({ ...details, [state]: true }) }),
+    });
+    ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+    assert.equal(ui.elements['incident-close'].disabled, true);
+    assert.equal(ui.elements['incident-close'].checked, false);
+    assert.equal(ui.elements['incident-update-fields'].disabled, true);
+    assert.equal(ui.elements['incident-update-save'].disabled, true);
+    assert.match(ui.elements['incident-close-help'].textContent, state === 'closed' ? /já está encerrado/ : /já foi solicitado/);
+  }
 });
