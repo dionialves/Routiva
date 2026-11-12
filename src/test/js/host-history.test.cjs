@@ -52,3 +52,23 @@ test('missing bands retain the requested timeline and include only gaps', () => 
   assert.equal(missingArea(points, ['latency','loss'], 0, 50, value => value, 0, 20),
     'M0,0H10V20H0Z M20,0H30V20H20Z M40,0H50V20H40Z ');
 });
+
+test('wireless ping rounds latency through measured values and keeps missing samples as gaps', () => {
+  const ui = surface();
+  const container = ui.elements['wireless-ping-chart'];
+  const chart = ui.charts.createRealtime(container);
+  chart.update({ from:0, to:5000, series:[8, 40, null, 0, 12].map((latency, i) => ({
+    from:i * 1000, to:(i + 1) * 1000, metrics:{ latency, loss:latency == null ? 100 : 0 },
+  })) });
+  const paths = container.children[0].children;
+  const latency = paths.find(node => node.stroke === '#06b6d4' && node.d);
+  const loss = paths.find(node => node.stroke === '#f59e0b');
+  assert.equal((latency.d.match(/M/g) || []).length, 2);
+  assert.equal((latency.d.match(/C/g) || []).length, 2);
+  assert.ok(!loss.d.includes('C'));
+  const historical = ui.elements['latency-chart'];
+  ui.charts.update({ from:0, to:2000, series:[8, 40].map((latency, i) => ({
+    from:i * 1000, to:(i + 1) * 1000, metrics:{ latency, loss:0 },
+  })) });
+  assert.ok(!historical.children[0].children.find(node => node.stroke === '#06b6d4' && node.d).d.includes('C'));
+});

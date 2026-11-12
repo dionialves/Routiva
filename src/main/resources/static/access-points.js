@@ -7,6 +7,8 @@
   let loading = false;
   let sortKey = 'name', direction = 1;
   const hostSelect = document.getElementById('incident-host');
+  const groupSelect = document.getElementById('incident-group');
+  let refreshGroupPicker;
   let pickerSignature = '';
   let refreshHostPicker;
   const pageSize = 50;
@@ -36,10 +38,23 @@
   }
   document.querySelectorAll('[data-ap-icon]').forEach(el => el.append(icon(el.dataset.apIcon)));
   function renderHostPicker() {
-    const signature = JSON.stringify(rows.map(row => [row.hostId, row.name, row.ip]));
+    const signature = JSON.stringify(rows.map(row => [row.hostId, row.name, row.ip, row.groups]));
     if (signature === pickerSignature && refreshHostPicker) return;
     pickerSignature = signature;
     refreshHostPicker?.dispose?.();
+    refreshGroupPicker?.dispose?.();
+    const selectedGroups = new Set([...groupSelect.selectedOptions].map(option => option.value));
+    const groups = [...new Map(rows.flatMap(row => row.groups || []).map(group => [group.id, group])).values()];
+    groups.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    groupSelect.replaceChildren(...groups.map(group => {
+      const option = document.createElement('option');
+      option.value = group.id; option.textContent = group.name;
+      option.selected = selectedGroups.has(group.id); return option;
+    }));
+    document.getElementById('incident-group-options').replaceChildren();
+    refreshGroupPicker = window.setupMultiPicker('group', groupSelect, 'Todos os grupos', () => {
+      page = 1; render();
+    });
     const selectedIds = new Set([...hostSelect.selectedOptions].map(option => option.value));
     hostSelect.replaceChildren(...rows.map(row => {
       const option = document.createElement('option');
@@ -61,7 +76,9 @@
   }
   function render() {
     const selectedHosts = new Set([...hostSelect.selectedOptions].map(option => option.value));
-    const filtered = rows.filter(row => !selectedHosts.size || selectedHosts.has(row.hostId));
+    const selectedGroups = new Set([...groupSelect.selectedOptions].map(option => option.value));
+    const filtered = rows.filter(row => (!selectedHosts.size || selectedHosts.has(row.hostId))
+      && (!selectedGroups.size || (row.groups || []).some(group => selectedGroups.has(group.id))));
     filtered.sort((a, b) => {
       const left = a[sortKey], right = b[sortKey];
       if (left == null || right == null) return left == null ? (right == null ? 0 : 1) : -1;

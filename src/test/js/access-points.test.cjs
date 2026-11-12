@@ -123,3 +123,27 @@ test('empty selection cannot submit', async () => {
   await ui.click('import'); await ui.click('save');
   assert.equal(ui.requests.filter(request => request.options.method === 'POST').length, 0);
 });
+
+test('host groups filter APs before combining host selection and reset pagination', async () => {
+  const rows = Array.from({ length:55 }, (_, i) => ({
+    hostId:String(i), name:`AP ${i}`, ip:`192.0.2.${i}`, available:true,
+    groups:i === 54 ? [] : [{ id:i < 52 ? 'a' : 'b', name:i < 52 ? 'Água' : 'Centro' }],
+  }));
+  const ui = await surface(rows), e = ui.elements;
+  assert.equal(e['incident-group'].children.length, 2);
+  await ui.click('next');
+  e['incident-group'].children.find(option => option.value === 'b').selected = true;
+  e['incident-group'].handlers.change();
+  assert.equal(e['ap-page-count'].textContent, 'Página 1 de 1');
+  assert.equal(e['ap-rows'].children[0].children.length, 2);
+  e['incident-host'].children.find(option => option.value === '52').selected = true;
+  e['incident-host'].handlers.change();
+  assert.equal(e['ap-rows'].children[0].children.length, 1);
+  e['incident-host'].children.find(option => option.value === '0').selected = true;
+  e['incident-host'].handlers.change();
+  assert.equal(e['ap-rows'].children[0].children.length, 1);
+  e['incident-group'].children.forEach(option => { option.selected = false; });
+  e['incident-group'].handlers.change();
+  assert.equal(e['ap-rows'].children[0].children.length, 2);
+  assert.equal(ui.requests.length, 1);
+});

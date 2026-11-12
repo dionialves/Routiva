@@ -20,13 +20,20 @@
         operational: total ? 100 * b.healthy / total : null};
     });
   }
-  function paths(points, key, x, y, baseline) {
+  function paths(points, key, x, y, baseline, smooth = false) {
     let line = '', area = '', segment = [];
     function flush() {
       if (!segment.length) return;
       // A single observed bucket still spans a visible interval (no interpolation across gaps).
       if (segment.length === 1) { const [px, py, start, end] = segment[0]; segment = [[start, py], [end, py]]; }
-      const path = segment.map(([px, py], i) => `${i ? 'L' : 'M'}${px},${py}`).join(' ');
+      const path = segment.map(([px, py], i) => {
+        if (!i) return `M${px},${py}`;
+        if (!smooth) return `L${px},${py}`;
+        const [previousX, previousY] = segment[i - 1];
+        // Horizontal tangents round each measurement without overshooting peaks or zero.
+        const handle = (px - previousX) / 3;
+        return `C${previousX + handle},${previousY} ${px - handle},${py} ${px},${py}`;
+      }).join(' ');
       line += path + ' ';
       area += `${path} L${segment.at(-1)[0]},${baseline} L${segment[0][0]},${baseline} Z `;
       segment = [];
