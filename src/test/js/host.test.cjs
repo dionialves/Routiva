@@ -16,7 +16,7 @@ async function surface({ failLive = false, ixcLogins = [], ixcNames = ['cliente.
   const elements = new Proxy({}, { get(object, key) { return object[key] ||= new Element(); } });
   elements['history-period'].value = '1440';
   const tabs = ['interfaces', 'wireless'].map(tab => Object.assign(new Element(), { dataset:{ tab } }));
-  const sortButtons = ['mac-address', 'pppoe', 'interface', 'avg-signal', 'avg-signal-to-noise', 'avg-tx-ccq', 'avg-rx-ccq', 'p-throughput', 'distance', 'uptime', 'avg-tx-rate', 'avg-rx-rate', 'quality'].map(key => {
+  const sortButtons = ['mac-address', 'pppoe', 'interface', 'avg-signal', 'avg-signal-to-noise', 'avg-tx-ccq', 'p-throughput', 'distance', 'uptime', 'avg-tx-rate', 'avg-rx-rate', 'quality'].map(key => {
     const button = new Element(), th = new Element(), icon = new Element();
     button.dataset.wirelessSort = key; button.closest = () => th; button.querySelector = () => icon; return button;
   });
@@ -27,7 +27,7 @@ async function surface({ failLive = false, ixcLogins = [], ixcNames = ['cliente.
   const document = {
     hidden:false, querySelector:() => ({ dataset:{ hostId:'42' } }),
     getElementById:id => elements[id], querySelectorAll:selector => selector === '[data-tab]' ? tabs : selector === '[data-wireless-sort]' ? sortButtons : panels,
-    createElement:() => new Element(), createElementNS:() => new Element(), createDocumentFragment:() => new Element(),
+    createTextNode:text => Object.assign(new Element(), { textContent:text }), createElement:() => new Element(), createElementNS:() => new Element(), createDocumentFragment:() => new Element(),
     addEventListener:(name, fn) => { events[name] = fn; },
   };
   const context = {
@@ -50,14 +50,16 @@ async function surface({ failLive = false, ixcLogins = [], ixcNames = ['cliente.
       const rows = url.includes('/interfaces') ? [
         { '.id':'*1', name:'ether1', type:'ether', running:'true', mtu:'1500', 'rx-byte':'1000', 'tx-byte':'2000' },
         { '.id':'*2', name:'wlan1', type:'wlan', running:'false', disabled:'true' },
-      ] : url.endsWith('/wireless') ? wirelessClients : url.includes('/traffic?') ? [{ 'rx-bits-per-second':'2400', 'tx-bits-per-second':'1200' }] : [{ identity:'Router' }];
+      ] : url.endsWith('/wireless') ? wirelessClients : url.includes('/traffic?') ? [{ 'rx-bits-per-second':'2400', 'tx-bits-per-second':'1200' }] : [{ identity:'Router', frequency:'5540' }];
       return { ok:true, json:async () => ({ measuredAt:sampleAt, rows, warning:'' }) };
     },
     window:{ addEventListener:(name, fn) => { events[name] = fn; }, HostTraffic:require('../../main/resources/static/host-traffic.js'), HostHistoryCharts:{ clear() { historyClearCount++; }, update(report) { elements['availability-chart'].report = report; } } },
   };
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/availability-view.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-signal.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host.js', 'utf8'), context);
   await flush();
+  tabs[0].onclick(); await flush();
   return { elements, tabs, panels, requests, timers, events, document, sortButtons, intervals, advance:ms => { sampleAt += ms; }, historyClearCount:() => historyClearCount, failHistory:() => { failHistory = true; } };
 }
 test('management failure preserves independent historical charts and displays its reason', async () => {
@@ -84,7 +86,9 @@ test('overview stays populated above the wireless tab', async () => {
   const ui = await surface();
   ui.tabs[1].onclick(); await flush();
   assert.ok(ui.requests.some(request => request.url.endsWith('/mikrotik/overview')));
-  assert.ok(ui.elements['resource-details'].children.length);
+  const details = ui.elements['resource-details'].children[0].children;
+  const frequency = details.find(field => field.children[0].textContent === 'Frequência');
+  assert.equal(frequency.children[1].textContent, '5540 MHz');
   assert.equal(ui.timers.size, 1);
 });
 
@@ -129,7 +133,8 @@ test('host header displays the four historical metrics and the selected date ran
   assert.equal(ui.elements.technical.textContent, '99,98%');
   assert.equal(ui.elements.loss.textContent, '0,02%');
   assert.equal(ui.elements.latency.textContent, '1,46 ms');
-  assert.match(ui.elements['history-range'].textContent, /1 minuto/);
+  assert.equal(ui.elements['history-range'].textContent,
+    [0, 60000].map(at => new Date(at).toLocaleString('pt-BR')).join(' — '));
   ui.elements['history-period'].value = '15';
   await ui.elements['history-period'].onchange();
   assert.ok(ui.requests.some(request => request.url.endsWith('/availability?minutes=15')));
@@ -158,33 +163,28 @@ test('wireless modal clears outdated details when the client disconnects', async
   assert.match(ui.elements['wireless-live-state'].textContent, /não consta mais/);
 });
 
-test('wireless table shows PPPoE login between MAC and interface and searches by login', async () => {
+test('wireless table shows PPPoE login between MAC and interface', async () => {
   const ui = await surface();
   ui.tabs[1].onclick(); await flush();
   const row = ui.elements['wireless-clients'].children[0].children[0];
   assert.equal(row.children[1].textContent, 'cliente.pppoe');
   assert.equal(row.children[2].textContent, 'wlan1');
-  ui.elements['wireless-search'].value = 'cliente.pppoe';
-  ui.elements['wireless-search'].oninput();
-  assert.equal(ui.elements['wireless-clients'].children[0].children.length, 1);
-  ui.elements['wireless-search'].value = 'outro nome';
-  ui.elements['wireless-search'].oninput();
-  assert.equal(ui.elements['wireless-clients'].children[0].children.length, 0);
+
 });
 
 test('wireless table shows numeric signal and CCQ percent without inventing absent readings', async () => {
   const ui = await surface({ wirelessClients:[
-    { 'mac-address':'AA', 'avg-signal':'-71', 'avg-tx-ccq':'81' },
-    { 'mac-address':'BB', 'avg-signal':'-63', 'avg-tx-ccq':'0' },
+    { 'mac-address':'AA', signal:'-71', 'avg-signal':'-71', 'avg-tx-ccq':'81' },
+    { 'mac-address':'BB', signal:'-63', 'avg-signal':'-63', 'avg-tx-ccq':'0' },
     { 'mac-address':'CC' },
   ] });
   ui.tabs[1].onclick(); await flush();
   const rows = ui.elements['wireless-clients'].children[0].children;
-  assert.equal(rows[0].children[3].textContent, '-71 dBm');
+  assert.equal(rows[0].children[3].children[1].textContent, '-71 dBm');
   assert.equal(rows[0].children[5].textContent, '81%');
-  assert.equal(rows[1].children[3].textContent, '-63 dBm');
+  assert.equal(rows[1].children[3].children[1].textContent, '-63 dBm');
   assert.equal(rows[1].children[5].textContent, '0%');
-  assert.equal(rows[2].children[3].textContent, '—');
+  assert.equal(rows[2].children[3].children[1].textContent, '—');
   assert.equal(rows[2].children[5].textContent, '—');
 });
 
@@ -243,10 +243,10 @@ test('wireless shows and numerically sorts throughput and distance, keeping abse
   ] });
   ui.tabs[1].onclick(); await flush();
   const rows = () => ui.elements['wireless-clients'].children[0].children;
-  assert.equal(rows()[0].children[7].textContent, '10.000');
-  assert.equal(rows()[0].children[8].textContent, '12');
+  assert.equal(rows()[0].children[6].textContent, '10.000');
+  assert.equal(rows()[0].children[7].textContent, '12');
+  assert.equal(rows()[2].children[6].textContent, '—');
   assert.equal(rows()[2].children[7].textContent, '—');
-  assert.equal(rows()[2].children[8].textContent, '—');
   for (const key of ['p-throughput', 'distance']) {
     ui.sortButtons.find(button => button.dataset.wirelessSort === key).onclick();
     assert.deepEqual(rows().map(row => row.children[0].children[0].textContent), ['BB','AA','CC']);
@@ -341,19 +341,52 @@ test('batch lookup includes all clients and a missing MAC does not affect the ot
   assert.equal(ui.requests.filter(r => r.url.endsWith('/ixc/login-names')).length, 1);
 });
 
-test('wireless distinguishes rolling quality, instant alerts and disconnected last values with stable order', async () => {
+test('wireless preserves original diagnosis, instant alerts, disconnected values and live severity order', async () => {
   const clients = [
-    { 'mac-address':'AA', interface:'wlan1', 'avg-signal':'-61', quality:'Normal', 'quality-severity':'0', 'quality-reason':'Sinal médio: -61 dBm — Normal', 'critical-alert':'SNR crítico agora: 10' },
+    { 'mac-address':'AA', interface:'wlan1', signal:'-61', 'avg-signal':'-61', quality:'Normal', 'quality-severity':'0', 'quality-reason':'Sinal médio: -61 dBm — Normal', 'critical-alert':'SNR crítico agora: 10' },
     { 'mac-address':'BB', interface:'wlan1', quality:'Ruim', 'quality-severity':'2', 'connection-status':'disconnected' },
   ];
   const ui = await surface({ wirelessClients:clients }); ui.tabs[1].onclick(); await flush();
   const rows = () => ui.elements['wireless-clients'].children[0].children;
   assert.equal(rows()[0].dataset.clientMac, 'BB');
-  assert.match(rows()[0].children[12].children[1].textContent, /Desconectado/);
-  assert.equal(rows()[1].children[12].children[0].textContent, 'Normal');
-  assert.match(rows()[1].children[12].children[1].textContent, /Crítico agora/);
-  assert.match(rows()[1].children[12].children[0].title, /Sinal médio/);
+  assert.match(rows()[0].title, /Desconectado/);
+  assert.equal(rows()[1].dataset.quality, '0');
+  assert.equal(rows()[1].children.length, 11);
+  assert.match(rows()[1]['aria-label'], /Crítico agora/);
+  assert.match(rows()[1].title, /Sinal médio/);
   clients[0]['quality-severity'] = '3';
   await ui.timers.values().next().value.fn();
-  assert.equal(rows()[0].dataset.clientMac, 'BB');
+  assert.equal(rows()[0].dataset.clientMac, 'AA');
+});
+
+test('all clients and interfaces remain visible across live updates', async () => {
+  const ui = await surface({ wirelessClients:[
+    { 'mac-address':'AA', interface:'wlan1', signal:'-50', 'avg-signal':'-51', quality:'Crítico', 'quality-severity':'3', 'avg-tx-ccq':'50' },
+    { 'mac-address':'BB', interface:'wlan2', quality:'Normal', 'quality-severity':'0', 'avg-tx-ccq':'90' },
+    { 'mac-address':'CC', interface:'wlan1', signal:'-75' },
+  ] });
+  ui.tabs[1].onclick(); await flush();
+  assert.equal(ui.elements['connected-clients'].textContent, 3);
+  assert.equal(ui.elements['weak-clients'].textContent, 1);
+  const rows = () => ui.elements['wireless-clients'].children[0].children;
+  assert.match(rows()[0]['aria-label'], /Crítico/);
+  await ui.timers.values().next().value.fn();
+  assert.equal(rows().length, 3);
+  ui.tabs[0].onclick(); await flush();
+  assert.equal(ui.elements['interface-rows'].children[0].children.length, 2);
+});
+
+test('wireless uses independent metric colors and includes unrated clients in the donut', async () => {
+  const ui = await surface({ wirelessClients:[
+    { 'mac-address':'AA', interface:'wlan1', 'quality-severity':'2', 'signal-severity':'0',
+      'avg-signal':'-62', 'signal-to-noise-severity':'2', 'avg-signal-to-noise':'20' },
+    { 'mac-address':'BB', interface:'wlan1' },
+  ] });
+  ui.tabs[1].onclick(); await flush();
+  const rows = () => ui.elements['wireless-clients'].children[0].children;
+  assert.equal(rows()[0].dataset.quality, '2');
+  assert.equal(rows()[0].children[3].dataset.level, '0');
+  assert.equal(rows()[0].children[4].dataset.level, '2');
+  assert.match(ui.elements['signal-distribution']['aria-label'], /Indisponível 1 \(50%\)/);
+  assert.equal(rows()[1].dataset.clientMac, 'BB');
 });

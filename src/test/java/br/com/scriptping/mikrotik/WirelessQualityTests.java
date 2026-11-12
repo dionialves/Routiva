@@ -54,6 +54,21 @@ class WirelessQualityTests {
         var result = engine.update("ap", List.of(next), 1000).getFirst();
         assertEquals("Normal", result.get("quality")); assertEquals("6.50", result.get("avg-tx-rate"));
     }
+    @Test void idleCcqDoesNotDegradeGoodSignalAndActiveCcqNeedsConfirmation() {
+        var engine = engine();
+        var row = row("-60");
+        row.put("tx-ccq", "40");
+        row.put("bytes", "0,0");
+        assertEquals("Normal", engine.update("ap", List.of(row), 0).getFirst().get("quality"));
+        row.put("bytes", "500,0");
+        assertEquals("Normal", engine.update("ap", List.of(row), 1000).getFirst().get("quality"));
+        row.put("bytes", "1100,0");
+        var result = engine.update("ap", List.of(row), 2000).getFirst();
+        assertEquals("Crítico", result.get("quality"));
+        assertEquals("0", result.get("signal-severity"));
+        assertEquals("3", result.get("tx-ccq-severity"));
+    }
+
     @Test void fractionalThresholdsHaveNoGaps() {
         var engine = engine();
         for (var entry : Map.of("-65", "Normal", "-65.1", "Atenção", "-75.1", "Ruim", "-82.5", "Ruim", "-83", "Crítico").entrySet())
@@ -66,7 +81,11 @@ class WirelessQualityTests {
                 : Map.of("90", "Normal", "89.9", "Atenção", "79.9", "Ruim", "59.9", "Crítico");
             for (var entry : values.entrySet()) {
                 var row = row(null); row.put(metric, entry.getKey());
-                assertEquals(entry.getValue(), engine().update("ap", List.of(row), 0).getFirst().get("quality"));
+                row.put("tx-bits-per-second", "1000");
+                row.put("rx-bits-per-second", "1000");
+                var engine = engine();
+                engine.update("ap", List.of(row), 0);
+                assertEquals(entry.getValue(), engine.update("ap", List.of(row), 1000).getFirst().get("quality"));
             }
         }
         var engine = engine();

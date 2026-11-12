@@ -78,3 +78,162 @@
 .wireless-quality { display:inline-block; color:var(--wireless-quality); border:1px solid currentColor; border-radius:12px; padding:2px 8px; }
 .wireless-critical-alert { color:#f87171; font-size:12px; }
 .host-page .wireless-table tr[data-connection="disconnected"] { opacity:.65; }
+
+/* Host diagnosis: scoped to this page; the shared shell remains unchanged. */
+.host-page { width:100%; max-width:1800px; box-sizing:border-box; }
+.host-hero > div { flex:1; min-width:0; }
+.host-hero { display:flex; justify-content:space-between; align-items:center; gap:24px; }
+.host-hero h1 { font-size:28px; margin:6px 0; }
+.host-hero p { font-size:12px; color:#a8bdd0; margin:6px 0; }
+.host-page .equipment-identity { display:flex; align-items:center; gap:14px; width:35%; min-width:240px; padding:12px 16px; margin:0; border:1px solid #164253; background:#082231; border-radius:10px; }
+.equipment-icon svg { width:28px; height:28px; color:#22d3ee; }
+.equipment-identity h2 { font-size:16px; margin:0; }
+.equipment-icon { display:grid; place-items:center; width:48px; height:48px; flex:none; border-radius:10px; background:#063245; }
+.host-meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 14px; }
+.equipment-status { display:inline-block; border:1px solid currentColor; border-radius:1em; padding:2px 8px; color:#a8bdd0; font-size:11px; }
+[data-api="online"] #equipment-api,#equipment-online[data-state="online"] { color:#59dfbb; }
+[data-api="unavailable"] #equipment-api,#equipment-online[data-state="offline"] { color:#ffa3a3; }
+.host-page #host-period-filter { display:flex; align-items:center; margin:8px 0 0; padding:6px 10px; min-height:0; }
+.host-page #host-period-filter label { flex-direction:row; flex-wrap:nowrap; align-items:center; width:auto; }
+.host-metrics { margin-top:12px; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; }
+.host-page .host-metrics .availability-grid,.host-live-metrics { display:contents; }
+.host-page .host-metrics .metric-card {
+  display:grid; grid-template-columns:30px minmax(0,1fr); grid-template-rows:auto auto 1fr;
+  align-content:start; align-items:start; column-gap:8px; row-gap:4px;
+  margin:0; min-width:0; min-height:0; padding:12px; padding-bottom:12px!important;
+  border:1px solid #164253; border-radius:9px; background:linear-gradient(120deg,#092a39,#081e2c);
+}
+.host-metrics .metric-title { display:contents; }
+.host-metrics .metric-title .metric-icon { grid-row:1 / 4; width:30px; height:30px; }
+.host-metrics .metric-icon svg { width:18px; height:18px; }
+.host-page .host-metrics .metric-title h2 { font-size:13px; line-height:1.3; }
+.host-page .host-metrics .metric-value,.host-page .host-metrics .metric-details-trigger,.host-page .host-metrics .metric-value-row { margin:0; min-height:0; }
+.host-page .host-metrics .metric-value { font-size:clamp(22px,1.5vw,28px); line-height:1.2; }
+.host-page .host-metrics article > p { grid-column:2; color:#b1c6d5; font-size:11px; line-height:1.45; margin:0; }
+.metric-weak { --metric-color:#fbbf24; }
+.host-chart-grid { display:grid; grid-template-columns:38fr 35fr 27fr; gap:12px; margin:16px 0; align-items:stretch; }
+.host-page .host-chart-grid .chart-card { min-width:0; margin:0; padding:12px; border:1px solid #164253; border-radius:10px; }
+.host-chart-grid h2 { font-size:14px; margin:0; }
+.host-chart-grid .availability-chart-heading { gap:8px; flex-wrap:wrap; }
+.host-chart-grid .availability-chart-legend { font-size:11px; margin:10px 0; }
+.loss-key::before { content:''; display:inline-block; width:8px; height:8px; border-radius:50%; background:#f59e0b; margin-right:6px; }
+#latency-chart { position:relative; }
+#latency-chart svg { width:100%; display:block; }
+.distribution-card { container-type:inline-size; }
+#signal-distribution { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(max-content,1fr); align-items:center; gap:12px; flex:1; padding:10px 0; }
+.signal-donut { width:min(88%,211px); justify-self:center; aspect-ratio:1; background:#23394a; border-radius:50%; display:grid; place-items:center; flex-shrink:0; }
+.signal-donut > span { width:72%; height:72%; border-radius:50%; background:#08202e; display:grid; align-content:center; justify-items:center; text-align:center; font-size:12px; }
+#signal-distribution ul { list-style:none; padding:0; margin:0; font-size:12px; }
+#signal-distribution li { display:flex; gap:10px; align-items:center; justify-content:space-between; margin:8px 0; }
+#signal-distribution li span { border-left:5px solid; padding-left:6px; }
+#signal-distribution li strong { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.signal-donut strong { color:white; font-size:24px; }
+#signal-missing:empty,.host-list-panel p:empty { display:none; }
+#signal-missing { font-size:11px; color:#a8bdd0; }
+.host-page #resource-details { grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:6px; }
+.host-page #resource-details div { padding:12px; border-radius:6px; background:#0b2637; border-color:#164253; }
+.host-page #resource-details dt { font-size:10px; margin-bottom:6px; }
+.host-page #resource-details dd { font-size:13px; font-weight:600; white-space:normal; }
+.host-tabs { margin:14px 0 8px; padding-bottom:8px; border-color:#164253; }
+.host-page .host-list-panel { margin-top:0; padding:14px; }
+.host-page .hosts-toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.host-page .host-equipment-table tbody td { height:34px; padding:6px 10px; font-size:12px; }
+
+.host-page .wireless-table tbody td.signal-cell {
+  font-weight:600;
+}
+.signal-bars {
+  display:inline-flex;
+  align-items:flex-end;
+  gap:2px;
+  height:15px;
+  margin-right:6px;
+  vertical-align:-1px;
+}
+.signal-bars i { width:3px; height:3px; background:currentColor; }
+.signal-bars i:nth-child(2) { height:7px; }
+.signal-bars i:nth-child(3) { height:11px; }
+.signal-bars i:nth-child(4) { height:15px; }
+.wireless-table tr { cursor:pointer; }
+.wireless-table tr:focus-visible { outline:2px solid #22d3ee; outline-offset:-2px; }
+.wireless-drawer { margin:0 0 0 auto; height:100dvh; max-height:100dvh; width:min(720px,100vw); border-radius:12px 0 0 12px; }
+@media(max-width:1199px) {
+  .host-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media(max-width:1000px) {
+  .host-chart-grid { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:700px) {
+  .host-hero { align-items:stretch; flex-direction:column; gap:8px; }
+  .host-page .equipment-identity { width:auto; min-width:0; }
+  .host-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:440px) {
+  .host-page .host-metrics .metric-card { grid-template-columns:1fr; }
+  .host-metrics .metric-title { display:flex; flex-direction:row; gap:6px; min-height:36px; }
+  .host-page .host-metrics article > p { grid-column:1; }
+}
+.host-page .host-heading { margin:12px 0; padding:0; }
+.host-page .host-chart-grid #availability-chart { min-height:230px; }
+.host-page .host-chart-grid #availability-chart > svg { min-height:230px; }
+.host-page .host-chart-grid .availability-axis { fill:#abc0d5; font-size:11px; }
+.host-page .host-chart-grid .loss-key { color:#f59e0b; }
+.host-page .host-chart-grid .technical-key { color:#00d1ff; }
+.host-page .host-chart-grid .healthy-key { color:#14b8a6; }
+.host-page .interface-type-icon { display:inline-block; float:left; width:18px; height:18px; min-height:0; margin-right:8px; }
+.interface-table tr[data-running=true] td:nth-child(3)::before,.interface-table tr[data-running=false] td:nth-child(3)::before { content:''; display:inline-block; width:7px; height:7px; margin-right:7px; border-radius:50%; background:#34d399; }
+.interface-table tr[data-running=false] td:nth-child(3)::before { background:#94a3b8; }
+.host-page .metric-icon { border-radius:50%; }
+.host-page .wireless-table tr[data-quality="3"] td { background:#f8717112; }
+.host-page .wireless-table tr[data-quality="2"] td { background:#fb923c0b; }
+.host-page .wireless-table tr[data-quality="1"] td { background:#fbbf240b; }
+
+.wireless-legend { display:flex; align-items:center; gap:10px 18px; flex-wrap:wrap; margin-top:14px; color:#a8bdd0; font-size:12px; }
+.wireless-legend strong { color:#c1d3e0; font-weight:500; }
+.wireless-legend span::before { content:''; display:inline-block; width:8px; height:8px; margin-right:7px; border-radius:50%; background:currentColor; }
+.wireless-legend .quality-normal { color:#22c55e; }
+.wireless-legend .quality-attention { color:#fbbf24; }
+.wireless-legend .quality-poor { color:#fb923c; }
+.wireless-legend .quality-critical { color:#f87171; }
+.wireless-legend .quality-unavailable { color:#94a3b8; }
+.wireless-legend p { flex-basis:100%; margin:0; font-size:11px; }
+
+.host-chart-grid .chart-card { display:flex; flex-direction:column; }
+.host-chart-grid .availability-chart-legend { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.host-chart-grid #latency-chart,.host-chart-grid #availability-chart { margin-top:auto; }
+.host-chart-grid .missing-band { fill:none; stroke:#617786; stroke-opacity:.45; stroke-dasharray:3 5; pointer-events:none; }
+.host-chart-grid .availability-chart-legend .missing-key::before { width:12px; height:0; vertical-align:middle; background:none; border-top:1px dashed currentColor; border-radius:0; }
+.host-chart-grid #latency-chart .technical-key::before { content:'●'; margin-right:5px; }
+.host-page .wireless-table tbody tr[data-quality="-1"] td { color:#9badbc; }
+.host-page .wireless-table tbody tr[data-quality]:hover td { background:color-mix(in srgb,var(--wireless-quality) 11%,#0f2130); }
+#wireless-summary { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+#wireless-summary span { padding:3px 9px; font-size:12px; border:1px solid currentColor; border-radius:12px; color:#a8d5df; }
+#wireless-summary span:nth-child(2) { color:#fda4a4; }
+#wireless-summary span:nth-child(3) { color:#fdba74; }
+#wireless-summary span:nth-child(4) { color:#fcd34d; }
+.host-page .wireless-table tbody td { padding:8px 10px; }
+
+.host-page .host-hero { align-items:flex-start; }
+.host-chart-grid .chart-card h2 { display:flex; align-items:center; gap:7px; font-size:14px; line-height:1.3; }
+.host-page .chart-card .section-icon { width:26px; height:26px; }
+.host-page #overview-title { margin:0; font-size:15px; }
+.host-page #resource-details { margin:8px 0; }
+.host-page #resource-details dt { color:#b9cedc; opacity:1; }
+.host-page .metric-trend { color:#9bc7df; font-size:11px; white-space:nowrap; }
+.host-page .metric-trend[data-change="worse"] { color:#fda4a4; }
+.host-page .metric-trend[data-change="better"] { color:#6ee7b7; }
+@media(max-width:700px) {
+  .host-page .host-hero { align-items:stretch; }
+}
+.host-metrics { grid-auto-rows:1fr; }
+.host-page #host-period-filter { flex-direction:row; gap:8px; }
+.host-page #history-range { align-self:center; margin:0; }
+@media(max-width:700px) {
+  .host-page #history-range { flex-basis:100%; padding:0; border:0; }
+}
+
+@container (max-width:280px) {
+  #signal-distribution { grid-template-columns:minmax(0,1fr); align-content:center; }
+  .signal-donut { width:min(58%,141px); }
+  #signal-distribution ul { width:100%; }
+}

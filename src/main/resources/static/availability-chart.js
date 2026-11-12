@@ -37,10 +37,22 @@
     }
     flush(); return {line, area};
   }
+  // Shade the complement of the observed bucket intervals on the report's time axis.
+  function missingArea(points, keys, from, to, x, top, bottom) {
+    let cursor = from, area = '';
+    const band = (start, end) => `M${x(start)},${top}H${x(end)}V${bottom}H${x(start)}Z `;
+    for (const point of points) {
+      if (!keys.some(key => point[key] != null)) continue;
+      if (point.from > cursor) area += band(cursor, point.from);
+      cursor = Math.max(cursor, point.to);
+    }
+    if (cursor < to) area += band(cursor, to);
+    return area;
+  }
   class Chart {
     constructor(container, select) {
       this.container = container; this.select = select; this.report = null; this.index = null;
-      select.addEventListener('change', () => { this.index = null; this.selection = null; this.draw(); });
+      select?.addEventListener('change', () => { this.index = null; this.selection = null; this.draw(); });
       this.observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
         const width = Math.round(container.getBoundingClientRect().width);
         if (this.report && width !== this.width) this.draw();
@@ -56,9 +68,9 @@
       if (!this.report) return;
       if (this.report.evaluatedAt == null) { this.container.replaceChildren(); return; }
       const report = this.report, container = this.container;
-      const points = aggregate(report, Number(this.select.value) || 1);
+      const points = aggregate(report, Number(this.select?.value) || 1);
       this.width = Math.round(container.getBoundingClientRect().width);
-      const width = Math.max(220, this.width), height = this.expanded ? Math.max(300, window.innerHeight - 200) : width < 500 ? 300 : 360;
+      const width = Math.max(220, this.width), height = this.expanded ? Math.max(300, window.innerHeight - 200) : this.height || (width < 500 ? 300 : 360);
       const left = 46, right = width - 12, top = 20, bottom = height - 46;
       const x = at => left + (at - report.from) / Math.max(1, report.to - report.from) * (right - left);
       const y = value => bottom - value / 100 * (bottom - top);
@@ -72,6 +84,9 @@
         if (text) el.textContent = text;
         parent.append(el); return el;
       };
+      if (this.shadeMissing) {
+        node('path', { d:missingArea(points, ['technical', 'operational'], report.from, report.to, x, top, bottom), class:'missing-band' });
+      }
       const defs = node('defs', {});
       const gradient = node('linearGradient', {id: 'availability-operational-fill', x1: '0', y1: '0', x2: '0', y2: '1'}, null, defs);
       node('stop', {offset: '0%', 'stop-color': colors.operational, 'stop-opacity': '.32'}, null, gradient);
@@ -176,6 +191,6 @@
       }
     }
   }
-  root.AvailabilityChart = { Chart, aggregate, paths };
+  root.AvailabilityChart = { Chart, aggregate, paths, missingArea };
   if (typeof module !== 'undefined') module.exports = root.AvailabilityChart;
 })(typeof window === 'undefined' ? globalThis : window);

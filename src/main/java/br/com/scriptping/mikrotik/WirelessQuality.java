@@ -34,6 +34,7 @@ public class WirelessQuality {
 
     private static class Station {
         final List<ArrayDeque<Double>> samples = new ArrayList<>();
+        final List<ArrayDeque<Double>> activeCcq = List.of(new ArrayDeque<>(), new ArrayDeque<>());
         Map<String, String> last;
         long seen;
         boolean connected;
@@ -47,6 +48,23 @@ public class WirelessQuality {
         if (!match.find()) return null;
         double value = Double.parseDouble(match.group(1));
         return Double.isFinite(value) ? value : null;
+    }
+
+    private static boolean trafficActive(Map<String, String> raw, Map<String, String> previous, boolean transmit) {
+        String direction = transmit ? "tx" : "rx";
+        Double direct = numeric(raw.get(direction + "-bits-per-second"));
+        if (direct != null) return direct > 0;
+        if (previous == null) return false;
+        return counter(raw, direction, transmit) > counter(previous, direction, transmit)
+            && counter(previous, direction, transmit) >= 0;
+    }
+
+    private static long counter(Map<String, String> row, String direction, boolean transmit) {
+        String[] pair = row.getOrDefault("bytes", "").split(",");
+        int index = transmit ? 0 : 1;
+        String raw = row.getOrDefault(direction + "-bytes", index < pair.length ? pair[index] : "");
+        try { return Long.parseLong(raw.trim()); }
+        catch (NumberFormatException ex) { return -1; }
     }
 
     private int level(int metric, double value) {
@@ -78,7 +96,12 @@ public class WirelessQuality {
             if (!present.add(key)) continue;
             Station s = stations.computeIfAbsent(key, ignored -> new Station());
             Double previous = uptime(s.uptime), current = uptime(raw.get("uptime"));
-            if (!s.connected || (previous != null && current != null && current < previous)) s.samples.forEach(Deque::clear);
+            if (!s.connected || (previous != null && current != null && current < previous)
+                    || !Objects.equals(raw.get(".id"), s.last == null ? null : s.last.get(".id"))) {
+                s.samples.forEach(Deque::clear);
+                s.activeCcq.forEach(Deque::clear);
+                s.last = null;
+            }
             var row = new LinkedHashMap<>(raw);
             int worst = -1, count = Integer.MAX_VALUE;
             List<String> reasons = new ArrayList<>(), alerts = new ArrayList<>();
@@ -88,6 +111,8 @@ public class WirelessQuality {
                 if (value != null && ((i == 0 && (value >= 0 || value < -150))
                         || (i > 0 && value < 0) || ((i == 2 || i == 3) && value > 100))) value = null;
                 var samples = s.samples.get(i);
+                boolean ccq = i == 2 || i == 3;
+                boolean active = !ccq || trafficActive(raw, s.last, i == 2);
                 if (value != null) {
                     if (i >= 4) {
                         String rate = raw.get(name).toLowerCase(Locale.ROOT);
@@ -95,16 +120,36 @@ public class WirelessQuality {
                         else if (rate.contains("kbps")) value /= 1000;
                         else if (!rate.contains("mbps")) value /= 1_000_000;
                     }
+                    if (ccq && active) {
+                        var evidence = s.activeCcq.get(i - 2);
+                        evidence.addLast(value);
+                        if (evidence.size() > window) evidence.removeFirst();
+                    }
                     samples.addLast(value);
                     if (samples.size() > window) samples.removeFirst();
+                }
+                if (ccq && !active && value != null) {
+                    reasons.add(LABELS[i] + ": sem tráfego confirmado nesta leitura.");
                 }
                 if (samples.isEmpty()) continue;
                 double mean = samples.stream().mapToDouble(Double::doubleValue).average().orElseThrow();
                 row.put("avg-" + name, String.format(Locale.ROOT, "%.2f", mean));
                 if (i < 4 && value != null) {
                     int severity = level(i, mean);
+                    row.put(name + "-severity", String.valueOf(severity));
+                    if (ccq) {
+                        if (!active) continue;
+                        var evidence = s.activeCcq.get(i - 2);
+                        double activeMean = evidence.stream().mapToDouble(Double::doubleValue).average().orElseThrow();
+                        severity = level(i, activeMean);
+                        if (severity > 0 && evidence.size() < Math.min(2, window)) {
+                            reasons.add(LABELS[i] + ": aguardando confirmação com tráfego.");
+                            continue;
+                        }
+                        reasons.add(LABELS[i] + " com tráfego: " + String.format(Locale.ROOT, "%.2f%%", activeMean) + " — " + LEVELS[severity]);
+                    }
                     worst = Math.max(worst, severity); count = Math.min(count, samples.size());
-                    reasons.add(LABELS[i] + ": " + row.get("avg-" + name) + (i == 0 ? " dBm" : i == 1 ? " dB" : "%") + " — " + LEVELS[severity]);
+                    if (!ccq) reasons.add(LABELS[i] + ": " + row.get("avg-" + name) + (i == 0 ? " dBm" : i == 1 ? " dB" : "%") + " — " + LEVELS[severity]);
                     if (level(i, value) == 3) alerts.add(LABELS[i].replace(" médio", "") + " crítico agora: " + value);
                 } else if (i < 4) {
                     row.remove("avg-" + name); // Current association does not report this metric.

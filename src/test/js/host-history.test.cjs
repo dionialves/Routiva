@@ -17,7 +17,7 @@ function surface() {
   const context = {
     document:{ getElementById:id => elements[id], createElement:() => new Element(), createElementNS:() => new Element(), addEventListener() {}, body:new Element() },
     window:{ AvailabilityView:{ format:(value, unit) => value == null ? 'Sem dados' : value + unit },
-      AvailabilityChart:{ paths:require('../../main/resources/static/availability-chart.js').paths,
+      AvailabilityChart:{ ...require('../../main/resources/static/availability-chart.js'),
         Chart:class { constructor() { primary = this; } clear() { this.report = null; } update(report) { this.report = report; } draw() {} } }, addEventListener() {} },
     Date,
   };
@@ -30,11 +30,7 @@ test('historical charts use the report for availability, latency and loss', () =
   ui.charts.update(report);
   assert.equal(ui.primary.report, report);
   assert.equal(ui.elements['latency-chart'].children[0].role, 'group');
-  assert.equal(ui.elements['loss-chart'].children[0].role, 'group');
-  ui.elements['chart-bars'].onclick();
-  assert.equal(ui.primary.mode, 'bars');
-  ui.elements['chart-expand'].onclick();
-  assert.equal(ui.primary.expanded, true);
+  assert.ok(ui.elements['latency-chart'].children[0].children.some(node => node.stroke === '#f59e0b'));
 });
 test('missing measurements show empty states and clearing removes the previous report', () => {
   const ui = surface();
@@ -43,5 +39,16 @@ test('missing measurements show empty states and clearing removes the previous r
   assert.equal(ui.elements['latency-chart'].children[0].textContent, 'Sem medições no período.');
   ui.charts.clear('Histórico indisponível.');
   assert.equal(ui.primary.report, null);
-  assert.equal(ui.elements['loss-chart'].children[0].textContent, 'Histórico indisponível.');
+  assert.equal(ui.elements['latency-chart'].children[0].textContent, 'Histórico indisponível.');
+});
+
+test('missing bands retain the requested timeline and include only gaps', () => {
+  const { missingArea } = require('../../main/resources/static/availability-chart.js');
+  const points = [
+    { from:10, to:20, latency:null, loss:100 },
+    { from:20, to:30, latency:null, loss:null },
+    { from:30, to:40, latency:0, loss:0 },
+  ];
+  assert.equal(missingArea(points, ['latency','loss'], 0, 50, value => value, 0, 20),
+    'M0,0H10V20H0Z M20,0H30V20H20Z M40,0H50V20H40Z ');
 });

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 
 @WebMvcTest(MikrotikController.class)
 class MikrotikPageTests {
@@ -23,7 +24,13 @@ class MikrotikPageTests {
         mvc.perform(get("/hosts/42")).andExpect(status().isOk())
             .andExpect(content().string(containsString("MikroTik São Paulo")))
             .andExpect(content().string(containsString("data-host-id=\"42\"")))
-            .andExpect(content().string(containsString("Wireless")));
+            .andExpect(content().string(containsString("Wireless")))
+            .andExpect(content().string(containsString("connected-clients")))
+            .andExpect(content().string(containsString("signal-distribution")))
+            .andExpect(content().string(containsString("Tempo conectado")))
+            .andExpect(content().string(not(containsString("interface-search"))))
+            .andExpect(content().string(not(containsString("wireless-search"))))
+            .andExpect(content().string(not(containsString("filters-toggle"))));
         verifyNoInteractions(mikrotik);
     }
 }

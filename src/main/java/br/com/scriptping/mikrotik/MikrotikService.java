@@ -42,8 +42,32 @@ public class MikrotikService {
                     rows = api.command("/system/resource/print");
                     var identity = api.command("/system/identity/print");
                     if (!rows.isEmpty() && !identity.isEmpty()) rows.getFirst().put("identity", identity.getFirst().get("name"));
+                    if (!rows.isEmpty()) {
+                        var radios = new ArrayList<Map<String, String>>();
+                        for (String path : List.of("/interface/wireless/print", "/interface/wifi/print", "/interface/wifiwave2/print")) {
+                            try {
+                                radios.addAll(api.command(path,
+                                    "=.proplist=name,frequency,channel-width,ssid,configuration.ssid,channel.frequency,channel.width"));
+                            } catch (RouterOsConnection.CommandRejectedException ex) { /* Optional radio package. */ }
+                        }
+                        for (String field : List.of("frequency", "ssid")) {
+                            var values = new LinkedHashSet<String>();
+                            for (var radio : radios) {
+                                String value = radio.getOrDefault(field, radio.get(field.equals("ssid") ? "configuration.ssid" : "channel.frequency"));
+                                if (value != null && !value.isBlank()) values.add(value);
+                            }
+                            if (!values.isEmpty()) rows.getFirst().put(field, String.join(" / ", values));
+                        }
+                        var channels = new LinkedHashSet<String>();
+                        for (var radio : radios) {
+                            String frequency = radio.getOrDefault("frequency", radio.get("channel.frequency"));
+                            String width = radio.getOrDefault("channel-width", radio.get("channel.width"));
+                            if (frequency != null && width != null) channels.add(frequency + " MHz / " + width);
+                        }
+                        if (!channels.isEmpty()) rows.getFirst().put("channel", String.join(" · ", channels));
+                    }
                 }
-                case "interfaces" -> rows = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled,mtu,actual-mtu,mac-address,link-downs,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop");
+                case "interfaces" -> rows = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled,mtu,actual-mtu,mac-address,uptime,link-downs,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop");
                 case "traffic" -> {
                     if (selectedInterface == null || selectedInterface.length() > 128) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione uma interface.");
                     var interfaces = api.command("/interface/print", "=.proplist=.id,name");

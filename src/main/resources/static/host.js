@@ -3,13 +3,16 @@
   const $ = id => document.getElementById(id);
   const root = document.querySelector('[data-host-id]');
   const base = '/api/hosts/' + encodeURIComponent(root.dataset.hostId);
+  const signalPolicy = window.HostSignal.policy();
+  let initialTab = true, overviewAt = 0, wirelessAvailable = false;
+  let lastValidAt = null, interfacesAt = 0, interfacesAvailable = false;
   let tab = 'interfaces', interfaces = [], clients = [], traffic = [];
   let interfaceCounters = new Map();
   let wirelessMeasuredAt, wirelessBaseline = null, wirelessTraffic = [];
   let liveTimer, historyTimer, controller, historyController;
   let generation = 0, selectedClient = null, selectedInterface = '', interfaceTrigger;
   const labels = { identity:'Identificação', 'board-name':'Modelo', version:'RouterOS', uptime:'Tempo ligado',
-    'cpu-load':'CPU (%)', 'free-memory':'Memória livre (bytes)', 'total-memory':'Memória total (bytes)',
+    'cpu-load':'CPU', 'free-memory':'Memória livre', 'total-memory':'Memória total', frequency:'Frequência', channel:'Canal', ssid:'SSID',
     name:'Nome', type:'Tipo', running:'Em operação', disabled:'Desabilitada', mtu:'MTU',
     'actual-mtu':'MTU efetiva', 'mac-address':'MAC', 'rx-byte':'Download acumulado (bytes)', 'tx-byte':'Upload acumulado (bytes)',
     'rx-error':'Erros RX', 'tx-error':'Erros TX', 'rx-drop':'Descartes RX', 'tx-drop':'Descartes TX',
@@ -18,10 +21,90 @@
     const fragment = document.createDocumentFragment();
     for (const key of keys) {
       const box = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
-      dt.textContent = labels[key] || key; dd.textContent = row?.[key] ?? 'Indisponível';
+      dt.textContent = labels[key] || key; dd.textContent = resourceValue(key, row?.[key]);
       box.append(dt, dd); fragment.append(box);
     }
     $(id).replaceChildren(fragment);
+  }
+  function resourceValue(key, value) {
+    if (value == null || value === '') return '—';
+    if (key.endsWith('memory')) {
+      const bytes = Number(value);
+      if (!Number.isFinite(bytes) || bytes < 0) return '—';
+      return (bytes / (bytes >= 1073741824 ? 1073741824 : 1048576)).toLocaleString('pt-BR', { maximumFractionDigits:2 }) + (bytes >= 1073741824 ? ' GiB' : ' MiB');
+    }
+    if (key === 'cpu-load') return value + '%';
+    if (key === 'frequency') {
+      return String(value).split(' / ').map(frequency =>
+        /^\d+(?:\.\d+)?$/.test(frequency) ? frequency + ' MHz' : frequency
+      ).join(' / ');
+    }
+    if (key === 'uptime') {
+      const seconds = wirelessSortValue({ uptime:value }, 'uptime');
+      if (typeof seconds === 'number') return `${Math.floor(seconds / 86400)}d ${Math.floor(seconds % 86400 / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
+    }
+    return value;
+  }
+  let previousSummary = null;
+  function clientTrend(id, delta, change) {
+    const trend = $(id);
+    trend.hidden = !delta;
+    if (!delta) return;
+    trend.textContent = (delta > 0 ? '↑ ' : '↓ ') + Math.abs(delta);
+    trend.title = 'Variação desde a leitura anterior';
+    trend.dataset.change = change;
+  }
+  function signalSummary() {
+    const summary = signalPolicy.summarize(clients);
+    $('connected-clients').textContent = wirelessAvailable ? summary.total : '—';
+    $('weak-clients').textContent = wirelessAvailable ? summary.counts[2] + summary.counts[3] : '—';
+    const weak = summary.counts[2] + summary.counts[3];
+    const comparable = wirelessAvailable && previousSummary && wirelessMeasuredAt > previousSummary.at;
+    const connectedDelta = comparable ? summary.total - previousSummary.total : null;
+    const weakDelta = comparable && !summary.missing && !previousSummary.missing ? weak - previousSummary.weak : null;
+    clientTrend('connected-trend', connectedDelta, 'neutral');
+    clientTrend('weak-trend', weakDelta, weakDelta > 0 ? 'worse' : 'better');
+    previousSummary = wirelessAvailable ? { ...summary, weak, at:wirelessMeasuredAt } : null;
+    $('weak-description').textContent = 'Clientes em estado ruim ou crítico';
+    const badges = $('wireless-summary');
+    badges.replaceChildren();
+    const counts = [[summary.total, 'conectados'], [summary.counts[3], 'críticos'],
+      [summary.counts[2], 'ruins'], [summary.counts[1], 'em atenção']];
+    if (wirelessAvailable) {
+      for (const [count, label] of counts) {
+        const badge = document.createElement('span');
+        badge.textContent = `${count} ${label}`;
+        badges.append(badge);
+      }
+    } else badges.textContent = 'Registration Table indisponível';
+
+    const box = $('signal-distribution'), donut = document.createElement('div');
+    donut.className = 'signal-donut';
+    const center = document.createElement('span'), total = document.createElement('strong');
+    total.textContent = wirelessAvailable ? summary.total : '—';
+    center.append(total, document.createTextNode('clientes'));
+    donut.append(center);
+    const legend = document.createElement('ul'), segments = [], description = [];
+    let offset = 0;
+    const categories = signalPolicy.names.map((name, i) => [name, summary.counts[i], signalPolicy.colors[i]]);
+    if (wirelessAvailable && summary.missing) categories.push(['Indisponível', summary.missing, '#94a3b8']);
+    for (const [name, count, color] of categories) {
+      const share = summary.total ? count / summary.total * 100 : 0;
+      if (count) segments.push(`${color} ${offset}% ${offset + share}%`);
+      offset += share;
+      const item = document.createElement('li'), label = document.createElement('span');
+      const value = document.createElement('strong');
+      label.textContent = name;
+      label.style.borderColor = color;
+      value.textContent = wirelessAvailable ? `${count} (${number(share)}%)` : '—';
+      item.append(label, value);
+      legend.append(item);
+      description.push(name + ' ' + value.textContent);
+    }
+    if (wirelessAvailable && segments.length) donut.style.background = `conic-gradient(${segments.join(',')})`;
+    box.replaceChildren(donut, legend);
+    box.setAttribute('aria-label', description.join(', '));
+    $('signal-missing').textContent = wirelessAvailable ? '' : 'Aguardando dados válidos da API';
   }
   async function request(path, options = {}) {
     const response = await fetch(base + path, { cache:'no-store', ...options });
@@ -68,6 +151,18 @@
     }
     window.AvailabilityView.times(report);
   }
+  let lastPingAt = null, lastBucketLoss = null;
+  function equipmentState() {
+    const age = lastPingAt == null ? Infinity : Date.now() - lastPingAt;
+    const recent = age >= 0 && age <= 10000;
+    const online = root.dataset.api === 'online' || (recent && lastBucketLoss === 0);
+    const offline = !online && recent && lastBucketLoss === 100;
+    const badge = $('equipment-online');
+    badge.textContent = online ? 'Online' : offline ? 'Offline (ICMP)' : 'Estado desconhecido';
+    badge.dataset.state = online ? 'online' : offline ? 'offline' : 'unknown';
+    badge.title = root.dataset.api === 'online' ? 'O equipamento respondeu à API.'
+      : recent ? 'Disponibilidade ICMP no intervalo da última medição.' : 'Sem confirmação recente de alcance.';
+  }
   let historyGeneration = 0, displayedHistoryPeriod = null;
   async function history(background = false) {
     const period = $('history-period').value;
@@ -84,10 +179,11 @@
       if (ownGeneration !== historyGeneration) return;
       displayedHistoryPeriod = period;
       historyMetrics(report);
-      const minutes = report.bucketMillis / 60000;
-      const grouping = report.grouping || (Number.isFinite(minutes) ? `${number(minutes)} ${minutes === 1 ? 'minuto' : 'minutos'}` : '');
-      $('history-range').textContent = `${new Date(report.from).toLocaleString('pt-BR')} — ${new Date(report.to).toLocaleString('pt-BR')}${grouping ? ' · ' + grouping : ''}`;
-      $('history-state').textContent = 'Indicadores existentes do Routiva · sem coleta adicional.';
+      lastPingAt = report.lastSampleAt;
+      lastBucketLoss = report.series.find(p => p.from <= lastPingAt && p.to > lastPingAt)?.metrics.loss;
+      equipmentState();
+      $('history-range').textContent = `${new Date(report.from).toLocaleString('pt-BR')} — ${new Date(report.to).toLocaleString('pt-BR')}`;
+      $('history-state').textContent = '';
       window.HostHistoryCharts.update(report);
     } catch (error) {
       if (error.name !== 'AbortError' && ownGeneration === historyGeneration) {
@@ -102,6 +198,7 @@
     }
   }
   const wirelessLabels = {
+    'quality-reason':'Diagnóstico da conexão', 'critical-alert':'Alerta da última leitura',
     'radio-name':'Nome do rádio', interface:'Interface', 'mac-address':'MAC', source:'Recurso',
     uptime:'Tempo conectado', 'last-activity':'Última atividade', 'routeros-version':'RouterOS do cliente',
     ap:'Ponto de acesso', wds:'WDS', bridge:'Bridge', nstreme:'Nstreme', 'framing-mode':'Modo de enquadramento',
@@ -119,7 +216,7 @@
   function wirelessDetails(client) {
     const groups = [
       ['Identificação', ['radio-name','mac-address','interface','source','routeros-version']],
-      ['Sinal e qualidade', ['signal','signal-strength','signal-to-noise','signal-strength-ch0','signal-strength-ch1','strength-at-rates','tx-ccq','distance']],
+      ['Sinal e qualidade', ['quality-reason','critical-alert','signal','signal-strength','signal-to-noise','signal-strength-ch0','signal-strength-ch1','strength-at-rates','tx-ccq','distance']],
       ['Taxas e tráfego', ['rx-rate','tx-rate','p-throughput','bytes','packets','frames','frame-bytes','hw-frames','hw-frame-bytes','tx-frames-timed-out']],
     ];
     const fragment = document.createDocumentFragment();
@@ -231,10 +328,10 @@
       wireless();
     }
   }
-  const wirelessOrder = new Map();
   let wirelessSort = { key:null, direction:1 };
   function wirelessSortValue(client, key) {
-    if (key === 'quality') return Number(client['quality-severity']);
+    if (key === 'signal') return signalPolicy.signal(client);
+    if (key === 'quality') { const category = signalPolicy.category(client); return category < 0 ? null : category; }
     if (key.startsWith('avg-')) return client[key] == null ? null : Number(client[key]);
     const value = client[key] ?? (key === 'signal' ? client['signal-strength'] : null);
     if (value == null || value === '') return null;
@@ -254,11 +351,8 @@
   function sortedClients() {
     const namedClients = clients.map(client => ({ ...client, pppoe:pppoeName(client) }));
     if (!wirelessSort.key) {
-      const identity = c => c.interface + ':' + c['mac-address'];
-      const newcomers = namedClients.filter(c => !wirelessOrder.has(identity(c)))
-        .sort((a, b) => Number(b['quality-severity']) - Number(a['quality-severity']));
-      newcomers.forEach(c => wirelessOrder.set(identity(c), wirelessOrder.size));
-      return namedClients.sort((a, b) => wirelessOrder.get(identity(a)) - wirelessOrder.get(identity(b)));
+      return namedClients.sort((a, b) => signalPolicy.category(b) - signalPolicy.category(a)
+        || Number(Boolean(b['critical-alert'])) - Number(Boolean(a['critical-alert'])));
     }
     return namedClients.sort((a, b) => {
       const left = wirelessSortValue(a, wirelessSort.key), right = wirelessSortValue(b, wirelessSort.key);
@@ -266,15 +360,32 @@
       return wirelessSort.direction * (typeof left === 'number' ? left - right : left.localeCompare(right, 'pt-BR', { numeric:true, sensitivity:'base' }));
     });
   }
+  function replaceRows(id, fragment, key) {
+    const active = document.activeElement;
+    const row = active?.closest?.('tr');
+    const identity = row?.dataset[key];
+    const clientInterface = row?.dataset.clientInterface;
+    const within = row?.parentElement === $(id);
+    const button = active?.tagName === 'BUTTON';
+    $(id).replaceChildren(fragment);
+    if (within && identity) {
+      const replacement = Array.from($(id).children).find(item => item.dataset[key] === identity && item.dataset.clientInterface === clientInterface);
+      (button ? replacement?.querySelector('button') : replacement)?.focus({ preventScroll:true });
+    }
+  }
   function wireless(measuredAt) {
-    const filter = $('wireless-search').value.toLowerCase(), fragment = document.createDocumentFragment();
-    for (const client of sortedClients().filter(c => Object.values(c).join(' ').toLowerCase().includes(filter))) {
+    const fragment = document.createDocumentFragment();
+    for (const client of sortedClients()) {
       const tr = document.createElement('tr');
       tr.dataset.clientMac = client['mac-address']; tr.dataset.clientInterface = client.interface;
-      const severity = Number(client['quality-severity']);
+      const severity = signalPolicy.category(client);
       tr.dataset.quality = String(severity);
+
       tr.dataset.connection = client['connection-status'] || 'connected';
-      const keys = ['mac-address', 'pppoe', 'interface', 'avg-signal', 'avg-signal-to-noise', 'avg-tx-ccq', 'avg-rx-ccq', 'p-throughput', 'distance', 'uptime', 'avg-tx-rate', 'avg-rx-rate', 'quality'];
+      tr.title = [client['quality-reason'] || client.quality || 'Avaliação indisponível',
+        client['connection-status'] === 'disconnected' ? 'Desconectado · últimos valores' : client['critical-alert']].filter(Boolean).join(' · ');
+      tr.setAttribute('aria-label', `${client['mac-address']} · ${client.quality || 'Avaliação indisponível'}${client['connection-status'] === 'disconnected' ? ' · Desconectado' : ''}${client['critical-alert'] ? ' · Crítico agora' : ''}`);
+      const keys = ['mac-address', 'pppoe', 'interface', 'signal', 'avg-signal-to-noise', 'avg-tx-ccq', 'p-throughput', 'distance', 'uptime', 'avg-tx-rate', 'avg-rx-rate'];
       keys.forEach((key, index) => {
         const td = document.createElement('td');
         let value = client[key] ?? (key === 'signal' ? client['signal-strength'] : null);
@@ -297,22 +408,20 @@
             $('wireless-live-state').textContent = 'Dados ao vivo · atualização a cada 1 segundo';
             $('wireless-modal').showModal();
           }; td.append(button);
-        } else if (key === 'quality') {
-          const badge = document.createElement('span');
-          badge.className = 'wireless-quality'; badge.textContent = value;
-          badge.title = client['quality-reason'] || 'Sem indicadores válidos';
-          badge.tabIndex = 0; td.append(badge);
-          if (client['connection-status'] === 'disconnected') {
-            const status = document.createElement('span'); status.textContent = ' · Desconectado · últimos valores'; td.append(status);
-          } else if (client['critical-alert']) {
-            const alert = document.createElement('span'); alert.className = 'wireless-critical-alert';
-            alert.textContent = ' ⚠ Crítico agora'; alert.title = client['critical-alert']; td.append(alert);
-          }
-        } else td.textContent = value;
+        } else if (key === 'signal') {
+          const bars = document.createElement('span'); bars.className = 'signal-bars'; bars.setAttribute('aria-hidden', 'true');
+          for (let i = 0; i < 4; i++) bars.append(document.createElement('i'));
+          td.className = 'signal-cell'; td.append(bars, document.createTextNode(signalPolicy.signal(client) == null ? '—' : number(signalPolicy.signal(client)) + ' dBm'));
+        } else { td.textContent = value; if (key === 'pppoe') td.title = client['radio-name'] || client.comment || client.name || ''; }
+        const metric = key === 'signal' ? key : key.startsWith('avg-') ? key.slice(4) : null;
+        if (metric && client[metric + '-severity'] != null) td.dataset.level = client[metric + '-severity'];
         tr.append(td);
-      }); fragment.append(tr);
+      });
+      tr.tabIndex = 0; tr.onclick = event => { if (event.target.tagName !== 'BUTTON') tr.querySelector('button')?.click(); };
+      tr.onkeydown = event => { if (event.target === tr && ['Enter', ' '].includes(event.key)) { event.preventDefault(); tr.querySelector('button')?.click(); } };
+      fragment.append(tr);
     }
-    $('wireless-clients').replaceChildren(fragment);
+    replaceRows('wireless-clients', fragment, 'clientMac');
     if ($('wireless-modal').open && selectedClient) {
       const selected = clients.find(c => c['mac-address'] === selectedClient.mac && c.interface === selectedClient.interface);
       if (selected && selected['connection-status'] !== 'disconnected') {
@@ -328,9 +437,25 @@
       }
     }
   }
+  function interfaceIcon(type) {
+    const paths = {
+      ether:'M4 4h16v12h-4v4H8v-4H4ZM8 4v5m4-5v5m4-5v5',
+      wireless:'M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0m-11 4a6 6 0 0 1 8 0m-4 4h.01',
+      bridge:'M3 3h6v6H3Zm12 0h6v6h-6ZM9 15h6v6H9ZM6 9v3h12V9m-6 3v3',
+      vlan:'M3 3h8l10 10-8 8L3 11Zm4 4h.01',
+      switch:'M3 9h18v11H3Zm4 4v3m5-3v3m5-3v3M7 9V4h10v5',
+      other:'M3 3h6v6H3Zm12 12h6v6h-6ZM9 6h9v9M6 9v9h9',
+    };
+    const kind = /^(wlan|wifi|wireless)/.test(type) ? 'wireless' : Object.hasOwn(paths, type) ? type : 'other';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    for (const [key, value] of Object.entries({ viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', 'stroke-width':'1.75', 'stroke-linecap':'round', 'stroke-linejoin':'round', 'aria-hidden':'true', class:'interface-type-icon' })) svg.setAttribute(key, value);
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', paths[kind]); svg.append(path);
+    return svg;
+  }
   function interfaceRows() {
     const fragment = document.createDocumentFragment();
-    for (const item of interfaces) {
+    const visible = [...interfaces].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { numeric:true }));
+    for (const item of visible) {
       const tr = document.createElement('tr');
       tr.tabIndex = 0;
       tr.dataset.interfaceId = item['.id'];
@@ -338,11 +463,13 @@
       tr.setAttribute('aria-label', 'Abrir interface ' + item.name);
       const state = item.disabled === 'true' ? 'Desabilitada' : item.running === 'true' ? 'Ativa' : 'Inativa';
       for (const value of [item.name, item.type, state, item['actual-mtu'] ?? item.mtu,
-        item['mac-address'], window.HostTraffic.format(item.downloadRate),
+        item['mac-address'], item.uptime ?? '—', window.HostTraffic.format(item.downloadRate),
         window.HostTraffic.format(item.uploadRate),
         `${item['rx-error'] ?? '—'} / ${item['tx-error'] ?? '—'}`]) {
         const td = document.createElement('td'); td.textContent = value ?? 'Indisponível'; tr.append(td);
       }
+      tr.children[0].append(interfaceIcon(item.type || ''));
+      tr.dataset.running = item.running === 'true' && item.disabled !== 'true' ? 'true' : 'false';
       const open = () => {
         interfaceTrigger = tr;
         selectedInterface = item['.id']; traffic = [];
@@ -357,7 +484,7 @@
       tr.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } };
       fragment.append(tr);
     }
-    $('interface-rows').replaceChildren(fragment);
+    replaceRows('interface-rows', fragment, 'interfaceId');
     $('interfaces-state').textContent = interfaces.length ? `${interfaces.length} interfaces` : 'Nenhuma interface disponível.';
   }
   function closeInterface() {
@@ -375,29 +502,76 @@
       const section = tab;
       let overview, overviewError;
       try {
-        overview = await request('/mikrotik/overview', { signal:controller.signal });
-        if (generation !== ownGeneration) return;
-        details('resource-details', overview.rows[0], ['identity','board-name','version','uptime','cpu-load','free-memory','total-memory']);
+        if (Date.now() - overviewAt >= 10000) {
+          overview = await request('/mikrotik/overview', { signal:controller.signal });
+          if (generation !== ownGeneration) return;
+          const resource = overview.rows[0] || {};
+          details('resource-details', resource, ['identity','board-name','version','uptime','cpu-load','free-memory','total-memory','frequency','channel','ssid']);
+          $('equipment-model').textContent = resource['board-name'] || 'Equipamento MikroTik';
+          $('equipment-identity').textContent = resource.identity || 'Identificação indisponível';
+          overviewAt = Date.now();
+        }
       } catch (error) {
         if (error.name === 'AbortError' || generation !== ownGeneration) return;
         overviewError = error;
       }
-      const result = await request('/mikrotik/' + section, { signal:controller.signal });
+      // Wireless drives the live indicators even while the interfaces tab is selected.
+      let wirelessResult;
+      try {
+        wirelessResult = await request('/mikrotik/wireless', { signal:controller.signal });
+        if (generation !== ownGeneration) return;
+        wirelessAvailable = !wirelessResult.warning;
+        if (wirelessAvailable) clients = wirelessResult.rows;
+        wirelessMeasuredAt = wirelessResult.measuredAt;
+
+        signalSummary();
+        if (initialTab) {
+          initialTab = false;
+          if (wirelessAvailable && signalPolicy.summarize(clients).total) { document.querySelectorAll('[data-tab]').forEach(b => { if (b.dataset.tab === 'wireless') b.onclick(); }); return; }
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') throw error;
+        wirelessAvailable = false; signalSummary();
+        $('wireless-state').textContent = 'Registration Table indisponível · ' + error.message;
+      }
+      let interfaceResult;
+      if (section === 'interfaces' || Date.now() - interfacesAt >= 5000) {
+        try {
+          interfaceResult = await request('/mikrotik/interfaces', { signal:controller.signal });
+          if (generation !== ownGeneration) return;
+          interfacesAt = Date.now(); interfacesAvailable = true;
+        } catch (error) {
+          interfacesAvailable = false;
+          $('interfaces-state').textContent = 'Interfaces indisponíveis · dados anteriores desatualizados';
+          if (section === 'interfaces' || error.name === 'AbortError') throw error;
+        }
+      }
+      const result = section === 'wireless' ? wirelessResult : interfaceResult;
+      if (!result) throw new Error('Registration Table indisponível');
       if (generation !== ownGeneration) return;
-      if (section === 'wireless') { if (!result.warning) clients = result.rows; wirelessMeasuredAt = result.measuredAt; wireless(result.measuredAt); $('wireless-state').textContent = result.warning || `${clients.filter(c => c['connection-status'] !== 'disconnected').length} clientes conectados · médias móveis de até 30 amostras`; loadLoginNames(); }
-      if (section === 'interfaces') {
+      if (section === 'wireless') {
+        if (!result.warning) clients = result.rows;
+        wirelessMeasuredAt = result.measuredAt;
+        wireless(result.measuredAt);
+        $('wireless-state').textContent = result.warning
+          ? result.warning + ' · últimos dados desatualizados · leitura válida: ' + (lastValidAt ? new Date(lastValidAt).toLocaleTimeString('pt-BR') : '—')
+          : 'Taxas TX/RX de associação e CCQ: médias móveis de até 30 amostras.';
+        loadLoginNames();
+      }
+      if (interfaceResult) {
         const nextCounters = new Map();
-        interfaces = result.rows.map(item => {
+        interfaces = interfaceResult.rows.map(item => {
           const previous = interfaceCounters.get(item['.id']);
-          const elapsed = result.measuredAt - (previous?.at ?? result.measuredAt);
+          const elapsed = interfaceResult.measuredAt - (previous?.at ?? interfaceResult.measuredAt);
           const sameInterface = previous?.name === item.name;
-          nextCounters.set(item['.id'], { ...item, at:result.measuredAt });
+          nextCounters.set(item['.id'], { ...item, at:interfaceResult.measuredAt });
           return { ...item,
             downloadRate:sameInterface ? window.HostTraffic.rate(previous['rx-byte'], item['rx-byte'], elapsed) : null,
             uploadRate:sameInterface ? window.HostTraffic.rate(previous['tx-byte'], item['tx-byte'], elapsed) : null,
           };
         });
         interfaceCounters = nextCounters;
+
         interfaceRows();
         const selected = interfaces.find(i => i['.id'] === selectedInterface);
         if ($('interface-modal').open && !selected) {
@@ -416,21 +590,31 @@
         }
       }
       if (overviewError) throw overviewError;
+      document.querySelectorAll('[data-tab]').forEach(b => { b.textContent = b.dataset.tab === 'wireless' ? `Clientes wireless (${wirelessAvailable ? signalPolicy.summarize(clients).total : '—'})` : `Interfaces (${interfacesAvailable ? interfaces.length : '—'})`; });
+      lastValidAt = result.measuredAt;
+      $('host-api-state').textContent = 'API: Online';
+      root.dataset.api = 'online';
+      equipmentState();
+      $('equipment-api').textContent = 'API conectada';
+      $('host-updated').textContent = 'Última leitura válida: ' + new Date(lastValidAt).toLocaleString('pt-BR');
       $('live-error').hidden = true;
-      $('connection-state').textContent = 'API conectada · atualização ' + new Date(result.measuredAt).toLocaleTimeString('pt-BR');
     } catch (error) {
       if (error.name !== 'AbortError' && generation === ownGeneration) {
         if ($('wireless-modal').open) { resetWirelessBandwidth('Consulta de tráfego indisponível.'); $('wireless-live-state').textContent = 'Atualização indisponível · dados anteriores podem estar desatualizados'; }
         if ($('interface-modal').open) $('interface-live-state').textContent = 'Atualização indisponível · dados anteriores podem estar desatualizados';
         if (tab === 'wireless') $('wireless-state').textContent = 'Falha na comunicação com o AP · dados desatualizados · últimos valores preservados';
         if (tab === 'interfaces' && traffic.length) traffic = [...traffic, { at:Date.now(), rx:null, tx:null }].slice(-120);
-        $('connection-state').textContent = 'Consulta ao vivo indisponível · dados anteriores podem estar desatualizados';
+        $('host-api-state').textContent = 'API: indisponível · dados desatualizados';
+        root.dataset.api = 'unavailable';
+        equipmentState();
+        $('equipment-api').textContent = 'API desconectada';
         $('live-error').textContent = error.message; $('live-error').hidden = false;
       }
     } finally { if (generation === ownGeneration && !document.hidden) liveTimer = setTimeout(poll, 1000); }
   }
   function restart() { generation++; controller?.abort(); clearTimeout(liveTimer); poll(); }
   document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => {
+    initialTab = false;
     interfaceCounters.clear();
     tab = button.dataset.tab;
     document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
@@ -468,7 +652,6 @@
       wireless();
     };
   });
-  $('wireless-search').oninput = wireless;
   $('history-period').onchange = history;
   $('host-period-filter').onsubmit = event => event.preventDefault();
   document.addEventListener('visibilitychange', () => { if (document.hidden) { if ($('wireless-modal').open) resetWirelessBandwidth('Atualização pausada enquanto a página estiver oculta.'); interfaceCounters.clear(); generation++; controller?.abort(); clearTimeout(liveTimer); } else restart(); });
