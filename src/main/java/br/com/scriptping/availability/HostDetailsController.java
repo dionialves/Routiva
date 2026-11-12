@@ -14,9 +14,9 @@ public class HostDetailsController {
         this.availability = availability;
     }
 
-    private HostAvailabilityService.Report report(String id, int hours) {
+    private HostAvailabilityService.Report report(String id, int hours, Integer minutes) {
         try {
-            return availability.report(id, hours);
+            return minutes == null ? availability.report(id, hours) : availability.reportMinutes(id, minutes);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
@@ -26,10 +26,11 @@ public class HostDetailsController {
     @ResponseBody
     public org.springframework.http.ResponseEntity<HostAvailabilityService.Report> data(
         @PathVariable String id,
-        @RequestParam(defaultValue = "24") int hours
+        @RequestParam(defaultValue = "24") int hours,
+        @RequestParam(required = false) Integer minutes
     ) {
         return org.springframework.http.ResponseEntity.ok()
             .cacheControl(org.springframework.http.CacheControl.noStore())
-            .body(report(id, hours));
+            .body(report(id, hours, minutes));
     }
 }

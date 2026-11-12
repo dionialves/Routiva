@@ -1,0 +1,80 @@
+.host-page { max-width:1500px; margin:auto; }
+.host-heading { display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; }
+.host-tabs { display:flex; gap:10px; flex-wrap:wrap; margin:24px 0; border-bottom:1px solid #344458; padding-bottom:14px; }
+.host-tabs button[aria-pressed=true] { background:#136981; color:white; }
+.host-page section { margin:20px 0; }
+.host-page .card { padding:22px; }
+.host-details { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; }
+.host-details div { background:var(--surface,#152536); border:1px solid #344458; border-radius:10px; padding:14px; min-width:0; }
+.host-details dt { opacity:.7; font-size:.85rem; margin-bottom:8px; }
+.host-details dd { margin:0; overflow-wrap:anywhere; }
+.host-page table { width:100%; border-collapse:collapse; }
+.host-page th,.host-page td { padding:12px; text-align:left; border-bottom:1px solid #344458; }
+.host-page label { display:inline-flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.host-page input,.host-page select { max-width:100%; }
+.host-page form { display:flex; gap:12px; flex-wrap:wrap; }
+.host-page .table-scroll { overflow:auto; }
+.host-chart svg { width:100%; height:170px; display:block; }
+.host-chart { margin-top:20px; background:#122130; padding:15px; border-radius:10px; }
+.host-chart p,.host-note { font-size:.85rem; opacity:.75; }
+#live-error { background:#502c32; color:#ffd6da; padding:16px; border-radius:8px; }
+.host-page [hidden] { display:none !important; }
+
+.interface-table tbody tr { cursor:pointer; }
+.interface-table tbody tr:hover { background:#17384b; }
+.interface-table tbody tr:focus-visible { outline:2px solid var(--cyan); outline-offset:-2px; }
+.interface-table td { white-space:nowrap; }
+.interface-table td:first-child { color:var(--cyan); font-weight:600; }
+.interface-modal { width:min(960px,calc(100vw - 32px)); max-height:85vh; box-sizing:border-box; overflow:auto; padding:24px; border:1px solid #39556b; border-radius:14px; background:#0e2030; color:var(--text); box-shadow:0 24px 80px #0009; }
+.interface-modal::backdrop { background:#020a13bb; }
+.interface-modal .host-details { grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+.interface-modal h2 { margin:4px 0; }
+
+.host-page .availability-heading { margin-top:16px; }
+.host-page .metric-card { padding:20px; }
+.host-page #host-period-filter label { display:flex; flex-direction:column; align-items:stretch; }
+
+.host-page #host-overview > .availability-timeseries { margin:0 0 20px; }
+.host-page .diagnostic-charts .chart-card { margin-top:0; }
+.host-page #history-state:empty { display:none; }
+
+/* Equipment tables follow the compact group-host panel. */
+.host-page .host-list-panel { padding:20px; border:1px solid #1d3b4e; border-radius:11px; background:#0b202e; }
+.host-page .host-list-panel .hosts-toolbar { margin-bottom:12px; }
+.host-page .host-list-panel h2 { margin:0; font-size:16px; }
+.host-page .host-list-panel > p { color:#a8bdd0; font-size:12px; }
+.host-page .host-list-panel .table-scroll { border:1px solid #193647; border-radius:8px; }
+.host-page .host-equipment-table { min-width:1000px; table-layout:auto; font-size:13px; }
+.host-page .host-equipment-table thead th { width:auto; padding:12px 10px; background:#102a3d; color:#c1d3e0; font-size:12px; white-space:nowrap; text-align:left; }
+.host-page .host-equipment-table tbody td { height:44px; box-sizing:border-box; padding:9px 10px; border-bottom:1px solid #193647; background:#0f2130; color:#c1d3e0; white-space:nowrap; text-align:left; }
+.host-page .host-equipment-table tbody tr:hover td { background:#102a3d; }
+.host-page .host-equipment-table tbody tr:last-child td { border-bottom:0; }
+.host-page .host-equipment-table td:first-child { min-width:180px; color:#f1f5f9; font-weight:600; }
+.host-page .interface-table td:nth-child(n+6),.host-page .interface-table th:nth-child(n+6) { text-align:right; font-variant-numeric:tabular-nums; }
+.host-page .interface-table td:nth-child(2),.host-page .interface-table td:nth-child(5) { color:#94a3b8; }
+.host-page .wireless-table td:nth-child(n+3) { font-variant-numeric:tabular-nums; }
+.host-page .wireless-table td:first-child button { padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.host-page .wireless-table td:first-child button:hover { color:#06b6d4; }
+.host-page .host-list-panel .host-heading { margin-bottom:14px; }
+@media(max-width:760px) { .host-page .host-list-panel { padding:14px; } }
+
+.wireless-modal { width:min(1040px,calc(100vw - 32px)); }
+.wireless-modal #wireless-modal-subtitle { color:#a8bdd0; font-size:13px; }
+.wireless-modal h3 { font-size:14px; color:#67d8ed; margin:22px 0 10px; }
+.wireless-modal .wireless-detail-grid { grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); align-items:start; }
+.wireless-modal .wireless-detail-grid dt { color:#a8bdd0; opacity:1; }
+.wireless-modal .wireless-detail-grid dd { white-space:pre-wrap; }
+
+.host-page .wireless-table th button { display:inline-flex; align-items:center; gap:8px; border:0; padding:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.host-page .wireless-table th button:hover { color:#06b6d4; }
+.host-page .wireless-table th[aria-sort=ascending],.host-page .wireless-table th[aria-sort=descending] { color:#67e8f9; }
+
+.host-page .wireless-table tr[data-quality="0"] { --wireless-quality:#22c55e; }
+.host-page .wireless-table tr[data-quality="1"] { --wireless-quality:#fbbf24; }
+.host-page .wireless-table tr[data-quality="2"] { --wireless-quality:#fb923c; }
+.host-page .wireless-table tr[data-quality="3"] { --wireless-quality:#f87171; }
+.host-page .wireless-table tr { --wireless-quality:#94a3b8; }
+.host-page .wireless-table tr td:first-child { border-left:3px solid var(--wireless-quality); }
+.wireless-quality { display:inline-block; color:var(--wireless-quality); border:1px solid currentColor; border-radius:12px; padding:2px 8px; }
+.wireless-critical-alert { color:#f87171; font-size:12px; }
+.host-page .wireless-table tr[data-connection="disconnected"] { opacity:.65; }

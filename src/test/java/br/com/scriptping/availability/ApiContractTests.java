@@ -51,6 +51,22 @@ class ApiContractTests {
     }
 
     @Test
+    void hostSupportsEverySharedPeriodInMinutes() throws Exception {
+        for (var period : AvailabilityPeriod.OPTIONS) {
+            mvc.perform(get("/api/hosts/h/availability").param("minutes", String.valueOf(period.minutes())))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+            verify(cache).host(host.id(), period.minutes());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-1", "2", "abc", "2147483648"})
+    void invalidMinutePeriodNeverQueriesStorage(String minutes) throws Exception {
+        mvc.perform(get("/api/hosts/h/availability").param("minutes", minutes)).andExpect(status().isBadRequest());
+        verifyNoInteractions(cache);
+    }
+
+    @Test
     void missingPeriodDefaultsTo24Hours() throws Exception {
         mvc.perform(get("/api/hosts/h/availability")).andExpect(status().isOk());
         verify(cache).host(host.id(), 1440);

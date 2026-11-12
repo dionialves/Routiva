@@ -57,6 +57,11 @@ public class HostAvailabilityService {
         }
     }
 
+    public Report reportMinutes(String id, int minutes) {
+        AvailabilityPeriod.of(minutes);
+        return cache.host(id, minutes);
+    }
+
     public Report report(String id, int hours) {
         if (!PERIODS.contains(hours)) throw new IllegalArgumentException("Período inválido");
         return cache.host(id, hours*60);
