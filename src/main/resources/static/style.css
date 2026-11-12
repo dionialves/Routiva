@@ -1038,3 +1038,9 @@ body { background: var(--app-bg); }
 #library #create[hidden], #edit[hidden], #ap-import[hidden] { display:none !important; }
 .profile-name { color:var(--text); font-size:13px; }
 .topbar-actions form { margin:0; }
+
+/* Profile actions remain available on every screen size. */
+.profile-menu .profile-avatar { display:flex; }
+.profile-menu summary:focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
+.profile-menu .profile-panel { width:160px; padding:12px; top:44px; }
+.profile-panel .system-button { width:100%; }

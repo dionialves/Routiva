@@ -38,13 +38,17 @@
   }
   function open(user, trigger) {
     current = user; opener = trigger; form.reset();
+    dialog.classList.remove('user-code-visible');
     $('user-dialog-title').textContent = user ? 'Editar usuário' : 'Novo usuário';
     $('user-name').value = user?.name || ''; $('user-username').value = user?.username || '';
     $('user-role').value = user?.role || 'USER'; $('user-error').textContent = '';
     $('user-reset').hidden = !user; $('user-code-panel').hidden = true; $('user-code').textContent = '';
     $('user-code-status').textContent = ''; $('user-reset-confirm').hidden = true;
     $('user-save').hidden = false; $('user-cancel-label').textContent = 'Cancelar';
-    for (const field of form.querySelectorAll('input, select')) field.disabled = false;
+    for (const field of form.querySelectorAll('input, select')) {
+      field.disabled = false;
+      if (field.tagName === 'INPUT') field.readOnly = false;
+    }
     dialog.showModal(); $('user-name').focus();
   }
   function close() {
@@ -57,21 +61,31 @@
   }
   function showCode(data) {
     current = data.user;
+    dialog.classList.add('user-code-visible');
+    $('user-name').value = data.user.name;
+    $('user-username').value = data.user.username;
+    $('user-role').value = data.user.role;
     $('user-code').textContent = data.activationCode; $('user-code-panel').hidden = false;
     $('user-reset-confirm').hidden = true; $('user-reset').hidden = true; $('user-save').hidden = true;
     $('user-cancel-label').textContent = 'Fechar';
-    for (const field of form.querySelectorAll('input, select')) field.disabled = true;
-    $('user-code-panel').scrollIntoView({ block: 'nearest' });
+    for (const field of form.querySelectorAll('input')) field.readOnly = true;
+    $('user-role').disabled = true;
+    $('user-cancel').focus();
   }
   $('user-new').addEventListener('click', event => open(null, event.currentTarget));
   $('user-cancel').addEventListener('click', close);
   dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
-  dialog.addEventListener('close', () => { $('user-code').textContent = ''; });
+  dialog.addEventListener('close', () => {
+    $('user-code').textContent = '';
+    $('user-code-status').textContent = '';
+    $('user-code-panel').hidden = true;
+    dialog.classList.remove('user-code-visible');
+  });
   $('user-search').addEventListener('input', render); $('users-retry').addEventListener('click', load);
   $('user-reset').addEventListener('click', () => { $('user-reset-confirm').hidden = false; $('user-reset-confirm-button').focus(); });
   $('user-reset-cancel').addEventListener('click', () => { $('user-reset-confirm').hidden = true; $('user-reset').focus(); });
   form.addEventListener('submit', async event => {
-    event.preventDefault(); if (busy) return;
+    event.preventDefault(); if (busy || dialog.classList.contains('user-code-visible')) return;
     $('user-error').textContent = ''; setBusy(true);
     let result;
     try {

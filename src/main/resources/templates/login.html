@@ -7,12 +7,49 @@
 </head>
 <body class="auth-page"><main class="auth-card">
   <svg class="auth-brand" viewBox="1190 245 880 245" role="img" aria-label="TraceOne Network"><image href="/traceone-brand.png?v=2" width="2172" height="724"/></svg>
-  <p class="eyebrow">ACESSO AO SISTEMA</p><h1>Entrar</h1>
-  <p>Informe seu usuário para continuar.</p>
+  <p class="eyebrow">ACESSO AO SISTEMA</p><h1 id="login-title">Entrar</h1>
+  <p id="login-help" aria-live="polite">Informe seu usuário para continuar.</p>
   <p th:if="${param.logout != null}" role="status">Você saiu do sistema.</p>
-  <form th:action="@{/login/usuario}" method="post" class="auth-form">
-    <label>Usuário<input name="username" th:value="${username}" required maxlength="64" autocomplete="username" autofocus autocapitalize="none" spellcheck="false"></label>
-    <p th:if="${error}" class="auth-error" role="alert" th:text="${error}"></p>
-    <button class="system-button system-button-primary" type="submit">Avançar</button>
+  <form th:action="@{/login/usuario}" method="post" class="auth-form" id="login-form" th:attr="data-setup=${setup == true}">
+    <div>
+      <label for="username">Usuário</label>
+      <div class="auth-user-row">
+        <div class="auth-input-wrap">
+          <input id="username" name="username" th:value="${username}" required maxlength="64" autocomplete="username" autofocus autocapitalize="none" spellcheck="false" aria-describedby="login-error">
+          <button type="button" id="clear-user" class="auth-icon" aria-label="Limpar usuário" hidden><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <button id="identify-user" class="system-button system-button-primary" type="submit" aria-label="Continuar com este usuário" disabled><svg viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <p id="login-error" class="auth-error" role="alert" th:text="${error}" th:hidden="${error == null}"></p>
+    <div id="password-stage" hidden>
+      <div class="auth-password-content">
+        <div id="setup-fields" hidden>
+          <label for="code">Código de ativação</label>
+          <div class="auth-user-row"><div class="auth-input-wrap">
+            <input id="code" name="code" maxlength="128" autocomplete="one-time-code" aria-describedby="activation-help code-error">
+            <svg id="code-check" class="auth-code-check" viewBox="0 0 24 24" aria-label="Código validado" hidden><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+          </div><button id="validate-code" class="system-button system-button-primary" type="submit" aria-label="Validar código de ativação" disabled><svg viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
+          <p id="code-error" class="auth-error" role="alert" hidden></p>
+          <p id="code-success" role="status" hidden>Código validado com sucesso.</p>
+          <small id="activation-help">Solicite o código ao Administrador. No primeiro acesso do admin, consulte o log de inicialização. Válido por 24 horas.</small>
+        </div>
+        <div id="password-fields">
+          <label id="password-label" for="password">Senha</label>
+          <div class="auth-input-wrap">
+            <input id="password" name="password" type="password" maxlength="128" autocomplete="current-password">
+            <button id="toggle-password" type="button" class="auth-icon" aria-label="Mostrar senha" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path id="eye-slash" d="m3 3 18 18" hidden/></svg></button>
+          </div>
+          <small id="password-requirements" hidden>Use de 12 a 128 caracteres, incluindo maiúscula, minúscula, número e caractere especial.</small>
+        </div>
+        <div id="confirmation-field" hidden>
+          <label for="confirmation">Confirmar nova senha</label>
+          <div class="auth-input-wrap"><input id="confirmation" name="confirmation" type="password" maxlength="128" autocomplete="new-password" aria-describedby="confirmation-error"><button id="toggle-confirmation" type="button" class="auth-icon" aria-label="Mostrar confirmação de senha" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path id="confirmation-slash" d="m3 3 18 18" hidden/></svg></button></div><p id="confirmation-error" class="auth-error" role="alert" hidden>As senhas não correspondem.</p>
+        </div>
+        <button id="login-submit" class="system-button system-button-primary" type="submit">Entrar</button>
+      </div>
+    </div>
+    <noscript><p>Ative o JavaScript para entrar nesta interface.</p><button class="system-button system-button-primary" type="submit">Continuar</button></noscript>
   </form>
+  <script src="/login.js" defer></script>
 </main></body></html>

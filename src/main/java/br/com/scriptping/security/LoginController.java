@@ -4,6 +4,9 @@ import br.com.scriptping.users.*;
 import jakarta.servlet.http.*;
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
+import org.springframework.http.ResponseEntity;
+import org.springframework.ui.ExtendedModelMap;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -31,6 +34,54 @@ public class LoginController {
         if (request.getSession(false) != null) request.getSession().removeAttribute(CHALLENGE);
         return "login";
     }
+    @PostMapping(value = "/usuario", produces = "application/json")
+    @ResponseBody
+    public ResponseEntity<?> identifyAsync(@RequestParam String username, HttpServletRequest request) {
+        var model = new ExtendedModelMap();
+        String result = identify(username, request, model);
+        if (!result.startsWith("redirect:")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Não foi possível continuar. Confira os dados ou aguarde antes de tentar novamente."));
+        }
+        var challenge = challenge(request);
+        return ResponseEntity.ok(Map.of("username", challenge.username, "setup", challenge.needsPassword));
+    }
+    @PostMapping(value = {"/senha", "/nova-senha"}, produces = "application/json")
+    @ResponseBody
+    public ResponseEntity<?> passwordAsync(@RequestParam(defaultValue = "") String password,
+        @RequestParam(defaultValue = "") String confirmation, @RequestParam(defaultValue = "") String code,
+        HttpServletRequest request, HttpServletResponse response) {
+        var model = new ExtendedModelMap();
+        String result = password(password, confirmation, code, request, response, model);
+        if (result.equals("redirect:/disponibilidade")) return ResponseEntity.ok(Map.of("redirect", "/disponibilidade"));
+        if (result.equals("redirect:/login")) return ResponseEntity.status(409).body(Map.of("message", "Sua identificação expirou. Informe o usuário novamente.", "reset", true));
+        boolean invalidCode = false;
+        var challenge = challenge(request);
+        if (challenge != null && challenge.needsPassword) {
+            try { service.validateActivation(challenge.userId, challenge.sessionVersion, code); }
+            catch (ResponseStatusException ex) { invalidCode = true; }
+        }
+        return ResponseEntity.badRequest().body(Map.of("message", model.getAttribute("error"), "codeInvalid", invalidCode));
+    }
+    @PostMapping(value = "/validar-codigo", produces = "application/json")
+    @ResponseBody
+    public ResponseEntity<?> validateCode(@RequestParam(defaultValue = "") String code, HttpServletRequest request) {
+        var challenge = challenge(request);
+        if (challenge == null || !challenge.needsPassword) return ResponseEntity.status(409).body(Map.of(
+            "message", "Sua identificação expirou. Informe o usuário novamente.", "reset", true));
+        try {
+            throttle.check(request.getRemoteAddr(), challenge.username);
+            service.validateActivation(challenge.userId, challenge.sessionVersion, code);
+            return ResponseEntity.ok(Map.of("validated", true));
+        } catch (ResponseStatusException ex) {
+            return ResponseEntity.status(ex.getStatusCode()).body(Map.of("message", ex.getReason()));
+        }
+    }
+    @PostMapping("/limpar")
+    @ResponseBody
+    public ResponseEntity<?> clear(HttpServletRequest request) {
+        if (request.getSession(false) != null) request.getSession().removeAttribute(CHALLENGE);
+        return ResponseEntity.ok(Map.of("cleared", true));
+    }
     @PostMapping("/usuario")
     public String identify(@RequestParam String username, HttpServletRequest request, Model model) {
         request.getSession().removeAttribute(CHALLENGE);
@@ -53,6 +104,7 @@ public class LoginController {
         String expected = "/login/" + (challenge.needsPassword ? "nova-senha" : "senha");
         if (!request.getRequestURI().equals(expected)) return "redirect:" + expected;
         model.addAttribute("username", challenge.username);
+        model.addAttribute("setup", challenge.needsPassword);
         return challenge.needsPassword ? "password-setup" : "login-password";
     }
     @PostMapping({"/senha", "/nova-senha"})
@@ -78,6 +130,7 @@ public class LoginController {
             return "redirect:/disponibilidade";
         } catch (ResponseStatusException ex) {
             model.addAttribute("error", ex.getReason()); model.addAttribute("username", challenge.username);
+        model.addAttribute("setup", challenge.needsPassword);
             return setup ? "password-setup" : "login-password";
         }
     }

@@ -5,8 +5,8 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <title>Usuários • TraceOne</title><link rel="icon" href="/favicon.svg">
   <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/availability.css">
-  <link rel="stylesheet" href="/query-filters.css"><link rel="stylesheet" href="/page-layout.css"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"><link rel="stylesheet" href="/form-dialog.css?v=1"><link rel="stylesheet" href="/users.css?v=2">
-  <script src="/shell.js" defer></script><script src="/users.js?v=2" defer></script>
+  <link rel="stylesheet" href="/query-filters.css"><link rel="stylesheet" href="/page-layout.css"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"><link rel="stylesheet" href="/form-dialog.css?v=1"><link rel="stylesheet" href="/users.css?v=3">
+  <script src="/shell.js" defer></script><script src="/users.js?v=3" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('users')}"></aside>
@@ -26,13 +26,23 @@
 <dialog id="user-dialog" class="settings-panel form-dialog" aria-labelledby="user-dialog-title">
   <form id="user-form" class="connection-form">
     <h2 id="user-dialog-title">Novo usuário</h2>
-    <label>Nome<input id="user-name" name="name" required maxlength="120" autocomplete="name" autofocus></label>
-    <label>Usuário<input id="user-username" name="username" required minlength="3" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9.@+_\-]{2,63}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="user-username-help"><small id="user-username-help">Use um e-mail ou nome de usuário de 3 a 64 caracteres: letras, números, ponto, @, +, hífen ou sublinhado.</small></label>
-    <label>Perfil<select id="user-role" name="role" required><option value="USER">Usuário normal</option><option value="ADMIN">Administrador</option></select></label>
-    <p class="user-profile-help">Administrador: acesso completo. Usuário normal: sem configurações, criação ou edição de mapas e importação de Access Points.</p>
+    <div class="user-dialog-content">
+    <div class="user-details">
+      <label>Nome<input id="user-name" name="name" required maxlength="120" autocomplete="name" autofocus></label>
+      <label>Usuário<input id="user-username" name="username" required minlength="3" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9.@+_\-]{2,63}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="user-username-help"><small id="user-username-help">Use um e-mail ou nome de usuário de 3 a 64 caracteres: letras, números, ponto, @, +, hífen ou sublinhado.</small></label>
+      <label>Perfil<select id="user-role" name="role" required><option value="USER">Usuário normal</option><option value="ADMIN">Administrador</option></select></label>
+      <p class="user-profile-help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg><span>Administrador: acesso completo. Usuário normal: sem configurações, criação ou edição de mapas e importação de Access Points.</span></p>
+      <section id="user-reset-confirm" hidden><p>Redefinir a senha encerra as sessões deste usuário e exige um novo código no próximo acesso.</p><button id="user-reset-confirm-button" class="system-button" type="button"><svg th:replace="~{shell :: icon('check')}"></svg><span>Confirmar redefinição</span></button><button id="user-reset-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg><span>Cancelar redefinição</span></button></section>
+    </div>
+    <section id="user-code-panel" hidden aria-labelledby="user-code-title">
+      <div class="user-code-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="16" cy="8" r="5"/><path d="m12.5 11.5-9 9H1v-3l9-9M16 6v2h2"/></svg><h3 id="user-code-title">Código de ativação</h3></div>
+      <p>Entregue este código ao usuário por um canal privado. Ele é exibido somente agora, vale por 24 horas e permite cadastrar a senha no próximo acesso.</p>
+      <div class="user-code-value"><output id="user-code" aria-label="Código de ativação"></output><button id="user-copy-code" class="system-button" type="button" aria-label="Copiar código de ativação"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3"/></svg></button></div>
+      <p class="user-code-validity"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg><span>Válido por 24 horas.</span></p>
+      <p id="user-code-status" role="status" aria-live="polite"></p>
+    </section>
+    </div>
     <p id="user-error" role="alert"></p>
-    <section id="user-reset-confirm" hidden><p>Redefinir a senha encerra as sessões deste usuário e exige um novo código no próximo acesso.</p><button id="user-reset-confirm-button" class="system-button" type="button"><svg th:replace="~{shell :: icon('check')}"></svg><span>Confirmar redefinição</span></button><button id="user-reset-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg><span>Cancelar redefinição</span></button></section>
-    <section id="user-code-panel" hidden aria-labelledby="user-code-title"><h3 id="user-code-title">Código de ativação</h3><p>Entregue este código ao usuário por um canal privado. Ele é exibido somente agora, vale por 24 horas e permite cadastrar a senha no próximo acesso.</p><output id="user-code"></output><button id="user-copy-code" class="system-button" type="button"><svg th:replace="~{shell :: icon('file')}"></svg><span>Copiar código</span></button><p id="user-code-status" role="status"></p></section>
     <div class="settings-actions"><button id="user-reset" class="system-button" type="button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg><span>Redefinir senha</span></button><button id="user-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg><span id="user-cancel-label">Cancelar</span></button><button id="user-save" class="system-button system-button-primary" type="submit"><svg th:replace="~{shell :: icon('check')}"></svg><span>Salvar</span></button></div>
   </form>
 </dialog>

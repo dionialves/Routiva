@@ -11,3 +11,31 @@
 .auth-form .auth-error { margin:0; padding:12px; background:#3b2029; color:#ffbec8; border-radius:6px; }
 .auth-form #password-requirements { margin:0; font-size:13px; color:#b9c7d8; }
 @media (max-width:520px) { .auth-page { padding:12px; } .auth-card { padding:24px 18px; } }
+
+/* The progressive login shares the application's typography, tokens and buttons. */
+.auth-card { margin:0; }
+.auth-form [hidden], .auth-form svg [hidden] { display:none !important; }
+.auth-form label[for] { margin-bottom:8px; }
+.auth-user-row { display:flex; gap:10px; align-items:center; }
+.auth-input-wrap { position:relative; min-width:0; flex:1; }
+.auth-input-wrap input { padding-right:44px; }
+.auth-form input[readonly] { background:#1b2d3c; color:#b9c7d8; }
+.auth-form svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+.auth-form .auth-icon { position:absolute; right:6px; top:50%; transform:translateY(-50%); display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:6px; background:transparent; color:#aebdd0; cursor:pointer; }
+.auth-icon:hover { color:#00d1ff; }
+.auth-icon:focus-visible { outline:2px solid #00d1ff; outline-offset:2px; }
+.auth-user-row > .system-button { flex-shrink:0; }
+.auth-password-content { display:grid; gap:18px; }
+#password-stage { animation:auth-reveal 180ms ease-out; }
+#login-submit { width:100%; }
+.auth-form .is-loading::before { content:''; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:auth-spin 700ms linear infinite; }
+.auth-form .is-loading svg { display:none; }
+@keyframes auth-spin { to { transform:rotate(360deg); } }
+@keyframes auth-reveal { from { opacity:0; max-height:0; overflow:hidden; } to { opacity:1; max-height:600px; overflow:hidden; } }
+@media (prefers-reduced-motion:reduce) { #password-stage, .auth-form .is-loading::before { animation:none; } }
+.auth-code-check { position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#50e8a5; }
+.auth-form input.auth-code-valid { border-color:#50e8a5; }
+#code-success { color:#50e8a5; margin:8px 0 0; font-size:13px; }
+#code-error { margin-top:8px; }
+#password-fields, #confirmation-field { animation:auth-reveal 180ms ease-out; }
+@media (prefers-reduced-motion:reduce) { #password-fields, #confirmation-field { animation:none; } }

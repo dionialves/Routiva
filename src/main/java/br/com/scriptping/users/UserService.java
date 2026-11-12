@@ -87,10 +87,7 @@ public class UserService {
     @Transactional
     public AppUser setPassword(Long id, long sessionVersion, String code, String password, String confirmation) {
         var u = users.lockById(id).orElseThrow(() -> bad("Acesso inválido. Informe o usuário novamente."));
-        if (u.sessionVersion != sessionVersion || !u.needsPassword() || u.activationHash == null
-            || u.activationExpiresAt == null || u.activationExpiresAt < System.currentTimeMillis()
-            || code == null || code.length() > 128 || !passwords.matches(code, u.activationHash))
-            throw bad("Código inválido ou expirado. Solicite um novo código ao Administrador.");
+        validateActivation(u, sessionVersion, code);
         if (!Objects.equals(password, confirmation)) throw bad("A confirmação não corresponde à senha.");
         if (password == null || password.length() < 12 || password.length() > 128
             || !password.codePoints().anyMatch(Character::isUpperCase)
@@ -102,6 +99,17 @@ public class UserService {
         u.passwordResetRequired = false; u.activationHash = null; u.activationExpiresAt = null;
         u.sessionVersion++; u.lastLoginAt = System.currentTimeMillis();
         return u;
+    }
+    @Transactional(readOnly = true)
+    public void validateActivation(Long id, long sessionVersion, String code) {
+        var u = users.findById(id).orElseThrow(() -> bad("Código inválido ou expirado. Solicite um novo código ao Administrador."));
+        validateActivation(u, sessionVersion, code);
+    }
+    private void validateActivation(AppUser u, long sessionVersion, String code) {
+        if (u.sessionVersion != sessionVersion || !u.needsPassword() || u.activationHash == null
+            || u.activationExpiresAt == null || u.activationExpiresAt < System.currentTimeMillis()
+            || code == null || code.length() > 128 || !passwords.matches(code, u.activationHash))
+            throw bad("Código inválido ou expirado. Solicite um novo código ao Administrador.");
     }
     private ResponseStatusException bad(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
 }

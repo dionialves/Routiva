@@ -42,6 +42,61 @@ class SecurityFlowTests {
             .andExpect(redirectedUrl("/disponibilidade"));
         return session;
     }
+    @Test void progressiveLoginReusesChallengeAndRetainsItAfterWrongPassword() throws Exception {
+        var saved = create(AppUser.Role.USER);
+        activate(saved);
+        var session = new MockHttpSession();
+        mvc.perform(post("/login/usuario").session(session).with(csrf()).accept("application/json")
+            .param("username", saved.user().username()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.setup").value(false));
+        mvc.perform(post("/login/senha").session(session).with(csrf()).accept("application/json")
+            .param("password", "wrong"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").isString());
+        mvc.perform(post("/login/senha").session(session).with(csrf()).accept("application/json")
+            .param("password", "SenhaForte#12345"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.redirect").value("/disponibilidade"));
+        mvc.perform(get("/api/maps").session(session)).andExpect(status().isOk());
+    }
+    @Test void progressiveIdentificationSupportsSetupNeutralErrorsAndClear() throws Exception {
+        var saved = create(AppUser.Role.USER);
+        var session = new MockHttpSession();
+        mvc.perform(post("/login/usuario").session(session).with(csrf()).accept("application/json")
+            .param("username", saved.user().username()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.setup").value(true));
+        mvc.perform(post("/login/limpar").session(session).with(csrf())).andExpect(status().isOk());
+        mvc.perform(post("/login/senha").session(session).with(csrf()).accept("application/json")
+            .param("password", "wrong"))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.reset").value(true));
+        mvc.perform(post("/login/usuario").session(session).with(csrf()).accept("application/json")
+            .param("username", "missing-" + UUID.randomUUID()))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(
+                "Não foi possível continuar. Confira os dados ou aguarde antes de tentar novamente."));
+        mvc.perform(post("/login/usuario").accept("application/json").param("username", "admin"))
+            .andExpect(status().isForbidden());
+    }
+    @Test void activationValidationDoesNotConsumeCodeAndCompletionRechecksIt() throws Exception {
+        var saved = create(AppUser.Role.USER);
+        var session = identify(saved.user().username());
+        mvc.perform(get("/login/nova-senha").session(session)).andExpect(status().isOk())
+            .andExpect(content().string(containsString("data-setup=\"true\"")));
+        mvc.perform(post("/login/validar-codigo").session(session).with(csrf()).param("code", "wrong"))
+            .andExpect(status().isBadRequest());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(post("/login/validar-codigo").session(session).with(csrf()).param("code", saved.activationCode()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.validated").value(true));
+        }
+        assertThat(repository.findById(saved.user().id()).orElseThrow().needsPassword()).isTrue();
+        mvc.perform(get("/api/maps").session(session)).andExpect(status().isUnauthorized());
+        users.reset(saved.user().id());
+        mvc.perform(post("/login/nova-senha").session(session).with(csrf()).accept("application/json")
+            .param("code", saved.activationCode()).param("password", "SenhaForte#12345")
+            .param("confirmation", "SenhaForte#12345"))
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.codeInvalid").value(true));
+        mvc.perform(post("/login/validar-codigo").with(csrf()).param("code", saved.activationCode()))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.reset").value(true));
+        mvc.perform(post("/login/validar-codigo").session(session).param("code", saved.activationCode()))
+            .andExpect(status().isForbidden());
+    }
     @Test void anonymousCannotAccessPagesOrApisOrSkipIdentification() throws Exception {
         mvc.perform(get("/disponibilidade")).andExpect(redirectedUrl("/login"));
         mvc.perform(get("/api/maps")).andExpect(status().isUnauthorized());
