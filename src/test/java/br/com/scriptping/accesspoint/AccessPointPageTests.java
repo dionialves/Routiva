@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 
 @WebMvcTest(AccessPointController.class)
+@org.springframework.security.test.context.support.WithMockUser(roles = "ADMIN")
 class AccessPointPageTests {
     @Autowired MockMvc mvc;
     @MockitoBean AccessPointService service;

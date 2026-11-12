@@ -463,3 +463,32 @@ API: `GET /api/hosts/{id}/availability?hours=24`, com totais, contagens, série 
 
 
 Detalhes de implementação, limites, migração e validação: [Agregação por minuto](docs/agregacao-por-minuto.md).
+
+## Acesso e usuários
+
+No primeiro acesso, abra `/login` e informe `admin`. A conta é criada sem senha.
+O código de ativação aparece no console/log de inicialização (procure por
+`Primeiro acesso: usuário admin`). Informe o código e cadastre uma senha de
+12 a 128 caracteres, incluindo maiúscula, minúscula, número e caractere especial.
+O código vale por 24 horas e é renovado ao reiniciar enquanto o admin ainda não
+tiver senha. Após cadastrar a senha, reinícios preservam o cadastro.
+
+Em **Configuração → Usuários**, administradores podem cadastrar e editar nome,
+usuário e perfil. O nome na tabela abre o modal de edição; a busca por nome
+ignora caixa e acentos. Novos usuários recebem um código exibido uma única vez
+no modal, que deve ser entregue por um canal privado.
+
+**Redefinir senha** exige confirmação, encerra as sessões do usuário e gera
+um novo código de uso único, válido por 24 horas. No próximo login, o usuário
+é direcionado ao cadastro de senha. Se o código expirar, um administrador deve
+gerar outro pela mesma ação. O reset do próprio administrador também encerra
+sua sessão: copie o código antes de fechar o modal.
+
+- **Administrador:** acesso completo.
+- **Usuário normal:** sem acesso às configurações ou importação de Access Points;
+  mapas disponíveis apenas para visualização, sem criação, edição ou publicação.
+
+O sistema impede a remoção do último perfil Administrador. Alterações de perfil
+ou de nome de usuário invalidam as sessões anteriores. Senhas são armazenadas
+com PBKDF2; sessões expiram após 30 minutos de inatividade.
+Em instalações com HTTPS, configure `SESSION_COOKIE_SECURE=true`.

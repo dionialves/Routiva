@@ -91,7 +91,7 @@
       fragment.append(tr);
     }
     $('rows').replaceChildren(fragment);
-    $('state').textContent = rows.length === 0 ? 'Nenhum AP cadastrado. Clique em Importar para definir seus Access Points.' : filtered.length === 0 ? 'Nenhum AP encontrado para esta busca.' : `${filtered.length} Access Point(s). Clientes e última leitura refletem a última consulta válida na página do AP.`;
+    $('state').textContent = rows.length === 0 ? (document.querySelector('meta[name="is-admin"]')?.content === 'false' ? 'Nenhum AP cadastrado.' : 'Nenhum AP cadastrado. Clique em Importar para definir seus Access Points.') : filtered.length === 0 ? 'Nenhum AP encontrado para esta busca.' : `${filtered.length} Access Point(s). Clientes e última leitura refletem a última consulta válida na página do AP.`;
     $('page-count').textContent = `Página ${page} de ${pages}`;
     $('previous').disabled = page <= 1; $('next').disabled = page >= pages;
   }

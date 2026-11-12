@@ -17,6 +17,7 @@ import org.springframework.mock.web.MockHttpSession;
 
 @SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:zabbix-settings;DB_CLOSE_DELAY=-1", "spring.datasource.username=sa", "spring.datasource.password=", "zabbix.url=", "zabbix.username=", "zabbix.password=", "collector.enabled=false"})
 @AutoConfigureMockMvc
+@org.springframework.security.test.context.support.WithMockUser(roles = "ADMIN")
 class ZabbixSettingsTests {
     @Autowired MockMvc mvc;
     @Autowired ZabbixSettings settings;
@@ -38,16 +39,16 @@ class ZabbixSettingsTests {
         var session = new MockHttpSession();
         mvc.perform(get("/configuracao/zabbix").session(session)).andExpect(status().isOk());
         String csrf = (String) session.getAttribute("zabbixCsrf");
-        mvc.perform(post("/configuracao/zabbix/conexao").session(session).param("csrf", csrf)
+        mvc.perform(post("/configuracao/zabbix/conexao").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", csrf)
             .param("url", "https://example.test/api_jsonrpc.php").param("username", "api").param("password", "secret-value"))
             .andExpect(status().is3xxRedirection());
-        mvc.perform(post("/configuracao/zabbix/grupos").session(session).param("csrf", csrf).param("ids", "a"))
+        mvc.perform(post("/configuracao/zabbix/grupos").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", csrf).param("ids", "a"))
             .andExpect(redirectedUrl("/configuracao/zabbix/hosts"));
         mvc.perform(get("/configuracao/zabbix/hosts").session(session)).andExpect(status().isOk());
-        mvc.perform(post("/configuracao/zabbix/hosts").session(session).param("csrf", csrf).param("ids", "1"))
+        mvc.perform(post("/configuracao/zabbix/hosts").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", csrf).param("ids", "1"))
             .andExpect(status().is3xxRedirection());
         verify(client, never()).fetchSelected(anySet(), anySet());
-        mvc.perform(post("/configuracao/zabbix/sincronizar").session(session).param("csrf", csrf)).andExpect(status().is3xxRedirection());
+        mvc.perform(post("/configuracao/zabbix/sincronizar").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", csrf)).andExpect(status().is3xxRedirection());
         assertThat(monitor.hosts()).extracting(Host::id).containsExactly("1");
         assertThat(monitor.hosts().getFirst().groups()).containsExactly(a);
         var restored = new ZabbixSettings(repository, mapper, "", "", "");
@@ -62,7 +63,7 @@ class ZabbixSettingsTests {
         assertThat(monitor.hosts()).isEmpty();
         verify(collector, atLeastOnce()).synchronize(List.of());
         assertThatThrownBy(() -> monitor.selectHosts(Set.of("2"))).isInstanceOf(IllegalArgumentException.class);
-        mvc.perform(post("/configuracao/zabbix/sincronizar").session(session).param("csrf", "invalid"))
+        mvc.perform(post("/configuracao/zabbix/sincronizar").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", "invalid"))
             .andExpect(status().isForbidden());
     }
 
@@ -77,15 +78,15 @@ class ZabbixSettingsTests {
         String csrf = (String) session.getAttribute("zabbixCsrf");
         mvc.perform(get("/configuracao/zabbix/inventario")).andExpect(status().isOk())
             .andExpect(jsonPath("$.hosts[0].name").value("Roteador"));
-        mvc.perform(post("/configuracao/zabbix/api/selecao").session(session).param("csrf", csrf)
+        mvc.perform(post("/configuracao/zabbix/api/selecao").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", csrf)
             .param("groups", "g").param("hosts", "h")).andExpect(status().isOk());
         assertThat(settings.current().hosts()).containsExactly("h");
-        mvc.perform(post("/configuracao/zabbix/api/selecao").session(session).param("csrf", csrf)
+        mvc.perform(post("/configuracao/zabbix/api/selecao").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", csrf)
             .param("groups", "g").param("hosts", "invalid")).andExpect(status().isBadRequest());
         assertThat(settings.current().hosts()).containsExactly("h");
-        mvc.perform(post("/configuracao/zabbix/api/selecao").session(session).param("csrf", "invalid"))
+        mvc.perform(post("/configuracao/zabbix/api/selecao").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", "invalid"))
             .andExpect(status().isForbidden());
-        mvc.perform(post("/configuracao/zabbix/api/selecao").session(session).param("csrf", csrf))
+        mvc.perform(post("/configuracao/zabbix/api/selecao").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session).param("csrf", csrf))
             .andExpect(status().isOk());
         assertThat(settings.current().hosts()).isEmpty();
     }
@@ -98,10 +99,10 @@ class ZabbixSettingsTests {
         when(client.fetchSelected(Set.of("json"), Set.of("json-host"))).thenReturn(List.of(h));
         var session = new MockHttpSession();
         mvc.perform(get("/configuracao/zabbix").session(session)).andExpect(status().isOk());
-        mvc.perform(post("/configuracao/zabbix/api/importar").session(session)
+        mvc.perform(post("/configuracao/zabbix/api/importar").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session)
             .header("X-Zabbix-CSRF", "wrong").contentType("application/json")
             .content("{\"hosts\":[\"json-host\"]}")).andExpect(status().isForbidden());
-        mvc.perform(post("/configuracao/zabbix/api/importar").session(session)
+        mvc.perform(post("/configuracao/zabbix/api/importar").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).session(session)
             .header("X-Zabbix-CSRF", session.getAttribute("zabbixCsrf")).contentType("application/json")
             .content("{\"hosts\":[\"json-host\"]}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.result.state").value("completed"))

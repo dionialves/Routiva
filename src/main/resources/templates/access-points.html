@@ -1,17 +1,18 @@
 <!doctype html>
 <html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 <head>
+  <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Access Point • TraceOne</title>
   <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/multi-picker.css?v=20261112-standard"><link rel="stylesheet" href="/access-points.css?v=20261112-import-modal-7">
   <script src="/shell.js" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261112-import-modal-7" defer></script>
-<link rel="stylesheet" href="/query-filters.css?v=20261112-4"><link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-1"></head>
+<link rel="stylesheet" href="/query-filters.css?v=20261112-4"><link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('ap')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
 <main class="page-content availability-page ap-page">
-  <div class="availability-heading page-action-heading"><div class="ap-heading-copy"><div><p class="eyebrow">REDE WIRELESS</p><h1>Access Point</h1><p>Analise seus APs e os clientes conectados à rede wireless outdoor.</p></div></div><button id="ap-import" class="system-button system-button-primary ap-primary query-primary-action" aria-haspopup="dialog" aria-controls="ap-dialog"><span data-ap-icon="upload"></span>Importar</button></div>
+  <div class="availability-heading page-action-heading"><div class="ap-heading-copy"><div><p class="eyebrow">REDE WIRELESS</p><h1>Access Point</h1><p>Analise seus APs e os clientes conectados à rede wireless outdoor.</p></div></div><button id="ap-import" th:hidden="${!isAdmin}" class="system-button system-button-primary ap-primary query-primary-action" aria-haspopup="dialog" aria-controls="ap-dialog"><span data-ap-icon="upload"></span>Importar</button></div>
   <section class="card ap-filter-card query-filter-bar" aria-label="Filtros de Access Points">
     <div class="ap-filters query-filter-row">
       <div class="incident-picker-field incident-host-field query-filter-field"><span id="incident-host-label"><span class="query-filter-label"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>Hosts</span></span><select name="hostId" id="incident-host" multiple hidden aria-hidden="true"></select><details id="incident-host-picker" class="incident-picker"><summary aria-labelledby="incident-host-label incident-host-summary"><span id="incident-host-summary">Todos os hosts</span><svg th:replace="~{shell :: icon('chevron-down')}"></svg></summary><div class="incident-picker-panel"><label><span class="sr-only">Pesquisar host</span><input type="search" id="incident-host-search" placeholder="Pesquisar host ou IP" autocomplete="off"></label><div id="incident-host-options" class="incident-picker-options" role="group" aria-label="Hosts"></div><p id="incident-host-empty" hidden>Nenhum host encontrado.</p></div></details></div>

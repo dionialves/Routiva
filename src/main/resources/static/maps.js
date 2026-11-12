@@ -1,5 +1,6 @@
 'use strict';
 
+const canManageMaps = document.querySelector('meta[name="is-admin"]')?.content !== 'false';
 const $ = id => document.getElementById(id);
 const labels = ['Sem dados', 'Sem incidentes', 'Não classificado', 'Informação', 'Atenção', 'Média', 'Alta', 'Desastre'];
 const colors = ['#687486', '#58bd83', '#a7a9c0', '#00bbd3', '#fced4e', '#ffa059', '#ff0000', '#ed4545'];
@@ -433,6 +434,7 @@ async function refresh(token) {
 }
 
 function openMap(map, edit = false) {
+  if (edit && !canManageMaps) return;
   popSummary.close();
   summaryUpdatedAt = 0;
   summaryFailed = false;
@@ -452,7 +454,7 @@ function openMap(map, edit = false) {
   $('editor').hidden = !edit;
   $('library').hidden = !!map;
   $('workspace').hidden = !map;
-  $('edit').hidden = edit;
+  $('edit').hidden = edit || !canManageMaps;
   $('editor-footer').hidden = $('editor-actions').hidden = !edit;
   $('map-description').textContent = edit ? 'Edite a topologia, adicione elementos, conecte e organize o mapa.' : 'Visualização do mapa de topologia da rede.';
   $('map-title').textContent = map?.layout.name || '';
@@ -532,6 +534,7 @@ function renderList() {
     badge.textContent = published ? 'Publicado' : 'Rascunho';
     row.insertCell().append(badge);
     const actions = row.insertCell();
+    if (!canManageMaps) continue;
     const menu = document.createElement('div');
     menu.className = 'map-options utility-panel';
     menu.popover = 'auto';
@@ -831,7 +834,7 @@ $('save').onclick = async () => {
   try {
     [maps, groups, inventory] = await Promise.all([api(''), api('/groups'), api('/hosts')]);
     renderList();
-    $('create').disabled = false;
+    $('create').disabled = !canManageMaps;
     openMap(null);
   } catch { $('status').textContent = 'Falha ao carregar os mapas. Recarregue a página para tentar novamente.'; }
 })();

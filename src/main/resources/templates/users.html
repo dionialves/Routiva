@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <th:block th:replace="~{shell :: security}"></th:block>
+  <title>Usuários • TraceOne</title><link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/availability.css">
+  <link rel="stylesheet" href="/query-filters.css"><link rel="stylesheet" href="/page-layout.css"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"><link rel="stylesheet" href="/form-dialog.css?v=1"><link rel="stylesheet" href="/users.css?v=2">
+  <script src="/shell.js" defer></script><script src="/users.js?v=2" defer></script>
+</head>
+<body class="availability-dashboard">
+<aside th:replace="~{shell :: sidebar('users')}"></aside>
+<div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
+<main class="page-content availability-page users-page">
+  <div class="availability-heading page-action-heading"><div><p class="eyebrow">CONFIGURAÇÃO</p><h1>Usuários</h1><p>Gerencie os acessos e os perfis do sistema.</p></div>
+    <button id="user-new" type="button" class="system-button system-button-primary query-primary-action" aria-haspopup="dialog" aria-controls="user-dialog"><svg th:replace="~{shell :: icon('plus')}"></svg>Novo usuário</button>
+  </div>
+  <section class="card query-filter-bar" aria-label="Filtros de usuários"><div class="query-filter-row">
+    <label class="query-filter-field"><span class="query-filter-label"><svg th:replace="~{shell :: icon('search')}"></svg>Nome</span><input id="user-search" type="search" placeholder="Buscar usuário por nome…" autocomplete="off"></label>
+  </div></section>
+  <section class="card availability-host-section" aria-labelledby="users-title"><h2 id="users-title">Usuários cadastrados</h2>
+    <p id="users-state" role="status" aria-live="polite">Carregando usuários…</p><button id="users-retry" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg><span>Tentar novamente</span></button>
+    <div class="table-scroll" role="region" aria-label="Usuários cadastrados" tabindex="0"><table class="hosts-table"><thead><tr><th scope="col">Nome</th><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Situação da senha</th><th scope="col">Último acesso</th></tr></thead><tbody id="users-rows"></tbody></table></div>
+  </section>
+</main></div>
+<dialog id="user-dialog" class="settings-panel form-dialog" aria-labelledby="user-dialog-title">
+  <form id="user-form" class="connection-form">
+    <h2 id="user-dialog-title">Novo usuário</h2>
+    <label>Nome<input id="user-name" name="name" required maxlength="120" autocomplete="name" autofocus></label>
+    <label>Usuário<input id="user-username" name="username" required minlength="3" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9.@+_\-]{2,63}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="user-username-help"><small id="user-username-help">Use um e-mail ou nome de usuário de 3 a 64 caracteres: letras, números, ponto, @, +, hífen ou sublinhado.</small></label>
+    <label>Perfil<select id="user-role" name="role" required><option value="USER">Usuário normal</option><option value="ADMIN">Administrador</option></select></label>
+    <p class="user-profile-help">Administrador: acesso completo. Usuário normal: sem configurações, criação ou edição de mapas e importação de Access Points.</p>
+    <p id="user-error" role="alert"></p>
+    <section id="user-reset-confirm" hidden><p>Redefinir a senha encerra as sessões deste usuário e exige um novo código no próximo acesso.</p><button id="user-reset-confirm-button" class="system-button" type="button"><svg th:replace="~{shell :: icon('check')}"></svg><span>Confirmar redefinição</span></button><button id="user-reset-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg><span>Cancelar redefinição</span></button></section>
+    <section id="user-code-panel" hidden aria-labelledby="user-code-title"><h3 id="user-code-title">Código de ativação</h3><p>Entregue este código ao usuário por um canal privado. Ele é exibido somente agora, vale por 24 horas e permite cadastrar a senha no próximo acesso.</p><output id="user-code"></output><button id="user-copy-code" class="system-button" type="button"><svg th:replace="~{shell :: icon('file')}"></svg><span>Copiar código</span></button><p id="user-code-status" role="status"></p></section>
+    <div class="settings-actions"><button id="user-reset" class="system-button" type="button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg><span>Redefinir senha</span></button><button id="user-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg><span id="user-cancel-label">Cancelar</span></button><button id="user-save" class="system-button system-button-primary" type="submit"><svg th:replace="~{shell :: icon('check')}"></svg><span>Salvar</span></button></div>
+  </form>
+</dialog>
+</body></html>

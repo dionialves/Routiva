@@ -29,8 +29,6 @@
 #canvas line { stroke:#8995aa; stroke-width:4; }
 #canvas g { cursor:pointer; }
 #canvas text, #node-preview text { fill:white; font:inherit; }
-dialog.settings-panel { width:min(380px,96vw); max-height:94vh; margin:auto; color:var(--text); }
-dialog::backdrop { background:rgb(3 12 20 / 68%); }
 #element-title { cursor:move; touch-action:none; user-select:none; }
 #element-dialog .group-picker-panel {
   position:fixed; inset:auto; margin:0; min-width:0; overflow:auto; color:var(--text);
@@ -38,21 +36,14 @@ dialog::backdrop { background:rgb(3 12 20 / 68%); }
 #element-dialog .group-picker-results { max-height:22vh; }
 
 #create-dialog { width:min(560px, calc(100vw - 32px)); }
-:is(#map-dialog, #create-dialog, #element-dialog) {
-  box-shadow:0 18px 48px rgb(0 0 0 / 35%);
-}
-:is(#create-title, #map-dialog-title, #element-title) { margin:0 0 6px; font-size:1.5rem; }
 #create-dialog p { margin:0; color:var(--muted); font-size:.875rem; }
-:is(#create-form, #map-form, #element-form) > label { max-width:none; }
 :is(#create-form, #map-form, #element-form) fieldset { min-width:0; padding:0; margin:0; border:0; }
 :is(#create-form, #map-form, #element-form) legend { padding:0; margin-bottom:8px; font-weight:600; }
 .map-dimensions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
 .map-dimensions label { min-width:0; }
 .map-size-note { display:flex; align-items:center; gap:8px; }
-:is(#create-form, #map-form, #element-form) input:focus-visible { outline:1px solid var(--cyan); outline-offset:0; border-color:var(--cyan); }
 #create-form small:empty, #create-error:empty { display:none; }
 #create-form small, #create-form #create-error { color:#ffb5b5; }
-:is(#create-form, #map-form, #element-form) .settings-actions { border-top:1px solid var(--border); padding-top:18px; justify-content:flex-end; }
 #submit-create { background:var(--cyan); color:#062137; font-weight:600; }
 
 .map-stage { position:relative; }

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acesso • TraceOne</title><link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"><link rel="stylesheet" href="/auth.css">
+</head>
+<body class="auth-page"><main class="auth-card">
+  <svg class="auth-brand" viewBox="1190 245 880 245" role="img" aria-label="TraceOne Network"><image href="/traceone-brand.png?v=2" width="2172" height="724"/></svg>
+  <p class="eyebrow">ACESSO AO SISTEMA</p><h1>Entrar</h1>
+  <p>Informe seu usuário para continuar.</p>
+  <p th:if="${param.logout != null}" role="status">Você saiu do sistema.</p>
+  <form th:action="@{/login/usuario}" method="post" class="auth-form">
+    <label>Usuário<input name="username" th:value="${username}" required maxlength="64" autocomplete="username" autofocus autocapitalize="none" spellcheck="false"></label>
+    <p th:if="${error}" class="auth-error" role="alert" th:text="${error}"></p>
+    <button class="system-button system-button-primary" type="submit">Avançar</button>
+  </form>
+</main></body></html>

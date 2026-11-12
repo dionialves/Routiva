@@ -1,4 +1,4 @@
-/* Shared action buttons. Explicit opt-in keeps table sorting, tabs and indicators semantic.
+/* Shared action buttons, matching the Zabbix settings reference (primary blue, secondary dark). Explicit opt-in keeps table sorting, tabs and indicators semantic.
    These declarations override legacy page/ID rules, including dialog-specific button rules. */
 :root {
   --button-height:36px;

@@ -5,7 +5,10 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.ui.ExtendedModelMap;
-import org.thymeleaf.context.Context;
+import org.thymeleaf.context.WebContext;
+import org.thymeleaf.web.servlet.JakartaServletWebApplication;
+import org.springframework.mock.web.MockServletContext;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.thymeleaf.spring6.SpringTemplateEngine;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,7 +34,11 @@ class IncidentsControllerTests {
         var resolver = new ClassLoaderTemplateResolver();
         resolver.setPrefix("templates/"); resolver.setSuffix(".html"); resolver.setTemplateMode("HTML");
         var engine = new SpringTemplateEngine(); engine.setTemplateResolver(resolver);
-        var context = new Context(Locale.forLanguageTag("pt-BR"), model);
+        var servletContext = new MockServletContext();
+        var request = new MockHttpServletRequest(servletContext);
+        var exchange = JakartaServletWebApplication.buildApplication(servletContext)
+            .buildExchange(request, new MockHttpServletResponse());
+        var context = new WebContext(exchange, Locale.forLanguageTag("pt-BR"), model);
         String html = engine.process("incidents", context);
         assertTrue(html.contains("incident-rows"));
         assertTrue(html.contains("Rec.</th>"));

@@ -1033,3 +1033,8 @@ body { background: var(--app-bg); }
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .app-workspace, .nav-chevron, .sidebar .side-nav a, .sidebar-group-toggle { transition: none; }
 }
+
+/* Role-restricted actions must stay hidden despite component display rules. */
+#library #create[hidden], #edit[hidden], #ap-import[hidden] { display:none !important; }
+.profile-name { color:var(--text); font-size:13px; }
+.topbar-actions form { margin:0; }

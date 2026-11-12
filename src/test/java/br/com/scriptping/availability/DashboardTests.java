@@ -31,6 +31,7 @@ import br.com.scriptping.aggregation.MinuteAggregationScheduled;
     }
 )
 @AutoConfigureMockMvc
+@org.springframework.security.test.context.support.WithMockUser(roles = "ADMIN")
 class DashboardTests {
 
     @Test
@@ -53,7 +54,7 @@ class DashboardTests {
             {"layout":{"name":"Backbone","nodes":[{"groupId":"a","name":"A","x":40,"y":80},
             {"groupId":"b","name":"B","x":60,"y":90}],"links":[{"from":"a","to":"b"}]}}
             """;
-        String saved = mvc.perform(post("/api/maps").contentType("application/json").content(draft))
+        String saved = mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(draft))
             .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(1))
             .andExpect(jsonPath("$.layout.publication").value("PUBLICADO"))
             .andExpect(jsonPath("$.updatedAt").isNumber())
@@ -62,12 +63,12 @@ class DashboardTests {
             .andExpect(jsonPath("$.layout.nodes[0].id").value("a"))
             .andReturn().getResponse().getContentAsString();
         mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.links[0].to").value("b"));
-        mvc.perform(post("/api/maps").contentType("application/json").content(saved.replace("PUBLICADO", "RASCUNHO")))
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved.replace("PUBLICADO", "RASCUNHO")))
             .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(2));
         mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.publication").value("RASCUNHO"));
-        mvc.perform(post("/api/maps").contentType("application/json").content(saved.replace("PUBLICADO", "EM_EDICAO")))
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved.replace("PUBLICADO", "EM_EDICAO")))
             .andExpect(status().isBadRequest());
-        mvc.perform(post("/api/maps").contentType("application/json").content(saved))
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved))
             .andExpect(status().isConflict());
     }
 
@@ -81,14 +82,14 @@ class DashboardTests {
                      {"id":"three","hostId":"router","labelPosition":"RIGHT","name":"Host","x":300,"y":80}],
             "links":[{"from":"one","to":"two"}]}}
             """;
-        mvc.perform(post("/api/maps").contentType("application/json").content(draft))
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(draft))
             .andExpect(status().isOk()).andExpect(jsonPath("$.layout.nodes[0].x").value(-1900))
             .andExpect(jsonPath("$.layout.links[0].from").value("one"));
         mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.nodes[2].hostId").value("router"))
             .andExpect(jsonPath("$[0].layout.camera.scale").value(0.4))
             .andExpect(jsonPath("$[0].layout.nodes[2].labelPosition").value("RIGHT"))
             .andExpect(jsonPath("$[0].layout.nodes[0].labelPosition").value("BELOW"));
-        mvc.perform(post("/api/maps").contentType("application/json").content(draft.replace("0.4", "0")))
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(draft.replace("0.4", "0")))
             .andExpect(status().isBadRequest());
     }
 
@@ -98,16 +99,16 @@ class DashboardTests {
         String draft = """
             {"layout":{"name":"Filtro","minimumSeverity":2,"nodes":[],"links":[]}}
             """;
-        mvc.perform(post("/api/maps").contentType("application/json").content(draft))
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(draft))
             .andExpect(status().isOk()).andExpect(jsonPath("$.layout.minimumSeverity").value(2));
         mvc.perform(get("/api/maps"))
             .andExpect(jsonPath("$[0].layout.minimumSeverity").value(2));
         for (String value : java.util.List.of("-1", "6")) {
-            mvc.perform(post("/api/maps").contentType("application/json")
+            mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json")
                 .content(draft.replace("\"minimumSeverity\":2", "\"minimumSeverity\":" + value)))
                 .andExpect(status().isBadRequest());
         }
-        mvc.perform(post("/api/maps").contentType("application/json")
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json")
             .content(draft.replace("\"minimumSeverity\":2,", "")))
             .andExpect(status().isOk()).andExpect(jsonPath("$.layout.minimumSeverity").value(0));
     }

@@ -113,6 +113,6 @@ docker compose exec -T collector routiva-collector --health | jq '{coletor: .col
 
 - The Map library search also uses the shared page-query layout, with the search icon and label above the field.
 
-- Primary page actions (including “Importar” in Access Points and “Novo mapa”) use `query-primary-action`: teal background, cyan border, white text, leading action icon, and shared height and typography.
+- All application action buttons follow the Zabbix settings reference through `buttons.css`: `system-button system-button-primary` for blue primary actions and `system-button` for dark bordered secondary/cancel actions. Use 36px height, 12px/600 typography, 6px corners, 16px leading icons, and an 8px icon/text gap. Do not override these styles per page or enlarge heading actions. `query-primary-action` is only a placement hook for primary page actions (including “Importar”, “Novo mapa”, and “Novo usuário”).
 
 - Place “Importar” (Access Points) and “Novo mapa” in the upper-right page heading, aligned with the title, outside the filter bar. Use `page-action-heading` and preserve the shared `query-primary-action` style.

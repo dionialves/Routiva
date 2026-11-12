@@ -120,28 +120,8 @@
   #library .map-library-filters .query-filter-field { flex:1 1 100%; width:100%; }
 }
 
-/* Primary page action shared by Importar and Novo mapa. */
-#library #create.query-primary-action,
-.ap-page #ap-import.query-primary-action {
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  height:46px;
-  padding:9px 12px;
-  border:1px solid var(--accent, #00d3e0);
-  border-radius:6px;
-  background:#007c8c;
-  color:#fff;
-  font:600 13px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  transition:background .15s, border-color .15s;
-}
-#library #create.query-primary-action:enabled:hover,
-.ap-page #ap-import.query-primary-action:enabled:hover { background:#0095a3; }
-#library #create.query-primary-action:focus-visible,
-.ap-page #ap-import.query-primary-action:focus-visible { outline:2px solid var(--accent, #00d3e0); outline-offset:3px; }
-.query-primary-action > svg { width:18px; height:18px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; }
-
+/* Action colors, height, typography and icons come exclusively from buttons.css.
+   query-primary-action is only a placement hook for page-heading actions. */
 /* Primary actions belong to the page heading, outside the query controls. */
 .availability-page .page-action-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
 .page-action-heading > .query-primary-action { flex-shrink:0; margin-left:auto; }

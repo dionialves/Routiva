@@ -1,12 +1,13 @@
 <!doctype html>
 <html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 <head>
+  <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/style.css?v=20261109-2"><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <link rel="stylesheet" href="/maps.css?v=20261112-name-link"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261110-5" defer></script><script src="/maps.js?v=20261112-name-link" defer></script>
+  <link rel="stylesheet" href="/form-dialog.css?v=1"><link rel="stylesheet" href="/maps.css?v=20261112-name-link"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261110-5" defer></script><script src="/maps.js?v=20261112-name-link" defer></script>
   <link rel="stylesheet" href="/query-filters.css?v=20261112-4">
-<link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-1"></head>
+<link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('maps')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -14,7 +15,7 @@
   <section id="library" class="availability-page">
     <div class="availability-heading page-action-heading"><div><p class="eyebrow">TOPOLOGIA DE REDE</p>
       <h1>Mapas de rede</h1><p>Visualize e organize os mapas de topologia da sua rede, com seus elementos e conexões.</p>
-    </div><button type="button" id="create" class="system-button system-button-primary map-action query-primary-action" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Novo mapa</button></div>
+    </div><button type="button" id="create" th:hidden="${!isAdmin}" class="system-button system-button-primary map-action query-primary-action" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Novo mapa</button></div>
     <section class="card map-library-filters query-filter-bar" aria-label="Filtros dos mapas de rede">
       <div class="hosts-toolbar query-filter-row">
         <label class="host-search query-filter-field"><span class="query-filter-label"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Buscar mapa por nome</span><input type="search" id="map-search" placeholder="Buscar mapa por nome…" autocomplete="off"></label>
@@ -41,7 +42,7 @@
         <p id="map-description">Visualização do mapa de topologia da rede.</p>
       </div>
       <div class="map-view-controls">
-      <button id="edit" class="system-button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-1 5 5-1L21 7l-4-4Zm10-10 4 4"/></svg>Editar</button></div>
+      <button id="edit" th:hidden="${!isAdmin}" class="system-button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-1 5 5-1L21 7l-4-4Zm10-10 4 4"/></svg>Editar</button></div>
       <div id="editor-actions" class="settings-actions" hidden><button id="properties" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8m5 0h3M4 17h3m5 0h8M17 7a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M12 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/></svg>Propriedades do mapa</button><button id="cancel" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button id="save" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="map-save-icon" d="M3 3h14l4 4v14H3Zm4 0v6h9V3M7 21v-8h10v8"/></svg><span id="save-label">Salvar mapa</span></button></div></div>
     <div id="editor" hidden><div class="settings-actions editor-toolbar" role="group" aria-label="Ferramentas de edição">
       <button id="add" aria-haspopup="dialog" aria-controls="element-dialog" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8m-4-4h8M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"/></svg>Adicionar elemento</button>
@@ -63,7 +64,7 @@
   <div id="editor-footer" hidden><span id="counts"></span></div>
   </section>
   <p id="status" role="status">Carregando mapas…</p>
-  <dialog id="create-dialog" class="settings-panel" aria-labelledby="create-title" aria-describedby="create-description">
+  <dialog id="create-dialog" class="settings-panel form-dialog" aria-labelledby="create-title" aria-describedby="create-description">
     <form id="create-form" class="connection-form" novalidate>
       <div><h2 id="create-title">Novo mapa</h2>
         <p id="create-description">Dê um nome ao mapa para começar a organizar sua topologia.</p>
@@ -75,7 +76,7 @@
         <button type="submit" id="submit-create" class="system-button system-button-primary"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#plus"></use></svg><span id="submit-create-label">Criar mapa</span></button></div>
     </form>
   </dialog>
-  <dialog id="map-dialog" class="settings-panel" aria-labelledby="map-dialog-title"><form class="connection-form" id="map-form">
+  <dialog id="map-dialog" class="settings-panel form-dialog" aria-labelledby="map-dialog-title"><form class="connection-form" id="map-form">
     <h2 id="map-dialog-title">Propriedades do mapa</h2>
     <label>Nome do mapa<input id="name" required maxlength="120"></label>
     <label>Severidade mínima dos incidentes<select id="minimum-severity">
@@ -95,7 +96,7 @@
     <div class="settings-actions"><button type="button" id="close-map" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button type="submit" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Aplicar alterações</span></button></div>
     <p id="map-error" role="alert"></p>
   </form></dialog>
-  <dialog id="element-dialog" class="settings-panel" aria-labelledby="element-title"><form class="connection-form" id="element-form">
+  <dialog id="element-dialog" class="settings-panel form-dialog" aria-labelledby="element-title"><form class="connection-form" id="element-form">
     <div class="element-heading">
       <h2 id="element-title">Elemento do mapa</h2>
       <button type="button" id="close-element" aria-label="Fechar" title="Fechar" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg><span>Fechar</span></button>
