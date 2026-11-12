@@ -56,6 +56,15 @@ class AccessPointTests {
         assertEquals("Novo nome", service.pageHost("42").name());
         assertThrows(ResponseStatusException.class, () -> service.read("42", "wireless", null));
     }
+    @Test void exposesCurrentInventoryGroupsWithoutInventingGroupsForMissingHosts() {
+        var groups = List.of(new Host.Group("outdoor", "Outdoor"));
+        when(inventory.hosts()).thenReturn(List.of(new Host("42", "AP Outdoor", "192.0.2.42", groups)));
+        service.define(List.of("42"));
+        assertEquals(groups, service.list().getFirst().groups());
+        when(inventory.hosts()).thenReturn(List.of());
+        assertTrue(service.list().getFirst().groups().isEmpty());
+        assertFalse(service.list().getFirst().available());
+    }
     @Test void onlyValidProviderReadingsUpdateClientCounts() {
         service.define(List.of("42"));
         when(provider.read(host, "wireless", null)).thenReturn(new EquipmentProvider.Snapshot(123, List.of(Map.of("mac-address", "AA")), ""));

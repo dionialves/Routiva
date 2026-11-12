@@ -6,6 +6,8 @@ const source = fs.readFileSync(require('node:path').join(__dirname, '../../main/
 function surface(search = '') {
   class Element {
     constructor(text = '', value = '') { this.textContent = text; this.value = value; this.children = []; this.listeners = {}; this.dataset = {}; this.style = {}; this.classList={toggle(){},contains(){return false;}}; }
+    get options() { return this._options || this.children; }
+    set options(value) { this._options = value; }
     append(...items) { this.children.push(...items); }
     add(item) { this.append(item); }
     replaceChildren(...items) { this.children = items; }

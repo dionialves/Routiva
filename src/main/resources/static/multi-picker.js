@@ -2,6 +2,11 @@
 (() => {
   const $ = id => document.getElementById(id);
   window.setupMultiPicker = function(kind, select, allLabel, onChange = () => {}) {
+    const listeners = [];
+    const listen = (element, type, handler) => {
+      element.addEventListener(type, handler);
+      listeners.push(() => element.removeEventListener(type, handler));
+    };
     const menu = $(`incident-${kind}-picker`);
     const search = $(`incident-${kind}-search`);
     const container = $(`incident-${kind}-options`);
@@ -10,9 +15,9 @@
     allRow.className = 'incident-picker-all';
     const allCheckbox = document.createElement('input'); allCheckbox.type = 'checkbox';
     const allText = document.createElement('span');
-    allText.textContent = kind === 'group' ? 'Todos os grupos de hosts' : 'Todos os Hosts';
+    allText.textContent = kind === 'group' ? 'Todos os grupos de hosts' : kind === 'name' ? 'Todos os incidentes' : 'Todos os Hosts';
     allRow.append(allCheckbox, allText); container.append(allRow);
-    allCheckbox.addEventListener('change', () => {
+    listen(allCheckbox, 'change', () => {
       for (const option of select.options) {
         if (!option.disabled) option.selected = allCheckbox.checked;
       }
@@ -24,19 +29,20 @@
       const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
       const text = document.createElement('span'); text.textContent = option.textContent;
       label.append(checkbox, text); container.append(label);
-      checkbox.addEventListener('change', () => {
+      listen(checkbox, 'change', () => {
         option.selected = checkbox.checked;
         onChange();
         refresh();
       });
       return { option, checkbox, label };
     });
+    const normalize = value => value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR');
     function refresh() {
-      const query = search.value.trim().toLocaleLowerCase('pt-BR');
+      const query = normalize(search.value.trim());
       let visible = 0;
       for (const { option, checkbox, label } of entries) {
         checkbox.checked = option.selected;
-        label.hidden = option.disabled || !option.textContent.toLocaleLowerCase('pt-BR').includes(query);
+        label.hidden = option.disabled || !normalize(option.textContent).includes(query);
         if (!label.hidden) visible++;
       }
       const available = entries.filter(entry => !entry.option.disabled);
@@ -45,11 +51,11 @@
       allCheckbox.checked = available.length > 0 && selected.length === available.length;
       allCheckbox.indeterminate = selected.length > 0 && selected.length < available.length;
       summary.textContent = !selected.length ? allLabel : selected.length === 1
-        ? selected[0].option.textContent : `${selected.length} ${kind === 'group' ? 'grupos selecionados' : 'hosts selecionados'}`;
+        ? selected[0].option.textContent : `${selected.length} ${kind === 'group' ? 'grupos selecionados' : kind === 'name' ? 'incidentes selecionados' : 'hosts selecionados'}`;
       $(`incident-${kind}-empty`).hidden = visible !== 0;
     }
-    search.addEventListener('input', refresh);
-    search.addEventListener('keydown', event => {
+    listen(search, 'input', refresh);
+    listen(search, 'keydown', event => {
       if (event.key !== 'Enter' || event.isComposing) return;
       event.preventDefault();
       event.stopPropagation();
@@ -69,13 +75,14 @@
       menu.open = false;
       menu.querySelector('summary').focus();
     });
-    menu.addEventListener('toggle', () => {
+    listen(menu, 'toggle', () => {
       if (menu.open) search.focus();
     });
-    menu.addEventListener('keydown', event => {
+    listen(menu, 'keydown', event => {
       if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
     });
-    document.addEventListener('click', event => { if (!menu.contains(event.target)) menu.open = false; });
+    listen(document, 'click', event => { if (!menu.contains(event.target)) menu.open = false; });
+    refresh.dispose = () => listeners.forEach(remove => remove());
     refresh(); return refresh;
   };
 })();

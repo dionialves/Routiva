@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function setup() {
+function setup(multiple = false) {
   class Element {
     constructor() {
       this.children = [];
@@ -14,7 +14,8 @@ function setup() {
     }
     append(...children) { this.children.push(...children); }
     replaceChildren() { this.children = []; }
-    setAttribute() {}
+    setAttribute(key, value) { (this.attributes ||= {})[key] = value; }
+    getAttribute(key) { return this.attributes?.[key]; }
     removeAttribute() {}
     addEventListener(type, callback) { this.listeners[type] = callback; }
     emit(type, key) { this.listeners[type]?.({ key, preventDefault() {}, stopPropagation() {} }); }
@@ -23,6 +24,7 @@ function setup() {
     scrollIntoView() {}
   }
   const select = new Element();
+  select.multiple = multiple;
   select.parentElement = new Element();
   select.options = [
     { value: '', textContent: 'Todos os hosts' },
@@ -30,7 +32,7 @@ function setup() {
     { value: 'b', textContent: 'Filial' },
   ];
   Object.defineProperty(select, 'selectedOptions', {
-    get() { return select.options.filter(option => option.value === select.value); },
+    get() { return select.options.filter(option => multiple ? option.selected : option.value === select.value); },
   });
   const window = {};
   vm.runInNewContext(
@@ -38,6 +40,7 @@ function setup() {
     { window, Event, document: {
       getElementById: () => select,
       createElement: () => new Element(),
+      createTextNode: text => text,
       addEventListener() {},
     } },
   );
@@ -97,4 +100,19 @@ test('refreshed inventory replaces stale choices while the picker is open', () =
   ui.input.emit('keydown', 'Enter');
   assert.equal(ui.select.value, 'new');
   assert.equal(ui.select.changes, 1);
+});
+
+
+test('multiple selection keeps the menu open and supports selecting all groups', () => {
+  const ui = setup(true);
+  ui.trigger.emit('click');
+  ui.list.children[1].emit('click');
+  ui.list.children[2].emit('click');
+  assert.equal(ui.select.selectedOptions.length, 2);
+  assert.equal(ui.panel.hidden, false);
+  assert.equal(ui.trigger.children[0].textContent, '2 grupos selecionados');
+  ui.list.children[0].emit('click');
+  assert.equal(ui.select.selectedOptions.length, 0);
+  ui.list.children[0].emit('click');
+  assert.equal(ui.select.selectedOptions.length, 2);
 });

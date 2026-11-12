@@ -100,4 +100,18 @@ class IncidentsControllerTests {
         assertTrue(response.getBody().warning().contains("Não foi possível"));
         assertFalse(response.getBody().warning().contains("secret"));
     }
+    @Test void groupedSnapshotIncludesEveryFilteredEventBeyondGlobalPageLimit() {
+        when(inventory.hosts()).thenReturn(List.of(a));
+        var events = new ArrayList<ZabbixClient.Incident>();
+        for (int i = 0; i < 151; i++) {
+            events.add(new ZabbixClient.Incident("Link", 2, "e" + i, 1000L + i));
+        }
+        when(client.activeIncidents(List.of("1"))).thenReturn(Map.of("1", events));
+        var response = controller.groupedData("g", "1", "2").getBody();
+        assertEquals(151, response.total());
+        assertEquals(151, response.rows().size());
+        assertEquals(1150, response.rows().getFirst().timestamp());
+        assertEquals(1, response.pages());
+        verify(client).activeIncidents(List.of("1"));
+    }
 }

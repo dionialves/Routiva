@@ -4,31 +4,40 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Access Point • TraceOne</title>
   <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/access-points.css?v=20261112-modal-fit-2">
-  <script src="/shell.js" defer></script><script src="/access-points.js" defer></script>
-</head>
+  <link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/multi-picker.css?v=20261112-standard"><link rel="stylesheet" href="/access-points.css?v=20261112-import-modal-7">
+  <script src="/shell.js" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261112-import-modal-7" defer></script>
+<link rel="stylesheet" href="/query-filters.css?v=20261112-4"><link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-1"></head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('ap')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
 <main class="page-content availability-page ap-page">
-  <div class="availability-heading"><div><p class="eyebrow">EQUIPAMENTOS WIRELESS</p><h1>Access Point</h1><p>Analise seus APs e os clientes conectados à rede wireless outdoor.</p></div><button id="ap-import" class="ap-primary" aria-haspopup="dialog" aria-controls="ap-dialog">Importar</button></div>
-  <section class="card availability-host-section">
-    <div class="ap-toolbar"><h2>Access Points cadastrados</h2><label>Buscar AP<input type="search" id="ap-search" placeholder="Nome, IP ou fabricante"></label></div>
+  <div class="availability-heading page-action-heading"><div class="ap-heading-copy"><div><p class="eyebrow">REDE WIRELESS</p><h1>Access Point</h1><p>Analise seus APs e os clientes conectados à rede wireless outdoor.</p></div></div><button id="ap-import" class="system-button system-button-primary ap-primary query-primary-action" aria-haspopup="dialog" aria-controls="ap-dialog"><span data-ap-icon="upload"></span>Importar</button></div>
+  <section class="card ap-filter-card query-filter-bar" aria-label="Filtros de Access Points">
+    <div class="ap-filters query-filter-row">
+      <div class="incident-picker-field incident-host-field query-filter-field"><span id="incident-host-label"><span class="query-filter-label"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>Hosts</span></span><select name="hostId" id="incident-host" multiple hidden aria-hidden="true"></select><details id="incident-host-picker" class="incident-picker"><summary aria-labelledby="incident-host-label incident-host-summary"><span id="incident-host-summary">Todos os hosts</span><svg th:replace="~{shell :: icon('chevron-down')}"></svg></summary><div class="incident-picker-panel"><label><span class="sr-only">Pesquisar host</span><input type="search" id="incident-host-search" placeholder="Pesquisar host ou IP" autocomplete="off"></label><div id="incident-host-options" class="incident-picker-options" role="group" aria-label="Hosts"></div><p id="incident-host-empty" hidden>Nenhum host encontrado.</p></div></details></div>
+
+    </div>
+  </section>
+  <section class="card availability-host-section" aria-labelledby="ap-title">
+    <h2 id="ap-title">Access Points cadastrados</h2>
     <p id="ap-state" role="status" aria-live="polite">Carregando Access Points…</p>
-    <button id="ap-retry" hidden>Tentar novamente</button>
-    <div class="table-scroll"><table class="hosts-table"><thead><tr><th scope="col">Nome</th><th scope="col">IP</th><th scope="col">Fabricante / Modelo</th><th scope="col">Status</th><th scope="col">Clientes conectados</th><th scope="col">Última leitura</th></tr></thead><tbody id="ap-rows"></tbody></table></div>
-    <div class="ap-pagination"><button id="ap-previous">← Anterior</button><span id="ap-page-count"></span><button id="ap-next">Próxima →</button></div>
+    <button id="ap-retry" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>Tentar novamente</button>
+    <div class="table-scroll" role="region" aria-label="Access Points cadastrados" tabindex="0"><table class="hosts-table"><thead><tr><th scope="col" aria-sort="none"><button type="button" id="ap-sort-name">Nome<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-ip">IP<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-manufacturer">Fabricante / Modelo<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-available">Status<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-connectedClients">Clientes conectados<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-lastCollectedAt">Última leitura<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="ap-rows"></tbody></table></div>
+    <nav class="ap-pagination" aria-label="Paginação dos Access Points"><button id="ap-previous" disabled class="system-button"><span data-ap-icon="chevron-left"></span>Anterior</button><span id="ap-page-count">Página 1 de 1</span><button id="ap-next" disabled class="system-button"><span data-ap-icon="chevron-right"></span>Próxima</button></nav>
   </section>
 </main></div>
-<dialog id="ap-dialog" aria-labelledby="ap-dialog-title">
-  <header class="ap-toolbar"><div><p class="eyebrow">INVENTÁRIO ZABBIX</p><h2 id="ap-dialog-title">Importar Access Points</h2></div><button id="ap-close" aria-label="Fechar importação">✕</button></header>
-  <p>Selecione os equipamentos que conectam clientes wireless outdoor. Hosts já definidos como AP não aparecem nesta lista.</p>
+<dialog id="ap-dialog" aria-labelledby="ap-dialog-title" aria-describedby="ap-dialog-description">
+  <header class="ap-import-header">
+    <span class="ap-import-icon" data-ap-icon="upload"></span>
+    <div class="ap-import-copy"><p class="eyebrow">INVENTÁRIO ZABBIX</p><h2 id="ap-dialog-title">Importar Access Points</h2><p id="ap-dialog-description">Selecione os equipamentos que conectam clientes wireless outdoor. Hosts já definidos como AP não aparecem nesta lista.</p></div>
+    <button id="ap-close" aria-label="Fechar importação" class="system-button"><span data-ap-icon="x"></span><span>Fechar importação</span></button>
+  </header>
   <div class="ap-transfer">
-    <section><label for="ap-available-search">Hosts disponíveis <span id="ap-available-count"></span></label><input type="search" id="ap-available-search" placeholder="Buscar por nome ou IP"><select id="ap-available" multiple size="12" aria-label="Hosts disponíveis"></select></section>
-    <div class="ap-arrows"><button id="ap-select" aria-label="Mover hosts selecionados para a direita" title="Selecionar como AP">→</button><button id="ap-remove" aria-label="Retirar hosts selecionados para a esquerda" title="Retirar seleção">←</button></div>
-    <section><label for="ap-selected-search">Hosts selecionados <span id="ap-selected-count"></span></label><input type="search" id="ap-selected-search" placeholder="Buscar na seleção"><select id="ap-selected" multiple size="12" aria-label="Hosts selecionados"></select></section>
+    <section aria-labelledby="ap-available-title"><h3 id="ap-available-title">Hosts disponíveis <span id="ap-available-count">(0)</span></h3><label class="ap-import-search"><span data-ap-icon="search"></span><input type="search" id="ap-available-search" placeholder="Buscar por nome ou IP" aria-label="Buscar por nome ou IP" autocomplete="off"></label><div class="ap-host-list" id="ap-available" role="group" aria-label="Hosts disponíveis"></div></section>
+    <div class="ap-arrows"><button id="ap-select" aria-label="Adicionar hosts marcados" title="Selecionar como AP" disabled class="system-button"><span data-ap-icon="arrow-right"></span><span>Adicionar</span></button><button id="ap-remove" aria-label="Retirar hosts marcados" title="Retirar seleção" disabled class="system-button"><span data-ap-icon="arrow-left"></span><span>Retirar</span></button></div>
+    <section aria-labelledby="ap-selected-title"><h3 id="ap-selected-title">Hosts selecionados <span id="ap-selected-count">(0)</span></h3><label class="ap-import-search"><span data-ap-icon="search"></span><input type="search" id="ap-selected-search" placeholder="Buscar na seleção" aria-label="Buscar na seleção" autocomplete="off"></label><div class="ap-host-list" id="ap-selected" role="group" aria-label="Hosts selecionados"></div></section>
   </div>
-  <p id="ap-import-state" role="status" aria-live="polite"></p>
-  <footer><button id="ap-cancel">Cancelar</button><button id="ap-save" class="ap-primary" disabled>Definir como AP</button></footer>
+  <div class="ap-import-feedback"><span id="ap-import-status-icon" data-ap-icon="info"></span><p id="ap-import-state" role="status" aria-live="polite">Marque os hosts e use → para selecionar ou ← para retirar.</p></div>
+  <footer><button id="ap-cancel" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button id="ap-save" class="system-button system-button-primary ap-primary" disabled><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#download"></use></svg><span id="ap-save-label">Definir como AP</span></button></footer>
 </dialog>
 </body></html>

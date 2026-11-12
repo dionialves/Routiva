@@ -76,6 +76,9 @@ class AvailabilitySnapshotCacheTests extends MinuteTestSupport {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM availability_snapshot", Integer.class)).isEqualTo(1);
         var restored=new AvailabilitySnapshotCache(builder, repository, monitor);
         restored.restore();
+        assertThat(restored.query(1440, "g,other").view().report().total().technical()).isEqualTo(50d);
+        assertThat(restored.query(1440, "g,other").view().hosts()).hasSize(2);
+        assertThat(restored.query(1440, "__none__").view().hosts()).isEmpty();
         clearInvocations(builder, repository, monitor);
         for (int minutes : AvailabilityDashboard.MINUTES) {
             var original=cache.query(minutes, "").view();

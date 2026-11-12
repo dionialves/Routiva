@@ -1,0 +1,72 @@
+/* Shared action buttons. Explicit opt-in keeps table sorting, tabs and indicators semantic.
+   These declarations override legacy page/ID rules, including dialog-specific button rules. */
+:root {
+  --button-height:36px;
+  --button-radius:6px;
+  --button-border:#355569;
+  --button-background:#132b3c;
+  --button-primary:#2383ef;
+}
+button.system-button {
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  flex-direction:row !important;
+  gap:8px !important;
+  box-sizing:border-box;
+  width:auto !important;
+  min-width:0 !important;
+  height:var(--button-height) !important;
+  min-height:var(--button-height) !important;
+  padding:7px 13px !important;
+  border:1px solid var(--button-border) !important;
+  border-radius:var(--button-radius) !important;
+  background:var(--button-background) !important;
+  color:#f8fafc !important;
+  font:600 12px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  letter-spacing:normal;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:background .16s, border-color .16s;
+}
+button.system-button-primary {
+  background:var(--button-primary) !important;
+  border-color:#489cff !important;
+}
+button.system-button:hover:not(:disabled) {
+  background:#1c3b50 !important;
+  border-color:#6b9ab5 !important;
+}
+button.system-button-primary:hover:not(:disabled) { background:#1473d9 !important; border-color:#74b5ff !important; }
+button.system-button:focus-visible { outline:2px solid #53cfee; outline-offset:3px; }
+button.system-button:disabled { opacity:.45 !important; cursor:default; }
+button.system-button[aria-busy=true] { cursor:progress; }
+button.system-button[aria-pressed=true] { border-color:#53cfee !important; box-shadow:inset 0 0 0 1px #53cfee; }
+button.system-button > svg,
+button.system-button > [data-ap-icon] {
+  display:inline-flex;
+  align-items:center;
+  width:16px !important;
+  height:16px !important;
+  flex:0 0 16px;
+  order:-1;
+  margin:0 !important;
+}
+button.system-button svg { fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+button.system-button[hidden] { display:none !important; }
+#editor-actions, .settings-actions, .zabbix-actions, .ap-pagination { flex-wrap:wrap; }
+#map-tools { justify-items:end; }
+#map-tools button.system-button > span { max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+#maps .map-options button.system-button { width:100% !important; justify-content:flex-start !important; margin-block:3px; }
+@media(prefers-reduced-motion:reduce) { button.system-button { transition:none; } }
+
+#ap-dialog .ap-transfer { grid-template-columns:minmax(0,1fr) 112px minmax(0,1fr); }
+#ap-dialog .ap-arrows { align-items:stretch; }
+@media(max-width:760px) {
+  #ap-dialog .ap-transfer { grid-template-columns:minmax(0,1fr); }
+  #ap-dialog .ap-arrows { justify-content:center; }
+}
+
+button.system-button-label::after { content:attr(aria-label); }
+button.system-button > [data-ap-icon] svg { width:16px; height:16px; }
+.chart-actions { flex-wrap:wrap; }

@@ -17,14 +17,14 @@ public class AccessPointService {
         this.repository = repository; this.inventory = inventory; this.providers = providers;
     }
     public record Row(String hostId, String name, String ip, String manufacturer, String model,
-        Integer connectedClients, Long lastCollectedAt, boolean available) {}
+        Integer connectedClients, Long lastCollectedAt, boolean available, List<Host.Group> groups) {}
     @Transactional
     public List<Row> list() {
         var hosts = new HashMap<String, Host>();
         inventory.hosts().forEach(h -> hosts.put(h.id(), h));
         repository.all().forEach(ap -> { if (hosts.containsKey(ap.hostId())) repository.refresh(hosts.get(ap.hostId())); });
         return repository.all().stream().map(ap -> new Row(ap.hostId(), ap.name(), ap.ip(), ap.manufacturer(),
-            ap.model(), ap.connectedClients(), ap.lastCollectedAt(), hosts.containsKey(ap.hostId()))).toList();
+            ap.model(), ap.connectedClients(), ap.lastCollectedAt(), hosts.containsKey(ap.hostId()), hosts.containsKey(ap.hostId()) ? hosts.get(ap.hostId()).groups() : List.of())).toList();
     }
     public List<Host> candidates() {
         var registered = new HashSet<String>();

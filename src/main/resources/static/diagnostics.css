@@ -32,21 +32,7 @@
 .diagnostic-info svg { width:16px; height:16px; }
 .diagnostics-dashboard .availability-grid { margin:0 0 18px; gap:14px; }
 .diagnostics-dashboard .card { border-color:#1d3b4e; border-radius:11px; padding:20px; margin-bottom:18px; }
-.diagnostics-dashboard .metric-card { position:relative; overflow:hidden; min-height:170px; padding-bottom:32px!important; }
-.diagnostics-dashboard .metric-operational { --metric-color:#10b981; }
-.diagnostics-dashboard .metric-technical { --metric-color:#06b6d4; }
-.diagnostics-dashboard .metric-loss { --metric-color:#f43f5e; }
-.diagnostics-dashboard .metric-latency { --metric-color:#8b5cf6; }
-.diagnostics-dashboard .metric-title h2 { color:#f1f5f9; font-size:13px; font-weight:600; }
-.diagnostics-dashboard .metric-icon { border-width:1px; width:42px; height:42px; }
-.diagnostics-dashboard .metric-card .metric-value { font-size:30px; margin:15px 0 6px; }
-.metric-value-row { display:flex; align-items:center; gap:9px; }
-.metric-info-button { display:inline-grid; place-items:center; padding:4px; border:0; background:transparent; color:#06b6d4; cursor:pointer; }
-.metric-info-button svg { width:16px; height:16px; }
-.metric-decoration { display:none; }
-.diagnostics-dashboard .metric-decoration { display:block; position:absolute; bottom:0; left:0; width:100%; height:25px; pointer-events:none; color:var(--metric-color); fill:currentColor; fill-opacity:.08; stroke:currentColor; stroke-opacity:.3; stroke-width:1; }
-.metric-explanation { max-width:min(340px,calc(100vw - 32px)); color:#f1f5f9; background:#102a3d; border:1px solid #1d3b4e; border-radius:10px; padding:18px; font-size:13px; line-height:1.6; }
-.metric-formula { margin:10px 0; font-size:12px; color:#b0c1d2; }
+
 .diagnostics-dashboard h2 { display:flex; align-items:center; gap:10px; }
 .diagnostics-dashboard .availability-chart-heading { gap:12px; flex-wrap:wrap; }
 .diagnostics-dashboard .chart-actions { margin-left:auto; }
@@ -102,15 +88,12 @@
  .diagnostic-charts { grid-template-columns:1fr; }
  .host-summary { gap:10px; }
  .host-summary > span + span { border:0; padding:0; }
- .diagnostics-dashboard .metric-title { gap:8px; }
- .diagnostics-dashboard .metric-title h2 { font-size:12px; }
- .diagnostics-dashboard .metric-icon { width:34px; height:34px; }
+
+
+
 }
 .diagnostics-dashboard .chart-card .section-icon svg { width:20px; height:20px; min-height:0; }
 .diagnostics-dashboard .chart-card .diagnostic-chart-empty svg { width:22px; height:22px; min-height:0; }
-.availability-page .metric-info-button { display:inline-grid; padding:3px; border:0; background:transparent; color:var(--metric-color,#06b6d4); border-radius:50%; }
-.diagnostics-dashboard .metric-value-row { margin:18px 0 10px; min-height:38px; }
-.diagnostics-dashboard .metric-value-row .metric-value { margin:0; }
 .diagnostics-dashboard .diagnostic-badge { white-space:nowrap; }
 #diagnostic-feedback-icon { color:#f59e0b; flex-shrink:0; }
 #diagnostic-feedback-icon[hidden] { display:none; }
@@ -134,8 +117,8 @@
 .diagnostic-badge.incident-severity-4 { color:#ff0000; background:#ff000026; }
 .diagnostic-badge.incident-severity-5 { color:#ed4545; background:#ed454526; }
 
-/* Group overview keeps the availability table primitives and a single compact panel. */
-#diagnostic-groups > h2 { margin:0 0 14px; font-size:17px; }
+/* Group overview uses separate filter and results panels. */
+#diagnostic-groups .diagnostic-group-results > h2 { margin:0 0 14px; font-size:17px; }
 .group-filters { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:16px; }
 .group-filters label { display:flex; align-items:center; gap:8px; min-width:0; }
 .group-filters .host-search { flex:1 1 260px; max-width:none; margin:0; order:0; }
@@ -178,3 +161,14 @@ a.diagnostic-badge:hover { text-decoration: underline; }
 .group-filters .incident-group-field > span { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 .group-filters .incident-picker-panel input[type="search"] { width:100%; box-sizing:border-box; }
 .group-filters .incident-picker-options input { min-height:0; }
+
+.diagnostics-dashboard .diagnostic-group-filters { padding:16px 18px; margin-bottom:24px; }
+.diagnostic-group-filters .group-filters { margin-bottom:0; }
+
+.groups-results-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px; }
+.groups-results-heading h2 { margin:0; font-size:17px; }
+#groups-updated { margin:0; color:#94a3b8; font-size:12px; }
+#groups-updated::before { content:''; display:inline-block; width:9px; height:9px; margin-right:9px; border-radius:50%; background:#71869b; }
+#groups-updated[data-state=success]::before { background:#0ed3a0; box-shadow:0 0 0 5px #0ed3a015; }
+#groups-updated[data-state=error]::before,
+#groups-updated[data-state=partial]::before { background:#fbbf24; }

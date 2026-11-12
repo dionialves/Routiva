@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Integração Zabbix • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="stylesheet" href="/style.css?v=20261109-2"><link rel="stylesheet" href="/zabbix-settings.css">
+  <link rel="stylesheet" href="/style.css?v=20261109-2"><link rel="stylesheet" href="/zabbix-settings.css?v=20261112-heading-alignment">
   <script src="/shell.js?v=20261109-2" defer></script><script src="/zabbix-import-results.js" defer></script><script src="/zabbix-settings.js" defer></script>
-</head>
+<link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-1"></head>
 <body>
 <aside th:replace="~{shell :: sidebar('settings')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -14,7 +14,7 @@
   <div class="zabbix-status">
     <span id="connection-status" class="connection-badge" data-state="unconfigured" role="status"><svg th:replace="~{shell :: icon('wifi')}"></svg><span id="connection-status-text">Não configurado</span></span>
     <span>Última consulta: <time id="last-query">Ainda não realizada</time></span>
-    <button type="button" id="refresh-inventory" class="button-primary"><svg th:replace="~{shell :: icon('refresh')}"></svg>Atualizar do Zabbix</button>
+    <button type="button" id="refresh-inventory" class="system-button system-button-primary button-primary"><svg th:replace="~{shell :: icon('refresh')}"></svg>Atualizar do Zabbix</button>
   </div>
   <details class="settings-panel" id="connection-details" th:open="${!configured}">
     <summary><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Configuração da conexão</summary>
@@ -23,7 +23,7 @@
       <label class="connection-url">URL da API Zabbix<input type="url" name="url" th:value="${url}" placeholder="https://zabbix.exemplo.com/api_jsonrpc.php" required></label>
       <label>Usuário<input name="username" th:value="${username}" autocomplete="username" required></label>
       <label>Senha<input type="password" name="password" autocomplete="new-password" th:placeholder="${hasPassword} ? 'Deixe em branco para manter a senha salva' : 'Informe a senha'"></label>
-      <div class="settings-actions connection-url"><button type="submit" class="button-primary">Salvar configuração</button><button type="button" id="test-connection"><svg th:replace="~{shell :: icon('wifi')}"></svg>Testar conexão</button></div>
+      <div class="settings-actions connection-url"><button type="submit" class="system-button system-button-primary button-primary"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#download"></use></svg>Salvar configuração</button><button type="button" id="test-connection" class="system-button"><svg th:replace="~{shell :: icon('wifi')}"></svg>Testar conexão</button></div>
     </form>
     <p>Salve os parâmetros antes de testar a conexão.</p><p id="connection-feedback" role="status"></p>
   </details>
@@ -48,7 +48,7 @@
         </div>
         <label class="zabbix-select-all"><input type="checkbox" id="group-all">Selecionar todos os hosts do grupo</label>
         <div class="zabbix-scroll host-table-scroll"><table class="integration-table host-selection-table"><thead><tr><th scope="col"><span class="visually-hidden">Seleção</span></th><th scope="col">Host</th><th scope="col">IP</th><th scope="col">Situação</th></tr></thead><tbody id="host-list"></tbody></table></div>
-        <div class="zabbix-pagination"><button id="previous-page" type="button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="page-label"></span><button id="next-page" type="button">Próxima<svg th:replace="~{shell :: icon('chevron-right')}"></svg></button></div>
+        <div class="zabbix-pagination"><button id="previous-page" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="page-label"></span><button id="next-page" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>Próxima</button></div>
       </section>
     </div>
     <section id="import-result" class="import-results" aria-labelledby="import-results-title" hidden>
@@ -62,11 +62,11 @@
       <div id="import-summary" class="import-summary"></div>
       <div id="import-filters" class="import-filters" role="group" aria-label="Filtrar resultados"></div>
       <div class="import-table-scroll"><table class="integration-table import-table"><thead><tr><th scope="col" id="import-sort-heading" aria-sort="ascending"><button type="button" id="import-sort">Host/ID<svg th:replace="~{shell :: icon('sort')}"></svg></button></th><th scope="col">Categoria</th><th scope="col">Mensagem</th><th scope="col">Status</th></tr></thead><tbody id="import-log"></tbody></table></div>
-      <div class="zabbix-pagination"><button id="import-previous" type="button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="import-page"></span><button id="import-next" type="button">Próxima<svg th:replace="~{shell :: icon('chevron-right')}"></svg></button></div>
+      <div class="zabbix-pagination"><button id="import-previous" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="import-page"></span><button id="import-next" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>Próxima</button></div>
     </section>
     <p class="selection-policy">Desmarcar interrompe futuras sincronizações e preserva os dados históricos.</p>
-    <div class="zabbix-actions"><div class="selection-action-summary"><svg th:replace="~{shell :: icon('monitor')}"></svg><div><strong id="selection-count" role="status"></strong><small id="selection-changes"></small></div></div><button id="cancel-selection" type="button">Cancelar alterações</button><button id="save-selection" type="button" class="button-primary"><svg th:replace="~{shell :: icon('download')}"></svg><span id="save-selection-text">Salvar e importar</span></button></div>
+    <div class="zabbix-actions"><div class="selection-action-summary"><svg th:replace="~{shell :: icon('monitor')}"></svg><div><strong id="selection-count" role="status"></strong><small id="selection-changes"></small></div></div><button id="cancel-selection" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar alterações</button><button id="save-selection" type="button" class="system-button system-button-primary button-primary"><svg th:replace="~{shell :: icon('download')}"></svg><span id="save-selection-text">Salvar e importar</span></button></div>
   </section>
 </main></div>
-<dialog id="import-details" class="import-details" aria-labelledby="import-details-title"><div class="import-detail-heading"><h2 id="import-details-title">Detalhes do resultado</h2><form method="dialog"><button type="submit" class="icon-button" aria-label="Fechar detalhes"><svg th:replace="~{shell :: icon('close')}"></svg></button></form></div><dl id="import-detail-fields"></dl></dialog>
+<dialog id="import-details" class="import-details" aria-labelledby="import-details-title"><div class="import-detail-heading"><h2 id="import-details-title">Detalhes do resultado</h2><form method="dialog"><button type="submit" class="system-button icon-button" aria-label="Fechar detalhes"><svg th:replace="~{shell :: icon('close')}"></svg><span>Fechar detalhes</span></button></form></div><dl id="import-detail-fields"></dl></dialog>
 </body></html>

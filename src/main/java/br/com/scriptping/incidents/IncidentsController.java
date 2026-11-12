@@ -55,7 +55,21 @@ public class IncidentsController {
             @RequestParam(defaultValue = "") String severity, @RequestParam(defaultValue = "date") String sort,
             @RequestParam(defaultValue = "desc") String direction, @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int size) {
-        size = Set.of(10, 25, 50, 100).contains(size) ? size : 50;
+        return query(groupId, hostId, q, severity, sort, direction, page,
+            Set.of(10, 25, 50, 100).contains(size) ? size : 50);
+    }
+
+    // One filtered snapshot: the table paginates each calendar period locally.
+    @GetMapping("/api/incidents/grouped-data")
+    @ResponseBody
+    public ResponseEntity<Page> groupedData(@RequestParam(defaultValue = "") String groupId,
+            @RequestParam(defaultValue = "") String hostId,
+            @RequestParam(defaultValue = "") String severity) {
+        return query(groupId, hostId, "", severity, "date", "desc", 1, Integer.MAX_VALUE);
+    }
+
+    private ResponseEntity<Page> query(String groupId, String hostId, String q, String severity,
+            String sort, String direction, int page, int size) {
         var selectedGroups = Set.copyOf(Arrays.asList(groupId.split(",")));
         var selectedHosts = Set.copyOf(Arrays.asList(hostId.split(",")));
         var selected = inventory.hosts().stream()
@@ -101,7 +115,7 @@ public class IncidentsController {
         if (!ascendingTime) order = order.reversed();
         rows.sort(order.thenComparing(Row::eventId));
         int total = rows.size();
-        int pages = Math.max(1, (total + size - 1) / size);
+        int pages = Math.max(1, (int) ((total + (long) size - 1) / size));
         page = Math.clamp(page, 1, pages);
         int from = Math.min(total, (page - 1) * size);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new Page(

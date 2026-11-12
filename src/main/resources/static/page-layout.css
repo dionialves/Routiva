@@ -1,0 +1,76 @@
+/* Page geometry follows Availability; dialog and settings filters do not opt in. */
+.page-content {
+  --page-heading-gap:28px;
+  --page-filter-height:108px;
+}
+main.page-content.settings-page { padding-top:20px; }
+.page-content .availability-heading,
+.page-content > .page-heading,
+.page-content .host-hero {
+  min-height:83px;
+  margin:0 0 var(--page-heading-gap);
+  gap:24px;
+  align-items:center;
+}
+.page-content .availability-heading h1,
+.page-content > .page-heading h1,
+.page-content .host-hero h1 {
+  margin:5px 0 10px;
+  font-size:30px;
+  line-height:1.25;
+  letter-spacing:-.8px;
+  overflow-wrap:anywhere;
+}
+.page-content .availability-heading p,
+.page-content > .page-heading p,
+.page-content .host-hero p {
+  margin:0;
+  font-size:15px;
+  line-height:normal;
+  color:#b0c1d2;
+}
+.page-content .availability-heading .eyebrow,
+.page-content > .page-heading .eyebrow,
+.page-content .host-hero .eyebrow {
+  font-size:10px;
+  letter-spacing:1.5px;
+  color:#94a3b8;
+}
+.page-content .page-action-heading > .query-primary-action { margin-top:0; }
+.availability-page .query-filter-bar,
+.host-page #host-period-filter.query-filter-bar {
+  min-height:var(--page-filter-height);
+  padding:16px 26px;
+  margin:0 0 24px;
+}
+.availability-page .query-filter-row,
+.host-page #host-period-filter.query-filter-row {
+  align-items:end;
+  gap:24px 50px;
+}
+.availability-page .query-filter-row .query-filter-field,
+.host-page #host-period-filter .query-filter-field {
+  gap:8px;
+}
+.availability-page .query-filter-row .query-filter-label,
+.availability-page .query-filter-row .availability-filter-label {
+  min-height:20px;
+  line-height:20px;
+}
+@media(max-width:700px) {
+  .page-content .availability-heading,
+  .page-content > .page-heading,
+  .page-content .host-hero { flex-wrap:wrap; gap:16px; }
+  .page-content .availability-heading h1,
+  .page-content > .page-heading h1,
+  .page-content .host-hero h1 { font-size:27px; }
+  .page-content .availability-heading p,
+  .page-content > .page-heading p,
+  .page-content .host-hero p { font-size:13px; line-height:1.6; }
+}
+@media(max-width:760px) {
+  .availability-page .query-filter-bar,
+  .host-page #host-period-filter.query-filter-bar { padding:16px; }
+  .availability-page .query-filter-row,
+  .host-page #host-period-filter.query-filter-row { gap:18px; }
+}

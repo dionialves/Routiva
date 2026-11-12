@@ -83,14 +83,15 @@ public class AvailabilitySnapshotCache {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Período inválido");
         var generation=current;
         if (generation==null) return new AvailabilityDashboard.Result(List.of(), null);
-        if (!groupId.isEmpty() && generation.groups.stream().noneMatch(g -> g.id().equals(groupId)))
+        var groupIds = java.util.Arrays.stream(groupId.split(",")).filter(id -> !id.isEmpty()).collect(java.util.stream.Collectors.toSet());
+        if (groupIds.stream().anyMatch(id -> !id.equals("__none__") && generation.groups.stream().noneMatch(g -> g.id().equals(id))))
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo indisponível");
         var key=new ViewKey(minutes, groupId);
         var view=generation.views.get(key);
         if (view==null) {
             var hosts=generation.snapshot.hosts();
             var selected=groupId.isEmpty() ? hosts : hosts.stream()
-                .filter(h -> h.groups().stream().anyMatch(g -> g.id().equals(groupId))).toList();
+                .filter(h -> h.groups().stream().anyMatch(g -> groupIds.contains(g.id()))).toList();
             view=generation.snapshot.view(minutes, selected);
             // Bound derived views; the immutable per-host generation always remains available.
             synchronized (generation.views) {

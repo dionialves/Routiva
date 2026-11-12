@@ -1,18 +1,24 @@
-/* One batched refresh for the current page; durations never query Zabbix. */
+/* One filtered snapshot per refresh; period pagination and durations stay local. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
   const form = $('incident-filters');
   const group = $('incident-group');
   const host = $('incident-host');
+  const incidentName = $('incident-name');
+  let selectedNames = new Set(), refreshNamePicker;
   const initial = new URLSearchParams(location.search);
-  let page = Math.max(1, Number(initial.get('page')) || 1);
+  let snapshot, calendarDay;
+  const periods = [
+    { id: 'today', label: 'Hoje', expanded: true, page: 1 },
+    { id: 'yesterday', label: 'Ontem', expanded: true, page: 1 },
+    { id: 'week', label: 'Últimos 7 dias', expanded: true, page: 1 },
+    { id: 'older', label: 'Anteriores', expanded: false, page: 1 },
+  ];
   const size = 50;
-  let sort = initial.get('sort') === 'duration' ? 'duration' : 'date';
-  let direction = initial.get('direction') === 'asc' ? 'asc' : 'desc';
   const storageKey = 'routiva.incidents.filters';
   const severityOptions = [...document.querySelectorAll('[data-incident-severity]')];
-  const filterKeys = ['groupId', 'hostId', 'severity'];
+  const filterKeys = ['groupId', 'hostId', 'severity', 'incidentNames'];
   function severityValue() {
     const selected = severityOptions.filter(option => option.checked).map(option => option.value);
     return selected.length === severityOptions.length ? '' : selected.length ? selected.join(',') : 'none';
@@ -29,6 +35,8 @@
     params.set('groupId', [...group.options].filter(option => option.selected).map(option => option.value).join(','));
     params.set('hostId', [...host.options].filter(option => option.selected).map(option => option.value).join(','));
     params.set('severity', severityValue());
+    if (selectedNames.size) params.set('incidentNames', JSON.stringify([...selectedNames]));
+    else params.delete('incidentNames');
     return params;
   }
   function saveFilters() {
@@ -50,6 +58,10 @@
       const value = source.get(key);
       for (const option of field.options) option.selected = value.split(',').includes(option.value);
     }
+    try {
+      const names = JSON.parse(source.get('incidentNames') || '[]');
+      if (Array.isArray(names)) selectedNames = new Set(names.filter(name => typeof name === 'string'));
+    } catch {}
     const selected = (source.get('severity') || '').split(',');
     for (const option of severityOptions) option.checked = !source.get('severity') || selected.includes(option.value);
     filterHosts(); updateSeveritySummary();
@@ -82,6 +94,7 @@
     return `${Math.floor(hours / 24)} d ${hours % 24} h`;
   }
   function updateDurations() {
+    if (snapshot && dayNumber(Date.now()) !== calendarDay) render(snapshot);
     document.querySelectorAll('[data-opened-at]').forEach(node => {
       node.textContent = duration(Number(node.dataset.openedAt));
     });
@@ -108,29 +121,128 @@
       $('incident-rows').append(tr);
     }
   }
-  function pagination(data) {
-    const nav = $('incident-pagination'); nav.replaceChildren();
-    function button(label, target, disabled = false, current = false) {
+  const calendarFormat = new Intl.DateTimeFormat('en-CA', {
+    timeZone: document.querySelector('.incidents-page').dataset.timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  function dayNumber(timestamp) {
+    const parts = Object.fromEntries(calendarFormat.formatToParts(new Date(timestamp))
+      .map(part => [part.type, part.value]));
+    return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / 86400000;
+  }
+  function calendarLabel(day, year = true) {
+    return new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'UTC', day: '2-digit', month: '2-digit', ...(year ? { year: 'numeric' } : {}),
+    }).format(new Date(day * 86400000));
+  }
+  function pagination(period, count, container) {
+    const pages = Math.max(1, Math.ceil(count / size));
+    if (pages === 1) return;
+    const nav = document.createElement('nav'); nav.className = 'pagination';
+    nav.setAttribute('aria-label', `Paginação: ${period.label}`);
+    function button(label, target, disabled) {
       const node = document.createElement('button'); node.type = 'button';
-      node.textContent = label; node.disabled = disabled || busy;
-      node.setAttribute('aria-label', label === '‹ Anterior' ? 'Página anterior' : label === 'Próxima ›' ? 'Próxima página' : `Página ${target}`);
-      if (current) node.setAttribute('aria-current', 'page');
-      node.addEventListener('click', () => { if (!busy) { page = target; load(); } });
+      node.className = 'system-button';
+      node.append(icon(target < period.page ? 'chevron-left' : 'chevron-right'), document.createTextNode(label.replace(/[‹›]/g, '').trim())); node.disabled = disabled;
+      node.addEventListener('click', () => { period.page = target; render(snapshot); });
       nav.append(node);
     }
-    button('‹ Anterior', page - 1, page <= 1);
+    button('‹ Anterior', period.page - 1, period.page <= 1);
     const status = document.createElement('span');
-    status.id = 'incident-page-status';
-    status.textContent = `Página ${page} de ${data.pages}`;
+    status.textContent = `Página ${period.page} de ${pages} · ${count} incidentes`;
     nav.append(status);
-    button('Próxima ›', page + 1, page >= data.pages);
+    button('Próxima ›', period.page + 1, period.page >= pages);
+    container.append(nav);
+  }
+  function updateNameOptions(data) {
+    const names = [...new Set([...selectedNames, ...data.rows.map(row => row.name)])]
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    refreshNamePicker?.dispose();
+    incidentName.replaceChildren(...names.map(name => {
+      const option = document.createElement('option');
+      option.value = name; option.textContent = name; option.selected = selectedNames.has(name);
+      return option;
+    }));
+    $('incident-name-options').replaceChildren();
+    refreshNamePicker = window.setupMultiPicker('name', incidentName, 'Todos os incidentes', () => {
+      selectedNames = new Set([...incidentName.options].filter(option => option.selected).map(option => option.value));
+      applied = filters(); saveFilters(); periods.forEach(period => { period.page = 1; });
+      if (snapshot) render(snapshot);
+    });
   }
   function render(data) {
+    snapshot = data;
+    calendarDay = dayNumber(Date.now());
     const fragment = document.createDocumentFragment();
+    const grouped = periods.map(() => []);
+    const matchingRows = selectedNames.size ? data.rows.filter(row => selectedNames.has(row.name)) : data.rows;
+    const total = selectedNames.size ? matchingRows.length : data.total;
+    for (const row of matchingRows) {
+      const age = calendarDay - dayNumber(row.timestamp);
+      grouped[age <= 0 ? 0 : age === 1 ? 1 : age <= 7 ? 2 : 3].push(row);
+    }
+    const labels = [calendarLabel(calendarDay), calendarLabel(calendarDay - 1),
+      `${calendarLabel(calendarDay - 7, false)} a ${calendarLabel(calendarDay - 2, false)}`,
+      `Antes de ${calendarLabel(calendarDay - 7)}`];
+    let visible = 0;
+    periods.forEach((period, index) => {
+      const rows = grouped[index].sort((a, b) => b.timestamp - a.timestamp || a.eventId.localeCompare(b.eventId));
+      if (!rows.length) return;
+      period.page = Math.min(period.page, Math.ceil(rows.length / size));
+      const header = document.createElement('tr'); header.className = 'incident-period';
+      header.dataset.period = period.id;
+      const heading = cell(header); heading.colSpan = 7;
+      const toggle = document.createElement('button'); toggle.type = 'button';
+      toggle.setAttribute('aria-expanded', String(period.expanded));
+
+      const title = document.createElement('strong'); title.textContent = period.label;
+      const dates = document.createElement('span'); dates.className = 'incident-period-dates'; dates.textContent = labels[index];
+      const count = document.createElement('span'); count.className = 'incident-period-count';
+      count.textContent = `${rows.length} ${rows.length === 1 ? 'incidente' : 'incidentes'}`;
+      toggle.append(title, dates, count, icon(period.expanded ? 'chevron-down' : 'chevron-right'));
+      toggle.addEventListener('click', () => {
+        period.expanded = !period.expanded;
+        render(snapshot);
+        document.getElementById(`incident-toggle-${period.id}`)?.focus();
+      });
+      toggle.id = `incident-toggle-${period.id}`;
+      heading.append(toggle); fragment.append(header);
+      const body = document.createDocumentFragment();
+      if (period.expanded) {
+        const start = (period.page - 1) * size;
+        const selected = rows.slice(start, start + size); visible += selected.length;
+        renderRows(selected, body, index);
+        if (rows.length > size) {
+          const footer = document.createElement('tr'); footer.className = 'incident-period-pagination';
+          const td = cell(footer); td.colSpan = 7; pagination(period, rows.length, td); body.append(footer);
+        }
+      }
+      fragment.append(body);
+    });
+    $('incident-rows').replaceChildren(fragment);
+
+    $('incident-total').textContent = `${total} encontrados`;
+    $('incident-updated').textContent = `Última atualização: ${formatDate(data.updatedAt)}`;
+    $('incident-updated').dataset.state = data.warning ? 'partial' : 'success';
+    $('incident-warning').textContent = data.warning; $('incident-warning').hidden = !data.warning;
+    $('incident-empty').hidden = total !== 0;
+    const filtered = filterKeys.some(key => applied.get(key)?.trim());
+    $('incident-empty').querySelector('p').textContent = filtered
+      ? 'Nenhum incidente corresponde aos filtros selecionados' : 'Nenhum incidente ativo encontrado';
+    $('incident-range').textContent = `Exibindo ${visible} de ${total} incidentes`;
+    const params = new URLSearchParams(applied);
+    history.replaceState(null, '', `/incidentes?${params}`);
+  }
+  function renderRows(rows, fragment, index) {
     const severityIcons = ['help', 'info', 'alert', 'circle-alert', 'alert', 'octagon-alert'];
-    for (const row of data.rows) {
+    for (const row of rows) {
       const tr = document.createElement('tr'); tr.dataset.severity = row.severity;
-      cell(tr, formatDate(row.timestamp));
+      const date = cell(tr, formatDate(row.timestamp));
+      date.title = formatDate(row.timestamp);
+      const parts = dateFormat.formatToParts(new Date(row.timestamp));
+      const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+      date.textContent = index < 2 ? `${values.hour}:${values.minute}:${values.second}`
+        : `${values.day}/${values.month}${index === 3 ? '/' + values.year : ''} ${values.hour}:${values.minute}`;
       const severity = document.createElement('span'); severity.className = 'incident-severity';
       severity.append(icon(severityIcons[row.severity] || 'help'), document.createTextNode(row.severityLabel));
       cell(tr).append(severity);
@@ -158,25 +270,7 @@
       recognition.title = row.acknowledged ? 'Incidente reconhecido' : 'Incidente não reconhecido';
       fragment.append(tr);
     }
-    $('incident-rows').replaceChildren(fragment);
-    page = data.page;
-    $('incident-total').textContent = `${data.total} encontrados`;
-    $('incident-updated').textContent = `Última atualização: ${formatDate(data.updatedAt)}`;
-    $('incident-updated').dataset.state = data.warning ? 'partial' : 'success';
-    $('incident-warning').textContent = data.warning; $('incident-warning').hidden = !data.warning;
-    $('incident-empty').hidden = data.total !== 0;
-    const filtered = ['groupId', 'hostId', 'severity'].some(key => applied.get(key)?.trim());
-    $('incident-empty').querySelector('p').textContent = filtered
-      ? 'Nenhum incidente corresponde aos filtros selecionados' : 'Nenhum incidente ativo encontrado';
-    $('incident-range').textContent = `Exibindo ${data.total ? (page - 1) * size + 1 : 0} – ${Math.min(page * size, data.total)} de ${data.total} incidentes`;
-    document.querySelectorAll('[data-incident-sort]').forEach(button => {
-      button.closest('th').setAttribute('aria-sort', button.dataset.incidentSort === sort
-        ? direction === 'asc' ? 'ascending' : 'descending' : 'none');
-    });
-    pagination(data);
-    const params = new URLSearchParams(applied);
-    params.set('page', page); params.set('size', size); params.set('sort', sort); params.set('direction', direction);
-    history.replaceState(null, '', `/incidentes?${params}`);
+
   }
   async function load() {
     if (busy || stopped) return;
@@ -184,15 +278,14 @@
     const requestFilterVersion = filterVersion;
     $('incidents-panel').setAttribute('aria-busy', 'true');
     const params = new URLSearchParams(applied);
-    params.set('page', page); params.set('size', size); params.set('sort', sort); params.set('direction', direction);
     controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await fetch(`/api/incidents?${params}`, { cache: 'no-store', signal: controller.signal });
+      const response = await fetch(`/api/incidents/grouped-data?${params}`, { cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error('Zabbix indisponível');
       const data = await response.json();
       if (stopped || requestFilterVersion !== filterVersion) return;
-      busy = false; render(data); loaded = true; $('incident-error').hidden = true;
+      busy = false; updateNameOptions(data); render(data); loaded = true; $('incident-error').hidden = true;
     } catch {
       if (!stopped && requestFilterVersion === filterVersion) {
         $('incident-error').hidden = false;
@@ -213,7 +306,7 @@
   }
   function applyFilters() {
     clearTimeout(filterTimer);
-    filterHosts(); applied = filters(); saveFilters(); page = 1;
+    filterHosts(); applied = filters(); saveFilters(); periods.forEach(period => { period.page = 1; });
     if (busy) queuedFilters = true;
     else { queuedFilters = false; load(); }
   }
@@ -225,6 +318,7 @@
     saveFilters();
     filterTimer = setTimeout(applyFilters, 300);
   }
+  refreshNamePicker = window.setupMultiPicker('name', incidentName, 'Todos os incidentes');
   const refreshHostPicker = window.setupMultiPicker('host', host, 'Todos os hosts', scheduleFilters);
   window.setupMultiPicker('group', group, 'Todos os grupos', () => { filterHosts(); refreshHostPicker(); scheduleFilters(); });
   group.addEventListener('change', () => { filterHosts(); refreshHostPicker(); });
@@ -247,11 +341,6 @@
     event.preventDefault(); if (busy) return;
     applyFilters();
   });
-  document.querySelectorAll('[data-incident-sort]').forEach(button => button.addEventListener('click', () => {
-    if (busy) return;
-    direction = sort === button.dataset.incidentSort && direction === 'desc' ? 'asc' : 'desc';
-    sort = button.dataset.incidentSort; page = 1; load();
-  }));
   $('incident-retry').addEventListener('click', load);
   window.addEventListener('pagehide', () => {
     stopped = true; controller?.abort(); clearTimeout(refreshTimer); clearTimeout(filterTimer); clearInterval(durationTimer);

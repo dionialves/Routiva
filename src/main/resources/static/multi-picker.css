@@ -14,3 +14,21 @@
 .incident-picker-panel p { color:#a6bdcf; font-size:12px; }
 .incident-picker summary:focus-visible { outline:2px solid #00c9d8; outline-offset:3px; }
 .incident-picker-panel input[type="search"] { box-sizing:border-box; width:100%; height:38px; min-width:0; border:1px solid #486071; border-radius:5px; background:#20313f; color:#eef4fa; padding:8px 12px; }
+
+/* Searchable host group checklist on Availability. */
+.availability-page .group-picker-panel { padding:8px; background:#0b2030; border-color:#496371; box-shadow:0 8px 24px #0004; }
+.availability-page .group-picker-panel > input { height:40px; background:#223342; border-color:#496371; font-weight:600; }
+.availability-page .group-picker-panel > input:focus { outline:2px solid #00c5dc; outline-offset:3px; }
+.availability-page .group-picker-results { max-height:260px; margin-top:4px; scrollbar-color:#65717a #263644; scrollbar-width:thin; }
+.availability-page .group-picker .group-picker-results button { display:flex; align-items:center; gap:10px; min-height:36px; padding:8px 10px; font-weight:600; }
+.availability-page .group-picker .group-picker-results button[aria-selected=true] { color:#e5edf5; background:transparent; }
+.availability-page .group-picker .group-picker-results button:hover,
+.availability-page .group-picker .group-picker-results button.is-active { background:#223b4c; }
+.availability-page .group-picker-check { display:inline-flex; align-items:center; justify-content:center; flex:0 0 16px; height:16px; border:1px solid #728694; border-radius:2px; font-size:15px; line-height:1; }
+.availability-page [aria-selected=true] > .group-picker-check { background:#00bace; border-color:#00bace; color:#073347; }
+.availability-page .availability-filters .group-picker-trigger { background:#223342; border-color:#496371; border-radius:5px; }
+
+/* Shared host and host-group selector appearance. */
+.incident-picker-panel input[type="search"]:focus { outline:2px solid #00c5dc; outline-offset:3px; }
+.incident-picker-options { overscroll-behavior:contain; scrollbar-color:#65717a #263644; scrollbar-width:thin; }
+.incident-picker-options label { min-height:36px; box-sizing:border-box; font-weight:600; }

@@ -5,7 +5,7 @@
   const $ = id => document.getElementById(id);
   const states = { NORMAL: ['Normal', 'normal'], DEGRADADO: ['Atenção', 'warning'], CRITICO: ['Crítico', 'critical'], SEM_DADOS: ['Sem dados', 'neutral'] };
   const severityLabels = ['Não classificada', 'Informação', 'Atenção', 'Média', 'Alta', 'Desastre'];
-  let page = 1, sort = 'name', direction = 'asc', version = 0, controller;
+  let page = 1, sort = 'name', direction = 'asc', version = 0, controller, timer;
   const group = $('incident-group');
   const storageKey = 'routiva.diagnostics.groups.filters';
   try {
@@ -131,12 +131,12 @@
     feedback(data.warning || '');
   }
   async function load(initial = false) {
+    clearTimeout(timer);
     const request = ++version;
     controller?.abort();
     const requestController = new AbortController(); controller = requestController;
     const timeout = setTimeout(() => requestController.abort(), 15000);
     $('diagnostic-groups').setAttribute('aria-busy', 'true');
-    $('groups-refresh').classList.add('refreshing');
     feedback('');
     if (initial) skeleton();
     const params = new URLSearchParams({ minutes: $('group-period').value || '1440', groupId: [...group.options].filter(option => option.selected).map(option => option.value).join(','), status: $('group-status').value, sort, direction, page });
@@ -144,17 +144,25 @@
       const response = await fetch(`/api/diagnostics/group-indicators?${params}`, { cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error('Não foi possível atualizar os grupos. Tente novamente.');
       const data = await response.json();
-      if (request === version) render(data);
+      if (request === version) {
+        render(data);
+        $('groups-updated').textContent = `Última atualização: ${new Date().toLocaleString('pt-BR', {timeZone: 'America/Sao_Paulo'})}`;
+        $('groups-updated').dataset.state = data.warning ? 'partial' : 'success';
+      }
     } catch (error) {
       if (request === version) {
-        if (initial) $('group-rows').replaceChildren();
+        $('groups-updated').dataset.state = 'error';
+        if (initial) {
+          $('group-rows').replaceChildren();
+          $('groups-updated').textContent = 'Atualização indisponível';
+        }
         feedback(error.name === 'AbortError' ? 'A consulta demorou demais. Tente novamente.' : error.message, true);
       }
     } finally {
       clearTimeout(timeout);
       if (request === version) {
         $('diagnostic-groups').setAttribute('aria-busy', 'false');
-        $('groups-refresh').classList.remove('refreshing');
+        timer = setTimeout(() => load(), 10000);
       }
     }
   }
@@ -162,7 +170,6 @@
   window.setupMultiPicker('group', group, 'Todos os grupos', reset);
   $('group-status').addEventListener('change', reset);
   $('group-period').addEventListener('change', reset);
-  $('groups-refresh').addEventListener('click', () => load());
   $('diagnostic-retry').addEventListener('click', () => load());
   $('groups-previous').addEventListener('click', () => { page--; load(); });
   $('groups-next').addEventListener('click', () => { page++; load(); });
@@ -172,7 +179,7 @@
     document.querySelectorAll('[data-group-sort]').forEach(item => item.closest('th').setAttribute('aria-sort', item === button ? direction === 'asc' ? 'ascending' : 'descending' : 'none'));
     reset();
   }));
-  window.addEventListener('pagehide', () => { version++; controller?.abort(); });
+  window.addEventListener('pagehide', () => { version++; clearTimeout(timer); controller?.abort(); });
   window.addEventListener('pageshow', event => { if (event.persisted) load(); });
   load(true);
 })();

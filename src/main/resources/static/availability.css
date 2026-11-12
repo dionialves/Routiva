@@ -163,3 +163,87 @@
 @media (prefers-reduced-motion:reduce) {
     .availability-page.is-loading .card::after { animation:none; display:none; }
 }
+
+/* Shared host rows in Availability and inside a host group. */
+.availability-page .host-list-table { border-collapse:collapse; }
+.availability-page .table-scroll:has(> .host-list-table) { border:1px solid #1d394b; border-radius:7px; overflow:auto; }
+.availability-page .host-list-table thead th { background:#112b3c; color:#bed0dd; font-size:12px; height:42px; box-sizing:border-box; padding:12px 10px; text-align:left; }
+.availability-page .host-list-table tbody tr { background:#0e202e; }
+.availability-page .host-list-table tbody tr:nth-child(even) { background:#102432; }
+.availability-page .host-list-table tbody tr:hover { background:#163243; }
+.availability-page .host-list-table tbody th,
+.availability-page .host-list-table tbody td { height:44px; box-sizing:border-box; padding:12px 10px; border-bottom:1px solid #1d394b; vertical-align:middle; }
+.availability-page .host-list-table tbody th { font-size:13px; font-weight:600; text-align:left; }
+.availability-page .host-list-table tbody th .availability-host-name,
+.availability-page .host-list-table tbody th .availability-host-name:visited { color:#f1f5f9; line-height:20px; text-decoration:none; }
+.availability-page .host-list-table tbody th .availability-host-name:hover { color:#f1f5f9; text-decoration:none; }
+.availability-page .host-list-table tbody th a.availability-host-name:focus-visible { color:#f1f5f9; text-decoration:underline; text-underline-offset:3px; }
+.availability-page .host-list-table tbody th .host-connectivity { width:9px; height:9px; margin-right:10px; vertical-align:middle; }
+#availability-hosts .availability-host-name { display:inline-flex; align-items:baseline; gap:10px; }
+#availability-hosts .availability-host-name::before { content:''; width:9px; height:9px; flex:0 0 9px; border-radius:50%; background:#64748b; align-self:baseline; }
+.availability-page .host-list-table tbody th small.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+
+/* Filter and publication context, matching the compact dashboard header. */
+.availability-page .availability-filters { align-items:center; gap:0; padding:16px 26px; border-color:#204b63; border-radius:12px; background:linear-gradient(110deg,#092334,#081e2d); margin-bottom:20px; }
+.availability-page .availability-period-filter { width:274px; min-width:0; flex:none; }
+.availability-page .availability-filters .group-filter { position:relative; width:290px; min-width:0; margin-left:50px; font-size:14px; }
+.availability-page .availability-filters .group-filter::before { content:''; position:absolute; left:-26px; top:14px; height:45px; width:1px; background:#24516a; }
+.availability-filter-label { display:flex; align-items:center; gap:10px; color:#bdd3e3; font-size:14px; line-height:20px; font-weight:400; }
+.availability-context-icon { width:20px; height:20px; flex:0 0 20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; color:#b6d3e6; }
+.availability-page .availability-filters select,
+.availability-page .availability-filters .group-picker-trigger { height:46px; padding:10px 18px; border:1px solid #2a5870; border-radius:11px; background:#061a28; color:#f1f5f9; font:inherit; font-size:13px; font-weight:600; box-shadow:inset 0 0 0 1px #16354755; }
+.availability-page .availability-filters select { appearance:none; padding-right:40px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23f1f5f9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; }
+.availability-page .availability-filters select:focus-visible,
+.availability-page .availability-filters .group-picker-trigger:focus-visible { outline:2px solid #53cfee; outline-offset:3px; }
+.availability-context { display:flex; align-items:baseline; flex-wrap:wrap; gap:12px 30px; }
+.availability-context-item { display:flex; align-items:center; gap:12px; min-width:0; }
+.availability-status-item { border-left:1px solid #24516a; padding-left:30px; }
+.availability-page .availability-range,
+.availability-page #availability-status { margin:0; font-size:14px; line-height:1.6; color:#bdd3e3; font-variant-numeric:tabular-nums; }
+.availability-coverage-note { display:flex; align-items:center; gap:6px; margin-top:12px; }
+.availability-coverage-note:has(#availability-coverage:empty),
+.availability-range-item:has(#availability-range:empty) { display:none; }
+.availability-coverage-note .availability-context-icon { width:17px; height:17px; flex-basis:17px; color:#50d5f5; }
+.availability-page .availability-coverage-note .note { margin:0; color:#b9d0e0; font-size:13px; line-height:1.6; font-style:italic; }
+@media(max-width:1200px) {
+ .availability-context { gap:10px 20px; }
+ .availability-status-item { border-left:0; padding-left:0; }
+}
+@media(max-width:760px) {
+ .availability-page .availability-filters { align-items:stretch; gap:18px; padding:16px; }
+ .availability-page .availability-filters .availability-period-filter,
+ .availability-page .availability-filters .group-filter { width:100%; min-width:0; margin-left:0; }
+ .availability-page .availability-filters .group-filter::before { display:none; }
+ .availability-context { flex-direction:column; align-items:stretch; }
+ .availability-context-item { align-items:flex-start; gap:8px; }
+ .availability-context-item .availability-context-icon { margin-top:2px; }
+ .availability-coverage-note { align-items:flex-start; }
+ .availability-coverage-note .availability-context-icon { margin-top:2px; }
+}
+
+/* Both dashboards render the same indicator fragment and share its presentation. */
+.availability-page .availability-grid { margin:0 0 18px; gap:14px; }
+.availability-page .availability-grid .card { border-color:#1d3b4e; border-radius:11px; padding:20px; }
+.availability-page .availability-grid .metric-card { position:relative; overflow:hidden; min-height:170px; padding-bottom:32px!important; }
+.availability-page .availability-grid .metric-operational { --metric-color:#10b981; }
+.availability-page .availability-grid .metric-technical { --metric-color:#06b6d4; }
+.availability-page .availability-grid .metric-loss { --metric-color:#f43f5e; }
+.availability-page .availability-grid .metric-latency { --metric-color:#8b5cf6; }
+.availability-page .availability-grid .metric-title h2 { color:#f1f5f9; font-size:13px; font-weight:600; }
+.availability-page .availability-grid .metric-icon { border-width:1px; width:42px; height:42px; }
+.availability-page .availability-grid .metric-card .metric-value { font-size:30px; margin:15px 0 6px; }
+.metric-value-row { display:flex; align-items:center; gap:9px; }
+.metric-info-button { display:inline-grid; place-items:center; padding:4px; border:0; background:transparent; color:#06b6d4; cursor:pointer; }
+.metric-info-button svg { width:16px; height:16px; }
+.metric-decoration { display:none; }
+.availability-page .availability-grid .metric-decoration { display:block; position:absolute; bottom:0; left:0; width:100%; height:25px; pointer-events:none; color:var(--metric-color); fill:currentColor; fill-opacity:.08; stroke:currentColor; stroke-opacity:.3; stroke-width:1; }
+.metric-explanation { max-width:min(340px,calc(100vw - 32px)); color:#f1f5f9; background:#102a3d; border:1px solid #1d3b4e; border-radius:10px; padding:18px; font-size:13px; line-height:1.6; }
+.metric-formula { margin:10px 0; font-size:12px; color:#b0c1d2; }
+.availability-page .availability-grid .metric-value-row { margin:18px 0 10px; min-height:38px; }
+.availability-page .availability-grid .metric-value-row .metric-value { margin:0; }
+.availability-page .metric-info-button { display:inline-grid; padding:3px; border:0; background:transparent; color:var(--metric-color,#06b6d4); border-radius:50%; }
+@media(max-width:760px) {
+ .availability-page .availability-grid .metric-title { gap:8px; }
+ .availability-page .availability-grid .metric-title h2 { font-size:12px; }
+ .availability-page .availability-grid .metric-icon { width:34px; height:34px; }
+}

@@ -480,8 +480,11 @@ let page = 0;
 function action(label, handler) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'map-action';
-  button.textContent = label;
+  button.className = 'map-action system-button';
+  const glyph = svg('svg', {viewBox:'0 0 24 24', 'aria-hidden':true});
+  glyph.append(svg('use', {href:'/icons.svg#' + (label === 'Editar' ? 'settings' : 'check')}));
+  const text = document.createElement('span'); text.textContent = label;
+  button.append(glyph, text);
   button.onclick = handler;
   return button;
 }
@@ -512,8 +515,12 @@ function renderList() {
   for (const map of rows) {
     const row = $('maps').insertRow();
     const layout = map.layout;
-    const title = document.createElement('strong');
+    const title = document.createElement('a');
+    title.className = 'map-name-link';
+    title.href = '#workspace';
     title.textContent = layout.name;
+    title.setAttribute('aria-label', 'Visualizar mapa ' + layout.name);
+    title.addEventListener('click', event => { event.preventDefault(); openMap(map); });
     row.insertCell().append(title);
     for (const value of [layout.nodes.length, layout.links.length,
       map.updatedAt ? new Date(map.updatedAt).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'}) : '—']) {
@@ -547,15 +554,9 @@ function renderList() {
           await persist({...map, layout:{...layout, publication:published ? 'RASCUNHO' : 'PUBLICADO'}});
         } catch (error) { $('status').textContent = error.message; renderList(); }
       }));
-    const view = action('Visualizar', () => openMap(map));
-    view.classList.add('map-view');
-    const icon = svg('svg', {viewBox:'0 0 24 24', width:16, height:16, fill:'none',
-      stroke:'currentColor', 'stroke-width':1.8, 'stroke-linecap':'round', 'stroke-linejoin':'round', 'aria-hidden':true});
-    icon.append(svg('path', {d:'M14 3h7v7m0-7L11 13m-1-9H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-5'}));
-    view.prepend(icon);
     const controls = document.createElement('div');
     controls.className = 'map-row-actions';
-    controls.append(view, toggle, menu);
+    controls.append(toggle, menu);
     actions.append(controls);
   }
   $('maps-empty').hidden = rows.length > 0;
@@ -602,7 +603,7 @@ createForm.onsubmit = async event => {
   createForm.setAttribute('aria-busy', 'true');
   createFields.forEach(field => { field.readOnly = true; });
   $('submit-create').disabled = $('cancel-create').disabled = true;
-  $('submit-create').textContent = 'Criando…';
+  $('submit-create-label').textContent = 'Criando…';
   try {
     const saved = await persist({layout:{name, publication:'RASCUNHO', nodes:[], links:[]}});
     createDialog.close();
@@ -614,7 +615,7 @@ createForm.onsubmit = async event => {
   } finally {
     createFields.forEach(field => { field.readOnly = false; });
     $('submit-create').disabled = $('cancel-create').disabled = false;
-    $('submit-create').textContent = 'Criar mapa';
+    $('submit-create-label').textContent = 'Criar mapa';
     createForm.removeAttribute('aria-busy');
   }
 };

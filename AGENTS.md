@@ -99,3 +99,20 @@ docker compose exec -T collector routiva-collector --health | jq '{coletor: .col
 - Auto-detects Zabbix version: 6.0/6.2 uses JSON-RPC `auth` field; 6.4+ uses Bearer header.
 - Inventory syncs every 60s. Failed sync keeps last inventory and shows error on dashboard.
 - No API token needed — session-based auth via `user.login` / `user.logout`.
+
+## UI standard — host and host-group search
+
+- Host and host-group selection must use the searchable dropdown checklist shown in the existing shared multi-picker: dark panel, search at the top, cyan checkboxes, a select-all row, scrollable results, and a selected-count summary.
+- Reuse `templates/multi-picker.html`, `static/multi-picker.js`, and `static/multi-picker.css`; do not introduce a new visual style per page. The Availability adapter in `group-picker.js` must use the same shared stylesheet.
+- Search ignores case and accents, changes only the visible options, and preserves selection. Multiple selection keeps the menu open. Support keyboard navigation, Escape, focus indication, empty results, and closing on outside click.
+- Use this standard for new and updated host/group selectors. Preserve single selection where the operation accepts only one host or group (for example a map element). Plain text search over an already visible table remains a table filter.
+
+- Availability filter values (including Period and Host group) share the application font family at 13px, weight 600, matching the Host group selector. Keep typography in their common CSS rule rather than per-control overrides.
+
+- Page-level host, host-group, and period queries use `query-filters.css`: a shared dark bordered bar, icon and visible label above each control, 46px controls, 13px/600 values, and separators between fields. Use `query-filter-bar`, `query-filter-row`, `query-filter-field`, and `query-filter-label` in templates. Stack fields on small screens. This layout applies to Availability, Incidents, Access Points, group lists/details, and host details. Settings and the Access Point import modal are explicitly excluded; never target their controls through global selectors.
+
+- The Map library search also uses the shared page-query layout, with the search icon and label above the field.
+
+- Primary page actions (including “Importar” in Access Points and “Novo mapa”) use `query-primary-action`: teal background, cyan border, white text, leading action icon, and shared height and typography.
+
+- Place “Importar” (Access Points) and “Novo mapa” in the upper-right page heading, aligned with the title, outside the filter bar. Use `page-action-heading` and preserve the shared `query-primary-action` style.

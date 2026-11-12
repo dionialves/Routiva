@@ -7,11 +7,13 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 async function surface(respond, options = {}) {
   class Element {
     constructor() { this.children = []; this.listeners = {}; this.dataset = {}; this.attributes = {}; this.value = ''; this.hidden = true; this.options = []; }
-    append(...nodes) { this.children.push(...nodes); }
-    replaceChildren(...nodes) { this.children = nodes; }
+    append(...nodes) { for (const node of nodes) this.children.push(...(node.fragment ? node.children : [node])); }
+    replaceChildren(...nodes) { this.children = nodes; this.options = nodes; }
     setAttribute(k, v) { this.attributes[k] = v; }
     addEventListener(k, fn) { this.listeners[k] = fn; }
+    removeEventListener(k, fn) { if (this.listeners[k] === fn) delete this.listeners[k]; }
     emit(k) { this.listeners[k]?.({ preventDefault() {} }); }
+    focus() {}
     closest() { return this; }
     querySelector() { return this.p ||= new Element(); }
   }
@@ -34,10 +36,10 @@ async function surface(respond, options = {}) {
   const timers = new Map(), intervals = [], requests = [], events = {};
   const main = new Element(); main.dataset.timeZone = 'America/Sao_Paulo';
   const context = {
-    document: { getElementById: id => elements[id], createElement: () => new Element(), createElementNS: () => new Element(), createTextNode: text => ({ textContent: text }), createDocumentFragment: () => new Element(), querySelector: () => main, addEventListener() {}, querySelectorAll: selector => selector === '[data-opened-at]' ? [] : selector === '[data-incident-severity]' ? severityOptions : sorts },
+    document: { getElementById: id => elements[id], createElement: () => new Element(), createElementNS: () => new Element(), createTextNode: text => ({ textContent: text }), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }), querySelector: () => main, addEventListener() {}, removeEventListener() {}, querySelectorAll: selector => selector === '[data-opened-at]' ? [] : selector === '[data-incident-severity]' ? severityOptions : sorts },
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
     location: { search: options.search ?? '?groupId=g&page=2' }, history: { replaceState() {} },
-    FormData: class { constructor() { return fields; } }, URLSearchParams, AbortController, Intl, Date,
+    FormData: class { constructor() { return fields; } }, URLSearchParams, AbortController, Intl, Date: options.Date || Date,
     setTimeout(fn, ms) { const id = timers.size + 1; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); }, setInterval(fn) { intervals.push(fn); return intervals.length; }, clearInterval() {},
     addEventListener(key, fn) { events[key] = fn; },
@@ -47,14 +49,14 @@ async function surface(respond, options = {}) {
   vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/static/multi-picker.js'), 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/incidents.js', 'utf8'), context);
   await tick();
-  return { elements, fields, requests, sorts, events, timers, intervals, severityOptions, storage, rows: () => elements['incident-rows'].children };
+  return { elements, fields, requests, sorts, events, timers, intervals, severityOptions, storage, rows: () => elements['incident-rows'].children[0].children };
 }
 const row = { eventId: '1', name: '<script>original trigger</script>', severity: 4, severityLabel: 'Alta', timestamp: Date.now() - 87 * 60000, hosts: [{ name: 'Router', ip: '10.0.0.1' }] };
 function response(params) { return { ok: true, json: async () => ({ rows: [row], total: 32, page: Number(params.get('page')), pages: 4, size: 10, updatedAt: Date.now(), warning: '' }) }; }
 
 test('renders seven columns safely and calculates durations locally', async () => {
   const ui = await surface(response);
-  const cells = ui.rows()[0].children[0].children;
+  const cells = ui.rows().find(node => node.dataset.severity != null).children;
   assert.equal(cells.length, 7);
   assert.equal(cells[2].children[0].textContent, 'Router');
   assert.equal(cells[2].children[0].children.length, 0);
@@ -64,22 +66,20 @@ test('renders seven columns safely and calculates durations locally', async () =
   assert.equal(cells[4].children[0].title, row.name);
   assert.equal(cells[5].children[0].children[1].textContent, '1 h 27 min');
   assert.equal(ui.elements['incident-total'].textContent, '32 encontrados');
-  assert.equal(ui.requests[0].get('page'), '2');
+  assert.equal(ui.requests[0].get('page'), null);
   ui.intervals[0](); assert.equal(ui.requests.length, 1);
 });
 
-test('refresh retains applied filters and page; submit resets page and sort works', async () => {
+test('refresh retains applied filters and submit applies current filters', async () => {
   const ui = await surface(response);
   ui.fields.set('q', 'unsubmitted text');
   [...ui.timers.values()].find(timer => timer.ms === 60000).fn(); await tick();
-  assert.equal(ui.requests.at(-1).get('page'), '2');
+  assert.equal(ui.requests.at(-1).get('page'), null);
   assert.equal(ui.requests.at(-1).get('q'), null);
   ui.elements['incident-filters'].emit('submit'); await tick();
   assert.equal(ui.requests.at(-1).get('q'), null);
-  assert.equal(ui.requests.at(-1).get('page'), '1');
-  ui.sorts[1].emit('click'); await tick();
-  assert.equal(ui.requests.at(-1).get('sort'), 'duration');
-  assert.equal(ui.requests.at(-1).get('direction'), 'desc');
+  assert.equal(ui.requests.at(-1).get('page'), null);
+
 });
 
 test('errors keep successful rows and timestamp; retry recovers', async () => {
@@ -110,7 +110,7 @@ test('distinguishes an empty filtered result and displays partial-data warnings'
   assert.equal(ui.elements['incident-warning'].hidden, true);
   const partial = await surface(params => ({ ok: true, json: async () => ({ ...(await response(params).json()), warning: 'Dados parciais' }) }));
   assert.equal(partial.elements['incident-warning'].hidden, false);
-  assert.equal(partial.rows()[0].children.length, 1);
+  assert.equal(partial.rows()[0].className, 'incident-period');
 });
 
 test('changing groups removes a host outside the selected group', async () => {
@@ -159,7 +159,7 @@ test('severity changes automatically apply filters and reset pagination', async 
   ui.severityOptions[2].checked = false; ui.severityOptions[2].emit('change');
   [...ui.timers.values()].find(timer => timer.ms === 300).fn(); await tick();
   assert.equal(ui.requests.at(-1).get('severity'), '0,1,3,4,5');
-  assert.equal(ui.requests.at(-1).get('page'), '1');
+  assert.equal(ui.requests.at(-1).get('page'), null);
 });
 
 test('filter changes during an active request queue the latest selection', async () => {
@@ -220,8 +220,90 @@ test('first picker option selects every available group or host even with a sear
 
 test('shows acknowledged incidents in the rightmost column', async () => {
   const ui = await surface(params => ({ ok: true, json: async () => ({ rows: [{ ...row, acknowledged: true }], total: 1, page: 1, pages: 1, updatedAt: Date.now(), warning: '' }) }));
-  const cells = ui.rows()[0].children[0].children;
+  const cells = ui.rows().find(node => node.dataset.severity != null).children;
   assert.equal(cells[6].children[0].textContent, 'Sim');
   assert.equal(cells[6].children[0].className, 'incident-acknowledged');
   assert.equal(cells[6].title, 'Incidente reconhecido');
+});
+
+function fixedClock(iso) {
+  let now = new Date(iso).getTime();
+  class Clock extends Date { static now() { return now; } }
+  return { Date: Clock, advance: value => { now = new Date(value).getTime(); } };
+}
+function snapshotResponse(rows) {
+  return { ok: true, json: async () => ({ rows, total: rows.length, updatedAt: Date.now(), warning: '' }) };
+}
+function headers(ui) { return ui.rows().filter(node => node.className === 'incident-period'); }
+function incidents(ui) { return ui.rows().flatMap(node => node.fragment ? node.children : [node]).filter(node => node.dataset.severity != null); }
+
+test('exclusive calendar groups include all filtered incidents with independent local pagination', async () => {
+  const clock = fixedClock('2026-01-01T15:00:00Z');
+  const rows = [
+    ...Array.from({ length: 86 }, (_, i) => ({ ...row, eventId: `today${i}`, timestamp: Date.parse('2026-01-01T04:00:00Z') + i })),
+    ...Array.from({ length: 63 }, (_, i) => ({ ...row, eventId: `yesterday${i}`, timestamp: Date.parse('2025-12-31T04:00:00Z') + i })),
+    { ...row, eventId: 'week', timestamp: Date.parse('2025-12-25T03:00:00Z') },
+    { ...row, eventId: 'older', timestamp: Date.parse('2025-12-25T02:59:59Z') },
+  ];
+  const ui = await surface(() => snapshotResponse(rows), clock);
+  assert.deepEqual(headers(ui).map(h => h.children[0].children[0].children[2].textContent),
+    ['86 incidentes', '63 incidentes', '1 incidente', '1 incidente']);
+  assert.equal(incidents(ui).length, 101);
+  assert.equal(headers(ui)[3].children[0].children[0].attributes['aria-expanded'], 'false');
+  const footers = ui.rows().flatMap(node => node.fragment ? node.children : [node]).filter(node => node.className === 'incident-period-pagination');
+  footers[0].children[0].children[0].children[2].emit('click');
+  assert.equal(incidents(ui).length, 87);
+  assert.equal(ui.requests.length, 1);
+  headers(ui)[3].children[0].children[0].emit('click');
+  assert.equal(incidents(ui).length, 88);
+  [...ui.timers.values()].find(timer => timer.ms === 60000).fn(); await tick();
+  assert.equal(incidents(ui).length, 88);
+  assert.equal(headers(ui)[3].children[0].children[0].attributes['aria-expanded'], 'true');
+});
+
+test('regroups locally at midnight across year boundary without querying Zabbix', async () => {
+  const clock = fixedClock('2026-01-01T02:59:59Z');
+  const ui = await surface(() => snapshotResponse([{ ...row, timestamp: Date.parse('2025-12-31T15:00:00Z') }]), clock);
+  assert.equal(headers(ui)[0].dataset.period, 'today');
+  clock.advance('2026-01-01T03:00:00Z'); ui.intervals[0]();
+  assert.equal(headers(ui)[0].dataset.period, 'yesterday');
+  assert.equal(ui.requests.length, 1);
+});
+
+test('calendar boundaries respect the configured timezone at a daylight saving transition', async () => {
+  const clock = fixedClock('2018-11-05T02:30:00Z');
+  const ui = await surface(() => snapshotResponse([
+    { ...row, eventId: 'today', timestamp: Date.parse('2018-11-05T02:00:00Z') },
+    { ...row, eventId: 'yesterday', timestamp: Date.parse('2018-11-04T03:00:00Z') },
+    { ...row, eventId: 'week', timestamp: Date.parse('2018-11-04T02:59:59Z') },
+  ]), clock);
+  assert.deepEqual(headers(ui).map(h => h.dataset.period), ['today', 'yesterday', 'week']);
+});
+
+test('incident name picker supports multiple exact names and updates counts locally', async () => {
+  const rows = [row, { ...row, eventId: '2', name: 'Link indisponível' },
+    { ...row, eventId: '3', name: 'Latência alta' }];
+  const ui = await surface(() => ({ ok: true, json: async () => ({ rows, total: 3, updatedAt: Date.now(), warning: '' }) }));
+  const options = ui.elements['incident-name-options'].children;
+  options[1].children[0].checked = true;
+  options[1].children[0].emit('change');
+  options[2].children[0].checked = true;
+  options[2].children[0].emit('change');
+  assert.equal(ui.elements['incident-name-summary'].textContent, '2 incidentes selecionados');
+  assert.equal(ui.elements['incident-total'].textContent, '2 encontrados');
+  assert.equal(ui.rows().filter(node => node.dataset.severity != null).length, 2);
+  assert.equal(ui.requests.length, 1);
+  const saved = JSON.parse(ui.storage.get('routiva.incidents.filters'));
+  assert.equal(JSON.parse(saved.incidentNames).length, 2);
+});
+
+test('restores incident names with commas and preserves selection through refresh', async () => {
+  const name = 'Perda alta, enlace São Paulo';
+  const ui = await surface(() => ({ ok: true, json: async () => ({ rows: [{ ...row, name }, row], total: 2, updatedAt: Date.now(), warning: '' }) }),
+    { search: '', saved: { incidentNames: JSON.stringify([name]) } });
+  assert.equal(ui.elements['incident-name-summary'].textContent, name);
+  assert.equal(ui.elements['incident-total'].textContent, '1 encontrados');
+  [...ui.timers.values()].find(timer => timer.ms === 60000).fn(); await tick();
+  assert.equal(ui.elements['incident-name-summary'].textContent, name);
+  assert.equal(ui.elements['incident-total'].textContent, '1 encontrados');
 });

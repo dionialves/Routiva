@@ -167,8 +167,6 @@
   .zabbix-summary > span { border: 0; }
 }
 @media (min-width: 1051px) {
-  main.settings-page { margin-top: -42px; }
-  .settings-page .page-heading { padding-right: 150px; }
   .zabbix-manager .host-table-scroll { height: clamp(190px, 24vh, 280px); }
   .zabbix-groups .zabbix-scroll { height: clamp(240px, calc(24vh + 50px), 330px); }
 }

@@ -825,7 +825,7 @@
       tr.setAttribute('aria-label', 'Abrir interface ' + item.name);
       const state = item.disabled === 'true' ? 'Desabilitada' : item.running === 'true' ? 'Ativa' : 'Inativa';
       for (const value of [item.name, item.type, state, item['actual-mtu'] ?? item.mtu,
-        item['mac-address'], item.uptime ?? '—', window.HostTraffic.format(item.downloadRate),
+        item['mac-address'], window.HostTraffic.format(item.downloadRate),
         window.HostTraffic.format(item.uploadRate),
         `${item['rx-error'] ?? '—'} / ${item['tx-error'] ?? '—'}`]) {
         const td = document.createElement('td'); td.textContent = value ?? 'Indisponível'; tr.append(td);

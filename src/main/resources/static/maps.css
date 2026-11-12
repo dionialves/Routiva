@@ -2,13 +2,12 @@
 #library .host-search { margin-left:auto; }
 #maps td { white-space:nowrap; }
 #library .hosts-table tr > :last-child { text-align:right; }
-#library :is(#create, .map-view) {
+#library #create {
   display:inline-flex; align-items:center; justify-content:center; gap:.6rem;
   background:#285889; color:white; border:1px solid #326797; font-weight:600;
 }
 #library #create { height:42px; padding:0 22px; }
-#library .map-view { height:34px; padding:0 14px; }
-#library :is(#create, .map-view):hover { background:#326797; }
+#library #create:hover { background:#326797; }
 .map-row-actions { display:flex; justify-content:flex-end; align-items:flex-start; gap:.75rem; }
 #maps .map-options-toggle {
   display:grid; place-items:center; width:34px; height:34px; padding:0;
@@ -230,3 +229,15 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
     accent-color:var(--focus);
     cursor:pointer;
 }
+
+#library .map-library-filters { padding:16px 18px; margin-bottom:24px; }
+#library .map-library-filters .hosts-toolbar { margin:0; align-items:flex-end; gap:18px; }
+#library .map-library-filters .host-search { display:grid; gap:6px; max-width:none; margin:0; min-width:0; font-size:13px; font-weight:500; }
+#library .map-library-filters .host-search input { height:38px; border-radius:5px; background:#20313f; border-color:#486071; }
+#library .map-library-filters #create { height:38px; }
+@media(max-width:650px) { #library .map-library-filters .host-search { flex-basis:100%; } }
+
+#library .map-name-link,
+#library .map-name-link:visited { display:inline-block; color:#00d3fd; font-weight:700; text-decoration:none; }
+#library .map-name-link:hover,
+#library .map-name-link:focus-visible { color:#00d3fd; text-decoration:underline; text-underline-offset:3px; }

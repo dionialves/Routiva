@@ -79,3 +79,17 @@
 }
 
 .incident-acknowledged { display:inline-flex; align-items:center; justify-content:center; margin-right:-10px; border-radius:20px; padding:3px 10px; background:#10b98125; color:#86efcb; font-size:12px; font-weight:600; white-space:nowrap; }
+
+.incidents-page .incidents-table .incident-period td { padding:8px 8px 0; border:0; height:auto; text-align:left; }
+.incidents-table .incident-period td::before,.incidents-table .incident-period-pagination td::before { display:none; }
+.incidents-table .incident-period:hover,.incidents-table .incident-period-pagination:hover { background:transparent; }
+.incidents-page .incident-period button { display:flex; width:100%; padding:12px; border:1px solid #234456; border-radius:5px; background:#193748; color:#e6edf5; text-align:left; font:inherit; cursor:pointer; gap:9px; }
+.incident-period button::before { content:''; width:3px; height:17px; border-radius:2px; background:#23bca8; flex-shrink:0; }
+.incident-period[data-period=yesterday] button::before { background:#d5ad4b; }
+.incident-period[data-period=week] button::before { background:#62a9db; }
+.incident-period[data-period=older] button::before { background:#91a7b7; }
+.incident-period strong { font-size:14px; }
+.incident-period-dates { color:#9fb8c9; font-size:11px; }
+.incident-period-count { margin-left:auto; color:#b0c7d7; font-size:11px; }
+.incident-period .ui-icon { width:16px; height:16px; flex-shrink:0; }
+.incident-period-pagination .pagination { margin:8px 0; }
