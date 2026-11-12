@@ -9,6 +9,19 @@ import static org.assertj.core.api.Assertions.*;
 import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 
 class MinuteAggregationTests extends MinuteTestSupport {
+    @Test void transientClientPingsAdvanceCleanupCursorWithoutProducingHistory() {
+        var client = new Host(br.com.scriptping.ingestion.ClientPingSessions.PREFIX + "test", "Client", "192.0.2.15", List.of());
+        insert(client, end - 10000, 2d, null, 20);
+        insert(client, end - 9000, null, "Tempo esgotado", 20);
+        long boundary = boundary();
+        drain(1);
+        assertThat(summaries.progress().rawCursor()).isEqualTo(boundary);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_minute", Long.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_rollup", Long.class)).isZero();
+        retention.cleanup(Long.MAX_VALUE);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM ping_sample", Long.class)).isZero();
+    }
+
     @Test void splitsOneMinuteAcrossBatchesAndUsesHistoricalLatencyLimits() {
         insert(end-59000,10d,null);insert(end-40000,30d,null);
         insert(end-30000,null,"Tempo esgotado");insert(end-20000,null,"Coletor: SEND_ERROR");

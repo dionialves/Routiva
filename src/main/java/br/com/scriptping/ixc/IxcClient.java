@@ -33,8 +33,9 @@ public class IxcClient {
 
     // Do not include credentials in generated toString/log output.
     public static final class Login {
-        public final String id, mac, ip, pppoe, pppoePassword, equipmentPassword, connectionPort;
+        public final String id, mac, ip, pppoe, pppoePassword, equipmentPassword, connectionPort, planId;
         Login(JsonNode row, String mac) {
+            this.planId = field(row, "id_grupo");
             this.id = field(row, "id"); this.mac = mac; this.ip = field(row, "ip");
             this.pppoe = field(row, "login"); this.pppoePassword = field(row, "senha");
             this.equipmentPassword = field(row, "senha_router1"); this.connectionPort = field(row, "porta_http");
@@ -90,6 +91,29 @@ public class IxcClient {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw unavailable();
+        } catch (Exception ex) { throw unavailable(); }
+    }
+
+    public record Plan(String download, String upload) {}
+    public Plan findPlan(String id) {
+        if (id == null || !id.matches("[1-9][0-9]*")) return new Plan("", "");
+        try {
+            URI endpoint = URI.create((url.endsWith("/webservice/v1") ? url : url + "/webservice/v1") + "/radgrupos");
+            if (!"https".equalsIgnoreCase(endpoint.getScheme()) || endpoint.getHost() == null || endpoint.getUserInfo() != null)
+                throw new IllegalArgumentException();
+            var body = Map.of("qtype", "radgrupos.id", "query", id, "oper", "=", "page", "1", "rp", "1");
+            var request = HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(10))
+                .header("Authorization", "Basic " + Base64.getEncoder().encodeToString(token.getBytes(StandardCharsets.UTF_8)))
+                .header("ixcsoft", "listar").header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))).build();
+            var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) throw unavailable();
+            var rows = readPage(response.body()).path("registros");
+            if (rows.isEmpty()) return new Plan("", "");
+            var row = rows.get(0);
+            return new Plan(row.path("download").asText(""), row.path("upload").asText(""));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt(); throw unavailable();
         } catch (Exception ex) { throw unavailable(); }
     }
 

@@ -67,7 +67,15 @@ public class MikrotikService {
                         if (!channels.isEmpty()) rows.getFirst().put("channel", String.join(" · ", channels));
                     }
                 }
-                case "interfaces" -> rows = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled,mtu,actual-mtu,mac-address,uptime,link-downs,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop");
+                case "interfaces" -> {
+                    rows = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled,mtu,actual-mtu,mac-address,uptime,link-downs");
+                    var stats = api.command("/interface/print", "=stats-detail=",
+                        "=.proplist=.id,name,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop");
+                    for (var row : rows) {
+                        stats.stream().filter(stat -> Objects.equals(row.get(".id"), stat.get(".id")))
+                            .findFirst().ifPresent(row::putAll);
+                    }
+                }
                 case "traffic" -> {
                     if (selectedInterface == null || selectedInterface.length() > 128) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione uma interface.");
                     var interfaces = api.command("/interface/print", "=.proplist=.id,name");

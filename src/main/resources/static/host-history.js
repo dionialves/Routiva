@@ -97,6 +97,7 @@
   const latencyChart = new MetricChart($('latency-chart'), 'latency', ' ms', '#06b6d4');
   let lastVersion;
   window.HostHistoryCharts = {
+    createRealtime:container => new MetricChart(container, 'latency', ' ms', '#06b6d4'),
     clear(message = 'Carregando período…') {
       lastVersion = undefined;
       chart.clear(); chartEmpty($('availability-chart'), message);

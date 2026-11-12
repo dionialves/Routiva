@@ -56,7 +56,9 @@
 .availability-page .hosts-table thead th { background:#112b3c; }
 .availability-page .hosts-table thead button { padding:0; border:0; background:transparent; font-size:11px; white-space:nowrap; color:#b9cbdd; }
 .availability-page .hosts-table tbody th { text-align:left; max-width:240px; }
-.availability-page .hosts-table tbody th .availability-host-name { color:#b1d7ed; overflow-wrap:anywhere; text-decoration:none; }
+.availability-page .hosts-table tbody th .availability-host-name { color:#00d3fd; overflow-wrap:anywhere; text-decoration:none; }
+.availability-page .hosts-table tbody th .availability-host-name:hover,
+.availability-page .hosts-table tbody th .availability-host-name:focus-visible { text-decoration:underline; text-underline-offset:3px; }
 .availability-page .hosts-table tbody th small { display:block; margin-top:5px; font-size:10px; color:#8da6bc; font-weight:400; }
 .availability-page .hosts-table tbody tr:hover { background:#112b3c; }
 .availability-page .host-groups { color:#b0c1d2; }

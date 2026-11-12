@@ -60,6 +60,19 @@ public class CollectorClient implements HealthIndicator {
     private volatile Map<String, Double> metrics = Map.of();
     private volatile long lastHealth, committed, writeFailures;
     private volatile String failure = "Aguardando coletor";
+    private ClientPingSessions clientPings;
+    private long clientPingRevision = -1;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setClientPings(ClientPingSessions clientPings) { this.clientPings = clientPings; }
+
+    public boolean enabled() { return enabled; }
+
+    public synchronized void refreshClientPings() {
+        if (!connected) return;
+        try { sendConfiguration(); }
+        catch (RuntimeException error) { disconnect(generation, "Falha ao atualizar alvos temporários"); }
+    }
+
     private int retries;
     private long nextConnect;
 
@@ -119,6 +132,10 @@ public class CollectorClient implements HealthIndicator {
                     .setEnabled(true)
                     .setLatencyLimitMs(store.latencyLimit())
             );
+        if (clientPings != null) {
+            clientPingRevision = clientPings.revision();
+            config.addAllHosts(clientPings.configurations(interval, timeout, store.latencyLimit()));
+        }
         commands.onNext(Command.newBuilder().setProtocolVersion(1).setConfig(config).build());
     }
 
@@ -127,6 +144,7 @@ public class CollectorClient implements HealthIndicator {
         try {
             synchronized (this) {
                 if (!connected && System.nanoTime() >= nextConnect) connect();
+                if (connected && clientPings != null && clientPings.revision() != clientPingRevision) sendConfiguration();
             }
             if (channel != null && connected) {
                 var health = CollectorGrpc.newBlockingStub(channel)
@@ -294,6 +312,7 @@ public class CollectorClient implements HealthIndicator {
                     }
                 }
                 synchronized (this) {
+                    if (saved && clientPings != null) clientPings.accept(batches);
                     int confirmed = 0;
                     for (var delivery : deliveries) {
                         if (saved && connected && delivery.generation() == generation) {

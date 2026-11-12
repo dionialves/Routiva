@@ -18,6 +18,28 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class CollectorClientTests {
+    @org.junit.jupiter.api.Test
+    void clientProbesCoexistWithInventoryAndAreRemovedWhenModalSessionStops() {
+        var client = new CollectorClient(mock(SampleIngestionService.class), "unused", "", "", "", "", false, 1000, 1500);
+        var sessions = new br.com.scriptping.ingestion.ClientPingSessions();
+        client.setClientPings(sessions);
+        var sent = new java.util.concurrent.atomic.AtomicReference<Command>();
+        ReflectionTestUtils.setField(client, "commands", new StreamObserver<Command>() {
+            public void onNext(Command command) { sent.set(command); }
+            public void onError(Throwable error) {}
+            public void onCompleted() {}
+        });
+        ReflectionTestUtils.setField(client, "connected", true);
+        var host = new br.com.scriptping.zabbix.Host("1", "AP", "192.0.2.1", java.util.List.of());
+        var session = sessions.start("1", "owner", "192.0.2.15");
+        client.synchronize(java.util.List.of(host));
+        assertThat(sent.get().getConfig().getHostsList()).extracting(HostConfig::getHostId)
+            .containsExactlyInAnyOrder("1", session.id());
+        sessions.stop(session.id(), "1", "owner");
+        client.synchronize(java.util.List.of(host));
+        assertThat(sent.get().getConfig().getHostsList()).extracting(HostConfig::getHostId).containsExactly("1");
+    }
+
 
     @org.junit.jupiter.api.Test
     void acknowledgedHostsAreRemovedFromCollectorConfigurationAndCanReturn() {

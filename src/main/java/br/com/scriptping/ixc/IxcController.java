@@ -31,6 +31,28 @@ public class IxcController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(ixc.findByMac(normalized));
     }
 
+    // Router password is held in browser memory for the access click; never render it into HTML.
+    public static final class ClientIdentity {
+        public final String pppoe, ip, connectionPort, equipmentPassword;
+        public final IxcClient.Plan plan;
+        ClientIdentity(IxcClient.Login login, IxcClient.Plan plan) {
+            pppoe = login.pppoe; ip = login.ip; connectionPort = login.connectionPort;
+            equipmentPassword = login.equipmentPassword; this.plan = plan;
+        }
+    }
+    @GetMapping("/api/hosts/{id}/ixc/client")
+    public ResponseEntity<List<ClientIdentity>> client(@PathVariable String id, @RequestParam String mac) {
+        var logins = login(id, mac).getBody();
+        var result = new ArrayList<ClientIdentity>();
+        for (var login : logins) {
+            IxcClient.Plan plan;
+            try { plan = ixc.findPlan(login.planId); }
+            catch (ResponseStatusException unavailable) { plan = new IxcClient.Plan("", ""); }
+            result.add(new ClientIdentity(login, plan));
+        }
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
+    }
+
     @GetMapping("/api/hosts/{id}/ixc/login-names")
     public ResponseEntity<Map<String, List<String>>> loginNames(@PathVariable String id) {
         var host = inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()

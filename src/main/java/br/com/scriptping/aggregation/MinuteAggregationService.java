@@ -80,6 +80,7 @@ public class MinuteAggregationService {
         var samples = repository.samples(previous.rawCursor(), boundary, PageRequest.of(0, pageSize));
         var contributions = new HashMap<MinuteKey, Summary>();
         for (PingSample sample : samples) {
+            if (sample.hostId().startsWith(br.com.scriptping.ingestion.ClientPingSessions.PREFIX)) continue;
             long minute = minuteAt(sample.measuredAt());
             var key = new MinuteKey(new HostTarget(sample.hostId(), sample.target()), minute);
             contributions.merge(key, summarize(sample, minute), MinuteAggregationService::combine);
@@ -121,6 +122,7 @@ public class MinuteAggregationService {
     private void updateExtremes(List<PingSample> samples, Map<MinuteKey, Summary> contributions) {
         var extremes = new HashMap<MinuteKey, double[]>();
         for (var sample : samples) {
+            if (sample.hostId().startsWith(br.com.scriptping.ingestion.ClientPingSessions.PREFIX)) continue;
             var key = new MinuteKey(new HostTarget(sample.hostId(), sample.target()), minuteAt(sample.measuredAt()));
             if (sample.outcome() == PingSample.SUCCESS) {
                 var range = extremes.computeIfAbsent(key,

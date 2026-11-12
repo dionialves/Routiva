@@ -9,6 +9,21 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class IxcClientTests {
+    @Test void readsSpeedsFromLoginGroupWithoutUsingWirelessRates() throws Exception {
+        HttpClient http = mock(HttpClient.class);
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn("{\"total\":1,\"registros\":[{\"id\":\"7\",\"download\":\"100M\",\"upload\":\"50M\"}]}");
+        when(http.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any())).thenReturn(response);
+        var client = new IxcClient("https://ixc.example", "token", new ObjectMapper(), http);
+        var plan = client.findPlan("7");
+        assertEquals("100M", plan.download());
+        assertEquals("50M", plan.upload());
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http).send(captor.capture(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        assertEquals("https://ixc.example/webservice/v1/radgrupos", captor.getValue().uri().toString());
+    }
+
     private final HttpClient http = mock(HttpClient.class);
     private final IxcClient client = new IxcClient("https://ixc.example/webservice/v1/", "7:secret", new ObjectMapper(), http);
 

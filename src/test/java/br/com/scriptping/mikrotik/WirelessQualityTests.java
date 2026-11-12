@@ -6,13 +6,32 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class WirelessQualityTests {
     private WirelessQuality engine() {
-        return new WirelessQuality(30, 120000, new double[]{-65,-75,-83}, new double[]{30,25,15}, new double[]{90,80,60});
+        return new WirelessQuality(30, 120000, new double[]{-71,-75,-83}, new double[]{30,25,15}, new double[]{90,80,60},
+                100000, 1000000, 60000, 2, -50, new double[]{1,1,2});
     }
     private Map<String,String> row(String signal) {
         var row = new HashMap<String,String>();
         row.put("interface", "wlan1"); row.put("mac-address", "AA:BB:CC:DD:EE:FF");
         if (signal != null) row.put("signal-strength", signal);
         return row;
+    }
+    @Test void presentationSummaryFollowsConfirmedWinnerAndIgnoresIdleCcq() {
+        var engine = engine();
+        var raw = row("-60"); raw.put("tx-ccq", "40"); raw.put("tx-bits-per-second", "0");
+        var idle = engine.update("ap", List.of(raw), 0).getFirst();
+        assertEquals("Conexão dentro dos parâmetros.", idle.get("quality-primary-reason"));
+        raw.put("tx-bits-per-second", "3005410");
+        var provisional = engine.update("ap", List.of(raw), 1000).getFirst();
+        assertEquals("Conexão estável.", provisional.get("quality-summary"));
+        var active = engine.update("ap", List.of(raw), 2000).getFirst();
+        assertEquals("Crítico", active.get("quality"));
+        assertEquals("TX CCQ reduzido sob tráfego significativo.", active.get("quality-primary-reason"));
+        assertEquals("Degradação identificada sob tráfego.", active.get("quality-summary"));
+        var missing = engine.update("other", List.of(row(null)), 0).getFirst();
+        assertEquals("Dados insuficientes para avaliação.", missing.get("quality-summary"));
+        var radio = row("-90"); radio.put("tx-ccq", "40"); radio.put("tx-bits-per-second", "0");
+        var weak = engine.update("weak", List.of(radio), 0).getFirst();
+        assertEquals("Sinal abaixo do recomendado.", weak.get("quality-primary-reason"));
     }
     @Test void immediateAndRollingWindow() {
         var engine = engine();
@@ -60,9 +79,9 @@ class WirelessQualityTests {
         row.put("tx-ccq", "40");
         row.put("bytes", "0,0");
         assertEquals("Normal", engine.update("ap", List.of(row), 0).getFirst().get("quality"));
-        row.put("bytes", "500,0");
+        row.put("bytes", "125000,0");
         assertEquals("Normal", engine.update("ap", List.of(row), 1000).getFirst().get("quality"));
-        row.put("bytes", "1100,0");
+        row.put("bytes", "250000,0");
         var result = engine.update("ap", List.of(row), 2000).getFirst();
         assertEquals("Crítico", result.get("quality"));
         assertEquals("0", result.get("signal-severity"));
@@ -71,7 +90,7 @@ class WirelessQualityTests {
 
     @Test void fractionalThresholdsHaveNoGaps() {
         var engine = engine();
-        for (var entry : Map.of("-65", "Normal", "-65.1", "Atenção", "-75.1", "Ruim", "-82.5", "Ruim", "-83", "Crítico").entrySet())
+        for (var entry : Map.of("-70", "Normal", "-70.5", "Normal", "-71", "Atenção", "-75", "Atenção", "-75.1", "Ruim", "-82.5", "Ruim", "-83", "Crítico").entrySet())
             assertEquals(entry.getValue(), engine.update(entry.getKey(), List.of(row(entry.getKey())), 0).getFirst().get("quality"));
     }
     @Test void snrAndCcqBoundariesAndValidSampleWindows() {
@@ -81,8 +100,8 @@ class WirelessQualityTests {
                 : Map.of("90", "Normal", "89.9", "Atenção", "79.9", "Ruim", "59.9", "Crítico");
             for (var entry : values.entrySet()) {
                 var row = row(null); row.put(metric, entry.getKey());
-                row.put("tx-bits-per-second", "1000");
-                row.put("rx-bits-per-second", "1000");
+                row.put("tx-bits-per-second", "1000000");
+                row.put("rx-bits-per-second", "1000000");
                 var engine = engine();
                 engine.update("ap", List.of(row), 0);
                 assertEquals(entry.getValue(), engine.update("ap", List.of(row), 1000).getFirst().get("quality"));
@@ -94,4 +113,54 @@ class WirelessQualityTests {
         assertEquals("-70.00", engine.update("ap", List.of(row("-80")), 2000).getFirst().get("avg-signal"));
     }
 
+
+    @Test void directionalActivityBoundariesAndHistoricalExpiry() {
+        var engine = engine();
+        var input = row("-60");
+        input.put("tx-ccq", "58");
+        input.put("rx-bits-per-second", "5000000");
+        for (var rate : List.of("15000", "100000", "999999")) {
+            input.put("tx-bits-per-second", rate);
+            var result = engine.update("ap", List.of(input), Long.parseLong(rate) / 1000).getFirst();
+            assertEquals("Normal", result.get("quality"));
+            assertNull(result.get("tx-ccq-severity"));
+            assertTrue(result.get("quality-reason").contains(rate.equals("15000") ? "ocioso" : "atividade baixa"));
+        }
+        input.put("tx-bits-per-second", "1000000");
+        var first = engine.update("ap", List.of(input), 2000).getFirst();
+        assertFalse(first.get("critical-alert").isEmpty());
+        assertEquals("Normal", first.get("quality"));
+        assertEquals("Crítico", engine.update("ap", List.of(input), 3000).getFirst().get("quality"));
+        input.put("tx-bits-per-second", "0");
+        input.put("tx-ccq", "12");
+        var idle = engine.update("ap", List.of(input), 4000).getFirst();
+        assertEquals("Normal", idle.get("quality"));
+        assertNull(idle.get("active-tx-ccq"));
+        assertTrue(idle.get("quality-reason").contains("Última avaliação válida TX: 58.00%"));
+        assertFalse(engine.update("ap", List.of(input), 63000).getFirst().get("quality-reason").contains("Última avaliação"));
+        input.put("tx-bits-per-second", "5000000");
+        input.put("tx-ccq", "95");
+        assertEquals("95.00", engine.update("ap", List.of(input), 64000).getFirst().get("active-tx-ccq"));
+    }
+
+    @Test void resetCounterSkipsIntervalAndInterruptsConfirmation() {
+        var engine = engine();
+        var input = row(null);
+        input.put("rx-ccq", "30");
+        long now = 0;
+        for (String bytes : List.of("0,0", "0,125000", "0,0", "0,125000", "0,250000")) {
+            input.put("bytes", bytes);
+            var result = engine.update("ap", List.of(input), now).getFirst();
+            assertEquals(now == 4000 ? "Crítico" : "Indisponível", result.get("quality"));
+            now += 1000;
+        }
+    }
+
+    @Test void recoveryNeedsMarginAndSparseSamplesExpireByTime() {
+        var engine = engine();
+        engine.update("ap", List.of(row("-72")), 0);
+        assertEquals("Atenção", engine.update("ap", List.of(row("-70")), 1000).getFirst().get("quality"));
+        assertEquals("Normal", engine.update("ap", List.of(row("-60")), 2000).getFirst().get("quality"));
+        assertEquals("-82.00", engine.update("ap", List.of(row("-82")), 32000).getFirst().get("avg-signal"));
+    }
 }

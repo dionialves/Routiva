@@ -75,16 +75,25 @@ Referências: [Wireless](https://help.mikrotik.com/docs/spaces/ROS/pages/8978446
 
 ## Qualidade wireless em tempo real
 
-A consulta existente da Registration Table alimenta janelas em memória de até 30
-amostras válidas por AP, interface, MAC e indicador. A primeira amostra já produz
-classificação provisória; cada resposta atualiza as médias sem tarefa adicional
-ou persistência de amostras. TX/RX Rate são auxiliares, convertidos para Mbps.
+A consulta existente da Registration Table atualiza uma janela móvel de 30 segundos
+por AP, interface e MAC, desde a primeira amostra. A categoria corresponde à pior
+condição válida entre sinal médio, SNR médio e CCQ sob tráfego em cada direção.
+Sem indicadores avaliáveis, a categoria é Indisponível.
 
-A qualidade usa a pior condição entre sinal, SNR e TX/RX CCQ disponíveis. Valores
-ausentes aparecem como `—`. O tooltip detalha os indicadores e a formação da
-janela. Uma leitura crítica instantânea gera um alerta separado da classificação
-pela média, sem limpar seu histórico. Sinal acima de -50 dBm é informado no
-tooltip e avaliado junto com os demais indicadores.
+A coluna TX CCQ mostra a média geral. O diagnóstico da linha e os detalhes mostram
+também a média das amostras com tráfego significativo. No AP, TX corresponde ao
+download do cliente e RX ao upload. Cada direção usa sua taxa nativa ou o delta
+de seus próprios contadores em bytes e o intervalo entre leituras. Um contador
+que diminui inicia uma nova referência. TX/RX Rate são taxas de associação.
+
+Por padrão, menos de 100 kbps indica ociosidade e de 100 kbps até menos de 1 Mbps
+indica atividade baixa. Nesses casos, a média geral continua disponível e a última
+avaliação válida sob tráfego aparece como histórica por até 60 segundos. A partir
+de 1 Mbps, a amostra participa da média sob tráfego. Uma leitura crítica gera
+um alerta provisório imediato. Para consolidar uma piora de CCQ, a média deve
+alcançar a categoria e duas leituras representativas consecutivas devem atingir
+essa gravidade ou pior. Uma leitura ociosa, ausente ou uma interrupção superior a
+3 segundos reinicia a confirmação. A recuperação usa uma margem de histerese.
 
 O desaparecimento de um cliente numa consulta bem-sucedida preserva os últimos
 valores por até 120 segundos, identificados como desconectados. Retorno do cliente
@@ -95,9 +104,14 @@ a limpeza ocorre na próxima atualização wireless.
 
 Parâmetros opcionais (application.properties / variáveis de ambiente):
 
-- `WIRELESS_QUALITY_WINDOW=30`: quantidade de amostras válidas por indicador.
+- `WIRELESS_QUALITY_WINDOW=30`: duração da janela móvel, em segundos.
+- `WIRELESS_QUALITY_IDLE_BPS=100000` e `WIRELESS_QUALITY_SIGNIFICANT_BPS=1000000` delimitam os estados de atividade.
+- `WIRELESS_QUALITY_HISTORY_MS=60000` define a validade da referência histórica.
+- `WIRELESS_QUALITY_CONFIRMATIONS=2` define quantas leituras consecutivas confirmam uma piora de CCQ.
+- `WIRELESS_QUALITY_HYSTERESIS=1,1,2` define as margens de recuperação para sinal (dBm), SNR (dB) e CCQ (pontos percentuais).
+- `WIRELESS_QUALITY_STRONG_SIGNAL=-50` define o limiar do aviso de possível excesso de potência.
 - `WIRELESS_QUALITY_RETENTION_MS=120000`: retenção sem atualização.
-- `WIRELESS_QUALITY_SIGNAL=-65,-75,-83`: limites Normal/Atenção e início de Crítico.
+- `WIRELESS_QUALITY_SIGNAL=-71,-75,-83`: Normal acima de −71 dBm; Atenção de −75 a −71 dBm (inclusive); Ruim acima de −83 e abaixo de −75 dBm; Crítico até −83 dBm. A recuperação mantém a margem de histerese configurada.
 - `WIRELESS_QUALITY_SNR=30,25,15`: limites inferiores Normal/Atenção/Ruim.
 - `WIRELESS_QUALITY_CCQ=90,80,60`: limites inferiores Normal/Atenção/Ruim.
 

@@ -10,6 +10,27 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class IxcControllerTests {
+    @Test void modalIdentityIncludesPlanAndRouterAccessWithoutPppoePassword() throws Exception {
+        var ixc = mock(IxcClient.class);
+        var inventory = mock(ZabbixService.class);
+        var mikrotik = mock(MikrotikService.class);
+        var host = new Host("42", "AP", "192.0.2.1", List.of());
+        when(inventory.hosts()).thenReturn(List.of(host));
+        when(mikrotik.query(host, "wireless", null)).thenReturn(new MikrotikService.Snapshot(1,
+            List.of(Map.of("mac-address", "AA:BB:CC:DD:EE:FF")), ""));
+        var row = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+            "{\"login\":\"cliente\",\"ip\":\"192.0.2.15\",\"id_grupo\":\"7\",\"senha\":\"ppp-secret\",\"senha_router1\":\"router-secret\",\"porta_http\":\"8080\"}");
+        when(ixc.findByMac("AA:BB:CC:DD:EE:FF")).thenReturn(List.of(new IxcClient.Login(row, "AA:BB:CC:DD:EE:FF")));
+        when(ixc.findPlan("7")).thenReturn(new IxcClient.Plan("100M", "50M"));
+        var mvc = MockMvcBuilders.standaloneSetup(new IxcController(ixc, inventory, mikrotik)).build();
+        mvc.perform(get("/api/hosts/42/ixc/client").param("mac", "aabbccddeeff"))
+            .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(jsonPath("$[0].pppoe").value("cliente"))
+            .andExpect(jsonPath("$[0].plan.download").value("100M"))
+            .andExpect(jsonPath("$[0].equipmentPassword").value("router-secret"))
+            .andExpect(jsonPath("$[0].pppoePassword").doesNotExist());
+    }
+
     @Test void restrictsLookupsToMonitoredHostsAndTheirConnectedWirelessMacs() throws Exception {
         var ixc = mock(IxcClient.class);
         var inventory = mock(ZabbixService.class);
