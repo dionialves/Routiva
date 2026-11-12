@@ -68,7 +68,9 @@
       const dot = document.createElement('span'); dot.className = 'host-connectivity';
       dot.dataset.state = 'unknown'; dot.setAttribute('role', 'img');
       dot.setAttribute('aria-label', 'Estado desconhecido');
-      const name = document.createElement('span'); name.textContent = host.name;
+      const name = document.createElement('a'); name.textContent = host.name;
+      name.className = 'availability-host-name';
+      window.AccessPointLinks?.attach(name, host.id);
       nameCell.append(dot, name); textCell(tr, host.ip || 'Sem IP');
       textCell(tr, equipment.model || 'Não informado'); textCell(tr, equipment.version || 'Não informado');
       const incident = data.incidents[host.id];

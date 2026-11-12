@@ -179,3 +179,15 @@ CREATE TABLE IF NOT EXISTS network_map (
 );
 
 ALTER TABLE network_map ADD COLUMN IF NOT EXISTS updated_at_ms BIGINT;
+
+CREATE TABLE IF NOT EXISTS access_point (
+    host_id VARCHAR(255) PRIMARY KEY,
+    host_name TEXT NOT NULL,
+    ip_address VARCHAR(255),
+    manufacturer VARCHAR(100),
+    model TEXT,
+    connected_clients INTEGER,
+    last_collected_at BIGINT,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
+);

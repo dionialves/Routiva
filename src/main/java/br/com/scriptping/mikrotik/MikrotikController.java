@@ -21,12 +21,6 @@ public class MikrotikController {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host não encontrado no inventário monitorado."));
     }
 
-    @GetMapping("/hosts/{id}")
-    public String page(@PathVariable String id, Model model) {
-        model.addAttribute("host", host(id));
-        return "host";
-    }
-
     @GetMapping("/api/hosts/{id}/mikrotik/{section:overview|interfaces|traffic|wireless}")
     @ResponseBody
     public ResponseEntity<MikrotikService.Snapshot> live(@PathVariable String id, @PathVariable String section,

@@ -1,0 +1,27 @@
+.ap-page button, #ap-dialog button { cursor: pointer; border: 1px solid var(--border, #28485e); border-radius: 8px; padding: 10px 16px; background: #0c2030; color: inherit; font: inherit; }
+.ap-page button.ap-primary, #ap-dialog button.ap-primary { background: #2563eb; color: white; border-color: #2563eb; font-weight: 600; }
+.ap-page button:disabled, #ap-dialog button:disabled { opacity: .45; cursor: default; }
+.ap-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px; }
+.ap-toolbar h2 { margin: 0; font-size: 18px; }
+.ap-toolbar label, .ap-transfer section { display: flex; flex-direction: column; gap: 8px; }
+.ap-page input, #ap-dialog input { border: 1px solid #28485e; border-radius: 8px; padding: 10px 12px; font: inherit; background: #0c2030; color: inherit; }
+#ap-state, #ap-retry { margin: 0 20px 16px; }
+.ap-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 16px 20px; }
+#ap-dialog { width: min(960px, calc(100vw - 32px)); height: min(800px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); overflow: hidden; box-sizing: border-box; border: 1px solid #28485e; border-radius: 16px; padding: 24px; color: var(--text, #17253d); background: #0c2030; box-shadow: 0 24px 80px #10234430; }
+#ap-dialog[open] { display: flex; flex-direction: column; }
+#ap-dialog > header, #ap-dialog > p, #ap-dialog > footer { flex-shrink: 0; }
+#ap-dialog::backdrop { background: #0f172a80; }
+#ap-dialog .ap-toolbar { padding: 0; }
+#ap-dialog > p { color: var(--muted, #65748b); line-height: 1.6; }
+.ap-transfer { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 52px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 18px; margin: 24px 0; }
+.ap-transfer section { display: grid; grid-template-rows: 24px 44px minmax(0, 1fr); min-height: 0; min-width: 0; }
+.ap-transfer input { width: 100%; min-width: 0; height: 44px; box-sizing: border-box; }
+.ap-transfer select { height: 100%; max-height: 100%; width: 100%; min-height: 0; box-sizing: border-box; border: 1px solid #28485e; border-radius: 8px; padding: 6px; background: #0c2030; color: inherit; font: inherit; }
+.ap-transfer option { padding: 10px; border-radius: 4px; }
+.ap-arrows { display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+#ap-dialog .ap-arrows button { padding: 10px; font-size: 22px; }
+#ap-dialog footer { display: flex; justify-content: flex-end; gap: 12px; }
+@media (max-width: 650px) { .ap-toolbar { flex-wrap: wrap; } .ap-transfer { gap: 8px; grid-template-columns: minmax(0, 1fr) 38px minmax(0, 1fr); } #ap-dialog { padding: 16px; } .ap-transfer input { min-width: 0; width: 100%; box-sizing: border-box; } }
+
+.ap-page .availability-host-section { padding: 0; overflow: hidden; }
+.ap-page .availability-host-name:not([href]) { cursor: default; }

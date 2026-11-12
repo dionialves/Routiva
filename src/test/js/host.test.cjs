@@ -71,7 +71,7 @@ test('management failure preserves independent historical charts and displays it
 test('switching tabs only polls the active section and clears earlier timers', async () => {
   const ui = await surface();
   ui.tabs[1].onclick(); await flush();
-  assert.ok(ui.requests.some(r => r.url.endsWith('/mikrotik/wireless')));
+  assert.ok(ui.requests.some(r => r.url.endsWith('/api/ap/42/wireless')));
   assert.equal(ui.panels[0].hidden, true);
   assert.equal(ui.panels[1].hidden, false);
   assert.equal(ui.timers.size, 1);
@@ -85,7 +85,7 @@ test('hiding the page stops all future live requests', async () => {
 test('overview stays populated above the wireless tab', async () => {
   const ui = await surface();
   ui.tabs[1].onclick(); await flush();
-  assert.ok(ui.requests.some(request => request.url.endsWith('/mikrotik/overview')));
+  assert.ok(ui.requests.some(request => request.url.endsWith('/api/ap/42/overview')));
   const details = ui.elements['resource-details'].children[0].children;
   const frequency = details.find(field => field.children[0].textContent === 'Frequência');
   assert.equal(frequency.children[1].textContent, '5540 MHz');

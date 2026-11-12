@@ -107,7 +107,7 @@
     $('signal-missing').textContent = wirelessAvailable ? '' : 'Aguardando dados válidos da API';
   }
   async function request(path, options = {}) {
-    const response = await fetch(base + path, { cache:'no-store', ...options });
+    const response = await fetch((/^\/(overview|interfaces|traffic|wireless)(?:\?|$)/.test(path) ? '/api/ap/' + encodeURIComponent(root.dataset.hostId) : base) + path, { cache:'no-store', ...options });
     if (!response.ok) {
       let message = 'Não foi possível consultar o equipamento.';
       try { const body = await response.json(); message = body.message || body.detail || message; } catch (_) { /* Empty response. */ }
@@ -503,7 +503,7 @@
       let overview, overviewError;
       try {
         if (Date.now() - overviewAt >= 10000) {
-          overview = await request('/mikrotik/overview', { signal:controller.signal });
+          overview = await request('/overview', { signal:controller.signal });
           if (generation !== ownGeneration) return;
           const resource = overview.rows[0] || {};
           details('resource-details', resource, ['identity','board-name','version','uptime','cpu-load','free-memory','total-memory','frequency','channel','ssid']);
@@ -518,7 +518,7 @@
       // Wireless drives the live indicators even while the interfaces tab is selected.
       let wirelessResult;
       try {
-        wirelessResult = await request('/mikrotik/wireless', { signal:controller.signal });
+        wirelessResult = await request('/wireless', { signal:controller.signal });
         if (generation !== ownGeneration) return;
         wirelessAvailable = !wirelessResult.warning;
         if (wirelessAvailable) clients = wirelessResult.rows;
@@ -537,7 +537,7 @@
       let interfaceResult;
       if (section === 'interfaces' || Date.now() - interfacesAt >= 5000) {
         try {
-          interfaceResult = await request('/mikrotik/interfaces', { signal:controller.signal });
+          interfaceResult = await request('/interfaces', { signal:controller.signal });
           if (generation !== ownGeneration) return;
           interfacesAt = Date.now(); interfacesAvailable = true;
         } catch (error) {
@@ -580,7 +580,7 @@
         }
         if ($('interface-modal').open && selected) details('interface-details', selected);
         if ($('interface-modal').open && selected) {
-          const sample = await request('/mikrotik/traffic?selectedInterface=' + encodeURIComponent(selectedInterface), { signal:controller.signal });
+          const sample = await request('/traffic?selectedInterface=' + encodeURIComponent(selectedInterface), { signal:controller.signal });
           if (generation !== ownGeneration) return;
           $('interface-live-state').textContent = 'Atualizado às ' + new Date(sample.measuredAt).toLocaleTimeString('pt-BR');
           const row = sample.rows[0] || {};

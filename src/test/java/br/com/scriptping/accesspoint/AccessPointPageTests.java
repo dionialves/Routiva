@@ -1,4 +1,4 @@
-package br.com.scriptping.mikrotik;
+package br.com.scriptping.accesspoint;
 
 import br.com.scriptping.zabbix.*;
 import java.util.*;
@@ -13,15 +13,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 
-@WebMvcTest(MikrotikController.class)
-class MikrotikPageTests {
+@WebMvcTest(AccessPointController.class)
+class AccessPointPageTests {
     @Autowired MockMvc mvc;
-    @MockitoBean ZabbixService inventory;
-    @MockitoBean MikrotikService mikrotik;
+    @MockitoBean AccessPointService service;
 
     @Test void rendersHostAndSharedNavigationWithoutExposingCredentials() throws Exception {
-        when(inventory.hosts()).thenReturn(List.of(new Host("42", "MikroTik São Paulo", "192.0.2.1", List.of())));
-        mvc.perform(get("/hosts/42")).andExpect(status().isOk())
+        when(service.pageHost("42")).thenReturn(new Host("42", "MikroTik São Paulo", "192.0.2.1", List.of()));
+        mvc.perform(get("/ap/42")).andExpect(status().isOk())
             .andExpect(content().string(containsString("MikroTik São Paulo")))
             .andExpect(content().string(containsString("data-host-id=\"42\"")))
             .andExpect(content().string(containsString("Wireless")))
@@ -31,6 +30,9 @@ class MikrotikPageTests {
             .andExpect(content().string(not(containsString("interface-search"))))
             .andExpect(content().string(not(containsString("wireless-search"))))
             .andExpect(content().string(not(containsString("filters-toggle"))));
-        verifyNoInteractions(mikrotik);
+        mvc.perform(get("/hosts/42")).andExpect(status().isNotFound());
+        mvc.perform(get("/ap")).andExpect(status().isOk())
+            .andExpect(content().string(containsString("Hosts disponíveis")))
+            .andExpect(content().string(containsString("Definir como AP")));
     }
 }

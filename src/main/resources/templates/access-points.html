@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Access Point • TraceOne</title>
+  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/access-points.css?v=20261112-modal-fit-2">
+  <script src="/shell.js" defer></script><script src="/access-points.js" defer></script>
+</head>
+<body class="availability-dashboard">
+<aside th:replace="~{shell :: sidebar('ap')}"></aside>
+<div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
+<main class="page-content availability-page ap-page">
+  <div class="availability-heading"><div><p class="eyebrow">EQUIPAMENTOS WIRELESS</p><h1>Access Point</h1><p>Analise seus APs e os clientes conectados à rede wireless outdoor.</p></div><button id="ap-import" class="ap-primary" aria-haspopup="dialog" aria-controls="ap-dialog">Importar</button></div>
+  <section class="card availability-host-section">
+    <div class="ap-toolbar"><h2>Access Points cadastrados</h2><label>Buscar AP<input type="search" id="ap-search" placeholder="Nome, IP ou fabricante"></label></div>
+    <p id="ap-state" role="status" aria-live="polite">Carregando Access Points…</p>
+    <button id="ap-retry" hidden>Tentar novamente</button>
+    <div class="table-scroll"><table class="hosts-table"><thead><tr><th scope="col">Nome</th><th scope="col">IP</th><th scope="col">Fabricante / Modelo</th><th scope="col">Status</th><th scope="col">Clientes conectados</th><th scope="col">Última leitura</th></tr></thead><tbody id="ap-rows"></tbody></table></div>
+    <div class="ap-pagination"><button id="ap-previous">← Anterior</button><span id="ap-page-count"></span><button id="ap-next">Próxima →</button></div>
+  </section>
+</main></div>
+<dialog id="ap-dialog" aria-labelledby="ap-dialog-title">
+  <header class="ap-toolbar"><div><p class="eyebrow">INVENTÁRIO ZABBIX</p><h2 id="ap-dialog-title">Importar Access Points</h2></div><button id="ap-close" aria-label="Fechar importação">✕</button></header>
+  <p>Selecione os equipamentos que conectam clientes wireless outdoor. Hosts já definidos como AP não aparecem nesta lista.</p>
+  <div class="ap-transfer">
+    <section><label for="ap-available-search">Hosts disponíveis <span id="ap-available-count"></span></label><input type="search" id="ap-available-search" placeholder="Buscar por nome ou IP"><select id="ap-available" multiple size="12" aria-label="Hosts disponíveis"></select></section>
+    <div class="ap-arrows"><button id="ap-select" aria-label="Mover hosts selecionados para a direita" title="Selecionar como AP">→</button><button id="ap-remove" aria-label="Retirar hosts selecionados para a esquerda" title="Retirar seleção">←</button></div>
+    <section><label for="ap-selected-search">Hosts selecionados <span id="ap-selected-count"></span></label><input type="search" id="ap-selected-search" placeholder="Buscar na seleção"><select id="ap-selected" multiple size="12" aria-label="Hosts selecionados"></select></section>
+  </div>
+  <p id="ap-import-state" role="status" aria-live="polite"></p>
+  <footer><button id="ap-cancel">Cancelar</button><button id="ap-save" class="ap-primary" disabled>Definir como AP</button></footer>
+</dialog>
+</body></html>
