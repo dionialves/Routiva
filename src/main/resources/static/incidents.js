@@ -233,6 +233,45 @@
     const params = new URLSearchParams(applied);
     history.replaceState(null, '', `/incidentes?${params}`);
   }
+  function hostName(item) {
+    const name = document.createElement('div');
+    name.className = 'incident-host';
+    const groups = (item.groups || []).map(group => group.id).filter(Boolean);
+    if (!groups.length) {
+      name.textContent = item.name; name.title = item.name;
+      return name;
+    }
+    const link = document.createElement('a');
+    link.className = 'incident-host-link';
+    link.textContent = item.name; link.title = item.name;
+    link.href = `/diagnostico/grupos?${new URLSearchParams({ groupId: groups.join(',') })}`;
+    link.setAttribute('aria-haspopup', 'true');
+    link.setAttribute('aria-expanded', 'false');
+    const menu = document.createElement('div');
+    menu.className = 'incident-host-menu';
+    menu.setAttribute('popover', 'auto');
+    const destination = document.createElement('a');
+    destination.href = link.href;
+    destination.textContent = 'Grupo do Host';
+    menu.append(destination);
+    link.addEventListener('click', event => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      const bounds = link.getBoundingClientRect();
+      menu.style.left = `${Math.max(8, Math.min(bounds.left, window.innerWidth - 200))}px`;
+      menu.style.top = `${bounds.bottom + 6}px`;
+      menu.showPopover();
+      if (menu.getBoundingClientRect().bottom > window.innerHeight) {
+        menu.style.top = `${Math.max(8, bounds.top - menu.offsetHeight - 6)}px`;
+      }
+      destination.focus();
+    });
+    menu.addEventListener('toggle', event => {
+      link.setAttribute('aria-expanded', String(event.newState === 'open'));
+    });
+    name.append(link, menu);
+    return name;
+  }
   function renderRows(rows, fragment, index) {
     const severityIcons = ['help', 'info', 'alert', 'circle-alert', 'alert', 'octagon-alert'];
     for (const row of rows) {
@@ -248,8 +287,7 @@
       cell(tr).append(severity);
       const hosts = cell(tr), addresses = cell(tr);
       for (const item of row.hosts) {
-        const name = document.createElement('div'); name.className = 'incident-host';
-        name.textContent = item.name; name.title = item.name;
+        const name = hostName(item);
         const ip = document.createElement('div'); ip.className = 'incident-ip';
         ip.textContent = item.ip; ip.title = item.ip;
         hosts.append(name); addresses.append(ip);

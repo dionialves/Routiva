@@ -17,6 +17,12 @@
       for (const option of group.options) option.selected = Array.isArray(saved.groups) && saved.groups.includes(option.value);
     }
   } catch {}
+  const initial = new URLSearchParams(location.search);
+  if (initial.has('groupId')) {
+    const selected = initial.get('groupId').split(',');
+    for (const option of group.options) option.selected = selected.includes(option.value);
+    $('group-status').value = '';
+  }
   function saveFilters() {
     try { localStorage.setItem(storageKey, JSON.stringify({
       groups: [...group.options].filter(option => option.selected).map(option => option.value),

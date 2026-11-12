@@ -93,3 +93,9 @@
 .incident-period-count { margin-left:auto; color:#b0c7d7; font-size:11px; }
 .incident-period .ui-icon { width:16px; height:16px; flex-shrink:0; }
 .incident-period-pagination .pagination { margin:8px 0; }
+
+.incident-host-link { color:#00d3fd; text-decoration:none; }
+.incident-host-link:hover,.incident-host-link:focus-visible { color:#00d3fd; text-decoration:underline; text-underline-offset:3px; }
+.incident-host-menu { position:fixed; inset:auto; margin:0; min-width:180px; padding:6px; border:1px solid #486071; border-radius:7px; background:#0c2030; color:#e6edf5; box-shadow:0 10px 24px #0007; }
+.incident-host-menu a { display:block; padding:8px 12px; border-radius:4px; color:#00d3fd; font-size:12px; font-weight:600; text-decoration:none; }
+.incident-host-menu a:hover,.incident-host-menu a:focus-visible { background:#174054; text-decoration:underline; text-underline-offset:3px; }
