@@ -101,6 +101,7 @@
     document.querySelectorAll('[data-opened-at]').forEach(node => {
       node.textContent = duration(Number(node.dataset.openedAt));
     });
+    updateOccurrenceTimes();
   }
   function filterHosts() {
     const groups = [...group.options].filter(option => option.selected).map(option => option.value);
@@ -339,6 +340,206 @@
     $('incident-update-save').disabled = !detailsLoaded || !canUpdate || saving || uncertain
       || activeIncident?.closed || activeIncident?.closing || !valid || message.value.length > limit;
   }
+  const modalTabs = ['summary', 'trigger', 'update'];
+  let occurrenceRows = null, occurrencePage = 1, occurrenceVersion = 0, occurrenceLoading = false;
+  function selectModalTab(key, focus = false) {
+    dialog.dataset.activeTab = key;
+    if (key === 'trigger') {
+      $('incident-trigger-scroll').scrollTop = 0;
+      $('incident-trigger-scroll').scrollLeft = 0;
+      $('incident-modal-scroll').scrollTop = 0;
+    }
+    for (const tab of modalTabs) {
+      const selected = key === tab;
+      $('incident-tab-' + tab).setAttribute('aria-selected', String(selected));
+      $('incident-tab-' + tab).tabIndex = selected ? 0 : -1;
+      $('incident-panel-' + tab).hidden = !selected;
+    }
+    if (focus) $('incident-tab-' + key).focus();
+    if (key === 'trigger' && detailsLoaded) {
+      loadOccurrences();
+      updateOccurrenceTimes();
+    }
+  }
+  for (const [index, key] of modalTabs.entries()) {
+    $('incident-tab-' + key).addEventListener('click', () => selectModalTab(key));
+    $('incident-tab-' + key).addEventListener('keydown', event => {
+      let next;
+      if (event.key === 'ArrowRight') next = (index + 1) % 3;
+      if (event.key === 'ArrowLeft') next = (index + 2) % 3;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = 2;
+      if (next !== undefined) { event.preventDefault(); selectModalTab(modalTabs[next], true); }
+    });
+  }
+  const readingNumberFormat = new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: 2, useGrouping: false,
+  });
+  function formatItemReading(reading) {
+    const raw = String(reading?.value ?? '').trim();
+    if (!raw) return '—';
+    // Only parse a complete numeric value: labels such as "Down (0)" remain untouched.
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(raw)) return raw;
+    let value = Number(raw);
+    if (!Number.isFinite(value)) return raw;
+    let units = String(reading.units || '').replace(/^!/, '').trim();
+    if (units === 's') { value *= 1000; units = 'ms'; }
+    if (!Number.isFinite(value)) return raw;
+    const formatted = readingNumberFormat.format(value);
+    return `${formatted}${units ? ' ' + units : ''}`;
+  }
+  function renderSummary(data) {
+    const hosts = (data.hosts || []).map(host => host.name).join(', ') || '—';
+    $('incident-dialog-host').replaceChildren(icon('server'), document.createTextNode(hosts));
+    $('incident-dialog-severity').textContent = severityLabels[data.severity] || '—';
+    $('incident-dialog-severity').style.color = severityColors[data.severity] || '';
+    function properties(id, entries) {
+      const dl = $(id); dl.replaceChildren();
+      for (const [label, value] of entries) {
+        const dt = document.createElement('dt'); dt.textContent = label;
+        const dd = document.createElement('dd'); dd.textContent = value || '—';
+        if (label === 'Severidade') dd.style.color = severityColors[data.severity] || '';
+        dl.append(dt, dd);
+      }
+    }
+    properties('incident-event-properties', [
+      ['Data de início', formatDate(data.timestamp)],
+      ['Severidade', severityLabels[data.severity]],
+      ['Status', data.closed ? 'Resolvido' : data.closing ? 'Fechamento solicitado' : 'Incidente ativo'],
+      ['Reconhecido', data.acknowledged ? 'Sim' : 'Não'], ['Dados operacionais do evento', data.operationalData],
+    ]);
+    const reading = data.latestReading;
+    $('incident-latest-value').textContent = formatItemReading(reading);
+    properties('incident-operational-properties', [
+      ['Última coleta', formatDate(reading?.collectedAt)], ['Expressão da trigger', data.expression], ['Origem', 'Zabbix'],
+    ]);
+    if (data.expression) {
+      const dd = $('incident-operational-properties').children[3];
+      dd.className = 'incident-expression'; dd.replaceChildren();
+      const code = document.createElement('code');
+      // Break at expression delimiters without changing the value copied to the clipboard.
+      for (const part of data.expression.split(/(?<=[/,()[\]<>])/)) {
+        code.append(document.createTextNode(part), document.createElement('wbr'));
+      }
+      const copy = document.createElement('button'); copy.type = 'button';
+      copy.className = 'incident-expression-copy'; copy.title = 'Copiar expressão';
+      copy.setAttribute('aria-label', 'Copiar expressão da trigger'); copy.append(icon('copy'));
+      const status = document.createElement('span'); status.className = 'incident-copy-status';
+      status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(data.expression);
+          status.textContent = 'Copiado';
+        } catch { status.textContent = 'Não foi possível copiar'; }
+        setTimeout(() => { status.textContent = ''; }, 2500);
+      });
+      dd.append(code, copy, status);
+    }
+    if (data.tags?.length) {
+      const dt = document.createElement('dt'); dt.textContent = 'Tags';
+      const tags = document.createElement('dd'); tags.className = 'incident-event-tags';
+      for (const tag of data.tags) {
+        const badge = document.createElement('span'); badge.className = 'incident-action-badge';
+        badge.textContent = `${tag.tag}: ${tag.value}`; tags.append(badge);
+      }
+      $('incident-event-properties').append(dt, tags);
+    }
+  }
+
+  const occurrenceDateFormat = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: document.querySelector('.incidents-page').dataset.timeZone,
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const formatOccurrenceDate = timestamp => timestamp > 0
+    ? occurrenceDateFormat.format(new Date(timestamp)).replace(',', '') : '—';
+  function occurrenceDuration(row) {
+    if (!(row.timestamp > 0)) return '—';
+    const end = row.resolved ? row.recoveredAt : Date.now();
+    if (!(end > 0) || end < row.timestamp) return '—';
+    const seconds = Math.floor((end - row.timestamp) / 1000);
+    const minutes = Math.floor(seconds / 60), hours = Math.floor(minutes / 60);
+    let value;
+    if (hours >= 24) value = `${Math.floor(hours / 24)} d ${hours % 24} h`;
+    else {
+      value = hours ? `${hours} h ${minutes % 60} min` : minutes ? `${minutes} min` : '';
+      const remainder = seconds % 60;
+      if (remainder) value += `${value ? ' ' : ''}${remainder} s`;
+      if (!value) value = '0 min';
+    }
+    return value;
+  }
+  function updateOccurrenceTimes() {
+    if (!dialog.open || dialog.dataset.activeTab !== 'trigger' || !occurrenceRows) return;
+    const visible = occurrenceRows.slice((occurrencePage - 1) * 10, occurrencePage * 10);
+    for (const [index, row] of visible.entries()) {
+      const cells = $('incident-trigger-rows').children[index]?.children;
+      if (!cells) continue;
+      cells[3].textContent = duration(row.timestamp);
+      if (!row.resolved) cells[4].textContent = occurrenceDuration(row);
+    }
+  }
+  function renderOccurrences() {
+    const body = $('incident-trigger-rows'); body.replaceChildren();
+    $('incident-trigger-scroll').scrollTop = 0;
+    const rows = occurrenceRows || [];
+    $('incident-trigger-state').textContent = rows.length ? '' : 'Nenhum evento encontrado.';
+    for (const row of rows.slice((occurrencePage - 1) * 10, occurrencePage * 10)) {
+      const tr = document.createElement('tr');
+      cell(tr, formatOccurrenceDate(row.timestamp));
+      cell(tr, row.resolved ? formatOccurrenceDate(row.recoveredAt) : '—');
+      const badge = document.createElement('span'); badge.className = 'incident-occurrence-status';
+      badge.dataset.state = row.resolved ? 'resolved' : 'active';
+      badge.textContent = row.resolved ? 'Resolvido' : 'Incidente'; cell(tr).append(badge);
+      cell(tr, duration(row.timestamp));
+      cell(tr, occurrenceDuration(row));
+      cell(tr, row.acknowledged ? 'Sim' : 'Não'); body.append(tr);
+    }
+    const nav = $('incident-trigger-pagination'); nav.replaceChildren();
+    const pages = Math.max(1, Math.ceil(rows.length / 10));
+    function button(label, target, disabled, iconName) {
+      const node = document.createElement('button'); node.type = 'button'; node.className = 'system-button';
+      if (iconName) node.append(icon(iconName));
+      node.append(document.createTextNode(label)); node.disabled = disabled;
+      if (target === occurrencePage && !iconName) node.setAttribute('aria-current', 'page');
+      node.addEventListener('click', () => { occurrencePage = target; renderOccurrences(); }); nav.append(node);
+    }
+    const count = document.createElement('span'); count.textContent = `${rows.length} registros`; nav.append(count);
+    button('Anterior', occurrencePage - 1, occurrencePage === 1, 'chevron-left');
+    for (let page = 1; page <= pages; page++) button(String(page), page, page === occurrencePage);
+    button('Próxima', occurrencePage + 1, occurrencePage === pages, 'chevron-right');
+  }
+  async function loadOccurrences() {
+    if (occurrenceRows !== null || occurrenceLoading) return;
+    const version = ++occurrenceVersion, id = activeIncident.eventId;
+    occurrenceLoading = true;
+    $('incident-trigger-retry').hidden = true;
+    $('incident-trigger-state').textContent = 'Consultando histórico da trigger…';
+    $('incident-panel-trigger').setAttribute('aria-busy', 'true');
+    $('incident-trigger-pagination').replaceChildren();
+    const body = $('incident-trigger-rows'); body.replaceChildren();
+    for (let row = 0; row < 10; row++) {
+      const tr = document.createElement('tr'); tr.className = 'incident-skeleton';
+      for (let col = 0; col < 6; col++) cell(tr, ' ');
+      body.append(tr);
+    }
+    try {
+      const response = await fetch(`/api/incidents/${encodeURIComponent(id)}/occurrences`, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Não foi possível consultar o histórico da trigger.');
+      const data = await response.json();
+      if (version !== occurrenceVersion || !dialog.open) return;
+      occurrenceRows = data; occurrencePage = 1; renderOccurrences();
+    } catch (error) {
+      if (version !== occurrenceVersion || !dialog.open) return;
+      body.replaceChildren(); $('incident-trigger-state').textContent = error.message;
+      $('incident-trigger-retry').hidden = false;
+    } finally {
+      if (version === occurrenceVersion) {
+        occurrenceLoading = false; $('incident-panel-trigger').setAttribute('aria-busy', 'false');
+      }
+    }
+  }
+  $('incident-trigger-retry').addEventListener('click', loadOccurrences);
   function renderIncidentHistory(data) {
     const history = $('incident-history'); history.replaceChildren();
     for (const item of [...data.history].sort((a, b) => b.timestamp - a.timestamp)) {
@@ -388,7 +589,8 @@
       $('incident-dialog-id').textContent = `ID: ${data.eventId}`;
       $('incident-dialog-description').textContent = `${status} · ${data.closed || data.closing ? 'Consulte o histórico de atualizações.' : 'Atualize o registro, severidade ou finalize o incidente.'}`;
       $('incident-dialog-state').textContent = !canUpdate ? 'Somente administradores podem atualizar incidentes.' : '';
-      renderIncidentHistory(data);
+      renderIncidentHistory(data); renderSummary(data);
+      if (!$('incident-panel-trigger').hidden) loadOccurrences();
       $('incident-update-fields').disabled = !canUpdate || data.closed || data.closing;
       $('incident-new-severity').value = String(previousSeverity ?? data.severity);
       $('incident-new-severity').disabled = !data.writable;
@@ -407,7 +609,7 @@
 
       if (uncertain) $('incident-dialog-state').textContent = 'Confira o histórico. Feche e reabra o modal antes de uma nova tentativa.';
       updateSaveState();
-      if (focusHistory) $('incident-history').closest('.table-scroll').focus();
+      if (focusHistory) { selectModalTab('update'); $('incident-history').closest('.table-scroll').focus(); }
     } catch (error) {
       if (version !== detailsVersion || !dialog.open) return;
       $('incident-dialog-state').textContent = error.message; $('incident-details-retry').hidden = false;
@@ -415,6 +617,13 @@
   }
   function openIncident(row, trigger, focusHistory = false) {
     returnFocus = trigger; activeIncident = row; uncertain = false; detailsLoaded = false; hasIncidentDetails = false;
+    occurrenceVersion++; occurrenceRows = null; occurrenceLoading = false; occurrencePage = 1;
+    $('incident-trigger-rows').replaceChildren(); $('incident-trigger-pagination').replaceChildren();
+    $('incident-trigger-state').textContent = 'Aguardando os dados do incidente…';
+    $('incident-trigger-retry').hidden = true;
+    $('incident-panel-trigger').setAttribute('aria-busy', 'false');
+    selectModalTab(focusHistory ? 'update' : 'summary');
+    renderSummary(row);
     updateForm.reset(); $('incident-update-error').textContent = '';
     $('incident-history').replaceChildren(); $('incident-history-empty').hidden = true;
     $('incident-history-count').textContent = '0 registros';
@@ -428,12 +637,20 @@
   $('incident-recognize').addEventListener('change', updateSaveState);
   $('incident-close').addEventListener('change', updateSaveState);
   $('incident-details-retry').addEventListener('click', () => readDetails());
-  for (const id of ['incident-dialog-cancel', 'incident-dialog-close']) {
-    $(id).addEventListener('click', () => { if (!saving) dialog.close(); });
+  function allowDismiss() {
+    if (saving) return false;
+    updateSaveState();
+    const dirty = $('incident-message').value.trim() || changedSeverity() !== null
+      || ($('incident-recognize').checked && !activeIncident?.acknowledged)
+      || ($('incident-close').checked && canCloseIncident());
+    return !dirty || window.confirm('Descartar alterações não salvas?');
   }
-  dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+  for (const id of ['incident-dialog-cancel', 'incident-dialog-close']) {
+    $(id).addEventListener('click', () => { if (allowDismiss()) dialog.close(); });
+  }
+  dialog.addEventListener('cancel', event => { if (!allowDismiss()) event.preventDefault(); });
   dialog.addEventListener('close', () => {
-    detailsVersion++; detailsLoaded = false;
+    detailsVersion++; occurrenceVersion++; occurrenceLoading = false; detailsLoaded = false;
     if (returnFocus?.isConnected) returnFocus.focus();
     else $('incident-rows').querySelector('.incident-link')?.focus();
   });
@@ -474,6 +691,7 @@
       $('incident-update-error').textContent = error.message;
     } finally {
       if (confirmed || uncertain) {
+        occurrenceVersion++; occurrenceRows = null; occurrenceLoading = false;
         // Discard snapshots requested before the mutation and fetch the Zabbix state again.
         filterVersion++;
         if (busy) queuedFilters = true;
@@ -484,7 +702,7 @@
       $('incident-update-save').setAttribute('aria-busy', 'false');
       $('incident-update-save-label').textContent = 'Atualizar incidente';
       updateSaveState();
-      if (confirmed) dialog.close();
+      // Keep the refreshed details and update history available after saving.
     }
   });
   function updateLocation() {

@@ -42,6 +42,7 @@ async function surface(respond, options = {}) {
     document: { getElementById: id => elements[id], createElement: () => new Element(), createElementNS: () => new Element(), createTextNode: text => ({ textContent: text }), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }), querySelector: () => main, addEventListener() {}, removeEventListener() {}, querySelectorAll: selector => selector === '[data-opened-at]' ? [] : selector === '[data-incident-severity]' ? severityOptions : sorts },
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
     location: { search: options.search ?? '?groupId=g&page=2' }, history: { replaceState(state, title, url) { locations.push(url); } },
+    navigator: { clipboard: { writeText: options.copy || (async () => {}) } },
     FormData: class { constructor() { return fields; } }, URLSearchParams, AbortController, Intl, Date: options.Date || Date,
     setTimeout(fn, ms) { const id = timers.size + 1; timers.set(id, { fn, ms }); return id; },
     clearTimeout(id) { timers.delete(id); }, setInterval(fn) { intervals.push(fn); return intervals.length; }, clearInterval() {},
@@ -377,7 +378,7 @@ test('large saved selections use a short POST URL and never copy incident names 
 });
 
 
-test('only changed severity is sent and confirmed update closes the modal', async () => {
+test('only changed severity is sent and confirmed update refreshes the open modal', async () => {
   const sent = [];
   const ui = await surface(response, { admin: true, api: async (url, init) => {
     if (init.method === 'POST') { sent.push(JSON.parse(init.body)); return { ok: true }; }
@@ -394,7 +395,7 @@ test('only changed severity is sent and confirmed update closes the modal', asyn
   await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].severity, null);
-  assert.equal(ui.elements['incident-dialog'].open, false);
+  assert.equal(ui.elements['incident-dialog'].open, true);
 });
 
 test('history message expands without changing the original content and recognized state is checked', async () => {
@@ -467,7 +468,7 @@ test('a missing linked event shows an empty result instead of unrelated incident
 });
 
 
-test('saving an incident waits for a fresh Zabbix list before closing the modal', async () => {
+test('saving an incident waits for a fresh Zabbix list and keeps the modal open', async () => {
   let updated = false, release;
   const ui = await surface(params => {
     if (!updated) return response(params);
@@ -488,8 +489,208 @@ test('saving an incident waits for a fresh Zabbix list before closing the modal'
   assert.equal(ui.elements['incident-dialog'].open, true);
   release();
   await saving;
-  assert.equal(ui.elements['incident-dialog'].open, false);
+  assert.equal(ui.elements['incident-dialog'].open, true);
   const cells = ui.rows().find(node => node.dataset.severity != null).children;
   assert.equal(cells[6].children[0].textContent, 'Sim');
   assert.equal(cells[7].children[0].children[1].textContent, '1');
+});
+
+
+test('modal preserves pending changes across tabs and paginates cached trigger events', async () => {
+  let occurrenceRequests = 0;
+  const occurrences = Array.from({ length: 20 }, (_, i) => ({ eventId: String(i),
+    timestamp: Date.now() - (i + 1) * 60000, recoveredAt: i ? Date.now() - i * 60000 : null,
+    resolved: i > 0, acknowledged: i % 2 === 0 }));
+  const ui = await surface(response, { admin: true, api: async url => {
+    if (url.endsWith('/occurrences')) {
+      occurrenceRequests++;
+      return { ok: true, json: async () => occurrences };
+    }
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  assert.equal(ui.elements['incident-panel-summary'].hidden, false);
+  assert.equal(occurrenceRequests, 0);
+  ui.elements['incident-tab-update'].emit('click');
+  ui.elements['incident-message'].value = 'Análise em andamento'; ui.elements['incident-message'].emit('input');
+  ui.elements['incident-new-severity'].value = '2';
+  ui.elements['incident-tab-trigger'].emit('click'); await tick();
+  assert.equal(occurrenceRequests, 1);
+  assert.equal(ui.elements['incident-trigger-rows'].children.length, 10);
+  assert.doesNotMatch(ui.elements['incident-trigger-rows'].children[0].children[4].textContent, /Em andamento/);
+  ui.elements['incident-trigger-pagination'].children[3].emit('click');
+  assert.equal(ui.elements['incident-trigger-rows'].children.length, 10);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[3].attributes['aria-current'], 'page');
+  assert.equal(ui.elements['incident-trigger-pagination'].children[3].disabled, true);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[2].disabled, false);
+  ui.elements['incident-tab-update'].emit('click');
+  assert.equal(ui.elements['incident-message'].value, 'Análise em andamento');
+  assert.equal(ui.elements['incident-new-severity'].value, '2');
+  assert.equal(ui.elements['incident-update-save'].disabled, false);
+  ui.elements['incident-tab-trigger'].emit('click'); await tick();
+  assert.equal(occurrenceRequests, 1);
+});
+
+test('trigger history retries a failed request and shows its empty state', async () => {
+  let attempts = 0;
+  const ui = await surface(response, { api: async url => {
+    if (url.endsWith('/occurrences')) return ++attempts === 1 ? { ok: false }
+      : { ok: true, json: async () => [] };
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  ui.elements['incident-tab-trigger'].emit('click'); await tick();
+  assert.equal(ui.elements['incident-trigger-retry'].hidden, false);
+  ui.elements['incident-trigger-retry'].emit('click'); await tick();
+  assert.equal(ui.elements['incident-trigger-state'].textContent, 'Nenhum evento encontrado.');
+  assert.equal(ui.elements['incident-trigger-retry'].hidden, true);
+});
+
+
+test('summary removes redundant fields, aligns tags and copies the complete expression', async () => {
+  const expression = 'max(/045-077_A/mikrotik.wl.peer.rxsignal[100.209.84.244.87],5m)<-72';
+  const copied = [];
+  const ui = await surface(response, { copy: async value => copied.push(value), api: async () => ({
+    ok: true, json: async () => ({ ...details, expression, operationalData: '-79 dBm',
+      latestReading: { value: '0', units: '!dBm', collectedAt: 200000 },
+      tags: [{ tag: 'scope', value: 'availability' }] }),
+  }) });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  const properties = ui.elements['incident-event-properties'].children;
+  assert.deepEqual(properties.filter((_, i) => i % 2 === 0).map(node => node.textContent),
+    ['Data de início', 'Severidade', 'Status', 'Reconhecido', 'Dados operacionais do evento', 'Tags']);
+  assert.equal(properties[9].textContent, '-79 dBm');
+  assert.equal(properties[11].children[0].textContent, 'scope: availability');
+  assert.equal(ui.elements['incident-latest-value'].textContent, '0 dBm');
+  const operational = ui.elements['incident-operational-properties'].children;
+  assert.equal(operational[0].textContent, 'Última coleta');
+  assert.equal(operational[2].textContent, 'Expressão da trigger');
+  const expressionCell = operational[3];
+  await expressionCell.children[1].listeners.click();
+  assert.deepEqual(copied, [expression]);
+  assert.equal(expressionCell.children[2].textContent, 'Copiado');
+});
+
+test('summary leaves missing item data unavailable without substituting the event opening', async () => {
+  const ui = await surface(response, { api: async () => ({ ok: true, json: async () => ({
+    ...details, timestamp: 100000, latestReading: null, tags: [],
+  }) }) });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  assert.equal(ui.elements['incident-latest-value'].textContent, '—');
+  assert.equal(ui.elements['incident-operational-properties'].children[1].textContent, '—');
+  assert.equal(ui.elements['incident-event-properties'].children.length, 10);
+});
+
+
+test('trigger history resets its viewport, formats dates to minutes and separates age from duration', async () => {
+  const now = Date.now();
+  const occurrences = [
+    { eventId: details.eventId, timestamp: now - 53 * 60000, resolved: false, acknowledged: false },
+    { eventId: 'older', timestamp: now - 97 * 60000,
+      recoveredAt: now - 89 * 60000, resolved: true, acknowledged: true },
+    { eventId: 'seconds', timestamp: now - 120000,
+      recoveredAt: now - 36600, resolved: true, acknowledged: false },
+    ...Array.from({ length: 17 }, (_, i) => ({ eventId: `old-${i}`,
+      timestamp: now - (i + 100) * 60000, resolved: false, acknowledged: false })),
+  ];
+  let requests = 0;
+  const ui = await surface(response, { api: async url => {
+    if (url.endsWith('/occurrences')) {
+      requests++;
+      return { ok: true, json: async () => occurrences };
+    }
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  const viewport = ui.elements['incident-trigger-scroll'];
+  viewport.scrollTop = 200; viewport.scrollLeft = 100;
+  ui.elements['incident-modal-scroll'].scrollTop = 100;
+  ui.elements['incident-tab-trigger'].emit('click'); await tick();
+  assert.equal(viewport.scrollTop, 0);
+  assert.equal(viewport.scrollLeft, 0);
+  assert.equal(ui.elements['incident-modal-scroll'].scrollTop, 0);
+  const rows = ui.elements['incident-trigger-rows'].children;
+  assert.match(rows[0].children[0].textContent, /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+  assert.equal(rows[0].children[1].textContent, '—');
+  assert.equal(rows[0].children[2].children[0].textContent, 'Incidente');
+  assert.equal(rows[0].children[3].textContent, '53 min');
+  assert.match(rows[0].children[4].textContent, /^53 min(?: \d+ s)?$/);
+  assert.equal(rows[1].children[3].textContent, '1 h 37 min');
+  assert.equal(rows[1].children[4].textContent, '8 min');
+  assert.equal(rows[1].children[5].textContent, 'Sim');
+  assert.equal(rows[2].children[4].textContent, '1 min 23 s');
+  const pagination = ui.elements['incident-trigger-pagination'];
+  assert.equal(pagination.children[0].textContent, '20 registros');
+  assert.equal(pagination.children[1].disabled, true);
+  assert.equal(pagination.children[2].disabled, true);
+  assert.equal(pagination.children[3].disabled, false);
+  viewport.scrollTop = 250;
+  pagination.children[3].emit('click');
+  assert.equal(viewport.scrollTop, 0);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[4].disabled, true);
+  ui.elements['incident-tab-summary'].emit('click');
+  viewport.scrollTop = 150;
+  ui.elements['incident-tab-trigger'].emit('click'); await tick();
+  assert.equal(viewport.scrollTop, 0);
+  assert.equal(requests, 1);
+});
+
+
+test('latest item reading formats latency, percentages and text without changing source values', async () => {
+  const samples = [
+    [{ value: '0.009529999999999999', units: 's' }, '9,53 ms'],
+    [{ value: '0', units: 's' }, '0 ms'],
+    [{ value: '9.529999999999999', units: 'ms' }, '9,53 ms'],
+    [{ value: '2.3456', units: '%' }, '2,35 %'],
+    [{ value: '-72.123', units: '!dBm' }, '-72,12 dBm'],
+    [{ value: 'Down (0)', units: '' }, 'Down (0)'],
+    [{ value: 'Value: 9.53ms', units: 's' }, 'Value: 9.53ms'],
+    [{ value: '<script>0</script>', units: '' }, '<script>0</script>'],
+    [{ value: '9.53e-3', units: 's' }, '9,53 ms'],
+    [{ value: '42', units: '' }, '42'],
+    [{ value: '', units: 's' }, '—'],
+    [null, '—'],
+  ];
+  for (const [reading, expected] of samples) {
+    const original = JSON.stringify(reading);
+    const ui = await surface(response, { api: async () => ({ ok: true, json: async () => ({
+      ...details, latestReading: reading,
+    }) }) });
+    ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+    assert.equal(ui.elements['incident-latest-value'].textContent, expected);
+    assert.equal(JSON.stringify(reading), original);
+  }
+});
+
+
+test('active trigger duration refreshes locally without resetting scroll or resolved durations', async () => {
+  let now = Date.parse('2026-11-13T12:00:00Z');
+  class Clock extends Date { static now() { return now; } }
+  let requests = 0;
+  const rows = [
+    { eventId: '1', timestamp: now - 68000, resolved: false, acknowledged: false },
+    { eventId: '2', timestamp: now - 600000, recoveredAt: now - 120000,
+      resolved: true, acknowledged: true },
+  ];
+  const ui = await surface(response, { Date: Clock, api: async url => {
+    if (url.endsWith('/occurrences')) {
+      requests++;
+      return { ok: true, json: async () => rows };
+    }
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  ui.elements['incident-tab-trigger'].emit('click'); await tick();
+  const body = ui.elements['incident-trigger-rows'];
+  const active = body.children[0], resolved = body.children[1];
+  assert.equal(active.children[4].textContent, '1 min 8 s');
+  assert.equal(resolved.children[4].textContent, '8 min');
+  ui.elements['incident-trigger-scroll'].scrollTop = 75;
+  now += 60000;
+  ui.intervals[0]();
+  assert.equal(body.children[0], active);
+  assert.equal(active.children[4].textContent, '2 min 8 s');
+  assert.equal(resolved.children[4].textContent, '8 min');
+  assert.equal(ui.elements['incident-trigger-scroll'].scrollTop, 75);
+  assert.equal(requests, 1);
 });

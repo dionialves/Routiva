@@ -166,21 +166,37 @@ public class ZabbixClient {
                                  int oldSeverity, int newSeverity) {}
     public record IncidentDetails(String eventId, String name, int severity, boolean acknowledged,
                                   boolean closed, boolean closing, boolean writable, boolean manualClose,
-                                  List<IncidentUpdate> history) {}
+                                  List<IncidentUpdate> history, String triggerId, long timestamp,
+                                  List<Map<String, String>> hosts, String operationalData,
+                                  String expression, List<Map<String, String>> tags, ItemReading latestReading) {
+        public IncidentDetails(String eventId, String name, int severity, boolean acknowledged,
+                               boolean closed, boolean closing, boolean writable, boolean manualClose,
+                               List<IncidentUpdate> history) {
+            this(eventId, name, severity, acknowledged, closed, closing, writable, manualClose,
+                history, "", 0, List.of(), "", "", List.of(), null);
+        }
+    }
+
+    public record ItemReading(String itemId, String name, String value, String units, long collectedAt) {}
 
     public synchronized IncidentDetails incidentDetails(String eventId, List<String> hostIds) {
+        return incidentDetails(eventId, hostIds, true);
+    }
+
+    private IncidentDetails incidentDetails(String eventId, List<String> hostIds, boolean includeReading) {
         if (hostIds.isEmpty()) return null;
         detectVersion();
         if (session == null) login();
         var events = authenticatedRequest("event.get", Map.of("eventids", List.of(eventId),
             "hostids", hostIds, "source", 0, "object", 0, "value", 1,
-            "output", List.of("eventid", "objectid", "name", "severity", "acknowledged", "r_eventid"),
+            "output", List.of("eventid", "objectid", "name", "severity", "acknowledged", "r_eventid", "clock", "opdata"),
+            "selectHosts", List.of("hostid", "name"), "selectTags", "extend",
             legacyEvents ? "select_acknowledges" : "selectAcknowledges", "extend"));
         if (events.isEmpty()) return null;
         var event = events.get(0);
         String triggerId = event.path("objectid").asText();
         var triggers = authenticatedRequest("trigger.get", Map.of("triggerids", List.of(triggerId),
-            "output", List.of("triggerid", "manual_close")));
+            "output", List.of("triggerid", "manual_close", "expression"), "expandExpression", true));
         var editable = authenticatedRequest("trigger.get", Map.of("triggerids", List.of(triggerId),
             "editable", true, "output", List.of("triggerid")));
         var history = new ArrayList<IncidentUpdate>();
@@ -196,10 +212,96 @@ public class ZabbixClient {
                 update.path("new_severity").asInt()));
         }
         history.sort(Comparator.comparingLong(IncidentUpdate::timestamp).reversed());
+        String operationalData = event.path("opdata").asText("");
+        // The API resolves opdata macros. Never substitute current item values into event data.
+        if (includeReading && operationalData.isBlank()) {
+            try {
+                var problems = authenticatedRequest("problem.get", Map.of("eventids", List.of(eventId),
+                    "hostids", hostIds, "output", List.of("eventid", "opdata"), "recent", true));
+                for (var problem : problems) {
+                    if (eventId.equals(problem.path("eventid").asText())) {
+                        operationalData = problem.path("opdata").asText("");
+                        break;
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                // Optional operational context must not disable incident updates.
+            }
+        }
+        if (operationalData.matches("(?s).*\\{(?:ITEM|HOST|TRIGGER|EVENT)[.][^}]+}.*")) operationalData = "";
+        ItemReading latestReading = includeReading ? latestIncidentReading(triggerId, hostIds) : null;
         return new IncidentDetails(eventId, event.path("name").asText(), event.path("severity").asInt(),
             event.path("acknowledged").asInt() == 1, !event.path("r_eventid").asText("0").equals("0"),
             closing, !editable.isEmpty(), !triggers.isEmpty() && triggers.get(0).path("manual_close").asInt() == 1,
-            List.copyOf(history));
+            List.copyOf(history), triggerId, event.path("clock").asLong() * 1000,
+            stringPairs(event.path("hosts"), "hostid", "name"), operationalData,
+            triggers.isEmpty() ? "" : triggers.get(0).path("expression").asText(""),
+            stringPairs(event.path("tags"), "tag", "value"), latestReading);
+    }
+
+    private ItemReading latestIncidentReading(String triggerId, List<String> allowedHosts) {
+        try {
+            // Inspect all trigger items before restricting hosts: a cross-host expression is ambiguous too.
+            var items = authenticatedRequest("item.get", Map.of("triggerids", List.of(triggerId),
+                "output", List.of("itemid", "hostid", "name", "lastvalue", "lastclock", "units"), "limit", 2));
+            if (items.size() != 1) return null;
+            var item = items.get(0);
+            long clock = item.path("lastclock").asLong();
+            if (!allowedHosts.contains(item.path("hostid").asText()) || clock <= 0
+                    || !item.hasNonNull("lastvalue") || item.path("lastvalue").asText().isBlank()) return null;
+            return new ItemReading(item.path("itemid").asText(), item.path("name").asText(),
+                item.path("lastvalue").asText(), item.path("units").asText(""), clock * 1000);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private List<Map<String, String>> stringPairs(com.fasterxml.jackson.databind.JsonNode nodes, String key, String value) {
+        var pairs = new ArrayList<Map<String, String>>();
+        for (var node : nodes) pairs.add(Map.of(key, node.path(key).asText(), value, node.path(value).asText()));
+        return List.copyOf(pairs);
+    }
+
+    public record TriggerOccurrence(String eventId, long timestamp, Long recoveredAt,
+                                    boolean resolved, boolean acknowledged) {}
+
+    public synchronized List<TriggerOccurrence> incidentOccurrences(String eventId, List<String> allowedHosts) {
+        var current = incidentDetails(eventId, allowedHosts, false);
+        if (current == null) return null;
+        var hosts = current.hosts().stream().map(h -> h.get("hostid")).filter(allowedHosts::contains).toList();
+        if (hosts.isEmpty() || current.triggerId().isBlank()) return List.of();
+        var params = new LinkedHashMap<String, Object>();
+        params.put("objectids", List.of(current.triggerId()));
+        params.put("hostids", hosts);
+        params.put("source", 0);
+        params.put("object", 0);
+        params.put("value", 1);
+        params.put("output", List.of("eventid", "clock", "r_eventid", "acknowledged"));
+        params.put("sortfield", List.of("clock", "eventid"));
+        params.put("sortorder", "DESC");
+        params.put("limit", 20);
+        var events = authenticatedRequest("event.get", params);
+        var recoveryIds = new ArrayList<String>();
+        for (var event : events) {
+            var id = event.path("r_eventid").asText("0");
+            if (!id.equals("0") && !id.isBlank()) recoveryIds.add(id);
+        }
+        var recoveries = new HashMap<String, Long>();
+        if (!recoveryIds.isEmpty()) {
+            for (var recovery : authenticatedRequest("event.get", Map.of("eventids", recoveryIds,
+                    "output", List.of("eventid", "clock")))) {
+                long clock = recovery.path("clock").asLong();
+                if (clock > 0) recoveries.put(recovery.path("eventid").asText(), clock * 1000);
+            }
+        }
+        var result = new ArrayList<TriggerOccurrence>();
+        for (var event : events) {
+            String recoveryId = event.path("r_eventid").asText("0");
+            result.add(new TriggerOccurrence(event.path("eventid").asText(), event.path("clock").asLong() * 1000,
+                recoveries.get(recoveryId), !recoveryId.equals("0") && !recoveryId.isBlank(),
+                event.path("acknowledged").asInt() == 1));
+        }
+        return List.copyOf(result);
     }
 
     // Mutations return an object, unlike the array returned by the read methods.

@@ -266,6 +266,82 @@ class ZabbixClientTests {
         }
     }
 
+    @Test void occurrenceHistoryScopesTriggerAndHostAndJoinsRecoveryTimestamps() throws Exception {
+        try (var api = new FakeApi(false)) {
+            api.events = """
+                [{"eventid":"99","objectid":"8","name":"Link","clock":"100","r_eventid":"0",
+                  "hosts":[{"hostid":"1","name":"Router"}],"opdata":"23 ms"}]
+                """;
+            api.occurrences = """
+                [{"eventid":"99","clock":"100","r_eventid":"0","acknowledged":"0"},
+                 {"eventid":"98","clock":"50","r_eventid":"1000","acknowledged":"1"},
+                 {"eventid":"97","clock":"20","r_eventid":"1001","acknowledged":"0"}]
+                """;
+            api.recoveries = "[{\"eventid\":\"1000\",\"clock\":\"80\"}]";
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            var rows = client.incidentOccurrences("99", List.of("1", "2"));
+            assertThat(api.occurrenceParams.path("objectids").get(0).asText()).isEqualTo("8");
+            assertThat(api.occurrenceParams.path("hostids").size()).isEqualTo(1);
+            assertThat(api.occurrenceParams.path("hostids").get(0).asText()).isEqualTo("1");
+            assertThat(api.occurrenceParams.path("limit").asInt()).isEqualTo(20);
+            assertThat(api.occurrenceParams.path("value").asInt()).isEqualTo(1);
+            assertThat(rows).hasSize(3);
+            assertThat(rows.get(0).resolved()).isFalse();
+            assertThat(rows.get(0).recoveredAt()).isNull();
+            assertThat(rows.get(1).acknowledged()).isTrue();
+            assertThat(rows.get(1).recoveredAt()).isEqualTo(80000L);
+            assertThat(rows.get(2).resolved()).isTrue();
+            assertThat(rows.get(2).recoveredAt()).isNull();
+            assertThat(api.violations).isEmpty();
+        }
+    }
+
+    @Test void summaryKeepsEventDataSeparateFromLatestItemValueAndCollectionClock() throws Exception {
+        for (String version : List.of("6.0.0", "6.4.0", "7.0.0")) {
+            try (var api = new FakeApi(false, version)) {
+                api.events = """
+                    [{"eventid":"99","objectid":"8","clock":"100","opdata":"Evento: -79 dBm"}]
+                    """;
+                api.items = """
+                    [{"itemid":"44","hostid":"1","name":"Signal","lastvalue":"-68","units":"dBm","lastclock":"200"}]
+                    """;
+                var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+                var details = client.incidentDetails("99", List.of("1"));
+                assertThat(details.operationalData()).isEqualTo("Evento: -79 dBm");
+                assertThat(details.latestReading().value()).isEqualTo("-68");
+                assertThat(details.latestReading().units()).isEqualTo("dBm");
+                assertThat(details.latestReading().collectedAt()).isEqualTo(200000L);
+                assertThat(details.timestamp()).isEqualTo(100000L);
+                assertThat(api.lastItemParams.path("triggerids").get(0).asText()).isEqualTo("8");
+                assertThat(api.lastItemParams.has("hostids")).isFalse();
+                assertThat(api.methods).doesNotContain("problem.get");
+                assertThat(api.violations).isEmpty();
+            }
+        }
+    }
+
+    @Test void summaryDoesNotGuessItemOrCollectionTimeAndToleratesOptionalReadFailure() throws Exception {
+        try (var api = new FakeApi(false)) {
+            api.events = "[{\"eventid\":\"99\",\"objectid\":\"8\",\"clock\":\"100\"}]";
+            api.problems = "[{\"eventid\":\"99\",\"opdata\":\"Evento: 0.023 s\"}]";
+            var client = new ZabbixClient(api.url(), "monitor", "secret # $ value");
+            for (String items : List.of("[]",
+                "[{\"itemid\":\"1\"},{\"itemid\":\"2\"}]",
+                "[{\"itemid\":\"1\",\"hostid\":\"1\",\"lastvalue\":\"0\",\"lastclock\":\"0\"}]",
+                "[{\"itemid\":\"1\",\"hostid\":\"2\",\"lastvalue\":\"42\",\"lastclock\":\"200\"}]")) {
+                api.items = items;
+                var details = client.incidentDetails("99", List.of("1"));
+                assertThat(details.latestReading()).isNull();
+                assertThat(details.operationalData()).isEqualTo("Evento: 0.023 s");
+            }
+            api.rejectItems = true;
+            assertThat(client.incidentDetails("99", List.of("1")).latestReading()).isNull();
+            api.problems = "[]";
+            api.events = "[{\"eventid\":\"99\",\"objectid\":\"8\",\"opdata\":\"{ITEM.LASTVALUE1}\"}]";
+            assertThat(client.incidentDetails("99", List.of("1")).operationalData()).isEmpty();
+        }
+    }
+
     private static class FakeApi implements AutoCloseable {
 
         final HttpServer server;
@@ -276,8 +352,11 @@ class ZabbixClientTests {
         volatile boolean alwaysExpire;
         String inventory = INVENTORY;
         com.fasterxml.jackson.databind.JsonNode lastHostParams;
-        String problems = "[]";
-        String events = "[]";
+        String problems = "[]", items = "[]";
+        boolean rejectItems;
+        com.fasterxml.jackson.databind.JsonNode lastItemParams;
+        String events = "[]", occurrences = "[]", recoveries = "[]";
+        com.fasterxml.jackson.databind.JsonNode occurrenceParams;
         com.fasterxml.jackson.databind.JsonNode lastEventParams;
         boolean rejectUpdate;
         com.fasterxml.jackson.databind.JsonNode lastUpdate;
@@ -347,11 +426,20 @@ class ZabbixClientTests {
                         "{\"result\":" + triggers + "}";
                     else if (method.equals("event.get")) {
                         lastEventParams = request.path("params");
-                        response = "{\"result\":" + events + "}";
+                        if (lastEventParams.has("objectids")) {
+                            occurrenceParams = lastEventParams;
+                            response = "{\"result\":" + occurrences + "}";
+                        } else if (lastEventParams.path("eventids").get(0).asText().equals("99")) {
+                            response = "{\"result\":" + events + "}";
+                        } else response = "{\"result\":" + recoveries + "}";
                     }
                     else if (method.equals("event.acknowledge")) {
                         lastUpdate = request.path("params");
                         response = rejectUpdate ? "{\"error\":{\"data\":\"No permissions\"}}" : "{\"result\":{\"eventids\":[\"99\"]}}";
+                    }
+                    else if (method.equals("item.get")) {
+                        lastItemParams = request.path("params");
+                        response = rejectItems ? "{\"error\":{\"data\":\"Denied\"}}" : "{\"result\":" + items + "}";
                     }
                     else if (method.equals("problem.get")) response = "{\"result\":" + problems + "}";
                     else if (method.equals("hostgroup.get")) response = "{\"result\":[{\"groupid\":\"2\",\"name\":\"Zulu\"},{\"groupid\":\"1\",\"name\":\"alpha\"}]}";

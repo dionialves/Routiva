@@ -92,6 +92,19 @@ public class IncidentsController {
         }
     }
 
+    @GetMapping("/api/incidents/{eventId}/occurrences")
+    @ResponseBody
+    public ResponseEntity<List<ZabbixClient.TriggerOccurrence>> occurrences(@PathVariable String eventId) {
+        if (!eventId.matches("[0-9]+")) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST);
+        try {
+            var events = zabbix.incidentOccurrences(eventId, inventory.hosts().stream().map(Host::id).toList());
+            if (events == null) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND);
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(events);
+        } catch (IllegalStateException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_GATEWAY, "Não foi possível consultar o histórico da trigger.");
+        }
+    }
+
     @PostMapping("/api/incidents/{eventId}/updates")
     @ResponseBody
     public Map<String, String> update(@PathVariable String eventId, @RequestBody UpdateRequest body,
