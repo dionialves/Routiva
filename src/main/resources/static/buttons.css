@@ -73,3 +73,12 @@ button.system-button-icon-only {
 button.system-button-label::after { content:attr(aria-label); }
 button.system-button > [data-ap-icon] svg { width:16px; height:16px; }
 .chart-actions { flex-wrap:wrap; }
+
+/* Keep the shared clear action at the trailing edge of each filter bar. */
+.query-filter-row > button.query-clear-filters,
+.zabbix-filters > button.query-clear-filters,
+.import-results-tools > button.query-clear-filters {
+  margin-left:auto;
+  flex-shrink:0;
+  align-self:flex-end;
+}

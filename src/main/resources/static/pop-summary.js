@@ -143,7 +143,7 @@ class PopSummary {
     this.box.style.setProperty('--pop-severity', statusColor);
     const heading = el('header');
     const name = el('div', undefined, 'pop-heading-copy');
-    name.append(el('strong', this.node.name), el('small', `Grupo Zabbix: ${this.groupName(this.node.groupId)}`));
+    name.append(el('strong', this.node.name), el('small', this.node.hostId ? 'Host Zabbix' : `Grupo Zabbix: ${this.groupName(this.node.groupId)}`));
     const symbol = el('span', undefined, 'pop-symbol');
     symbol.append(popIcon('pop-router', 18));
     heading.append(symbol, name);
@@ -206,7 +206,13 @@ class PopSummary {
         alert.title = this.labels[issue.severity + 2];
         alert.setAttribute('role', 'img');
         alert.setAttribute('aria-label', alert.title);
-        const copy = el('div', undefined, 'pop-incident-copy');
+        const copy = el(issue.eventId ? 'a' : 'div', undefined, 'pop-incident-copy');
+        if (issue.eventId) {
+          copy.setAttribute('href', `/incidentes?eventId=${encodeURIComponent(issue.eventId)}`);
+          copy.setAttribute('target', '_blank');
+          copy.setAttribute('rel', 'noopener noreferrer');
+          copy.setAttribute('aria-label', `${issue.name} — ${[...issue.hosts].join(', ')} (abre em nova aba)`);
+        }
         const row = el('div', undefined, 'pop-incident-heading');
         const duration = el('time');
         if (issue.openedAt) duration.setAttribute('datetime', new Date(issue.openedAt).toISOString());
@@ -235,11 +241,11 @@ class PopSummary {
     refresh.setAttribute('stroke-width', '1.5');
     const updated = el('span', undefined, 'pop-updated');
     updated.append(refresh, el('span', undefined, 'pop-freshness'));
-    const details = el('a', 'Ver detalhes do POP ↗', 'pop-details');
-    details.setAttribute('href', `/diagnostico/grupos/${encodeURIComponent(this.node.groupId)}`);
+    const details = el('a', this.node.hostId ? 'Ver detalhes do host ↗' : 'Ver detalhes do POP ↗', 'pop-details');
+    details.setAttribute('href', this.node.hostId ? `/ap/${encodeURIComponent(this.node.hostId)}` : `/diagnostico/grupos/${encodeURIComponent(this.node.groupId)}`);
     details.setAttribute('target', '_blank');
     details.setAttribute('rel', 'noopener noreferrer');
-    details.setAttribute('aria-label', `Ver detalhes do POP ${this.node.name} (abre em nova aba)`);
+    details.setAttribute('aria-label', `Ver detalhes ${this.node.hostId ? 'do host' : 'do POP'} ${this.node.name} (abre em nova aba)`);
     footer.append(updated, details);
     this.box.append(footer);
     this.updateFooter();

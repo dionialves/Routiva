@@ -179,7 +179,7 @@ function draw() {
       }
       choose(n);
     };
-    if (!editing && n.groupId && !n.hostId) popSummary.bind(g, n);
+    if (monitored) popSummary.bind(g, n);
     canvas.append(g);
   }
   if (marquee) {

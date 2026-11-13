@@ -8,12 +8,13 @@
   const incidentName = $('incident-name');
   let selectedNames = new Set(), refreshNamePicker;
   const initial = new URLSearchParams(location.search);
+  const eventId = initial.get('eventId') || '';
   let snapshot, calendarDay;
   const periods = [
     { id: 'today', label: 'Hoje', expanded: true, page: 1 },
     { id: 'yesterday', label: 'Ontem', expanded: true, page: 1 },
     { id: 'week', label: 'Últimos 7 dias', expanded: true, page: 1 },
-    { id: 'older', label: 'Anteriores', expanded: false, page: 1 },
+    { id: 'older', label: 'Anteriores', expanded: !!eventId, page: 1 },
   ];
   const size = 50;
   const storageKey = 'routiva.incidents.filters';
@@ -40,11 +41,12 @@
     return params;
   }
   function saveFilters() {
+    if (eventId) return;
     try { localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(filters()))); } catch {}
   }
   function restoreFilters() {
     let source = initial;
-    if (!filterKeys.some(key => initial.has(key))) {
+    if (!eventId && !filterKeys.some(key => initial.has(key))) {
       try {
         const saved = JSON.parse(localStorage.getItem(storageKey));
         if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
@@ -176,8 +178,9 @@
     calendarDay = dayNumber(Date.now());
     const fragment = document.createDocumentFragment();
     const grouped = periods.map(() => []);
-    const matchingRows = selectedNames.size ? data.rows.filter(row => selectedNames.has(row.name)) : data.rows;
-    const total = selectedNames.size ? matchingRows.length : data.total;
+    const matchingRows = data.rows.filter(row => (!eventId || row.eventId === eventId)
+      && (!selectedNames.size || selectedNames.has(row.name)));
+    const total = eventId || selectedNames.size ? matchingRows.length : data.total;
     for (const row of matchingRows) {
       const age = calendarDay - dayNumber(row.timestamp);
       grouped[age <= 0 ? 0 : age === 1 ? 1 : age <= 7 ? 2 : 3].push(row);
@@ -227,7 +230,7 @@
     $('incident-updated').dataset.state = data.warning ? 'partial' : 'success';
     $('incident-warning').textContent = data.warning; $('incident-warning').hidden = !data.warning;
     $('incident-empty').hidden = total !== 0;
-    const filtered = filterKeys.some(key => applied.get(key)?.trim());
+    const filtered = !!eventId || filterKeys.some(key => applied.get(key)?.trim());
     $('incident-empty').querySelector('p').textContent = filtered
       ? 'Nenhum incidente corresponde aos filtros selecionados' : 'Nenhum incidente ativo encontrado';
     $('incident-range').textContent = `Exibindo ${visible} de ${total} incidentes`;
@@ -507,6 +510,7 @@
   function updateLocation() {
     // Names stay in local storage. Large selections also stay off the URL and Referer header.
     const params = new URLSearchParams();
+    if (eventId) params.set('eventId', eventId);
     for (const key of ['groupId', 'hostId', 'severity']) {
       if (applied.get(key)) params.set(key, applied.get(key));
     }

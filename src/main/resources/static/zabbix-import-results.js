@@ -62,6 +62,10 @@ class ZabbixImportResults {
     this.$('import-severity').addEventListener('change', () => {
       this.model.severity = this.$('import-severity').value; this.model.page = 0; this.renderTable();
     });
+    this.$('import-result').addEventListener('query-filters-cleared', () => {
+      this.model.filter = 'all'; this.model.page = 0;
+      this.renderFilters(); this.renderTable();
+    });
     this.$('import-sort').addEventListener('click', () => {
       this.model.descending = !this.model.descending; this.model.page = 0; this.renderTable();
     });

@@ -234,3 +234,17 @@ test('hides acknowledged incidents from the list, counts and worst severity', ()
   assert.equal(context.summarizePop(hosts, 0, true).incidents[0].eventId, 'ack');
   assert.equal(context.summarizePop(hosts).incidents.length, 2);
 });
+
+
+test('incident links open only their encoded event in a new tab for hosts and groups', () => {
+  const preview = renderPreview([host('a', [issue('123 /&', 4, 1000)])]);
+  for (const hostId of [undefined, 'host-1']) {
+    preview.subject.node.hostId = hostId;
+    preview.subject.render();
+    const link = preview.box.querySelector('.pop-incident-copy');
+    assert.equal(link.tag, 'a');
+    assert.equal(link.attributes.href, '/incidentes?eventId=123%20%2F%26');
+    assert.equal(link.attributes.target, '_blank');
+    assert.equal(link.attributes.rel, 'noopener noreferrer');
+  }
+});

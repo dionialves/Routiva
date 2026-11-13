@@ -4,6 +4,7 @@
 <meta name="_csrf_header" th:if="${_csrf != null}" th:content="${_csrf.headerName}">
 <meta name="is-admin" th:content="${isAdmin}">
 <script src="/security.js?v=1" defer></script>
+<script src="/query-filters.js?v=20261113-1" defer></script>
 </th:block>
 <svg th:fragment="icon(name)" class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use th:href="${'/icons.svg#' + name}"></use></svg>
 <aside th:fragment="sidebar(active)" class="sidebar" id="sidebar" aria-label="Menu principal">

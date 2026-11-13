@@ -442,3 +442,24 @@ test('closed and closing events explicitly disable the closing checkbox with a r
     assert.match(ui.elements['incident-close-help'].textContent, state === 'closed' ? /já está encerrado/ : /já foi solicitado/);
   }
 });
+
+
+test('map event links show only the exact ID, ignore saved filters and survive refresh', async () => {
+  const ui = await surface(() => ({ ok: true, json: async () => ({
+    rows: [row, { ...row, eventId: '2' }], total: 2, updatedAt: Date.now(), warning: ''
+  }) }), { search: '?eventId=2', saved: { groupId: 'g', severity: 'none', incidentNames: '["other"]' } });
+  assert.equal(ui.requests[0].get('groupId'), '');
+  assert.equal(ui.requests[0].get('severity'), '');
+  assert.equal(ui.rows().filter(node => node.dataset.severity != null).length, 1);
+  assert.equal(ui.elements['incident-total'].textContent, '1 encontrados');
+  assert.ok(ui.locations.every(url => url === '/incidentes?eventId=2'));
+  [...ui.timers.values()].find(timer => timer.ms === 60000).fn(); await tick();
+  assert.equal(ui.rows().filter(node => node.dataset.severity != null).length, 1);
+  assert.equal(JSON.parse(ui.storage.get('routiva.incidents.filters')).severity, 'none');
+});
+
+test('a missing linked event shows an empty result instead of unrelated incidents', async () => {
+  const ui = await surface(response, { search: '?eventId=missing' });
+  assert.equal(ui.elements['incident-empty'].hidden, false);
+  assert.equal(ui.elements['incident-total'].textContent, '0 encontrados');
+});
