@@ -273,8 +273,8 @@ class ZabbixClientTests {
                   "hosts":[{"hostid":"1","name":"Router"}],"opdata":"23 ms"}]
                 """;
             api.occurrences = """
-                [{"eventid":"99","clock":"100","r_eventid":"0","acknowledged":"0"},
-                 {"eventid":"98","clock":"50","r_eventid":"1000","acknowledged":"1"},
+                [{"eventid":"99","clock":"100","r_eventid":"0","acknowledged":"0","acknowledges":[{"message":"Atual"},{"message":" "}]},
+                 {"eventid":"98","clock":"50","r_eventid":"1000","acknowledged":"1","acknowledges":[{"message":"Anterior"},{"message":"Resolvido"}]},
                  {"eventid":"97","clock":"20","r_eventid":"1001","acknowledged":"0"}]
                 """;
             api.recoveries = "[{\"eventid\":\"1000\",\"clock\":\"80\"}]";
@@ -286,6 +286,10 @@ class ZabbixClientTests {
             assertThat(api.occurrenceParams.path("limit").asInt()).isEqualTo(20);
             assertThat(api.occurrenceParams.path("value").asInt()).isEqualTo(1);
             assertThat(rows).hasSize(3);
+            assertThat(rows.get(0).messageCount()).isEqualTo(1);
+            assertThat(rows.get(1).messageCount()).isEqualTo(2);
+            assertThat(rows.get(2).messageCount()).isZero();
+            assertThat(api.occurrenceParams.path("selectAcknowledges").get(0).asText()).isEqualTo("message");
             assertThat(rows.get(0).resolved()).isFalse();
             assertThat(rows.get(0).recoveredAt()).isNull();
             assertThat(rows.get(1).acknowledged()).isTrue();

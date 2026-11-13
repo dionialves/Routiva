@@ -100,7 +100,7 @@
 .incident-link:focus-visible, .incident-message-button:focus-visible { outline:2px solid var(--cyan); outline-offset:4px; }
 /* Incident editor: isolated from page filters and other dialogs. */
 #incident-dialog { --form-dialog-width:1300px; padding:0; overflow:hidden; max-height:90dvh; border-radius:12px; background:#0b2030; color:var(--text); }
-#incident-dialog .connection-form { display:flex; flex-direction:column; max-width:none; max-height:90dvh; gap:0; min-height:0; }
+#incident-dialog .connection-form { display:flex; flex-direction:column; max-width:none; height:calc(90dvh - 2px); max-height:90dvh; gap:0; min-height:0; }
 #incident-dialog .incident-modal-header { width:100%; max-width:none; margin:0; display:flex; flex-direction:row; text-align:left; align-items:center; justify-content:space-between; gap:16px; padding:20px 26px; border-bottom:1px solid var(--border); flex-shrink:0; }
 #incident-dialog h2 { margin:0; font-size:24px; font-weight:600; }
 #incident-dialog .incident-modal-summary { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:22px 26px; border-bottom:1px solid var(--border); flex-shrink:0; }
@@ -205,8 +205,7 @@
 #incident-dialog .incident-occurrence-status[data-state=resolved]::before { background:#78b79a; }
 #incident-dialog .incident-skeleton td::after { content:""; display:block; height:14px; background:#203e50; border-radius:3px; }
 #incident-trigger-pagination { display:flex; justify-content:flex-end; align-items:center; gap:8px; min-height:48px; flex-wrap:wrap; }
-#incident-trigger-pagination > span { margin-right:auto; color:#a9c1d2; font-size:12px; }
-#incident-trigger-pagination [aria-current=page] { border-color:var(--cyan); color:var(--cyan); }
+#incident-trigger-pagination > span:first-child { margin-right:auto; color:#a9c1d2; font-size:12px; }
 @media(max-width:800px) {
   #incident-dialog .incident-summary-grid, #incident-dialog .incident-modal-columns { grid-template-columns:minmax(0,1fr); }
   #incident-dialog .incident-tabs { margin:0 14px; gap:0; }
@@ -228,7 +227,6 @@
 @media(hover:none) { #incident-dialog .incident-expression-copy { opacity:1; } }
 
 /* Only trigger history owns an inner table viewport; other tabs keep their existing sizing. */
-#incident-dialog[data-active-tab=trigger] .connection-form { height:90dvh; }
 #incident-dialog[data-active-tab=trigger] .incident-modal-scroll { display:flex; flex-direction:column; overflow:hidden; }
 #incident-dialog[data-active-tab=trigger] .incident-modal-status { flex-shrink:0; }
 #incident-panel-trigger { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; }
@@ -243,5 +241,37 @@
 #incident-trigger-pagination { flex-shrink:0; min-height:0; margin:0; padding:8px 12px; border-top:1px solid var(--border); background:#0b2030; }
 @media(max-width:480px) {
   #incident-trigger-pagination { gap:6px; padding:8px; }
-  #incident-trigger-pagination > span { flex-basis:100%; }
+  #incident-trigger-pagination > span:first-child { flex-basis:100%; }
 }
+
+/* Compact update editor; no sizing changes to Summary or trigger history. */
+#incident-dialog #incident-panel-update { align-items:start; }
+#incident-dialog #incident-panel-update fieldset { gap:10px; }
+#incident-dialog #incident-panel-update fieldset > section { padding:12px; }
+#incident-dialog #incident-panel-update .incident-section-title { margin-bottom:10px; }
+#incident-dialog #incident-panel-update .incident-section-title svg { width:18px; height:18px; flex-basis:18px; stroke-width:1.75; }
+#incident-dialog #incident-panel-update textarea { height:100px; min-height:100px; max-height:100px; resize:none; overflow-y:auto; }
+#incident-dialog #incident-panel-update .incident-actions-panel { gap:10px; padding:10px 12px; }
+#incident-dialog #incident-panel-update #incident-close-help:empty { display:none; }
+#incident-dialog #incident-panel-update .incident-modal-history { align-self:start; }
+#incident-dialog #incident-panel-update .incident-history-scroll { max-height:min(320px,40dvh); overflow-y:auto; overscroll-behavior:contain; }
+#incident-dialog #incident-panel-update .incident-history-table th { position:sticky; top:0; z-index:1; }
+#incident-dialog #incident-history-empty { margin:0; padding:8px 0 4px; }
+
+.incident-comments-tooltip { position:fixed; inset:auto; margin:0; padding:12px; width:max-content; max-width: min(720px, calc(100vw - 16px)); box-sizing:border-box; background:#0b2030; color:var(--text); border:1px solid #315368; border-radius:7px; box-shadow:0 8px 24px #0005; z-index:1000; font-size:12px; }
+.incident-comments-tooltip[hidden] { display:none; }
+.incident-comments-tooltip p { margin:0; color:#a9c1d2; }
+#incident-comments-state:empty { display:none; }
+.incident-comments-scroll { max-height:min(320px,50dvh); overflow:auto; }
+.incident-comments-tooltip table { width:100%; border-collapse:separate; border-spacing:0; text-align:left; }
+.incident-comments-tooltip th { position:sticky; top:0; background:#0b2030; color:#a9c1d2; font-weight:600; }
+.incident-comments-tooltip :is(th,td) { padding:8px; border-bottom:1px solid #294b61; vertical-align:top; }
+.incident-comments-tooltip td:first-child { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.incident-comments-tooltip td:not(:first-child) { white-space:pre-wrap; overflow-wrap:anywhere; max-width:420px; }
+.incident-comments-tooltip tr:last-child td { border-bottom:0; }
+
+#incident-dialog .incident-trigger-table .incident-observations { text-align:center; width:64px; }
+#incident-dialog .incident-message-button { display:inline-flex; align-items:center; gap:5px; padding:0; border:0; background:transparent; color:#62b6ff; font:inherit; cursor:pointer; }
+#incident-dialog .incident-message-button:hover { color:#a5dbff; }
+#incident-dialog .incident-message-button svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+#incident-dialog .incident-message-button:focus-visible { outline:2px solid var(--cyan); outline-offset:4px; }

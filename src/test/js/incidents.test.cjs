@@ -10,6 +10,8 @@ async function surface(respond, options = {}) {
     append(...nodes) { for (const node of nodes) this.children.push(...(node.fragment ? node.children : [node])); }
     replaceChildren(...nodes) { this.children = nodes; this.options = nodes; }
     setAttribute(k, v) { this.attributes[k] = v; }
+    removeAttribute(k) { delete this.attributes[k]; }
+    getBoundingClientRect() { return { top:100, bottom:120, right:600, width:400, height:100 }; }
     addEventListener(k, fn) { this.listeners[k] = fn; }
     removeEventListener(k, fn) { if (this.listeners[k] === fn) delete this.listeners[k]; }
     emit(k) { this.listeners[k]?.({ preventDefault() {} }); }
@@ -39,7 +41,8 @@ async function surface(respond, options = {}) {
   const timers = new Map(), intervals = [], requests = [], events = {}, locations = [], transports = [];
   const main = new Element(); main.dataset.timeZone = 'America/Sao_Paulo'; main.dataset.canUpdate = options.admin ? 'true' : 'false'; main.content = 'csrf';
   const context = {
-    document: { getElementById: id => elements[id], createElement: () => new Element(), createElementNS: () => new Element(), createTextNode: text => ({ textContent: text }), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }), querySelector: () => main, addEventListener() {}, removeEventListener() {}, querySelectorAll: selector => selector === '[data-opened-at]' ? [] : selector === '[data-incident-severity]' ? severityOptions : sorts },
+    innerHeight: 800,
+    document: { documentElement: { clientWidth: 1200 }, getElementById: id => elements[id], createElement: () => new Element(), createElementNS: () => new Element(), createTextNode: text => ({ textContent: text }), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }), querySelector: () => main, addEventListener() {}, removeEventListener() {}, querySelectorAll: selector => selector === '[data-opened-at]' ? [] : selector === '[data-incident-severity]' ? severityOptions : sorts },
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
     location: { search: options.search ?? '?groupId=g&page=2' }, history: { replaceState(state, title, url) { locations.push(url); } },
     navigator: { clipboard: { writeText: options.copy || (async () => {}) } },
@@ -520,9 +523,9 @@ test('modal preserves pending changes across tabs and paginates cached trigger e
   assert.doesNotMatch(ui.elements['incident-trigger-rows'].children[0].children[4].textContent, /Em andamento/);
   ui.elements['incident-trigger-pagination'].children[3].emit('click');
   assert.equal(ui.elements['incident-trigger-rows'].children.length, 10);
-  assert.equal(ui.elements['incident-trigger-pagination'].children[3].attributes['aria-current'], 'page');
+  assert.equal(ui.elements['incident-trigger-pagination'].children[2].textContent, 'Página 2 de 2');
   assert.equal(ui.elements['incident-trigger-pagination'].children[3].disabled, true);
-  assert.equal(ui.elements['incident-trigger-pagination'].children[2].disabled, false);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[1].disabled, false);
   ui.elements['incident-tab-update'].emit('click');
   assert.equal(ui.elements['incident-message'].value, 'Análise em andamento');
   assert.equal(ui.elements['incident-new-severity'].value, '2');
@@ -622,12 +625,12 @@ test('trigger history resets its viewport, formats dates to minutes and separate
   const pagination = ui.elements['incident-trigger-pagination'];
   assert.equal(pagination.children[0].textContent, '20 registros');
   assert.equal(pagination.children[1].disabled, true);
-  assert.equal(pagination.children[2].disabled, true);
+  assert.equal(pagination.children[2].textContent, 'Página 1 de 2');
   assert.equal(pagination.children[3].disabled, false);
   viewport.scrollTop = 250;
   pagination.children[3].emit('click');
   assert.equal(viewport.scrollTop, 0);
-  assert.equal(ui.elements['incident-trigger-pagination'].children[4].disabled, true);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[3].disabled, true);
   ui.elements['incident-tab-summary'].emit('click');
   viewport.scrollTop = 150;
   ui.elements['incident-tab-trigger'].emit('click'); await tick();
@@ -693,4 +696,115 @@ test('active trigger duration refreshes locally without resetting scroll or reso
   assert.equal(resolved.children[4].textContent, '8 min');
   assert.equal(ui.elements['incident-trigger-scroll'].scrollTop, 75);
   assert.equal(requests, 1);
+});
+
+
+test('update history hides empty table and shows compact dates with newest updates first', async () => {
+  let history = [];
+  const ui = await surface(response, { api: async () => ({ ok: true, json: async () => ({
+    ...details, history,
+  }) }) });
+  const link = ui.rows().find(node => node.dataset.severity != null).children[4].children[0];
+  link.emit('click'); await tick();
+  assert.equal(ui.elements['incident-history-scroll'].hidden, true);
+  assert.equal(ui.elements['incident-history-empty'].hidden, false);
+  assert.equal(ui.elements['incident-history-count'].textContent, '0 registros');
+  history = [
+    { timestamp: Date.parse('2026-11-13T12:00:35Z'), user: 'ana', action: 4, message: 'Primeira mensagem' },
+    { timestamp: Date.parse('2026-11-13T12:04:59Z'), user: 'carlos', action: 2, message: 'Reconhecido' },
+  ];
+  ui.elements['incident-details-retry'].emit('click'); await tick();
+  assert.equal(ui.elements['incident-history-scroll'].hidden, false);
+  assert.equal(ui.elements['incident-history-empty'].hidden, true);
+  assert.equal(ui.elements['incident-history-count'].textContent, '2 registros');
+  const rows = ui.elements['incident-history'].children;
+  assert.equal(rows[0].children[1].textContent, 'carlos');
+  assert.equal(rows[0].children[0].children[0].textContent, '13/11/2026 09:04');
+  assert.equal(rows[0].children[0].children[0].dateTime, '2026-11-13T12:04:59.000Z');
+});
+
+
+test('comment icon previews real comments on hover and focus without opening the incident dialog', async () => {
+  let requests = 0;
+  const history = [
+    { timestamp: 100000, user: 'ana', message: '<script>comentário</script>', action: 4 },
+    { timestamp: 200000, user: 'carlos', message: 'Acompanhando\nSegunda linha', action: 6 },
+    { timestamp: 300000, user: 'ana', message: '', action: 2 },
+  ];
+  const ui = await surface(() => ({ ok: true, json: async () => ({ rows: [{ ...row, messageCount: 2 }],
+    total: 1, updatedAt: Date.now(), warning: '' }) }), { api: async () => {
+    requests++; return { ok: true, json: async () => ({ ...details, history }) };
+  } });
+  const anchor = ui.rows().find(node => node.dataset.severity != null).children[7].children[0];
+  anchor.emit('mouseenter');
+  assert.equal(requests, 0);
+  [...ui.timers.values()].find(timer => timer.ms === 150).fn(); await tick();
+  assert.equal(requests, 1);
+  assert.notEqual(ui.elements['incident-dialog'].open, true);
+  assert.equal(ui.elements['incident-comments-tooltip'].hidden, false);
+  const comments = ui.elements['incident-comments-rows'].children;
+  assert.equal(comments.length, 2);
+  assert.equal(comments[0].children[1].textContent, 'carlos');
+  assert.equal(comments[0].children[2].textContent, 'Acompanhando\nSegunda linha');
+  assert.equal(comments[1].children[2].textContent, '<script>comentário</script>');
+  anchor.emit('click'); await tick();
+  assert.equal(requests, 1);
+  assert.notEqual(ui.elements['incident-dialog'].open, true);
+  anchor.emit('mouseleave');
+  [...ui.timers.values()].find(timer => timer.ms === 200).fn();
+  assert.equal(ui.elements['incident-comments-tooltip'].hidden, true);
+  anchor.emit('focus'); await tick();
+  assert.equal(ui.elements['incident-comments-tooltip'].hidden, false);
+  assert.equal(requests, 1);
+});
+
+test('comment preview retries failed reads and displays an empty state', async () => {
+  let requests = 0;
+  const ui = await surface(() => ({ ok: true, json: async () => ({ rows: [{ ...row, messageCount: 1 }],
+    total: 1, updatedAt: Date.now(), warning: '' }) }), { api: async () => {
+    requests++; return requests === 1 ? { ok: false } : { ok: true, json: async () => ({ history: [] }) };
+  } });
+  const anchor = ui.rows().find(node => node.dataset.severity != null).children[7].children[0];
+  anchor.emit('focus'); await tick();
+  assert.match(ui.elements['incident-comments-state'].textContent, /Não foi possível/);
+  assert.equal(ui.elements['incident-comments-table'].hidden, true);
+  anchor.emit('focus'); await tick();
+  assert.equal(requests, 2);
+  assert.equal(ui.elements['incident-comments-state'].textContent, 'Nenhum comentário registrado.');
+  assert.notEqual(ui.elements['incident-dialog'].open, true);
+});
+
+
+test('trigger history comment icons load only the selected occurrence including resolved events', async () => {
+  const requests = [];
+  const occurrences = [
+    { eventId: '1', timestamp: 100000, resolved: false, messageCount: 1 },
+    { eventId: '98', timestamp: 50000, recoveredAt: 80000, resolved: true, messageCount: 2 },
+    { eventId: '97', timestamp: 10000, resolved: true, messageCount: 0 },
+  ];
+  const ui = await surface(response, { api: async url => {
+    requests.push(url);
+    if (url.endsWith('/occurrences')) return { ok: true, json: async () => occurrences };
+    if (url.endsWith('/98')) return { ok: true, json: async () => ({ history: [
+      { timestamp: 60000, user: 'ana', message: 'Comentário da ativação anterior', action: 4 },
+    ] }) };
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  ui.elements['incident-tab-trigger'].emit('click'); await tick();
+  const rows = ui.elements['incident-trigger-rows'].children;
+  assert.equal(rows[0].children.length, 7);
+  assert.equal(rows[0].children[6].children[0].children[1].textContent, '1');
+  assert.equal(rows[1].children[6].children[0].children[1].textContent, '2');
+  assert.equal(rows[2].children[6].textContent, '—');
+  rows[1].children[6].children[0].emit('focus'); await tick();
+  assert.equal(requests.at(-1), '/api/incidents/98');
+  assert.equal(ui.elements['incident-comments-rows'].children[0].children[2].textContent,
+    'Comentário da ativação anterior');
+  assert.ok(ui.elements['incident-dialog'].children.includes(ui.elements['incident-comments-tooltip']));
+  rows[1].children[6].children[0].emit('click'); await tick();
+  assert.equal(requests.filter(url => url.endsWith('/98')).length, 1);
+  assert.equal(ui.elements['incident-panel-trigger'].hidden, false);
+  ui.elements['incident-tab-summary'].emit('click');
+  assert.equal(ui.elements['incident-comments-tooltip'].hidden, true);
 });

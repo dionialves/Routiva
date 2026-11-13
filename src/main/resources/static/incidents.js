@@ -175,6 +175,7 @@
     });
   }
   function render(data) {
+    hideComments();
     snapshot = data;
     calendarDay = dayNumber(Date.now());
     const fragment = document.createDocumentFragment();
@@ -290,14 +291,7 @@
       }
       recognition.title = row.acknowledged ? 'Incidente reconhecido' : 'Incidente não reconhecido';
       const observations = cell(tr); observations.className = 'incident-observations';
-      if (row.messageCount > 0) {
-        const messages = document.createElement('button'); messages.type = 'button';
-        messages.className = 'incident-message-button'; messages.title = `${row.messageCount} ${row.messageCount === 1 ? 'mensagem' : 'mensagens'}`;
-        messages.setAttribute('aria-label', `Ver ${messages.title} do incidente`); messages.setAttribute('aria-haspopup', 'dialog');
-        messages.append(icon('message-square'), document.createTextNode(String(row.messageCount)));
-        messages.addEventListener('click', () => openIncident(row, messages, true)); observations.append(messages);
-      }
-      else observations.textContent = '—';
+      renderCommentIndicator(observations, row);
       fragment.append(tr);
     }
 
@@ -308,6 +302,98 @@
   const severityLabels = severityOptions.map(option => option.nextElementSibling.textContent);
   let activeIncident, detailsVersion = 0, saving = false, uncertain = false, returnFocus, detailsLoaded = false, hasIncidentDetails = false;
   const severityColors = ['#a6afba', '#62b6ff', '#f5db27', '#ffa45c', '#ff794f', '#ff5364'];
+  const commentsTooltip = $('incident-comments-tooltip');
+  const commentsCache = new Map();
+  let commentsAnchor = null, commentsOpening, commentsClosing;
+  function hideComments() {
+    clearTimeout(commentsOpening); clearTimeout(commentsClosing);
+    commentsAnchor?.removeAttribute('aria-describedby');
+    commentsAnchor = null;
+    commentsTooltip.hidePopover?.(); commentsTooltip.hidden = true;
+  }
+  function positionComments(anchor) {
+    const bounds = anchor.getBoundingClientRect();
+    const tooltip = commentsTooltip.getBoundingClientRect();
+    const width = document.documentElement.clientWidth, height = window.innerHeight;
+    commentsTooltip.style.left = Math.max(8, Math.min(bounds.right - tooltip.width, width - tooltip.width - 8)) + 'px';
+    const below = bounds.bottom + 8;
+    commentsTooltip.style.top = Math.max(8, below + tooltip.height <= height - 8
+      ? below : bounds.top - tooltip.height - 8) + 'px';
+  }
+  function renderComments(history) {
+    const rows = history.filter(item => item.message?.trim()).sort((a, b) => b.timestamp - a.timestamp);
+    const body = $('incident-comments-rows'); body.replaceChildren();
+    for (const item of rows) {
+      const tr = document.createElement('tr');
+      cell(tr, formatDate(item.timestamp)); cell(tr, item.user || '—'); cell(tr, item.message);
+      body.append(tr);
+    }
+    $('incident-comments-table').hidden = rows.length === 0;
+    $('incident-comments-state').textContent = rows.length ? '' : 'Nenhum comentário registrado.';
+  }
+  async function showComments(row, anchor, inModal = false) {
+    clearTimeout(commentsOpening); clearTimeout(commentsClosing);
+    commentsAnchor = anchor;
+    (inModal ? dialog : $('incident-comments-host')).append(commentsTooltip);
+    anchor.setAttribute('aria-describedby', 'incident-comments-tooltip');
+    commentsTooltip.hidden = false;
+    $('incident-comments-table').hidden = true;
+    $('incident-comments-state').textContent = 'Carregando comentários…';
+    commentsTooltip.showPopover?.(); positionComments(anchor);
+    try {
+      let entry = commentsCache.get(row.eventId);
+      if (!entry || Date.now() - entry.at > 30000) {
+        const promise = fetch(`/api/incidents/${encodeURIComponent(row.eventId)}`, { cache: 'no-store' })
+          .then(async response => {
+            if (!response.ok) throw new Error('Não foi possível consultar os comentários. Passe o mouse novamente para tentar.');
+            const data = await response.json(); return data.history || [];
+          });
+        entry = { at: Date.now(), promise }; commentsCache.set(row.eventId, entry);
+      }
+      const history = await entry.promise;
+      if (commentsAnchor !== anchor) return;
+      renderComments(history); positionComments(anchor);
+    } catch (error) {
+      commentsCache.delete(row.eventId);
+      if (commentsAnchor !== anchor) return;
+      $('incident-comments-table').hidden = true;
+      $('incident-comments-state').textContent = error instanceof TypeError
+        ? 'Não foi possível consultar os comentários. Passe o mouse novamente para tentar.' : error.message;
+      positionComments(anchor);
+    }
+  }
+  function scheduleCommentsClose() {
+    clearTimeout(commentsOpening); clearTimeout(commentsClosing);
+    commentsClosing = setTimeout(hideComments, 200);
+  }
+  function renderCommentIndicator(container, row, inModal = false) {
+    if (!(row.messageCount > 0)) { container.textContent = '—'; return; }
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = 'incident-message-button';
+    const label = `${row.messageCount} ${row.messageCount === 1 ? 'mensagem' : 'mensagens'}`;
+    button.setAttribute('aria-label', `Ver ${label} do incidente`);
+    button.append(icon('message-square'), document.createTextNode(String(row.messageCount)));
+    attachComments(row, button, inModal); container.append(button);
+  }
+  function attachComments(row, anchor, inModal = false) {
+    anchor.addEventListener('mouseenter', () => {
+      clearTimeout(commentsOpening); clearTimeout(commentsClosing);
+      commentsOpening = setTimeout(() => showComments(row, anchor, inModal), 150);
+    });
+    anchor.addEventListener('mouseleave', scheduleCommentsClose);
+    anchor.addEventListener('focus', () => showComments(row, anchor, inModal));
+    anchor.addEventListener('blur', scheduleCommentsClose);
+    anchor.addEventListener('click', () => showComments(row, anchor, inModal));
+  }
+  commentsTooltip.addEventListener('mouseenter', () => clearTimeout(commentsClosing));
+  commentsTooltip.addEventListener('mouseleave', scheduleCommentsClose);
+  commentsTooltip.addEventListener('focusin', () => clearTimeout(commentsClosing));
+  commentsTooltip.addEventListener('focusout', scheduleCommentsClose);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') hideComments(); });
+  document.addEventListener('scroll', event => {
+    if (commentsAnchor && !commentsTooltip.contains(event.target)) hideComments();
+  }, true);
+  window.addEventListener('resize', hideComments);
   function updateActions(action, item) {
     const labels = [];
     if (action & 1) labels.push('Fechamento solicitado');
@@ -343,6 +429,7 @@
   const modalTabs = ['summary', 'trigger', 'update'];
   let occurrenceRows = null, occurrencePage = 1, occurrenceVersion = 0, occurrenceLoading = false;
   function selectModalTab(key, focus = false) {
+    hideComments();
     dialog.dataset.activeTab = key;
     if (key === 'trigger') {
       $('incident-trigger-scroll').scrollTop = 0;
@@ -480,6 +567,7 @@
     }
   }
   function renderOccurrences() {
+    hideComments();
     const body = $('incident-trigger-rows'); body.replaceChildren();
     $('incident-trigger-scroll').scrollTop = 0;
     const rows = occurrenceRows || [];
@@ -493,7 +581,9 @@
       badge.textContent = row.resolved ? 'Resolvido' : 'Incidente'; cell(tr).append(badge);
       cell(tr, duration(row.timestamp));
       cell(tr, occurrenceDuration(row));
-      cell(tr, row.acknowledged ? 'Sim' : 'Não'); body.append(tr);
+      cell(tr, row.acknowledged ? 'Sim' : 'Não');
+      const comments = cell(tr); comments.className = 'incident-observations';
+      renderCommentIndicator(comments, row, true); body.append(tr);
     }
     const nav = $('incident-trigger-pagination'); nav.replaceChildren();
     const pages = Math.max(1, Math.ceil(rows.length / 10));
@@ -501,12 +591,16 @@
       const node = document.createElement('button'); node.type = 'button'; node.className = 'system-button';
       if (iconName) node.append(icon(iconName));
       node.append(document.createTextNode(label)); node.disabled = disabled;
-      if (target === occurrencePage && !iconName) node.setAttribute('aria-current', 'page');
       node.addEventListener('click', () => { occurrencePage = target; renderOccurrences(); }); nav.append(node);
     }
     const count = document.createElement('span'); count.textContent = `${rows.length} registros`; nav.append(count);
     button('Anterior', occurrencePage - 1, occurrencePage === 1, 'chevron-left');
-    for (let page = 1; page <= pages; page++) button(String(page), page, page === occurrencePage);
+    const status = document.createElement('span');
+    status.className = 'incident-trigger-page-status';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.textContent = `Página ${occurrencePage} de ${pages}`;
+    nav.append(status);
     button('Próxima', occurrencePage + 1, occurrencePage === pages, 'chevron-right');
   }
   async function loadOccurrences() {
@@ -520,7 +614,7 @@
     const body = $('incident-trigger-rows'); body.replaceChildren();
     for (let row = 0; row < 10; row++) {
       const tr = document.createElement('tr'); tr.className = 'incident-skeleton';
-      for (let col = 0; col < 6; col++) cell(tr, ' ');
+      for (let col = 0; col < 7; col++) cell(tr, ' ');
       body.append(tr);
     }
     try {
@@ -545,7 +639,7 @@
     for (const item of [...data.history].sort((a, b) => b.timestamp - a.timestamp)) {
       const tr = document.createElement('tr');
       const time = document.createElement('time'); time.dateTime = new Date(item.timestamp).toISOString();
-      time.textContent = formatDate(item.timestamp); cell(tr).append(time);
+      time.textContent = formatOccurrenceDate(item.timestamp); cell(tr).append(time);
       cell(tr, item.user);
       const actions = cell(tr);
       for (const label of updateActions(item.action, item)) {
@@ -569,6 +663,7 @@
     }
     $('incident-history-count').textContent = `${data.history.length} ${data.history.length === 1 ? 'registro' : 'registros'}`;
     $('incident-history-empty').hidden = data.history.length !== 0;
+    $('incident-history-scroll').hidden = data.history.length === 0;
   }
   async function readDetails(focusHistory = false) {
     const version = ++detailsVersion;
@@ -616,6 +711,7 @@
     }
   }
   function openIncident(row, trigger, focusHistory = false) {
+    hideComments();
     returnFocus = trigger; activeIncident = row; uncertain = false; detailsLoaded = false; hasIncidentDetails = false;
     occurrenceVersion++; occurrenceRows = null; occurrenceLoading = false; occurrencePage = 1;
     $('incident-trigger-rows').replaceChildren(); $('incident-trigger-pagination').replaceChildren();
@@ -626,6 +722,7 @@
     renderSummary(row);
     updateForm.reset(); $('incident-update-error').textContent = '';
     $('incident-history').replaceChildren(); $('incident-history-empty').hidden = true;
+    $('incident-history-scroll').hidden = true;
     $('incident-history-count').textContent = '0 registros';
     $('incident-dialog-name').textContent = row.name; $('incident-dialog-id').textContent = `ID: ${row.eventId}`;
     $('incident-status-badge').textContent = 'Consultando…'; $('incident-status-badge').dataset.state = 'loading';
@@ -650,6 +747,7 @@
   }
   dialog.addEventListener('cancel', event => { if (!allowDismiss()) event.preventDefault(); });
   dialog.addEventListener('close', () => {
+    hideComments();
     detailsVersion++; occurrenceVersion++; occurrenceLoading = false; detailsLoaded = false;
     if (returnFocus?.isConnected) returnFocus.focus();
     else $('incident-rows').querySelector('.incident-link')?.focus();
@@ -691,6 +789,7 @@
       $('incident-update-error').textContent = error.message;
     } finally {
       if (confirmed || uncertain) {
+        commentsCache.delete(activeIncident.eventId);
         occurrenceVersion++; occurrenceRows = null; occurrenceLoading = false;
         // Discard snapshots requested before the mutation and fetch the Zabbix state again.
         filterVersion++;

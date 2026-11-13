@@ -263,7 +263,7 @@ public class ZabbixClient {
     }
 
     public record TriggerOccurrence(String eventId, long timestamp, Long recoveredAt,
-                                    boolean resolved, boolean acknowledged) {}
+                                    boolean resolved, boolean acknowledged, int messageCount) {}
 
     public synchronized List<TriggerOccurrence> incidentOccurrences(String eventId, List<String> allowedHosts) {
         var current = incidentDetails(eventId, allowedHosts, false);
@@ -277,6 +277,7 @@ public class ZabbixClient {
         params.put("object", 0);
         params.put("value", 1);
         params.put("output", List.of("eventid", "clock", "r_eventid", "acknowledged"));
+        params.put(legacyEvents ? "select_acknowledges" : "selectAcknowledges", List.of("message"));
         params.put("sortfield", List.of("clock", "eventid"));
         params.put("sortorder", "DESC");
         params.put("limit", 20);
@@ -299,7 +300,7 @@ public class ZabbixClient {
             String recoveryId = event.path("r_eventid").asText("0");
             result.add(new TriggerOccurrence(event.path("eventid").asText(), event.path("clock").asLong() * 1000,
                 recoveries.get(recoveryId), !recoveryId.equals("0") && !recoveryId.isBlank(),
-                event.path("acknowledged").asInt() == 1));
+                event.path("acknowledged").asInt() == 1, messageCount(event)));
         }
         return List.copyOf(result);
     }

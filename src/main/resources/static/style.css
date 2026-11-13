@@ -1044,3 +1044,15 @@ body { background: var(--app-bg); }
 .profile-menu summary:focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
 .profile-menu .profile-panel { width:160px; padding:12px; top:44px; }
 .profile-panel .system-button { width:100%; }
+
+/* Keep the background still while any application modal is open.
+   CSS follows the actual open state, including nested dialogs and Escape/form closes. */
+html:has(dialog[open]),
+body:has(dialog[open]),
+html:has([aria-modal="true"]),
+body:has([aria-modal="true"]) {
+  overflow:hidden;
+  overscroll-behavior:none;
+  scrollbar-gutter:stable;
+}
+dialog[open], [aria-modal="true"] { overscroll-behavior:contain; }
