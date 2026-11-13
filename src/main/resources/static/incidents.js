@@ -415,7 +415,91 @@
     return activeIncident?.writable && Number.isInteger(value) && value >= 0 && value <= 5
       && value !== activeIncident.severity ? value : null;
   }
+  const severityTrigger = $('incident-severity-trigger');
+  const severityMenu = $('incident-severity-listbox');
+  const severitySelect = $('incident-new-severity');
+  let focusedSeverity = 0;
+  const severityChoices = severityLabels.map((label, level) => {
+    const option = document.createElement('button'); option.type = 'button';
+    option.id = `incident-severity-option-${level}`;
+    option.className = 'incident-severity-choice'; option.tabIndex = -1;
+    option.setAttribute('role', 'option');
+    option.style.setProperty('--incident-level', severityColors[level]);
+    const dot = document.createElement('span'); dot.className = 'incident-severity-choice-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span'); text.textContent = label;
+    option.append(dot, text);
+    option.addEventListener('click', () => chooseSeverity(level));
+    severityMenu.append(option); return option;
+  });
+  severitySelect.hidden = true;
+  severitySelect.setAttribute('aria-hidden', 'true'); severitySelect.tabIndex = -1;
+  severityTrigger.hidden = false;
+  function closeSeverityMenu(focus = false) {
+    severityMenu.hidePopover?.(); severityMenu.hidden = true;
+    severityTrigger.setAttribute('aria-expanded', 'false');
+    if (focus && !severityTrigger.disabled) severityTrigger.focus();
+  }
+  function syncSeverityPicker() {
+    const level = Number(severitySelect.value);
+    $('incident-severity-value').textContent = severityLabels[level] || '—';
+    severityTrigger.disabled = severitySelect.disabled || $('incident-update-fields').disabled
+      || !detailsLoaded || saving;
+    severityChoices.forEach((option, index) => {
+      option.setAttribute('aria-selected', String(index === level));
+    });
+    if (severityTrigger.disabled) closeSeverityMenu();
+  }
+  function openSeverityMenu() {
+    if (severityTrigger.disabled) return;
+    focusedSeverity = Math.max(0, Math.min(5, Number(severitySelect.value) || 0));
+    severityMenu.hidden = false; severityMenu.showPopover?.();
+    severityTrigger.setAttribute('aria-expanded', 'true');
+    const anchor = severityTrigger.getBoundingClientRect();
+    severityMenu.style.width = anchor.width + 'px';
+    const menu = severityMenu.getBoundingClientRect();
+    severityMenu.style.left = Math.max(8, Math.min(anchor.left, document.documentElement.clientWidth - anchor.width - 8)) + 'px';
+    severityMenu.style.top = Math.max(8, anchor.bottom + menu.height + 6 <= window.innerHeight - 8
+      ? anchor.bottom + 6 : anchor.top - menu.height - 6) + 'px';
+    severityChoices[focusedSeverity].focus();
+  }
+  function chooseSeverity(level) {
+    if (severityTrigger.disabled) return;
+    severitySelect.value = String(level);
+    // Keep the original select and its change handler as the form's source of truth.
+    severitySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    closeSeverityMenu(true);
+  }
+  severityTrigger.addEventListener('click', () => {
+    if (severityMenu.hidden) openSeverityMenu(); else closeSeverityMenu(true);
+  });
+  severityTrigger.addEventListener('keydown', event => {
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault(); openSeverityMenu();
+      if (event.key === 'Home' || event.key === 'End') {
+        focusedSeverity = event.key === 'Home' ? 0 : 5; severityChoices[focusedSeverity].focus();
+      }
+    }
+  });
+  severityMenu.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeSeverityMenu(true); return; }
+    if (event.key === 'Tab') { closeSeverityMenu(true); return; }
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseSeverity(focusedSeverity); return; }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    focusedSeverity = event.key === 'Home' ? 0 : event.key === 'End' ? 5
+      : (focusedSeverity + (event.key === 'ArrowDown' ? 1 : 5)) % 6;
+    severityChoices[focusedSeverity].focus();
+  });
+  document.addEventListener('pointerdown', event => {
+    if (!severityMenu.hidden && !severityMenu.contains(event.target) && !severityTrigger.contains(event.target)) closeSeverityMenu();
+  });
+  window.addEventListener('resize', () => closeSeverityMenu());
+  document.addEventListener('scroll', event => {
+    if (!severityMenu.hidden && !severityMenu.contains(event.target)) closeSeverityMenu();
+  }, true);
   function updateSaveState() {
+    syncSeverityPicker();
     const message = $('incident-message');
     const limit = message.maxLength > 0 ? message.maxLength : 1800;
     $('incident-message-count').textContent = `${message.value.length.toLocaleString('pt-BR')} / ${limit.toLocaleString('pt-BR')}`;
@@ -429,6 +513,7 @@
   const modalTabs = ['summary', 'trigger', 'update'];
   let occurrenceRows = null, occurrencePage = 1, occurrenceVersion = 0, occurrenceLoading = false;
   function selectModalTab(key, focus = false) {
+    closeSeverityMenu();
     hideComments();
     dialog.dataset.activeTab = key;
     if (key === 'trigger') {
@@ -666,6 +751,7 @@
     $('incident-history-scroll').hidden = data.history.length === 0;
   }
   async function readDetails(focusHistory = false) {
+    closeSeverityMenu();
     const version = ++detailsVersion;
     const previousSeverity = hasIncidentDetails ? changedSeverity() : null;
     detailsLoaded = false;
@@ -747,6 +833,7 @@
   }
   dialog.addEventListener('cancel', event => { if (!allowDismiss()) event.preventDefault(); });
   dialog.addEventListener('close', () => {
+    closeSeverityMenu();
     hideComments();
     detailsVersion++; occurrenceVersion++; occurrenceLoading = false; detailsLoaded = false;
     if (returnFocus?.isConnected) returnFocus.focus();

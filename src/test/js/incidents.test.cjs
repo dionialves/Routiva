@@ -11,8 +11,9 @@ async function surface(respond, options = {}) {
     replaceChildren(...nodes) { this.children = nodes; this.options = nodes; }
     setAttribute(k, v) { this.attributes[k] = v; }
     removeAttribute(k) { delete this.attributes[k]; }
-    getBoundingClientRect() { return { top:100, bottom:120, right:600, width:400, height:100 }; }
+    getBoundingClientRect() { return { top:100, bottom:120, right:600, left:200, width:400, height:100 }; }
     addEventListener(k, fn) { this.listeners[k] = fn; }
+    dispatchEvent(event) { this.listeners[event.type]?.(event); }
     removeEventListener(k, fn) { if (this.listeners[k] === fn) delete this.listeners[k]; }
     emit(k) { this.listeners[k]?.({ preventDefault() {} }); }
     focus() {}
@@ -41,6 +42,7 @@ async function surface(respond, options = {}) {
   const timers = new Map(), intervals = [], requests = [], events = {}, locations = [], transports = [];
   const main = new Element(); main.dataset.timeZone = 'America/Sao_Paulo'; main.dataset.canUpdate = options.admin ? 'true' : 'false'; main.content = 'csrf';
   const context = {
+    Event: class { constructor(type) { this.type = type; } },
     innerHeight: 800,
     document: { documentElement: { clientWidth: 1200 }, getElementById: id => elements[id], createElement: () => new Element(), createElementNS: () => new Element(), createTextNode: text => ({ textContent: text }), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }), querySelector: () => main, addEventListener() {}, removeEventListener() {}, querySelectorAll: selector => selector === '[data-opened-at]' ? [] : selector === '[data-incident-severity]' ? severityOptions : sorts },
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
@@ -807,4 +809,65 @@ test('trigger history comment icons load only the selected occurrence including 
   assert.equal(ui.elements['incident-panel-trigger'].hidden, false);
   ui.elements['incident-tab-summary'].emit('click');
   assert.equal(ui.elements['incident-comments-tooltip'].hidden, true);
+});
+
+
+test('colored severity menu preserves the form value and applies changes only on confirmation', async () => {
+  const updates = [];
+  const ui = await surface(response, { admin: true, api: async (url, init) => {
+    if (init.method === 'POST') { updates.push(JSON.parse(init.body)); return { ok: true }; }
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  ui.elements['incident-tab-update'].emit('click');
+  const trigger = ui.elements['incident-severity-trigger'], menu = ui.elements['incident-severity-listbox'];
+  assert.equal(ui.elements['incident-new-severity'].hidden, true);
+  assert.equal(trigger.disabled, false);
+  assert.equal(ui.elements['incident-severity-value'].textContent, 'Alta');
+  assert.equal(menu.children.length, 6);
+  for (const option of menu.children) {
+    assert.equal(option.children[0].className, 'incident-severity-choice-dot');
+    assert.ok(option.children[1].textContent);
+  }
+  trigger.emit('click');
+  assert.equal(trigger.attributes['aria-expanded'], 'true');
+  assert.equal(menu.children[4].attributes['aria-selected'], 'true');
+  menu.children[2].emit('click');
+  assert.equal(menu.hidden, true);
+  assert.equal(trigger.attributes['aria-expanded'], 'false');
+  assert.equal(ui.elements['incident-new-severity'].value, '2');
+  assert.equal(ui.elements['incident-severity-value'].textContent, 'Atenção');
+  assert.equal(menu.children[2].attributes['aria-selected'], 'true');
+  assert.equal(ui.elements['incident-update-save'].disabled, false);
+  assert.equal(updates.length, 0);
+  ui.elements['incident-tab-summary'].emit('click');
+  ui.elements['incident-tab-update'].emit('click');
+  assert.equal(ui.elements['incident-severity-value'].textContent, 'Atenção');
+  await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].severity, 2);
+});
+
+test('severity menu supports keyboard selection, Escape and permission restrictions', async () => {
+  const ui = await surface(response, { admin: true, api: async () => ({ ok: true, json: async () => details }) });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  const trigger = ui.elements['incident-severity-trigger'], menu = ui.elements['incident-severity-listbox'];
+  const key = key => ({ key, preventDefault() {}, stopPropagation() {} });
+  trigger.listeners.keydown(key('ArrowDown'));
+  assert.equal(menu.hidden, false);
+  menu.listeners.keydown(key('Home'));
+  menu.listeners.keydown(key('Enter'));
+  assert.equal(ui.elements['incident-new-severity'].value, '0');
+  trigger.emit('click');
+  menu.listeners.keydown(key('End'));
+  menu.listeners.keydown(key('Escape'));
+  assert.equal(menu.hidden, true);
+  assert.equal(ui.elements['incident-new-severity'].value, '0');
+  const readonly = await surface(response, { admin: true,
+    api: async () => ({ ok: true, json: async () => ({ ...details, writable: false }) }),
+  });
+  readonly.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
+  assert.equal(readonly.elements['incident-severity-trigger'].disabled, true);
+  readonly.elements['incident-severity-trigger'].emit('click');
+  assert.equal(readonly.elements['incident-severity-listbox'].hidden, true);
 });
