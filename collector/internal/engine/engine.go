@@ -31,6 +31,7 @@ type host struct {
 	cfg      *pb.HostConfig
 	next     time.Time
 	sequence uint64
+	packets  uint32
 }
 type hosts []*host
 
@@ -106,7 +107,7 @@ func Validate(c *pb.Configuration) error {
 	}
 	seen := map[string]bool{}
 	for _, h := range c.Hosts {
-		if h.HostId == "" || len(h.HostId) > 255 || seen[h.HostId] || parseIPv4(h.Target) == nil || h.IntervalMs < 100 || h.IntervalMs > 3600000 || h.TimeoutMs < 100 || h.TimeoutMs > 60000 {
+		if h.HostId == "" || len(h.HostId) > 255 || seen[h.HostId] || parseIPv4(h.Target) == nil || h.IntervalMs < 100 || h.IntervalMs > 3600000 || h.TimeoutMs < 100 || h.TimeoutMs > 60000 || h.MaxPackets > 10000 {
 			return fmt.Errorf("invalid host configuration: %s", h.HostId)
 		}
 		seen[h.HostId] = true
@@ -146,7 +147,7 @@ func (e *Engine) configure(c *pb.Configuration, now time.Time) error {
 			continue
 		}
 		old := e.inventory[cfg.HostId]
-		if old != nil && old.cfg.Target == cfg.Target && old.cfg.IntervalMs == cfg.IntervalMs {
+		if old != nil && old.cfg.Target == cfg.Target && old.cfg.IntervalMs == cfg.IntervalMs && old.cfg.MaxPackets == cfg.MaxPackets {
 			copyHost := *old
 			copyHost.cfg = cfg
 			next[cfg.HostId] = &copyHost
@@ -210,6 +211,9 @@ func (e *Engine) step(now time.Time) {
 	}
 	for len(e.schedule) > 0 && !e.schedule[0].next.After(now) {
 		h := heap.Pop(&e.schedule).(*host)
+		if h.cfg.MaxPackets > 0 && h.packets >= h.cfg.MaxPackets {
+			continue
+		}
 		interval := time.Duration(h.cfg.IntervalMs) * time.Millisecond
 		lag := now.Sub(h.next)
 		e.Metrics.LagNS.Store(lag.Nanoseconds())
@@ -236,6 +240,7 @@ func (e *Engine) step(now time.Time) {
 		} else {
 			select {
 			case e.sends <- job{h.cfg.Target, e.serial, a.deadline}:
+				h.packets++
 				e.pending[e.serial] = a
 				heap.Push(&e.deadlines, a)
 			default:

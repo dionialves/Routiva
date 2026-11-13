@@ -19,12 +19,30 @@ class AccessPointPageTests {
     @Autowired MockMvc mvc;
     @MockitoBean AccessPointService service;
 
+    @Test void rendersLatencySummaryWithSharedNavigationAndEscapedEquipmentName() throws Exception {
+        when(service.pageHost("42")).thenReturn(new Host("42", "AP <teste>", "192.0.2.1", List.of()));
+        mvc.perform(get("/ap/42/latency/assessment-1")).andExpect(status().isOk())
+            .andExpect(content().string(containsString("Resumo dos resultados")))
+            .andExpect(content().string(containsString("AP &lt;teste&gt;")))
+            .andExpect(content().string(containsString("data-assessment-id=\"assessment-1\"")))
+            .andExpect(content().string(containsString("Média geral dos clientes")))
+            .andExpect(content().string(containsString("3 clientes com maior latência adicional")))
+            .andExpect(content().string(containsString("/ap/42")));
+    }
     @Test void rendersHostAndSharedNavigationWithoutExposingCredentials() throws Exception {
         when(service.pageHost("42")).thenReturn(new Host("42", "MikroTik São Paulo", "192.0.2.1", List.of()));
         mvc.perform(get("/ap/42")).andExpect(status().isOk())
             .andExpect(content().string(containsString("MikroTik São Paulo")))
             .andExpect(content().string(containsString("data-host-id=\"42\"")))
             .andExpect(content().string(containsString("Wireless")))
+            .andExpect(content().string(containsString("latency-execution-status")))
+            .andExpect(content().string(containsString("latency-search")))
+            .andExpect(content().string(not(containsString("latency-sidebar"))))
+            .andExpect(content().string(containsString("latency-results-tab")))
+            .andExpect(content().string(containsString("latency-results-panel")))
+            .andExpect(content().string(containsString("latency-final-results")))
+            .andExpect(content().string(not(containsString("latency-summary-link"))))
+            .andExpect(content().string(containsString("Clientes avaliados")))
             .andExpect(content().string(containsString("connected-clients")))
             .andExpect(content().string(containsString("signal-distribution")))
             .andExpect(content().string(containsString("Tempo conectado")))

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+<th:block th:replace="~{shell :: security}"></th:block>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title th:text="${'Resumo de latência • ' + host.name()}">Resumo de latência</title>
+<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/buttons.css"><link rel="stylesheet" href="/ap-latency.css?v=20261113-8">
+<script src="/shell.js" defer></script><script src="/ap-latency.js?v=20261113-8" defer></script><script src="/ap-latency-summary.js?v=20261113-8" defer></script>
+</head>
+<body><aside th:replace="~{shell :: sidebar('ap')}"></aside><div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
+<main class="page-content latency-summary" th:attr="data-host-id=${host.id()},data-assessment-id=${assessment}">
+<header class="ap-latency-heading"><div><p class="eyebrow">AVALIAÇÃO DE LATÊNCIA</p><h1>Resumo dos resultados</h1><p th:text="${host.name() + ' · ' + host.ip()}"></p></div><a class="system-button" th:href="@{/ap/{id}(id=${host.id()})}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 5-7 7 7 7M5 12h14"/></svg>Voltar ao AP</a></header>
+<p id="latency-summary-state" role="status" aria-live="polite">Carregando resultados…</p>
+<div id="latency-summary-content" hidden>
+<p id="latency-summary-period"></p>
+<div class="latency-summary-metrics">
+<article class="card"><h2>Média do AP</h2><strong id="summary-ap">—</strong><p id="summary-ap-loss"></p></article>
+<article class="card"><h2>Média geral dos clientes</h2><strong id="summary-mean">—</strong><p>Média das médias dos clientes com resposta.</p></article>
+<article class="card"><h2>Diferença média para o AP</h2><strong id="summary-delta">—</strong><p>Latência adicional estimada dos clientes.</p></article>
+<article class="card"><h2>Perda dos clientes</h2><strong id="summary-loss">—</strong><p>Percentual sobre os pings com resultado ICMP.</p></article>
+</div>
+<section class="card latency-summary-section"><h2>Cobertura da avaliação</h2><p id="summary-coverage"></p><p id="summary-alert" role="status"></p></section>
+<section class="card latency-summary-section"><h2>3 clientes com maior latência adicional</h2><p>Ordenados pela diferença entre a média do cliente e a média do AP. Clientes sem resposta aparecem na cobertura e na tabela completa.</p><ol id="summary-worst" class="latency-worst"></ol><p id="summary-worst-empty" hidden>Não há dados suficientes para comparar clientes com o AP.</p></section>
+<section class="card latency-summary-section"><h2>Todos os resultados</h2><div class="table-scroll"><table class="hosts-table"><thead><tr><th>Equipamento / Cliente</th><th>IP / MAC</th><th>Média</th><th>Mínima</th><th>Máxima</th><th>Perda</th><th>Respostas / Amostras</th><th>Diferença para o AP</th><th>Observação</th></tr></thead><tbody id="summary-results"></tbody></table></div></section>
+<p>Teste por quantidade de pacotes pelo coletor, sem bloqueio de tráfego. A diferença inclui efeitos do tráfego e do processamento dos equipamentos. Valores negativos indicam variação da medição. Falhas de coleta não contam como perda ICMP.</p>
+<p>Os resultados ficam disponíveis nesta sessão por cinco minutos após o fim do teste. Esta avaliação não é salva no histórico.</p>
+</div></main></div></body></html>

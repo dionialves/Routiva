@@ -15,6 +15,12 @@ public class AccessPointController {
     @GetMapping("/ap/{id}") public String page(@PathVariable String id, Model model) {
         model.addAttribute("host", service.pageHost(id)); return "host";
     }
+    @GetMapping("/ap/{id}/latency/{assessment}")
+    public String latencySummary(@PathVariable String id, @PathVariable String assessment, Model model) {
+        model.addAttribute("host", service.pageHost(id));
+        model.addAttribute("assessment", assessment);
+        return "ap-latency-summary";
+    }
     @GetMapping("/api/ap") @ResponseBody
     public ResponseEntity<?> list() { return fresh(service.list()); }
     @GetMapping("/api/ap/candidates") @ResponseBody

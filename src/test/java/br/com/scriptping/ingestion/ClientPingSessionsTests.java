@@ -11,6 +11,38 @@ class ClientPingSessionsTests {
         return Result.newBuilder().setHostId(id).setTarget("192.0.2.15")
             .setScheduledAt(at * 1000000).setRttNs(2500000).setStatus(status).build();
     }
+    @Test void fixedWindowStopsWithoutPollingAndRejectsSamplesOutsideWindow() {
+        var sessions = new ClientPingSessions();
+        long start = System.currentTimeMillis(), end = start + 60000;
+        var view = sessions.startWindow("host", "owner", "192.0.2.15", start, end);
+        sessions.accept(List.of(Batch.newBuilder()
+            .addResults(result(view.id(), start - 1, Status.SUCCESS))
+            .addResults(result(view.id(), start, Status.SUCCESS))
+            .addResults(result(view.id(), end, Status.SUCCESS)).build()));
+        assertThat(sessions.read(view.id(), "host", "owner").samples()).hasSize(1);
+        long revision = sessions.revision();
+        sessions.expire(end);
+        assertThat(sessions.revision()).isGreaterThan(revision);
+        assertThat(sessions.configurations(5000, 5000, 20)).isEmpty();
+        assertThat(sessions.read(view.id(), "host", "owner").samples()).hasSize(1);
+        sessions.expire(end + 300001);
+        assertThatThrownBy(() -> sessions.read(view.id(), "host", "owner"))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+    @Test void packetSessionsStopAtBudgetIgnoreSkippedAndDoNotCountReplayedResults() {
+        var sessions = new ClientPingSessions();
+        var view = sessions.startPackets("host", "owner", "192.0.2.15", 5, System.currentTimeMillis() + 35000);
+        assertThat(sessions.configurations(1000, 1500, 20).getFirst().getMaxPackets()).isEqualTo(5);
+        long at = view.startedAt();
+        var skipped = Batch.newBuilder().addResults(result(view.id(), at, Status.SKIPPED)).build();
+        sessions.accept(List.of(skipped));
+        assertThat(sessions.read(view.id(), "host", "owner").samples()).isEmpty();
+        var batch = Batch.newBuilder();
+        for (int i = 0; i < 7; i++) batch.addResults(result(view.id(), at + i, Status.TIMEOUT));
+        sessions.accept(List.of(batch.build(), batch.build()));
+        assertThat(sessions.read(view.id(), "host", "owner").samples()).hasSize(5);
+        assertThat(sessions.configurations(1000, 1500, 20)).isEmpty();
+    }
     @Test void sessionStartsEmptyAndOnlyIpv4IsAccepted() {
         var sessions = new ClientPingSessions();
         for (String ip : List.of("::1", "example.com", "0.0.0.0", "999.1.1.1"))

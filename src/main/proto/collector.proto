@@ -18,6 +18,8 @@ message HostConfig {
   int64 timeout_ms = 4;
   bool enabled = 5;
   double latency_limit_ms = 6;
+  // Zero keeps continuous monitoring; nonzero bounds diagnostic attempts per target.
+  uint32 max_packets = 7;
 }
 
 // A snapshot replaces the inventory atomically. Incremental changes use upsert/remove.

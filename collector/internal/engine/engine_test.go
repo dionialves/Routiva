@@ -223,3 +223,51 @@ func TestCorrelatedICMPFailureIsNetworkFailure(t *testing.T) {
 		t.Fatal("network error classified as collector failure")
 	}
 }
+
+func TestPacketBudgetStopsExactlyAndSurvivesConfigurationRefresh(t *testing.T) {
+	for _, count := range []uint32{5, 10, 30, 60} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			e := configured(1)
+			start := time.Now()
+			cfg := &pb.Configuration{Replace: true, Hosts: []*pb.HostConfig{{HostId: "0", Target: "127.0.0.1", IntervalMs: 1000, TimeoutMs: 1500, Enabled: true, MaxPackets: count}}}
+			if err := e.configure(cfg, start); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 100; i++ {
+				now := start.Add(time.Duration(i) * time.Second)
+				e.step(now)
+				drain(e, now, true)
+				if i == 8 || i == 70 {
+					if err := e.configure(cfg, now); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if got := e.Metrics.Sent.Load(); got != int64(count) {
+				t.Fatalf("sent %d packets, want %d", got, count)
+			}
+		})
+	}
+}
+
+func TestSkippedWorkDoesNotConsumePacketBudget(t *testing.T) {
+	e := configured(1)
+	start := time.Now()
+	cfg := &pb.Configuration{Replace: true, Hosts: []*pb.HostConfig{{HostId: "0", Target: "127.0.0.1", IntervalMs: 1000, TimeoutMs: 1500, Enabled: true, MaxPackets: 5}}}
+	if err := e.configure(cfg, start); err != nil {
+		t.Fatal(err)
+	}
+	e.MaxPending = 0
+	for i := 0; i < 3; i++ {
+		e.step(start.Add(time.Duration(i) * time.Second))
+	}
+	e.MaxPending = 100
+	for i := 3; i < 20; i++ {
+		now := start.Add(time.Duration(i) * time.Second)
+		e.step(now)
+		drain(e, now, true)
+	}
+	if got := e.Metrics.Sent.Load(); got != 5 {
+		t.Fatalf("sent %d packets, want 5", got)
+	}
+}

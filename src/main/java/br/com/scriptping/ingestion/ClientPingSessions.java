@@ -16,8 +16,11 @@ public class ClientPingSessions {
     public record View(String id, String ip, long startedAt, List<Point> samples) {}
     private static final class Session {
         final String id = PREFIX + UUID.randomUUID(), host, owner, ip;
-        final long startedAt;
+        long startedAt;
         long expiresAt;
+        long endsAt = Long.MAX_VALUE;
+        boolean finished;
+        int packetLimit;
         final NavigableMap<Long, Point> samples = new TreeMap<>();
         Session(String host, String owner, String ip, long now) {
             this.host = host; this.owner = owner; this.ip = ip; startedAt = now; expiresAt = now + LEASE_MS;
@@ -40,10 +43,25 @@ public class ClientPingSessions {
         sessions.put(session.id, session); revision++;
         return session.view();
     }
+    public synchronized View startWindow(String host, String owner, String ip, long startedAt, long endsAt) {
+        var view = start(host, owner, ip);
+        var session = sessions.get(view.id());
+        session.startedAt = startedAt;
+        session.endsAt = endsAt;
+        session.expiresAt = endsAt + 300000;
+        return session.view();
+    }
+    public synchronized View startPackets(String host, String owner, String ip, int packets, long deadline) {
+        if (!Set.of(5, 10, 30, 60).contains(packets))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione 5, 10, 30 ou 60 pacotes.");
+        var view = startWindow(host, owner, ip, System.currentTimeMillis(), deadline);
+        sessions.get(view.id()).packetLimit = packets;
+        return view;
+    }
     public synchronized View read(String id, String host, String owner) {
         expire(System.currentTimeMillis());
         var session = owned(id, host, owner);
-        session.expiresAt = System.currentTimeMillis() + LEASE_MS;
+        if (session.endsAt == Long.MAX_VALUE) session.expiresAt = System.currentTimeMillis() + LEASE_MS;
         return session.view();
     }
     public synchronized void stop(String id, String host, String owner) {
@@ -58,26 +76,34 @@ public class ClientPingSessions {
         return session;
     }
     synchronized void expire(long now) {
+        for (var session : sessions.values()) {
+            if (!session.finished && session.endsAt <= now) { session.finished = true; revision++; }
+        }
         if (sessions.values().removeIf(s -> s.expiresAt <= now)) revision++;
     }
     synchronized long revision() { expire(System.currentTimeMillis()); return revision; }
     synchronized List<HostConfig> configurations(long interval, long timeout, double limit) {
         expire(System.currentTimeMillis());
-        return sessions.values().stream().map(s -> HostConfig.newBuilder().setHostId(s.id).setTarget(s.ip)
-            .setIntervalMs(interval).setTimeoutMs(timeout).setEnabled(true).setLatencyLimitMs(limit).build()).toList();
+        return sessions.values().stream().filter(s -> !s.finished).map(s -> HostConfig.newBuilder().setHostId(s.id).setTarget(s.ip)
+            .setIntervalMs(s.endsAt == Long.MAX_VALUE ? interval : 1000).setTimeoutMs(s.endsAt == Long.MAX_VALUE ? timeout : 1500).setMaxPackets(s.packetLimit).setEnabled(true).setLatencyLimitMs(limit).build()).toList();
     }
     synchronized void accept(List<Batch> batches) {
         expire(System.currentTimeMillis());
         for (var batch : batches) for (var result : batch.getResultsList()) {
             var s = sessions.get(result.getHostId());
             long at = result.getScheduledAt() / 1000000;
-            if (s == null || !s.ip.equals(result.getTarget()) || at < s.startedAt
+            if (s == null || !s.ip.equals(result.getTarget()) || at < s.startedAt || at >= s.endsAt
                 || at > System.currentTimeMillis() + 60000 || result.getRttNs() < 0
                 || (s.samples.size() >= 120 && at < s.samples.firstKey())) continue;
+            if (s.packetLimit > 0 && (result.getStatus() == Status.SKIPPED
+                || (s.samples.size() >= s.packetLimit && !s.samples.containsKey(at)))) continue;
             boolean success = result.getStatus() == Status.SUCCESS;
             boolean loss = result.getStatus() == Status.TIMEOUT || result.getStatus() == Status.ICMP_ERROR;
             s.samples.put(at, new Point(at, success ? result.getRttNs() / 1000000d : null,
                 success ? Double.valueOf(0) : loss ? Double.valueOf(100) : null, result.getStatus().name()));
+            if (s.packetLimit > 0 && s.samples.size() >= s.packetLimit && !s.finished) {
+                s.finished = true; revision++;
+            }
             while (s.samples.size() > 120) s.samples.pollFirstEntry();
         }
     }

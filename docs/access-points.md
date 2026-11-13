@@ -35,3 +35,43 @@ Para outro fabricante, implementar `EquipmentProvider`, normalizar as linhas ao
 contrato consumido pela apresentação e informar as capacidades disponíveis.
 Categorias futuras (OLT/roteador) podem reutilizar esse contrato, preservando seus
 próprios cadastros, rotas e componentes de apresentação específicos.
+
+## Avaliação de latência
+
+Na página do AP, a engrenagem abre **Avaliação de latência**. O modal lista os
+clientes wireless conectados e resolve seus IPv4 pelo IXC. Ao lado de **Start**,
+selecione **5, 10, 30 ou 60 pacotes por destino** (padrão: 60). O coletor executa
+essa quantidade de tentativas para o AP e para cada cliente com IP válido, com
+intervalo de 1 segundo e timeout de 1,5 segundo. Não há bloqueio de tráfego.
+
+O teste é limitado por pacotes, não por uma janela fixa de segundos. Cada destino
+para ao atingir seu limite, inclusive após atualizações da configuração do
+coletor. Trabalhos ignorados pelo agendador não consomem o limite; erros de envio
+ou coleta são registrados como tentativas com falha, não como perda ICMP.
+O progresso mostra a menor quantidade de pacotes concluídos entre os destinos.
+O seletor fica bloqueado durante a execução. Clientes sem IP não recebem pings.
+
+A conclusão é confirmada pelo backend quando todos os destinos testáveis atingem
+a quantidade escolhida. Um prazo de segurança de quantidade × 1 segundo + 30
+segundos encerra avaliações incompletas como erro, sem apresentá-las como sucesso.
+A aba Resultados abre automaticamente com os dados finais, incluindo médias,
+mínimo, máximo, perda, cobertura e Top 3 de diferenças positivas para o AP.
+A média geral dá o mesmo peso a cada cliente com resposta; a perda agregada é
+ponderada pelo número de pings com resultado ICMP. Diferenças negativas indicam
+variação e não são, por si só, um problema. A comparação inclui tráfego, filas,
+roteamento e processamento; não isola a latência do enlace wireless.
+
+O AP permanece na primeira linha da tabela. A busca aceita nome, IP e MAC,
+ignorando acentos e maiúsculas; os filtros e a ordenação não alteram as medições.
+As cores usam os parâmetros iniciais de diferença acima de 2 ms para atenção,
+acima de 5 ms para crítico e perda acima de 2% para ao menos atenção.
+Há até 255 clientes por avaliação e limite global de 256 alvos temporários.
+Resultados ficam em memória por cinco minutos após a conclusão, sem histórico.
+**Executar novamente** limpa o teste anterior; fechar/cancelar encerra os alvos.
+
+Esta versão requer atualizar **app e collector**, pois o limite `max_packets` é
+aplicado no coletor. Zero mantém o monitoramento contínuo de outros recursos.
+Os stubs Java são gerados normalmente pelo Maven. Para regenerar o stub Go,
+instale protoc-gen-go 1.36.6 e use o perfil Maven `collector-proto`, informando
+`-Dprotoc.go.executable=/caminho/absoluto/protoc-gen-go`. Não execute protoc
+manualmente.

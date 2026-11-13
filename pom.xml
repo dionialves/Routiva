@@ -160,4 +160,26 @@
       </plugin>
     </plugins>
   </build>
+  <profiles>
+    <profile>
+      <id>collector-proto</id>
+      <properties><protoc.go.executable>protoc-gen-go</protoc.go.executable></properties>
+      <build><plugins><plugin>
+        <groupId>org.xolstice.maven.plugins</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <executions><execution>
+          <id>generate-collector-go</id>
+          <goals><goal>compile-custom</goal></goals>
+          <configuration>
+            <pluginId>go</pluginId>
+            <pluginArtifact combine.self="override" />
+            <pluginExecutable>${protoc.go.executable}</pluginExecutable>
+            <pluginParameter>paths=source_relative</pluginParameter>
+            <outputDirectory>${project.basedir}/collector/gen</outputDirectory>
+            <clearOutputDirectory>false</clearOutputDirectory>
+          </configuration>
+        </execution></executions>
+      </plugin></plugins></build>
+    </profile>
+  </profiles>
 </project>

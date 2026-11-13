@@ -90,8 +90,10 @@ type HostConfig struct {
 	TimeoutMs      int64                  `protobuf:"varint,4,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
 	Enabled        bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	LatencyLimitMs float64                `protobuf:"fixed64,6,opt,name=latency_limit_ms,json=latencyLimitMs,proto3" json:"latency_limit_ms,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Zero keeps continuous monitoring; nonzero bounds diagnostic attempts per target.
+	MaxPackets    uint32 `protobuf:"varint,7,opt,name=max_packets,json=maxPackets,proto3" json:"max_packets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HostConfig) Reset() {
@@ -162,6 +164,13 @@ func (x *HostConfig) GetEnabled() bool {
 func (x *HostConfig) GetLatencyLimitMs() float64 {
 	if x != nil {
 		return x.LatencyLimitMs
+	}
+	return 0
+}
+
+func (x *HostConfig) GetMaxPackets() uint32 {
+	if x != nil {
+		return x.MaxPackets
 	}
 	return 0
 }
@@ -670,7 +679,7 @@ var File_collector_proto protoreflect.FileDescriptor
 
 const file_collector_proto_rawDesc = "" +
 	"\n" +
-	"\x0fcollector.proto\x12\x14routiva.collector.v1\"\xc1\x01\n" +
+	"\x0fcollector.proto\x12\x14routiva.collector.v1\"\xe2\x01\n" +
 	"\n" +
 	"HostConfig\x12\x17\n" +
 	"\ahost_id\x18\x01 \x01(\tR\x06hostId\x12\x16\n" +
@@ -680,7 +689,9 @@ const file_collector_proto_rawDesc = "" +
 	"\n" +
 	"timeout_ms\x18\x04 \x01(\x03R\ttimeoutMs\x12\x18\n" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x12(\n" +
-	"\x10latency_limit_ms\x18\x06 \x01(\x01R\x0elatencyLimitMs\"y\n" +
+	"\x10latency_limit_ms\x18\x06 \x01(\x01R\x0elatencyLimitMs\x12\x1f\n" +
+	"\vmax_packets\x18\a \x01(\rR\n" +
+	"maxPackets\"y\n" +
 	"\rConfiguration\x126\n" +
 	"\x05hosts\x18\x01 \x03(\v2 .routiva.collector.v1.HostConfigR\x05hosts\x12\x18\n" +
 	"\areplace\x18\x02 \x01(\bR\areplace\x12\x16\n" +
