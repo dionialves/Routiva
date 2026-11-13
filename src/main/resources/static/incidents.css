@@ -60,11 +60,6 @@
 .incidents-table tr[data-severity="0"] .incident-severity { color:#d2dbea; }
 .incident-severity-field { display:grid; gap:6px; min-width:0; font-size:13px; font-weight:500; }
 #incident-severity-menu { position:relative; min-width:0; }
-#incident-severity-menu summary { display:flex; align-items:center; justify-content:space-between; gap:8px; box-sizing:border-box; height:38px; padding:8px 12px; border:1px solid #486071; border-radius:5px; background:#20313f; color:#eef4fa; cursor:pointer; list-style:none; }
-#incident-severity-menu summary::-webkit-details-marker { display:none; }
-#incident-severity-menu summary > span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-#incident-severity-menu summary svg { width:15px; height:15px; flex-shrink:0; }
-#incident-severity-menu summary:focus-visible { outline:2px solid #00c9d8; outline-offset:3px; }
 .incident-severity-options { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:20; padding:6px; border:1px solid #486071; border-radius:7px; background:#0c2030; box-shadow:0 10px 24px #0007; }
 .incidents-filters .incident-severity-options label { display:flex; align-items:center; gap:10px; padding:8px; border-radius:4px; cursor:pointer; }
 .incident-severity-options label:hover { background:#174054; }
