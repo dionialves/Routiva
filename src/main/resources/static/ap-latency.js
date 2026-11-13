@@ -336,14 +336,7 @@
       timer = setTimeout(poll, 3000);
     }
   }
-  settings.addEventListener('click', () => {
-    menu.hidden = !menu.hidden;
-    settings.setAttribute('aria-expanded', String(!menu.hidden));
-    if (!menu.hidden) menu.querySelector('button').focus();
-  });
-  function hideMenu() { menu.hidden = true; settings.setAttribute('aria-expanded', 'false'); }
-  document.addEventListener('click', event => { if (!event.target.closest('.ap-settings')) hideMenu(); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && !menu.hidden) { hideMenu(); settings.focus(); } });
+  function hideMenu() { if (menu.matches?.(':popover-open')) menu.hidePopover(); settings.setAttribute('aria-expanded', 'false'); }
   document.getElementById('ap-latency-open').addEventListener('click', async () => {
     hideMenu();
     dialog.showModal();

@@ -997,7 +997,8 @@
       }
     } finally { if (generation === ownGeneration && livePollingEnabled()) liveTimer = setTimeout(poll, 1000); }
   }
-  function restart() { generation++; controller?.abort(); clearTimeout(liveTimer); poll(); }
+  function restart() { generation++; controller?.abort(); clearTimeout(liveTimer); return poll(); }
+  window.AccessPointActions = { refresh() { overviewAt = 0; return restart(); } };
   document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => {
     initialTab = false;
     interfaceCounters.clear();
