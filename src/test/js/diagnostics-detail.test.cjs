@@ -39,6 +39,7 @@ async function surface(report = null, { storage = new Map(), search = '', storag
   };
   context.window=context;
   vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync('src/main/resources/static/performance-chart.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../main/resources/static/diagnostics.js'),'utf8'),context);
   await flush();
   return {elements,timers,requests,live,location:context.location,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
@@ -118,11 +119,16 @@ test('secondary charts expose real interval values and missing data through keyb
   ]};
   const ui=await surface(report);
   const [svg,tooltip]=ui.elements['latency-chart'].children;
+  assert.ok(svg.children.some(node => node.stroke === '#06b6d4' && node.d));
+  assert.ok(svg.children.some(node => node.stroke === '#f59e0b' && node.d));
+  assert.ok(svg.children.some(node => node.textContent === '100%'));
   svg.emit('focus'); assert.match(tooltip.textContent,/5 ms/);
+  assert.match(tooltip.textContent,/Perda: 0%/);
   svg.emit('keydown',{key:'ArrowRight',preventDefault(){}});
   assert.match(tooltip.textContent,/Sem dados/);
   svg.emit('keydown',{key:'End',preventDefault(){}});
   assert.match(tooltip.textContent,/30 ms/);
+  assert.match(tooltip.textContent,/Perda: 100%/);
   svg.emit('keydown',{key:'Escape'});assert.equal(tooltip.hidden,true);
 });
 

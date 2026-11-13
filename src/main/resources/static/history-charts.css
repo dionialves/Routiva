@@ -1,0 +1,19 @@
+.availability-page .history-charts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:stretch; }
+.availability-page .history-charts > .chart-card { display:flex; flex-direction:column; min-width:0; }
+.availability-page .history-charts .availability-chart-heading { min-height:72px; align-content:flex-start; flex-wrap:wrap; gap:12px; }
+.availability-page .history-charts .diagnostic-performance > h2 { min-height:72px; margin:0; font-size:16px; }
+.availability-page .history-charts .availability-chart-legend { margin:12px 0 14px; min-height:18px; display:flex; gap:20px; flex-wrap:wrap; }
+.availability-page .history-charts #availability-chart,
+.availability-page .history-charts #latency-chart { position:relative; margin-top:auto; min-height:260px; }
+.availability-page .history-charts #availability-chart > svg,
+.availability-page .history-charts #latency-chart > svg { display:block; width:100%; height:auto; min-height:0; }
+.history-charts .availability-axis { fill:#abc0d5; font-size:11px; }
+.history-charts .latency-key { color:#06b6d4; }
+.history-charts .loss-key { color:#f59e0b; }
+.history-charts svg[tabindex]:focus-visible { outline:2px solid #06b6d4; outline-offset:4px; }
+@media(max-width:900px) {
+  .availability-page .history-charts { grid-template-columns:minmax(0,1fr); }
+}
+.diagnostic-chart-tooltip { position:absolute; top:8px; max-width:min(280px,calc(100% - 16px)); padding:10px 12px; border:1px solid #315066; border-radius:8px; background:#102a3df5; color:#f1f5f9; font-size:12px; line-height:1.6; pointer-events:none; z-index:2; box-shadow:0 4px 12px #0003; }
+.diagnostic-chart-empty { display:flex; justify-content:center; align-items:center; gap:10px; min-height:210px; margin:0; color:#94a3b8; font-size:13px; }
+.diagnostic-chart-empty svg { width:22px; height:22px; }

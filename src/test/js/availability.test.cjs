@@ -11,7 +11,8 @@ function surface(search = '') {
     append(...items) { this.children.push(...items); }
     add(item) { this.append(item); }
     replaceChildren(...items) { this.children = items; }
-    setAttribute() {}
+    setAttribute(key, value) { this[key] = value; }
+    getBoundingClientRect() { return {width:600,left:0}; }
     addEventListener(name, fn) { this.listeners[name] = fn; }
     emit(name) { this.listeners[name]?.({preventDefault() {}}); }
   }
@@ -19,12 +20,13 @@ function surface(search = '') {
   elements.period.options = ['5','15','30','60','180','360','720','1440','2880','10080','43200','129600','259200','525600','1051200'].map(value=>({value}));
   const requests = [], timers = new Map(); let serial = 0;
   const location = {search, pathname:'/disponibilidade', href: 'http://localhost/disponibilidade' + search};
-  const context = {document: {body:new Element(),addEventListener(){},createDocumentFragment:()=>new Element(),getElementById: id => elements[id], querySelector: id => elements[id], querySelectorAll: () => [], createElement: tagName => Object.assign(new Element(), {tagName}), createElementNS: () => new Element()}, location, history: {replaceState(a,b,url) { location.href = String(url); }}, URL, URLSearchParams, AbortController, Date, Option: Element, AvailabilityChart: { Chart: class { update() {} clear() {} } },
+  const context = {document: {createTextNode:text=>text,body:new Element(),addEventListener(){},createDocumentFragment:()=>new Element(),getElementById: id => elements[id], querySelector: id => elements[id], querySelectorAll: () => [], createElement: tagName => Object.assign(new Element(), {tagName}), createElementNS: () => new Element()}, location, history: {replaceState(a,b,url) { location.href = String(url); }}, URL, URLSearchParams, AbortController, Date, Option: Element, AppIcon:()=>new Element(), AvailabilityChart: { paths:require('../../main/resources/static/availability-chart.js').paths, Chart: class { update() {} clear() {} } },
     setTimeout(fn, ms) { timers.set(++serial, {fn, ms}); return serial; }, clearTimeout(id) { timers.delete(id); },
     fetch(url, options) { return new Promise((resolve, reject) => {requests.push({url, resolve, reject, options});}); }
   };
   context.window=context;vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../../main/resources/static/availability-view.js'),'utf8'),context);
   vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
+  vm.runInNewContext(fs.readFileSync('src/main/resources/static/performance-chart.js', 'utf8'), context);
   vm.runInNewContext(source,context);
   return {elements, requests, timers, location, respond(i, body, status = 200) {requests[i].resolve({ok: status === 200, status, json: async () => body});}};
 }
@@ -37,6 +39,9 @@ test('defaults to 48 hours and all hosts; renders cards and paginates without ch
   const ui = surface(); assert.match(ui.requests[0].url, /minutes=2880&groupId=&page=1/);
   ui.respond(0, data()); await flush();
   assert.equal(ui.elements.technical.textContent, '99,00%');
+  const svg = ui.elements['latency-chart'].children[0];
+  assert.ok(svg.children.some(node => node.stroke === '#06b6d4' && node.d));
+  assert.ok(svg.children.some(node => node.stroke === '#f59e0b' && node.d));
   assert.equal(ui.elements['availability-hosts'].children[0].children.length, 20);
   ui.elements.next.emit('click'); assert.match(ui.requests[1].url,/page=2/); const next=data();next.page.number=2;next.view.hosts=next.view.hosts.slice(0,1);ui.respond(1,next);await flush();assert.equal(ui.elements['availability-hosts'].children[0].children.length,1);
   assert.equal(ui.elements.technical.textContent, '99,00%');

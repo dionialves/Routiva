@@ -17,6 +17,8 @@
   if(group){for(const id of group.split(',')) $('group').add(new Option('Grupo selecionado',id,false,true));window.availabilityGroupPicker?.sync();}
   let data=null, controller, generation=0, timer, searchTimer, groupVersion;
   const chart=new AvailabilityChart.Chart($('availability-chart'),$('chart-granularity'));
+  chart.height = 260;
+  const performanceChart = new window.PerformanceChart($('latency-chart'), 'latency', ' ms', '#06b6d4');
   const date=at=>new Date(at).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo'});
   function query() {return new URLSearchParams({minutes:$('period').value,groupId:group,page:String(page),sort,direction,q:$('host-search').value});}
   function url() {history.replaceState(null,'',location.pathname+'?'+query());}
@@ -37,13 +39,13 @@
     $('collection-state').dataset.state=state==='RECEBENDO'?'normal':state==='PARCIAL'||state==='ATRASADO'||state==='PROCESSANDO'?'warning':'neutral';
     $('availability-status').textContent=stale?'A agregação dos indicadores está atrasada.':r.evaluatedAt?`Dados consolidados até ${date(r.to)} · Processamento em ${date(r.evaluatedAt)}`:'Carregando indicadores…';
     $('availability-coverage').textContent=[r.load&&r.load.phase!=='COMPLETE'?'Processando histórico pendente; os dados ainda são parciais.':'',r.retainedFrom>r.from?'O histórico retido é menor que o período selecionado.':'',r.observedMillis!=null&&data.page.selectedTotal>0&&r.observedMillis<r.to-r.from?'A cobertura de medições é parcial no período selecionado.':'',r.total.technical==null&&data.page.selectedTotal>0?'Os hosts selecionados não possuem medições válidas neste período.':''].filter(Boolean).join(' ');
-    chart.update(r); AvailabilityView.table(data); page=data.page.number;
+    chart.update(r); performanceChart.update(r); AvailabilityView.table(data); page=data.page.number;
     loading(r.evaluatedAt==null);
   }
   async function refresh(reset=false) {
     clearTimeout(timer); clearTimeout(searchTimer); controller?.abort(); controller=new AbortController(); const active=controller, current=++generation;
     $('retry').hidden=true;
-    if(reset) {$('collection-state').textContent='Aguardando indicadores';$('collection-state').dataset.state='neutral';$('last-measurement').textContent='Última medição: —';data=null;chart.clear();AvailabilityView.reset();AvailabilityView.times(null);loading(true);for(const key of ['operational','technical','loss','latency']) $(key).textContent='—';$('availability-coverage').textContent='';$('availability-range').textContent='';}
+    if(reset) {$('collection-state').textContent='Aguardando indicadores';$('collection-state').dataset.state='neutral';$('last-measurement').textContent='Última medição: —';data=null;chart.clear();performanceChart.clear('Carregando período…');AvailabilityView.reset();AvailabilityView.times(null);loading(true);for(const key of ['operational','technical','loss','latency']) $(key).textContent='—';$('availability-coverage').textContent='';$('availability-range').textContent='';}
     if(!data) {$('availability-status').textContent='Carregando indicadores…';loading(true);}
     const timeout=setTimeout(()=>active.abort(),9000);
     try {
@@ -68,7 +70,7 @@
   for(const mode of ['lines','bars'])$('chart-'+mode).addEventListener('click',()=>{chart.mode=mode;chart.draw();for(const item of ['lines','bars'])$('chart-'+item).setAttribute('aria-pressed',String(item===mode));});
   const panel=document.querySelector('.availability-timeseries');
   let chartInert=[];
-  function expand(value){chart.expanded=value;if(value){chartInert=[...document.querySelectorAll('.availability-page > :not(.availability-timeseries), .sidebar, .topbar')].map(el=>({el,inert:el.inert}));chartInert.forEach(({el})=>el.inert=true);}else{chartInert.forEach(({el,inert})=>el.inert=inert);chartInert=[];}panel.classList.toggle('chart-expanded',value);$('chart-expand').setAttribute('aria-expanded',String(value));$('chart-expand').setAttribute('aria-label',value?'Recolher gráfico':'Expandir gráfico');$('chart-expand').title=value?'Recolher gráfico':'Expandir gráfico';document.body.classList.toggle('chart-is-expanded',value);panel.setAttribute('role',value?'dialog':'region');panel.setAttribute('aria-modal',String(value));chart.draw();}
+  function expand(value){chart.expanded=value;if(value){chartInert=[...document.querySelectorAll('.availability-page > :not(.history-charts), .history-charts > :not(.availability-timeseries), .sidebar, .topbar')].map(el=>({el,inert:el.inert}));chartInert.forEach(({el})=>el.inert=true);}else{chartInert.forEach(({el,inert})=>el.inert=inert);chartInert=[];}panel.classList.toggle('chart-expanded',value);$('chart-expand').setAttribute('aria-expanded',String(value));$('chart-expand').setAttribute('aria-label',value?'Recolher gráfico':'Expandir gráfico');$('chart-expand').title=value?'Recolher gráfico':'Expandir gráfico';document.body.classList.toggle('chart-is-expanded',value);panel.setAttribute('role',value?'dialog':'region');panel.setAttribute('aria-modal',String(value));chart.draw();}
   $('chart-expand').addEventListener('click',()=>expand(!panel.classList.contains('chart-expanded')));
   document.addEventListener('keydown',e=>{if(e.key==='Tab'&&chart.expanded){const controls=[...panel.querySelectorAll('button,select,[tabindex="0"]')];const first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}if(e.key==='Escape'&&chart.expanded){expand(false);}});
   document.querySelectorAll('[data-sort]').forEach(b=>b.parentElement.setAttribute('aria-sort',b.dataset.sort===sort?(direction==='asc'?'ascending':'descending'):'none'));
