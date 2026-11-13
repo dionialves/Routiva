@@ -46,8 +46,9 @@ window.AvailabilityView = (() => {
     tableVersion = fingerprint;
     const fragment = document.createDocumentFragment();
     for (const row of view.hosts) {
-      const tr = document.createElement('tr'), th = document.createElement('th'), name = document.createElement('span'), ip = document.createElement('small');
+      const tr = document.createElement('tr'), th = document.createElement('th'), name = document.createElement('a'), ip = document.createElement('small');
       th.scope = 'row'; name.className = 'availability-host-name'; name.textContent = row.name; name.title = `${row.name} · ${row.ip || 'Sem IP'}`; ip.className = 'sr-only'; ip.textContent = row.ip || 'Sem IP'; th.append(name,ip); tr.append(th);
+      window.HostMenu.attach(name, th, { ip: row.ip, groupUrl: row.groups?.[0]?.id ? `/diagnostico/grupos/${encodeURIComponent(row.groups[0].id)}` : null });
       const group = document.createElement('td'), groupText = document.createElement('span');
       groupText.textContent = (row.groups || []).map(g=>g.name).join(', ') || 'Sem grupo';
       groupText.className = 'host-groups-text'; groupText.title = groupText.textContent;

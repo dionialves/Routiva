@@ -175,9 +175,9 @@
 .availability-page .host-list-table tbody td { height:44px; box-sizing:border-box; padding:12px 10px; border-bottom:1px solid #1d394b; vertical-align:middle; }
 .availability-page .host-list-table tbody th { font-size:13px; font-weight:600; text-align:left; }
 .availability-page .host-list-table tbody th .availability-host-name,
-.availability-page .host-list-table tbody th .availability-host-name:visited { color:#f1f5f9; line-height:20px; text-decoration:none; }
-.availability-page .host-list-table tbody th .availability-host-name:hover { color:#f1f5f9; text-decoration:none; }
-.availability-page .host-list-table tbody th a.availability-host-name:focus-visible { color:#f1f5f9; text-decoration:underline; text-underline-offset:3px; }
+.availability-page .host-list-table tbody th .availability-host-name:visited { color:#71d7ff; line-height:20px; text-decoration:none; }
+.availability-page .host-list-table tbody th .availability-host-name:hover { color:#71d7ff; text-decoration:underline; text-underline-offset:3px; }
+.availability-page .host-list-table tbody th a.availability-host-name:focus-visible { color:#71d7ff; text-decoration:underline; text-underline-offset:3px; }
 .availability-page .host-list-table tbody th .host-connectivity { width:9px; height:9px; margin-right:10px; vertical-align:middle; }
 #availability-hosts .availability-host-name { display:inline-flex; align-items:baseline; gap:10px; }
 #availability-hosts .availability-host-name::before { content:''; width:9px; height:9px; flex:0 0 9px; border-radius:50%; background:#64748b; align-self:baseline; }

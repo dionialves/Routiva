@@ -33,6 +33,7 @@ async function surface(respond, saved) {
     fetch: async url => { const params = new URL(url, 'http://localhost').searchParams; requests.push(params); return { ok: true, json: async () => respond(params) }; },
   };
   context.window = context;
+  vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/availability-view.js'), 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/diagnostics-groups.js'), 'utf8'), context);
   await tick();

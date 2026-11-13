@@ -90,11 +90,8 @@
 .incident-period .ui-icon { width:16px; height:16px; flex-shrink:0; }
 .incident-period-pagination .pagination { margin:8px 0; }
 
-.incident-host-link, .incident-link { color:#00d3fd; text-decoration:none; }
-.incident-host-link:hover,.incident-host-link:focus-visible, .incident-link:hover,.incident-link:focus-visible { color:#00d3fd; text-decoration:underline; text-underline-offset:3px; }
-.incident-host-menu { position:fixed; inset:auto; margin:0; min-width:180px; padding:6px; border:1px solid #486071; border-radius:7px; background:#0c2030; color:#e6edf5; box-shadow:0 10px 24px #0007; }
-.incident-host-menu a { display:block; padding:8px 12px; border-radius:4px; color:#00d3fd; font-size:12px; font-weight:600; text-decoration:none; }
-.incident-host-menu a:hover,.incident-host-menu a:focus-visible { background:#174054; text-decoration:underline; text-underline-offset:3px; }
+.incident-host-link, .incident-link { color:#71d7ff; text-decoration:none; }
+.incident-host-link:hover,.incident-host-link:focus-visible, .incident-link:hover,.incident-link:focus-visible { color:#71d7ff; text-decoration:underline; text-underline-offset:3px; }
 
 .incidents-page .incidents-table .incident-observations { text-align:center; padding:5px 8px; color:#9fb2c4; }
 .incidents-page .incidents-table .incident-message-button { display:inline-flex; align-items:center; justify-content:center; gap:5px; border:0; border-radius:0; background:transparent; color:#62b6ff; padding:0; margin:0; width:auto; height:auto; min-height:0; cursor:pointer; font:inherit; }

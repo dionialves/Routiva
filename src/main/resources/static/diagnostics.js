@@ -70,8 +70,9 @@
       dot.setAttribute('aria-label', 'Estado desconhecido');
       const name = document.createElement('a'); name.textContent = host.name;
       name.className = 'availability-host-name';
-      window.AccessPointLinks?.attach(name, host.id);
-      nameCell.append(dot, name); textCell(tr, host.ip || 'Sem IP');
+      nameCell.append(dot, name);
+      window.HostMenu.attach(name, nameCell, { ip: host.ip, hostId: host.id });
+      textCell(tr, host.ip || 'Sem IP');
       textCell(tr, equipment.model || 'Não informado'); textCell(tr, equipment.version || 'Não informado');
       const incident = data.incidents[host.id];
       const incidentCell = textCell(tr, '');

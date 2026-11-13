@@ -1,0 +1,6 @@
+.host-action-menu { position:fixed; inset:auto; margin:0; min-width:180px; padding:6px; border:1px solid #486071; border-radius:7px; background:#0c2030; color:#e6edf5; box-shadow:0 10px 24px #0007; }
+.host-action-menu a { display:block; padding:8px 12px; border-radius:4px; color:#71d7ff; font-size:12px; font-weight:600; text-decoration:none; }
+.host-action-menu a:hover,.host-action-menu a:focus-visible { background:#174054; text-decoration:underline; text-underline-offset:3px; }
+.host-action-menu a[hidden] { display:none; }
+.host-action-link { cursor:pointer; color:#71d7ff; text-decoration:none; }
+.host-action-link:hover, .host-action-link:focus-visible { text-decoration:underline; text-underline-offset:3px; }

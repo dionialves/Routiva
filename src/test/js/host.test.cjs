@@ -64,6 +64,7 @@ async function surface({ clipboard = { writeText:async () => {} }, ping = false,
     },
     window:{ addEventListener:(name, fn) => { events[name] = fn; }, HostTraffic:require('../../main/resources/static/host-traffic.js'), HostHistoryCharts:{ createRealtime:container => ({ clear() { container.report = null; }, update(report) { container.report = report; } }), clear() { historyClearCount++; }, update(report) { elements['availability-chart'].report = report; } } },
   };
+  vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/availability-view.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-signal.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host.js', 'utf8'), context);

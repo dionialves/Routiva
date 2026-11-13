@@ -49,6 +49,7 @@ async function surface(respond, options = {}) {
     fetch: async (url, init) => { if (options.api && !url.includes('grouped-data')) return options.api(url, init); const params = init?.method === 'POST' ? new URLSearchParams(JSON.parse(init.body)) : new URL(url, 'http://localhost').searchParams; transports.push({ url, init }); requests.push(params); return respond(params); },
   };
   context.window = context;
+  vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/static/multi-picker.js'), 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/incidents.js', 'utf8'), context);
   await tick();
@@ -62,8 +63,8 @@ test('renders eight columns safely and calculates durations locally', async () =
   const cells = ui.rows().find(node => node.dataset.severity != null).children;
   assert.equal(cells.length, 8);
   assert.equal(cells[7].textContent, "—");
-  assert.equal(cells[2].children[0].textContent, 'Router');
-  assert.equal(cells[2].children[0].children.length, 0);
+  assert.equal(cells[2].children[0].children[0].textContent, 'Router');
+  assert.equal(cells[2].children[0].children[1].children[0].href, 'winbox://10.0.0.1');
   assert.equal(cells[3].children[0].textContent, '10.0.0.1');
   assert.equal(cells[6].textContent, 'Não');
   assert.equal(cells[4].children[0].textContent, row.name);

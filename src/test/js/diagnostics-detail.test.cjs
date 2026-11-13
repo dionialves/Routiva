@@ -38,6 +38,7 @@ async function surface(report = null, { storage = new Map(), search = '', storag
     fetch:async url=>{requests.push(url);if(failLive&&url.includes('/live?')) throw Error('offline');return {ok:true,json:async()=>data[url.split('?')[0]]||{view:report ? {report} : null}};},
   };
   context.window=context;
+  vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../main/resources/static/diagnostics.js'),'utf8'),context);
   await flush();
   return {elements,timers,requests,live,location:context.location,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
