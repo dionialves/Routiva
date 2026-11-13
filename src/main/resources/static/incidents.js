@@ -468,12 +468,17 @@
       $('incident-message').value = ''; $('incident-recognize').checked = false; $('incident-close').checked = false;
       $('incident-new-severity').value = String(activeIncident.severity);
       window.notify?.(close ? 'Fechamento solicitado ao Zabbix.' : 'Incidente atualizado.');
-      if (busy) queuedFilters = true; else load();
     } catch (error) {
       // A transport error may happen after the server applied the update.
       uncertain ||= error instanceof TypeError;
       $('incident-update-error').textContent = error.message;
     } finally {
+      if (confirmed || uncertain) {
+        // Discard snapshots requested before the mutation and fetch the Zabbix state again.
+        filterVersion++;
+        if (busy) queuedFilters = true;
+        else await load();
+      }
       await readDetails();
       saving = false; $('incident-dialog-cancel').disabled = false; $('incident-dialog-close').disabled = false;
       $('incident-update-save').setAttribute('aria-busy', 'false');

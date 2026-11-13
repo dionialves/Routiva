@@ -353,6 +353,7 @@ test('uncertain update preserves message and prevents duplicate submission', asy
   ui.elements['incident-message'].value = 'Investigando';
   await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
   assert.equal(posts, 1);
+  assert.equal(ui.requests.length, 2);
   assert.equal(ui.elements['incident-message'].value, 'Investigando');
   assert.equal(ui.elements['incident-update-save'].disabled, true);
   await ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
@@ -463,4 +464,32 @@ test('a missing linked event shows an empty result instead of unrelated incident
   const ui = await surface(response, { search: '?eventId=missing' });
   assert.equal(ui.elements['incident-empty'].hidden, false);
   assert.equal(ui.elements['incident-total'].textContent, '0 encontrados');
+});
+
+
+test('saving an incident waits for a fresh Zabbix list before closing the modal', async () => {
+  let updated = false, release;
+  const ui = await surface(params => {
+    if (!updated) return response(params);
+    return new Promise(resolve => { release = () => resolve({ ok: true, json: async () => ({
+      rows: [{ ...row, acknowledged: true, hasMessages: true, messageCount: 1 }],
+      total: 1, updatedAt: Date.now(), warning: '',
+    }) }); });
+  }, { admin: true, api: async (url, init) => {
+    if (init.method === 'POST') { updated = true; return { ok: true }; }
+    return { ok: true, json: async () => details };
+  } });
+  ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click');
+  await tick();
+  ui.elements['incident-message'].value = 'Investigando';
+  const saving = ui.elements['incident-update-form'].listeners.submit({ preventDefault() {} });
+  await tick();
+  assert.equal(ui.requests.length, 2);
+  assert.equal(ui.elements['incident-dialog'].open, true);
+  release();
+  await saving;
+  assert.equal(ui.elements['incident-dialog'].open, false);
+  const cells = ui.rows().find(node => node.dataset.severity != null).children;
+  assert.equal(cells[6].children[0].textContent, 'Sim');
+  assert.equal(cells[7].children[0].children[1].textContent, '1');
 });
