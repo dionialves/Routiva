@@ -95,7 +95,7 @@
   }
   function sync() {
     const selected = Array.from(select.options).filter(option => option.value && option.selected);
-    selection.textContent = multiple ? (selected.length === 1 ? selected[0].textContent : `${selected.length} grupos selecionados`) : select.selectedOptions[0]?.textContent || 'Todos os hosts';
+    selection.textContent = multiple ? (!selected.length ? 'Todos os hosts' : selected.length === 1 ? selected[0].textContent : `${selected.length} grupos selecionados`) : select.selectedOptions[0]?.textContent || 'Todos os hosts';
     const next = JSON.stringify(Array.from(select.options, option => [option.value, option.textContent]));
     if (next !== signature && !panel.hidden) render();
     signature = next;
@@ -107,7 +107,20 @@
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault(); highlight(Math.max(0, Math.min(matches.length - 1, active + (event.key === 'ArrowDown' ? 1 : -1))));
-    } else if (event.key === 'Enter') { event.preventDefault(); choose(active < 0 ? 0 : active); }
+    } else if (event.key === 'Enter' && !event.isComposing) {
+      event.preventDefault(); event.stopPropagation();
+      if (multiple && input.value.trim() && active < 0) {
+        const found = matches.filter(option => option.value);
+        if (!found.length) return;
+        let changed = false;
+        for (const option of select.options) {
+          const selected = found.includes(option);
+          if (!!option.selected !== selected) { option.selected = selected; changed = true; }
+        }
+        sync(); render();
+        if (changed) select.dispatchEvent(new Event('change', {bubbles: true}));
+      } else choose(active < 0 ? 0 : active);
+    }
   });
   wrapper.addEventListener('focusout', event => { if (!wrapper.contains(event.relatedTarget)) close(); });
   document.addEventListener('click', event => { if (!wrapper.contains(event.target)) close(); });

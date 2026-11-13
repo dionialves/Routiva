@@ -51,7 +51,7 @@
       if(!response.ok) throw new Error(response.status===404?'Grupo indisponível. Selecione outro grupo.':'Não foi possível atualizar os indicadores.');
       const result=await response.json();if(current!==generation)return;
       const options=JSON.stringify(result.groups);
-      if(options!==groupVersion) {groupVersion=options;$('group').replaceChildren(new Option('Todos os hosts',''));for(const g of result.groups)$('group').add(new Option(g.name,g.id));for(const id of group.split(',').filter(Boolean)) if(id!=='__none__'&&!result.groups.some(g=>g.id===id))$('group').add(new Option('Grupo indisponível',id));for(const option of $('group').options)option.selected=!!option.value&&(!group||group.split(',').includes(option.value));window.availabilityGroupPicker?.sync();}
+      if(options!==groupVersion) {groupVersion=options;$('group').replaceChildren(new Option('Todos os hosts',''));for(const g of result.groups)$('group').add(new Option(g.name,g.id));for(const id of group.split(',').filter(Boolean)) if(id!=='__none__'&&!result.groups.some(g=>g.id===id))$('group').add(new Option('Grupo indisponível',id));for(const option of $('group').options)option.selected=!!option.value&&group.split(',').includes(option.value);window.availabilityGroupPicker?.sync();}
       if(result.view){data=result;render();} else {loading(true);$('collection-state').textContent='Carregando indicadores';$('availability-status').textContent='Carregando a primeira versão dos indicadores…';}
     } catch(error) {
       if(current!==generation)return;
@@ -61,7 +61,7 @@
     } finally {clearTimeout(timeout);if(current===generation)timer=setTimeout(()=>refresh(),10000);}
   }
   document.querySelector('.availability-filters').addEventListener('submit',e=>e.preventDefault());
-  for(const id of ['period','group'])$(id).addEventListener('change',()=>{if(id==='period')savePeriod();group=$('group').multiple?Array.from($('group').selectedOptions,option=>option.value).filter(Boolean).join(',')||'__none__':$('group').value;page=1;url();refresh(true);});
+  for(const id of ['period','group'])$(id).addEventListener('change',()=>{if(id==='period')savePeriod();group=$('group').multiple?Array.from($('group').selectedOptions,option=>option.value).filter(Boolean).join(','):$('group').value;page=1;url();refresh(true);});
   $('host-search').addEventListener('input',()=>{clearTimeout(searchTimer);clearTimeout(timer);controller?.abort();generation++;searchTimer=setTimeout(()=>{page=1;url();refresh();},300);});
   document.querySelectorAll('[data-sort]').forEach(button=>button.addEventListener('click',()=>{direction=sort===button.dataset.sort&&direction==='asc'?'desc':'asc';sort=button.dataset.sort;page=1;document.querySelectorAll('[data-sort]').forEach(b=>b.parentElement.setAttribute('aria-sort',b===button?(direction==='asc'?'ascending':'descending'):'none'));url();refresh();}));
   $('previous').addEventListener('click',()=>{page=Math.max(1,page-1);url();refresh();});$('next').addEventListener('click',()=>{page++;url();refresh();});$('retry').addEventListener('click',()=>refresh());

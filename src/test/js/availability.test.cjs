@@ -178,3 +178,16 @@ test('a late failed request cannot overwrite the successful current filter', asy
   assert.equal(ui.elements['technical-available'].textContent,'1 min');
   assert.equal(ui.elements['technical-unavailable'].textContent,'1 min');
  });
+
+test('inventory leaves groups unchecked by default and restores explicit selections', async () => {
+  for (const [query, selected] of [['', false], ['?groupId=g1', true]]) {
+    const ui = surface(query);
+    ui.respond(0, data());
+    await flush();
+    assert.equal(ui.elements.group.options.find(option => option.value === 'g1').selected, selected);
+    ui.elements.group.multiple = true;
+    ui.elements.group.selectedOptions = [];
+    ui.elements.group.emit('change');
+    assert.equal(new URLSearchParams(ui.requests[1].url.split('?')[1]).get('groupId'), '');
+  }
+});

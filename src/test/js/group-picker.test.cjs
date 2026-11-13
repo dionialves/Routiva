@@ -116,3 +116,31 @@ test('multiple selection keeps the menu open and supports selecting all groups',
   ui.list.children[0].emit('click');
   assert.equal(ui.select.selectedOptions.length, 2);
 });
+
+test('search confirmation selects matching groups instead of toggling them off', () => {
+  const ui = setup(true);
+  ui.select.options[1].textContent = '177 - Produção';
+  ui.select.options[2].textContent = '177 - Filial';
+  ui.select.options.push({ value: 'c', textContent: 'Outro grupo', selected: true });
+  ui.select.options[1].selected = true;
+  ui.trigger.emit('click');
+  ui.input.value = '177';
+  ui.input.emit('input');
+  assert.equal(ui.select.options[3].selected, true);
+  ui.input.emit('keydown', 'Enter');
+  assert.deepEqual(ui.select.selectedOptions.map(option => option.value), ['a', 'b']);
+  assert.equal(ui.panel.hidden, false);
+  assert.equal(ui.select.changes, 1);
+  ui.input.emit('keydown', 'Enter');
+  assert.equal(ui.select.changes, 1);
+  ui.input.value = 'missing';
+  ui.input.emit('input');
+  ui.input.emit('keydown', 'Enter');
+  assert.deepEqual(ui.select.selectedOptions.map(option => option.value), ['a', 'b']);
+});
+
+test('no explicit group selection displays all hosts without checked groups', () => {
+  const ui = setup(true);
+  assert.equal(ui.trigger.children[0].textContent, 'Todos os hosts');
+  assert.equal(ui.select.selectedOptions.length, 0);
+});
