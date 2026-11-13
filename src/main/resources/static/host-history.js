@@ -11,8 +11,8 @@
   chart.height = 230;
   chart.shadeMissing = true;
   class MetricChart {
-    constructor(container, key, unit, color, smooth = false) {
-      Object.assign(this, { container, key, unit, color, smooth });
+    constructor(container, key, unit, color) {
+      Object.assign(this, { container, key, unit, color });
       this.index = 0;
       if (typeof ResizeObserver !== 'undefined') {
         this.observer = new ResizeObserver(() => { if (this.report) this.draw(); });
@@ -52,7 +52,7 @@
         node('line', { x1:left, x2:right, y1:y(max * ratio), y2:y(max * ratio), class:'availability-gridline' });
         node('text', { x:left - 8, y:y(max * ratio)+4, 'text-anchor':'end', class:'availability-axis' }, (max * ratio).toFixed(1) + unit);
       }
-      node('path', { d:window.AvailabilityChart.paths(points,key,x,y,bottom,this.smooth).line, fill:'none', stroke:color, 'stroke-width':2 });
+      node('path', { d:window.AvailabilityChart.paths(points,key,x,y,bottom).line, fill:'none', stroke:color, 'stroke-width':2 });
       const lossY = value => bottom - value / 100 * (bottom - top);
       node('path', { d:window.AvailabilityChart.paths(points,'loss',x,lossY,bottom).line, fill:'none', stroke:'#f59e0b', 'stroke-width':2 });
       for (const ratio of [0, .5, 1]) node('text', { x:right + 6, y:lossY(ratio * 100) + 4, class:'availability-axis' }, (ratio * 100) + '%');
@@ -97,7 +97,7 @@
   const latencyChart = new MetricChart($('latency-chart'), 'latency', ' ms', '#06b6d4');
   let lastVersion;
   window.HostHistoryCharts = {
-    createRealtime:container => new MetricChart(container, 'latency', ' ms', '#06b6d4', true),
+    createRealtime:container => new MetricChart(container, 'latency', ' ms', '#06b6d4'),
     clear(message = 'Carregando período…') {
       lastVersion = undefined;
       chart.clear(); chartEmpty($('availability-chart'), message);

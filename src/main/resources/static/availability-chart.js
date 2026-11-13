@@ -20,7 +20,7 @@
         operational: total ? 100 * b.healthy / total : null};
     });
   }
-  function paths(points, key, x, y, baseline, smooth = false) {
+  function paths(points, key, x, y, baseline) {
     let line = '', area = '', segment = [];
     function flush() {
       if (!segment.length) return;
@@ -28,7 +28,6 @@
       if (segment.length === 1) { const [px, py, start, end] = segment[0]; segment = [[start, py], [end, py]]; }
       const path = segment.map(([px, py], i) => {
         if (!i) return `M${px},${py}`;
-        if (!smooth) return `L${px},${py}`;
         const [previousX, previousY] = segment[i - 1];
         // Horizontal tangents round each measurement without overshooting peaks or zero.
         const handle = (px - previousX) / 3;

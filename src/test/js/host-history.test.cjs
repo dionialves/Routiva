@@ -65,10 +65,10 @@ test('wireless ping rounds latency through measured values and keeps missing sam
   const loss = paths.find(node => node.stroke === '#f59e0b');
   assert.equal((latency.d.match(/M/g) || []).length, 2);
   assert.equal((latency.d.match(/C/g) || []).length, 2);
-  assert.ok(!loss.d.includes('C'));
+  assert.ok(loss.d.includes('C'));
   const historical = ui.elements['latency-chart'];
   ui.charts.update({ from:0, to:2000, series:[8, 40].map((latency, i) => ({
     from:i * 1000, to:(i + 1) * 1000, metrics:{ latency, loss:0 },
   })) });
-  assert.ok(!historical.children[0].children.find(node => node.stroke === '#06b6d4' && node.d).d.includes('C'));
+  assert.ok(historical.children[0].children.find(node => node.stroke === '#06b6d4' && node.d).d.includes('C'));
 });
