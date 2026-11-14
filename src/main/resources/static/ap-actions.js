@@ -4,29 +4,31 @@
   const trigger = document.getElementById('ap-settings');
   const menu = document.getElementById('ap-settings-menu');
   if (!root || !trigger || !menu) return;
-  const feedback = document.getElementById('ap-action-feedback');
-  let feedbackTimer;
-  let refreshing = false;
   const items = () => Array.from(menu.querySelectorAll('[role=menuitem]:not(:disabled)'));
   function close(restore = false) {
     if (menu.matches(':popover-open')) menu.hidePopover();
     if (restore) trigger.focus();
   }
-  function notify(message) {
-    clearTimeout(feedbackTimer);
-    feedback.hidden = false;
-    feedback.textContent = message;
-    feedbackTimer = setTimeout(() => { feedback.hidden = true; }, 5000);
-  }
   function position() {
+    const edge = 8;
+    const gap = 6;
     const bounds = trigger.getBoundingClientRect();
-    menu.style.left = `${Math.max(8, Math.min(bounds.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 8))}px`;
-    const below = innerHeight - bounds.bottom - 14;
-    const above = bounds.top - 14;
-    const upwards = menu.scrollHeight > below && above > below;
-    menu.style.maxHeight = `${Math.max(40, upwards ? above : below)}px`;
-    menu.style.top = `${upwards ? Math.max(8, bounds.top - menu.offsetHeight - 6) : bounds.bottom + 6}px`;
+    const viewport = window.visualViewport;
+    const left = viewport?.offsetLeft || 0;
+    const top = viewport?.offsetTop || 0;
+    const width = viewport?.width || innerWidth;
+    const height = viewport?.height || innerHeight;
+    // Measure without the previous opening's height constraint.
+    menu.style.maxHeight = `${Math.max(0, height - edge * 2)}px`;
+    const naturalHeight = menu.scrollHeight + menu.offsetHeight - menu.clientHeight;
+    const below = Math.max(0, top + height - bounds.bottom - gap - edge);
+    const above = Math.max(0, bounds.top - gap - top - edge);
+    const upwards = naturalHeight > below && above > below;
+    menu.style.maxHeight = `${upwards ? above : below}px`;
+    menu.style.left = `${Math.max(left + edge, Math.min(bounds.right - menu.offsetWidth, left + width - menu.offsetWidth - edge))}px`;
+    menu.style.top = `${upwards ? bounds.top - menu.offsetHeight - gap : bounds.bottom + gap}px`;
   }
+
   function states() {
     const online = root.dataset.api === 'online';
     menu.querySelectorAll('[data-remote]').forEach(item => {
@@ -39,7 +41,7 @@
     states();
     menu.showPopover();
     position();
-    (last ? items().at(-1) : items()[0])?.focus();
+    (last ? items().at(-1) : items()[0])?.focus({ preventScroll:true });
   }
   trigger.addEventListener('click', () => menu.matches(':popover-open') ? close() : open());
   trigger.addEventListener('keydown', event => {
@@ -63,40 +65,20 @@
   menu.addEventListener('click', event => {
     if (event.target.closest('[role=menuitem]:not(:disabled)')) close(true);
   });
-  addEventListener('resize', () => { if (menu.matches(':popover-open')) position(); });
+  const reposition = () => { if (menu.matches(':popover-open')) position(); };
+  addEventListener('resize', reposition);
+  window.visualViewport?.addEventListener('resize', reposition);
+  window.visualViewport?.addEventListener('scroll', reposition);
   document.addEventListener('scroll', () => { if (menu.matches(':popover-open')) position(); }, true);
   new MutationObserver(states).observe(root, { attributes:true, attributeFilter:['data-api'] });
   document.getElementById('ap-winbox').addEventListener('click', () => {
     const url = window.HostMenu.winboxUrl(root.dataset.managementIp);
     if (url) window.location.href = url;
-    else notify('IP inválido para abrir o WinBox.');
+    else window.notify('IP inválido para abrir o WinBox.', 'error');
   });
   document.getElementById('ap-copy-ip').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(root.dataset.managementIp); notify('IP copiado'); }
-    catch { notify('Não foi possível copiar o IP. Verifique a permissão da área de transferência.'); }
-  });
-  for (const [id, tab] of [['ap-interfaces', 'interfaces'], ['ap-clients', 'wireless']]) {
-    document.getElementById(id).addEventListener('click', () => {
-      document.querySelector(`[data-tab="${tab}"]`).click();
-      const panel = document.querySelector(`[data-panel="${tab}"]`);
-      panel.scrollIntoView({ behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block:'start' });
-      panel.setAttribute('tabindex', '-1'); panel.focus({ preventScroll:true });
-    });
-  }
-  const refresh = document.getElementById('ap-refresh');
-  refresh.addEventListener('click', async () => {
-    if (refreshing) return;
-    refreshing = true; refresh.disabled = true; refresh.setAttribute('aria-busy', 'true');
-    refresh.querySelector('span').textContent = 'Atualizando…';
-    notify('Atualizando informações…');
-    try {
-      await window.AccessPointActions.refresh();
-      notify(root.dataset.api === 'online' ? 'Informações atualizadas' : 'Não foi possível atualizar as informações. Verifique a conexão com a API.');
-    } catch { notify('Não foi possível atualizar as informações.'); }
-    finally {
-      refreshing = false; refresh.disabled = false; refresh.removeAttribute('aria-busy');
-      refresh.querySelector('span').textContent = 'Atualizar informações';
-    }
+    try { await navigator.clipboard.writeText(root.dataset.managementIp); window.notify('IP copiado'); }
+    catch { window.notify('Não foi possível copiar o IP. Verifique a permissão da área de transferência.', 'error'); }
   });
   states();
 })();

@@ -90,7 +90,7 @@
 .equipment-identity h2 { font-size:16px; margin:0; }
 .equipment-icon { display:grid; place-items:center; width:48px; height:48px; flex:none; border-radius:10px; background:#063245; }
 .host-meta { display:flex; flex-wrap:wrap; align-items:center; gap:0 14px; }
-.equipment-status { display:inline-block; border:1px solid currentColor; border-radius:1em; padding:2px 8px; color:#a8bdd0; font-size:11px; }
+.equipment-status { display:inline-block; border:0; border-radius:0; padding:0; background:transparent; color:#a8bdd0; font-size:12px; line-height:18px; }
 [data-api="online"] #equipment-api,#equipment-online[data-state="online"] { color:#59dfbb; }
 [data-api="unavailable"] #equipment-api,#equipment-online[data-state="offline"] { color:#ffa3a3; }
 .host-page #host-period-filter { display:flex; align-items:center; margin:8px 0 0; padding:6px 10px; min-height:0; }

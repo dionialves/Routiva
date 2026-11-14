@@ -173,6 +173,7 @@
     const online = root.dataset.api === 'online' || (recent && lastBucketLoss === 0);
     const offline = !online && recent && lastBucketLoss === 100;
     const badge = $('equipment-online');
+    badge.hidden = root.dataset.api !== 'online' && root.dataset.api !== 'unavailable';
     badge.textContent = online ? 'Online' : offline ? 'Offline (ICMP)' : 'Estado desconhecido';
     badge.dataset.state = online ? 'online' : offline ? 'offline' : 'unknown';
     badge.title = root.dataset.api === 'online' ? 'O equipamento respondeu à API.'
@@ -879,7 +880,6 @@
           const resource = overview.rows[0] || {};
           details('resource-details', { ...resource, frequency:resource.channel || resource.frequency }, ['identity','board-name','version','uptime','cpu-load','free-memory','total-memory','frequency','ssid']);
           $('equipment-model').textContent = resource['board-name'] || 'Equipamento MikroTik';
-          $('equipment-identity').textContent = resource.identity || 'Identificação indisponível';
           overviewAt = Date.now();
         }
       } catch (error) {
@@ -997,8 +997,7 @@
       }
     } finally { if (generation === ownGeneration && livePollingEnabled()) liveTimer = setTimeout(poll, 1000); }
   }
-  function restart() { generation++; controller?.abort(); clearTimeout(liveTimer); return poll(); }
-  window.AccessPointActions = { refresh() { overviewAt = 0; return restart(); } };
+  function restart() { generation++; controller?.abort(); clearTimeout(liveTimer); poll(); }
   document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => {
     initialTab = false;
     interfaceCounters.clear();

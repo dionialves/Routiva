@@ -2,23 +2,84 @@
 .equipment-identity > div:not(.ap-settings) { min-width:0; }
 .equipment-identity .ap-settings { margin-left:auto; flex-shrink:0; }
 #ap-settings[aria-expanded=true] > svg:last-child { transform:rotate(180deg); }
-#ap-settings-menu.equipment-action-menu { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:320px; min-width:0; max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px); overflow:auto; padding:8px; color:#e2edf5; background:#09202f; border:1px solid #326174; border-radius:10px; box-shadow:0 12px 32px #0007; font-family:inherit; }
-.equipment-action-menu [role=group] + [role=group], .equipment-action-note { border-top:1px solid #304b5a; }
-.equipment-action-menu .equipment-action-label { margin:10px 12px 6px; color:#adc2d2; font-size:11px; font-weight:600; letter-spacing:1.2px; }
-.equipment-action-menu [role=menuitem] { display:flex; align-items:center; gap:12px; width:100%; min-height:40px; padding:8px 12px; border:0; border-radius:5px; background:transparent; color:inherit; text-align:left; font:500 13px/1.4 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; }
+#ap-settings-menu.equipment-action-menu { position:fixed; inset:auto; margin:0; box-sizing:border-box; width:290px; min-width:0; max-width:calc(100vw - 16px); max-height:calc(100dvh - 16px); overflow:auto; padding:8px; color:#e2edf5; background:#0c2030; border:1px solid #326174; border-radius:10px; box-shadow:0 10px 24px #0006; font-family:inherit; }
+.equipment-action-menu [role=group] + [role=group] { border-top:1px solid #304b5a; margin-top:6px; padding-top:2px; }
+#ap-settings-menu .equipment-action-label { margin:6px 0 4px; padding:0 10px; color:#adc2d2; font-size:11px; font-weight:600; line-height:16px; text-transform:uppercase; letter-spacing:.8px; }
+.equipment-action-menu [role=menuitem] { display:flex; align-items:center; gap:12px; width:100%; box-sizing:border-box; height:36px; padding:6px 10px; border:0; border-radius:6px; background:transparent; color:inherit; text-align:left; font:500 13px/1.4 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; cursor:pointer; }
 .equipment-action-menu [role=menuitem]:hover:not(:disabled) { background:#14394e; }
 .equipment-action-menu [role=menuitem]:focus-visible { outline:2px solid #00d7ed; outline-offset:-2px; }
-.equipment-action-menu [role=menuitem]:disabled { opacity:.45; cursor:not-allowed; }
-.equipment-action-menu svg { width:18px; height:18px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.equipment-action-menu [role=menuitem]:disabled { color:#798d9c; opacity:1; cursor:not-allowed; }
+.equipment-action-menu svg { width:18px; height:18px; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 .equipment-action-menu .equipment-action-danger { color:#ff696d; }
-.equipment-action-menu .equipment-action-note { display:flex; align-items:flex-start; gap:10px; margin:8px 10px 0; padding:12px 2px 4px; font-size:11px; line-height:1.5; color:#adc2d2; }
-.equipment-action-note svg { width:16px; height:16px; }
-.ap-action-feedback { color:#b9e8ed; font-size:13px; }
+.equipment-action-menu .equipment-action-danger:disabled { color:#b86670; }
+.equipment-action-menu .equipment-action-danger:hover:not(:disabled) { background:#ff59691a; color:#ff858a; }
 @media(max-width:600px) { .host-page .equipment-identity { gap:8px; padding:12px; } }
 /* Equipment actions follow the cyan treatment in the supplied reference. */
-button#ap-settings.system-button { color:#00dbed !important; border-color:#00c9df !important; background:#082332 !important; }
-#ap-settings > svg:first-child { width:18px; height:18px; }
-#ap-settings > svg:last-child { width:16px; height:16px; transition:transform .15s; }
-#ap-refresh[aria-busy=true] svg { animation:equipment-action-spin 1s linear infinite; }
-@keyframes equipment-action-spin { to { transform:rotate(360deg); } }
-@media(prefers-reduced-motion:reduce) { #ap-refresh[aria-busy=true] svg { animation:none; } #ap-settings > svg:last-child { transition:none; } }
+button#ap-settings.system-button { color:#00dbed !important; border-color:#00c9df !important; background:#082332 !important; font-size:13px !important; }
+button#ap-settings.system-button[aria-expanded=true] { background:#123b4d !important; box-shadow:0 0 0 2px #00c9df1f; }
+#ap-settings.system-button > svg:first-child { width:16px; height:16px; }
+#ap-settings.system-button > svg:last-child { width:14px !important; height:14px !important; flex-basis:14px; order:1; transition:transform .15s; }
+
+@media(prefers-reduced-motion:reduce) { #ap-settings > svg:last-child { transition:none; } }
+/* Equipment identity and management summary. */
+.host-page .equipment-identity {
+  display:grid;
+  grid-template-columns:86px minmax(0,1fr) auto;
+  gap:18px 20px;
+  box-sizing:border-box;
+  width:570px;
+  max-width:52%;
+  min-width:0;
+  flex:0 1 570px;
+  padding:18px;
+  border-color:#00a4b9;
+  border-radius:12px;
+  background:linear-gradient(115deg,#062633,#071e2c);
+  box-shadow:inset 0 0 24px #00c9df08;
+}
+.equipment-identity .equipment-icon {
+  width:84px;
+  height:84px;
+  border:1px solid #00aabd;
+  border-radius:14px;
+  background:linear-gradient(135deg,#064859,#06313e);
+  box-shadow:inset 0 0 18px #00e1dc22;
+}
+.equipment-identity .equipment-icon svg { width:44px; height:44px; color:#00d9eb; }
+.equipment-identity .equipment-description { display:flex; flex-direction:column; align-self:stretch; border-left:1px solid #164657; padding-left:16px; }
+.equipment-identity .equipment-description h2 { font-size:22px; line-height:1.2; overflow-wrap:anywhere; }
+.equipment-identity .equipment-kind { font-size:12px; margin:4px 0 8px; color:#adc6d6; }
+.equipment-identity .equipment-badges { display:flex; flex-wrap:nowrap; align-items:flex-end; gap:12px; margin-top:auto; padding-top:6px; white-space:nowrap; }
+.equipment-identity .equipment-badges > span { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.equipment-identity .equipment-status[hidden] { display:none; }
+.equipment-identity .equipment-status { padding:0; border:0; border-radius:0; background:transparent; font-size:12px; line-height:18px; }
+[data-api="online"] .equipment-identity #equipment-api,
+.equipment-identity #equipment-online[data-state="online"] { color:#39df9c; }
+.equipment-identity .ap-settings { display:flex; align-items:center; align-self:stretch; border-left:1px solid #164657; padding-left:20px; }
+@media(max-width:1200px) {
+  .host-page .equipment-identity { grid-template-columns:56px minmax(0,1fr) auto; gap:14px 12px; padding:14px; }
+  .equipment-identity .equipment-icon { width:54px; height:60px; }
+  .equipment-identity .equipment-icon svg { width:32px; height:32px; }
+  .equipment-identity .equipment-description { padding-left:12px; }
+  .equipment-identity .equipment-description h2 { font-size:18px; }
+  .equipment-identity .ap-settings { padding-left:12px; }
+}
+@media(max-width:900px) {
+  .host-page .host-hero { flex-direction:column; align-items:stretch; }
+  .host-page .equipment-identity { width:100%; max-width:100%; flex:none; }
+}
+@media(max-width:480px) {
+  .host-page .equipment-identity { grid-template-columns:42px minmax(0,1fr) auto; gap:12px 8px; padding:12px; }
+  .equipment-identity .equipment-icon { width:40px; height:52px; border-radius:9px; }
+  .equipment-identity .equipment-icon svg { width:28px; height:28px; }
+  .equipment-identity .equipment-description { padding-left:8px; }
+  .equipment-identity .ap-settings { padding-left:8px; }
+  .equipment-identity .equipment-status { font-size:10px; }
+}
+
+@media(max-width:600px) {
+  .host-page .equipment-identity { grid-template-columns:42px minmax(0,1fr); }
+  .equipment-identity .ap-settings { grid-column:1 / -1; justify-self:end; border-left:0; padding-left:0; }
+  .equipment-identity .equipment-badges { gap:8px; font-size:11px; }
+  .equipment-identity .equipment-status { font-size:11px; }
+}
