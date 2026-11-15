@@ -19,7 +19,7 @@ class MapInventoryTests {
     void resolvesHostAndGroupBindingsFromSelectedInventoryInOneIncidentQuery() {
         var inventory = mock(ZabbixService.class);
         var zabbix = mock(ZabbixClient.class);
-        var controller = new NetworkMapController(new NetworkMapService(null, null, inventory, zabbix));
+        var controller = new NetworkMapController(new NetworkMapService(null, null, inventory, zabbix), mock(AvailabilitySnapshotCache.class), new PacketLossPolicy());
         var group = new Host.Group("g", "Rede");
         when(inventory.hosts()).thenReturn(List.of(
             new Host("1", "Switch", "10.0.0.1", List.of(group)),

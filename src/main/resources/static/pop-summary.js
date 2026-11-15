@@ -45,8 +45,8 @@ function popIcon(name, size = 16) {
 }
 
 class PopSummary {
-  constructor({stage, hosts, groupName, freshness, colors, labels, minimumSeverity = () => 0, showAcknowledged = () => true}) {
-    Object.assign(this, {stage, hosts, groupName, freshness, colors, labels, minimumSeverity, showAcknowledged});
+  constructor({stage, hosts, metric = () => null, groupName, freshness, colors, labels, minimumSeverity = () => 0, showAcknowledged = () => true}) {
+    Object.assign(this, {stage, hosts, metric, groupName, freshness, colors, labels, minimumSeverity, showAcknowledged});
     this.box = document.createElement('section');
     this.box.className = 'pop-summary';
     this.box.id = 'map-pop-summary';
@@ -130,6 +130,8 @@ class PopSummary {
   }
   render() {
     if (!this.node) return;
+    const metric = this.metric?.(this.node);
+    if (metric) { this.renderMetric(metric); return; }
     const summary = summarizePop(this.hosts(this.node), this.minimumSeverity?.() ?? 0, this.showAcknowledged?.() ?? true);
     const fresh = this.freshness();
     const el = (tag, text, className) => {
@@ -249,6 +251,27 @@ class PopSummary {
     footer.append(updated, details);
     this.box.append(footer);
     this.updateFooter();
+  }
+  renderMetric(metric) {
+    const el = (tag, text, className) => {
+      const item = document.createElement(tag);
+      item.textContent = text;
+      if (className) item.className = className;
+      return item;
+    };
+    const heading = el('header', this.node.name);
+    const value = el('h3', `${metric.label}: ${metric.formatted}`);
+    const state = el('p', metric.state);
+    state.style.color = metric.color;
+    const fresh = this.freshness();
+    this.box.replaceChildren(heading, value, state, el('p', metric.period), el('small', metric.range));
+    if (!fresh.updatedAt) this.box.append(el('p', fresh.failed ? 'Indicadores indisponíveis.' : 'Carregando indicadores…'));
+    else {
+      const footer = el('footer', '');
+      footer.append(el('span', '', 'pop-freshness'));
+      this.box.append(footer);
+      this.updateFooter();
+    }
   }
   updateFooter() {
     const freshness = this.box.querySelector('.pop-freshness');

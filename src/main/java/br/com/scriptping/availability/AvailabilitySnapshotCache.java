@@ -151,6 +151,42 @@ public class AvailabilitySnapshotCache {
             generation == null ? "" : generation.snapshot.version(), List.copyOf(rows));
     }
 
+    public record MapMetric(String type, String id, HostAvailabilityService.Metrics metrics) {}
+    public record MapMetrics(long from, long to, String version, long builtAt, List<MapMetric> elements) {}
+
+    /** Capture one published generation for every map element, without building time series. */
+    public MapMetrics mapMetrics(int minutes, Set<String> groups, Set<String> hosts, List<Host> inventory) {
+        AvailabilityPeriod.of(minutes);
+        var generation = current;
+        if (generation == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Carregando indicadores");
+        var period = generation.snapshot.periods().get(minutes);
+        if (period == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Período inválido");
+        var totals = new LinkedHashMap<String, AvailabilitySnapshot.Observation>();
+        groups.forEach(id -> totals.put("group:" + id, AvailabilitySnapshot.Observation.EMPTY));
+        hosts.forEach(id -> totals.put("host:" + id, AvailabilitySnapshot.Observation.EMPTY));
+        var targets = new HashMap<String, Host>();
+        generation.snapshot.hosts().forEach(h -> targets.put(h.id(), h));
+        var catalogue = new LinkedHashMap<String, Host>();
+        generation.snapshot.hosts().stream().filter(h -> !generation.snapshot.activeHostIds().contains(h.id()))
+            .forEach(h -> catalogue.put(h.id(), h));
+        inventory.forEach(h -> catalogue.put(h.id(), h));
+        for (var host : catalogue.values()) {
+            var previous = targets.get(host.id());
+            var data = period.hosts().get(host.id());
+            if (data == null || previous == null || !Objects.equals(previous.ip(), host.ip())
+                || host.acknowledgedIcmpProblem()) continue;
+            if (hosts.contains(host.id())) totals.put("host:" + host.id(), data.total());
+            host.groups().stream().map(Host.Group::id).distinct().filter(groups::contains)
+                .forEach(id -> totals.compute("group:" + id, (key, total) -> total.plus(data.total())));
+        }
+        var elements = totals.entrySet().stream().map(e -> {
+            int separator = e.getKey().indexOf(':');
+            return new MapMetric(e.getKey().substring(0, separator), e.getKey().substring(separator + 1), e.getValue().metrics());
+        }).toList();
+        return new MapMetrics(period.from(), generation.snapshot.to(), generation.snapshot.version(),
+            generation.snapshot.builtAt(), elements);
+    }
+
     public HostAvailabilityService.Report host(String id, int minutes) {
         var generation=current;
         if (generation==null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Carregando indicadores");

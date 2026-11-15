@@ -35,6 +35,19 @@ import br.com.scriptping.aggregation.MinuteAggregationScheduled;
 class DashboardTests {
 
     @Test
+    void mapPeriodOptionsAreRenderedWithTwentyFourHoursSelected() throws Exception {
+        var html = mvc.perform(get("/mapas")).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        var select = java.util.regex.Pattern.compile("<select id=\"map-period\">(.*?)</select>", java.util.regex.Pattern.DOTALL)
+            .matcher(html);
+        assertThat(select.find()).isTrue();
+        String options = select.group(1);
+        assertThat(java.util.regex.Pattern.compile("<option ").matcher(options).results().count())
+            .isEqualTo(AvailabilityPeriod.OPTIONS.size());
+        assertThat(options).contains("value=\"1440\" selected=\"selected\"", "Última 1 hora", "Último 1 dia");
+    }
+
+    @Test
     void rendersDiagnosticsAndSharedAvailabilityComponents() throws Exception {
         mvc.perform(get("/diagnostico/grupos")).andExpect(status().isOk())
             .andExpect(view().name("diagnostics"))

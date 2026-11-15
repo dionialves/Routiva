@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     '/diagnostico/grupos': ['routiva.diagnostics.groups.filters'],
   };
   document.querySelectorAll('.query-filter-bar, .zabbix-filters, .import-results-tools').forEach(bar => {
+    if (bar.dataset?.clearFilters === 'false') return;
     const row = bar.matches('.query-filter-row') ? bar : bar.querySelector('.query-filter-row') || bar;
     const button = document.createElement('button');
     button.type = 'button';

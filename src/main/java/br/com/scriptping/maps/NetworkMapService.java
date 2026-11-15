@@ -39,6 +39,8 @@ public class NetworkMapService {
         }).toList();
     }
 
+    public List<Host> inventoryHosts() { return inventory.hosts(); }
+
     public List<Host.Group> groups() {
         return inventory.hosts().stream().flatMap(host -> host.groups().stream()).distinct()
             .sorted(Comparator.comparing(Host.Group::name)).toList();

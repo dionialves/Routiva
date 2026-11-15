@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const source = fs.readFileSync('src/main/resources/static/query-filters.js', 'utf8');
-function surface(pathname, controls = []) {
+function surface(pathname, controls = [], clearFilters) {
   const removed = [], navigated = [];
-  const row = { children: [], matches: () => true, append(node) { this.children.push(node); },
+  const row = { dataset: {clearFilters}, children: [], matches: () => true, append(node) { this.children.push(node); },
     querySelectorAll: () => controls, dispatchEvent(event) { this.event = event.type; } };
   const node = () => ({ children: [], attributes: {}, listeners: {}, append(child) { this.children.push(child); },
     setAttribute(key, value) { this.attributes[key] = value; }, addEventListener(key, callback) { this.listeners[key] = callback; } });
@@ -16,7 +16,7 @@ function surface(pathname, controls = []) {
     localStorage: { removeItem: key => removed.push(key) }, Event: class { constructor(type) { this.type = type; } },
   });
   const button = row.children[0];
-  button.listeners.click();
+  if (button) button.listeners.click();
   return { row, button, removed, navigated };
 }
 test('clearing incident deep links removes saved filters and navigates without the event query', () => {
@@ -46,5 +46,11 @@ test('local searches and period controls reset before notifying their page', () 
   assert.equal(select.options[1].selected, true);
   assert.deepEqual(events, [['input', ''], ['change', true]]);
   assert.equal(ui.row.event, 'query-filters-cleared');
+  assert.deepEqual(ui.navigated, []);
+});
+
+test('map visualization controls omit the clear-filters action', () => {
+  const ui = surface('/mapas', [], 'false');
+  assert.equal(ui.row.children.length, 0);
   assert.deepEqual(ui.navigated, []);
 });

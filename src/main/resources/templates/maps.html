@@ -5,7 +5,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/style.css?v=20261109-2"><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <link rel="stylesheet" href="/form-dialog.css?v=1"><link rel="stylesheet" href="/maps.css?v=20261112-name-link"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261110-5" defer></script><script src="/maps.js?v=20261112-name-link" defer></script>
+  <link rel="stylesheet" href="/form-dialog.css?v=1"><link rel="stylesheet" href="/maps.css?v=20261115-legend-left"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-map-redesign-2" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/maps.js?v=20261115-map-redesign-2" defer></script>
   <link rel="stylesheet" href="/query-filters.css?v=20261112-4">
 <link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
 <body class="availability-dashboard">
@@ -37,13 +37,34 @@
   <section id="workspace" class="settings-panel" hidden>
     <div class="page-heading">
       <div class="map-heading-copy">
-        <button id="back" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-left"></use></svg>Mapas de rede</button>
+
         <h1 id="map-title"></h1>
         <p id="map-description">Visualização do mapa de topologia da rede.</p>
       </div>
       <div class="map-view-controls">
-      <button id="edit" th:hidden="${!isAdmin}" class="system-button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-1 5 5-1L21 7l-4-4Zm10-10 4 4"/></svg>Editar</button></div>
+      <button id="edit" th:hidden="${!isAdmin}" class="system-button system-button-primary"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m4 16-1 5 5-1L21 7l-4-4Zm10-10 4 4"/></svg>Editar</button></div>
       <div id="editor-actions" class="settings-actions" hidden><button id="properties" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8m5 0h3M4 17h3m5 0h8M17 7a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0M12 17a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/></svg>Propriedades do mapa</button><button id="cancel" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button id="save" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="map-save-icon" d="M3 3h14l4 4v14H3Zm4 0v6h9V3M7 21v-8h10v8"/></svg><span id="save-label">Salvar mapa</span></button></div></div>
+    <section id="map-query-controls" class="availability-page" aria-label="Visualização do mapa">
+      <div class="query-filter-bar" data-clear-filters="false"><div class="query-filter-row">
+        <div class="query-filter-field map-view-field">
+          <span id="map-view-label" class="query-filter-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Visão</span>
+          <div id="map-view-segments" role="group" aria-labelledby="map-view-label">
+            <button type="button" data-map-view="incidents" aria-pressed="true">Incidentes</button>
+            <button type="button" data-map-view="latency" aria-pressed="false">Latência</button>
+            <button type="button" data-map-view="loss" aria-pressed="false">Perda de pacotes</button>
+          </div>
+          <select id="map-view" hidden aria-hidden="true" tabindex="-1"><option value="incidents">Incidentes</option><option value="latency">Latência</option><option value="loss">Perda de pacotes</option></select>
+        </div>
+        <label id="map-period-field" class="query-filter-field" hidden><span class="query-filter-label"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Período</span>
+          <select id="map-period"><option th:each="period : ${T(br.com.scriptping.availability.AvailabilityPeriod).OPTIONS}" th:value="${period.minutes()}" th:text="${period.label()}" th:selected="${period.minutes() == 1440}"></option></select>
+        </label>
+        <div id="map-state-legend" class="map-state-legend" aria-label="Legenda dos estados"></div>
+        <div id="map-updated" class="map-updated">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg>
+          <div><span>Atualizado em</span><time id="map-updated-at">—</time><small id="map-update-warning" hidden>Dados desatualizados</small></div>
+        </div>
+      </div></div>
+    </section>
     <div id="editor" hidden><div class="settings-actions editor-toolbar" role="group" aria-label="Ferramentas de edição">
       <button id="add" aria-haspopup="dialog" aria-controls="element-dialog" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v8m-4-4h8M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0"/></svg>Adicionar elemento</button>
       <button id="connect" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 15 6-6m-2-2 2-2a4 4 0 0 1 6 6l-3 3m-7 3-2 2a4 4 0 0 1-6-6l3-3"/></svg>Conectar elementos</button>
@@ -52,18 +73,29 @@
       <button id="delete-item" title="Excluir seleção" aria-label="Excluir seleção" class="system-button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg><span>Excluir seleção</span></button>
       <button id="undo" title="Desfazer (Ctrl+Z)" aria-label="Desfazer" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 4-5 5 5 5M3 9h11c7 0 8 9 2 11"/></svg><span>Desfazer</span></button><button id="redo" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 5 5-5 5m5-5H10c-7 0-8 9-2 11"/></svg><span>Refazer</span></button>
     </div><p id="hint"></p></div>
-  <div class="map-stage" id="map-stage"><div class="map-viewport" id="viewport"><svg id="canvas" viewBox="0 0 1200 700" aria-label="Topologia de rede"></svg></div>
+  <section class="map-surface" aria-labelledby="map-surface-title">
+    <header id="map-surface-heading" class="map-surface-heading">
+      <h2 id="map-surface-title"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="m10.5 7.5-4 9m7-9 4 9M8 19h8"/></svg>Mapa de rede</h2>
+      <div class="map-active-view"><svg id="map-active-icon" viewBox="0 0 24 24" aria-hidden="true"></svg><span id="map-active-name">Incidentes</span></div>
+      <dl id="map-node-indicators" class="map-node-indicators" aria-label="Indicadores dos elementos do mapa" aria-live="polite">
+        <div><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="m10.5 7.5-4 9m7-9 4 9M8 19h8"/></svg><dt>Nós monitorados</dt><dd id="map-node-total">—</dd></div>
+      </dl>
+    </header>
+  <div class="map-stage" id="map-stage">
+<div class="map-viewport" id="viewport"><svg id="canvas" viewBox="0 0 1200 700" aria-label="Topologia de rede"></svg></div>
     <div id="map-tools" role="group" aria-label="Navegação do mapa">
       <button id="fit" title="Ajustar à tela" aria-label="Ajustar à tela" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4m10 6h-4m-6 10v-4M2 12h4"/></svg></button>
       <button id="zoom-in" title="Aumentar zoom" aria-label="Aumentar zoom" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
       <button id="zoom-out" title="Diminuir zoom" aria-label="Diminuir zoom" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-      <button id="refresh-map" type="button" aria-busy="false" title="Atualizar incidentes" aria-label="Atualizar incidentes" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button>
+      <button id="refresh-map" type="button" aria-busy="false" title="Atualizar mapa" aria-label="Atualizar mapa" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button>
       <button id="maximize-map" aria-pressed="false" title="Maximizar mapa" aria-label="Maximizar mapa" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/></svg></button>
       <button id="fullscreen-map" title="Exibir em tela cheia" aria-label="Exibir em tela cheia" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M12 17v4m-5 0h10"/></svg></button>
     </div></div>
+    <footer id="map-footer" class="map-info-footer"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg></footer>
+  </section>
   <div id="editor-footer" hidden><span id="counts"></span></div>
   </section>
-  <p id="status" role="status">Carregando mapas…</p>
+  <div id="page-status"><p id="status" role="status">Carregando mapas…</p></div>
   <dialog id="create-dialog" class="settings-panel form-dialog" aria-labelledby="create-title" aria-describedby="create-description">
     <form id="create-form" class="connection-form" novalidate>
       <div><h2 id="create-title">Novo mapa</h2>

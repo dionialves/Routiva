@@ -51,6 +51,7 @@ test('draw paints POP circles using the map threshold rather than unclassified i
   const node = {id: 'pop', groupId: 'g', name: 'POP', x: 0, y: 0};
   const hosts = [{incidents: [{severity: 0}], monitoring: 'monitored'}];
   const drawContext = vm.createContext({
+    metricSummary: () => null,
     current: {layout: {name: 'Map', minimumSeverity: 1, nodes: [node], links: []}},
     editing: false, drag: null, marquee: null, selection: new Set(), selected: null,
     colors: ['gray', 'green', 'unclassified', 'information'],

@@ -13,8 +13,8 @@ function setup() {
   const context = vm.createContext({
     $: id => id === 'refresh-map' ? button : status,
     current: { layout: { nodes: [{ hostId: '1' }] } }, editing: false,
-    generation: 1, timer: 7, states: new Map(), summaryFailed: false,
-    api: () => pending, draw() {}, popSummary: { render() {} },
+    mapView: 'incidents', generation: 1, timer: 7, states: new Map(), summaryFailed: false,
+    api: () => pending, draw() {}, updateMapOverview() {}, popSummary: { render() {} },
     clearTimeout() {}, setTimeout: () => 8,
   });
   vm.runInContext(source.slice(source.indexOf('function setRefreshBusy('), source.indexOf('function openMap(')), context);

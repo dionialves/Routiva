@@ -11,8 +11,61 @@ const selection = new Set();
 let marquee;
 let states = new Map(), generation = 0, timer;
 let summaryUpdatedAt = 0, summaryFailed = false;
+let mapView = 'incidents', metricStates = new Map(), metricRange;
+const metricColors = {NORMAL:'#58bd83', ATENCAO:'#fced4e', CRITICO:'#ff0000'};
+const metricLabels = {NORMAL:'Normal', ATENCAO:'Atenção', CRITICO:'Crítico'};
+function metricSummary(node) {
+  if (mapView === 'incidents') return null;
+  const metric = metricStates.get((node.hostId ? 'host:' + node.hostId : 'group:' + node.groupId));
+  const value = metric?.[mapView];
+  const state = metric?.[mapView + 'State'];
+  const label = mapView === 'latency' ? 'Latência média' : 'Perda de pacote';
+  const formatted = value == null ? 'Sem dados' : value.toLocaleString('pt-BR', {maximumFractionDigits:2}) + (mapView === 'latency' ? ' ms' : '%');
+  return {label, formatted, state:metricLabels[state] || 'Sem dados', color:metricColors[state] || colors[0],
+    period: $('map-period').selectedOptions[0]?.textContent || '',
+    range: metricRange ? new Date(metricRange.from).toLocaleString('pt-BR') + ' — ' + new Date(metricRange.to).toLocaleString('pt-BR') : ''};
+}
+const mapPeriodStorageKey = 'routiva.maps.period';
+function restoreMapPeriod() {
+  const control = $('map-period');
+  let saved;
+  try { saved = localStorage.getItem(mapPeriodStorageKey); } catch { /* Storage may be unavailable. */ }
+  control.value = [...control.options].some(option => option.value === saved) ? saved : '1440';
+}
+function saveMapPeriod() {
+  try { localStorage.setItem(mapPeriodStorageKey, $('map-period').value); } catch { /* Keep filters usable without storage. */ }
+}
+function changeMapQuery() {
+  mapView = $('map-view').value;
+  saveMapPeriod();
+  $('map-period-field').hidden = mapView === 'incidents';
+  metricStates.clear();
+  metricRange = null;
+  states.clear();
+  summaryUpdatedAt = 0;
+  summaryFailed = false;
+  popSummary.close();
+  draw();
+  updateMapOverview();
+  refresh(++generation);
+}
+function updateMapOverview() {
+  renderMapOverview({nodes:current?.layout.nodes || [], view:mapView,
+    stateOf: node => mapView === 'incidents' ? groupLevel(nodeHosts(node))
+      : metricStates.get(node.hostId ? 'host:' + node.hostId : 'group:' + node.groupId)?.[mapView + 'State'],
+    updatedAt:summaryUpdatedAt, failed:summaryFailed, busy:$('refresh-map').disabled, colors, labels});
+}
+restoreMapPeriod();
+$('map-view').onchange = $('map-period').onchange = changeMapQuery;
+document.querySelectorAll('[data-map-view]').forEach(button => {
+  button.onclick = () => {
+    if ($('map-view').value === button.dataset.mapView) return;
+    $('map-view').value = button.dataset.mapView;
+    changeMapQuery();
+  };
+});
 const popSummary = new PopSummary({
-  stage: $('map-stage'), hosts: nodeHosts,
+  stage: $('map-stage'), hosts: nodeHosts, metric: metricSummary,
   minimumSeverity: () => current?.layout.minimumSeverity ?? 0,
   showAcknowledged: () => current?.layout.showAcknowledged ?? true,
   groupName: id => groups.find(group => group.id === id)?.name || id,
@@ -144,13 +197,14 @@ function draw() {
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
     const level = monitored ? groupLevel(nodeHosts(n)) + 2 : 1;
-    const description = monitored ? n.name + ' · ' + labels[level] : n.name;
+    const metric = monitored ? metricSummary(n) : null;
+    const description = metric ? `${n.name} · ${metric.label}: ${metric.formatted} · ${metric.state}` : monitored ? n.name + ' · ' + labels[level] : n.name;
     const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
       ...(editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
-    drawNode(g, n.name, n.labelPosition, editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id);
+    drawNode(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n, event.shiftKey || event.ctrlKey || event.metaKey); }
     };
@@ -406,30 +460,44 @@ async function refresh(token) {
   if (!current || editing || token !== generation) return;
   clearTimeout(timer);
   setRefreshBusy(true);
-  $('status').textContent = 'Consultando incidentes…';
+  updateMapOverview();
+  const metricMode = mapView !== 'incidents';
+  $('status').textContent = metricMode ? 'Consultando indicadores…' : 'Consultando incidentes…';
   try {
     const ids = [...new Set(current.layout.nodes.map(n => n.groupId).filter(Boolean))];
     const hostsIds = [...new Set(current.layout.nodes.map(n => n.hostId).filter(Boolean))];
-    const hosts = ids.length || hostsIds.length ? await api('/summaries', {groups:ids, hosts:hostsIds}) : [];
-    if (token !== generation) return;
-    summaryUpdatedAt = Date.now();
-    summaryFailed = false;
-    states = new Map();
-    for (const host of hosts) states.set('host:' + host.id, [host]);
-    for (const host of hosts) for (const group of host.groups) {
-      if (!states.has(group.id)) states.set(group.id, []);
-      states.get(group.id).push(host);
+    if (metricMode) {
+      const result = await api('/metrics', {groups:ids, hosts:hostsIds, minutes:Number($('map-period').value)});
+      if (token !== generation) return;
+      metricStates = new Map(result.elements.map(e => [e.type + ':' + e.id, e]));
+      metricRange = result;
+      summaryUpdatedAt = result.builtAt;
+      summaryFailed = false;
+      $('status').textContent = 'Indicadores do período até ' + new Date(result.to).toLocaleString('pt-BR') + ' · atualização automática a cada minuto' + (Date.now() - result.builtAt > 90000 ? ' · Dados desatualizados' : '');
+    } else {
+      const hosts = ids.length || hostsIds.length ? await api('/summaries', {groups:ids, hosts:hostsIds}) : [];
+      if (token !== generation) return;
+      summaryUpdatedAt = Date.now();
+      summaryFailed = false;
+      states = new Map();
+      for (const host of hosts) states.set('host:' + host.id, [host]);
+      for (const host of hosts) for (const group of host.groups) {
+        if (!states.has(group.id)) states.set(group.id, []);
+        states.get(group.id).push(host);
+      }
+      $('status').textContent = ids.length || hostsIds.length ? 'Incidentes atualizados às ' + new Date().toLocaleTimeString('pt-BR') : '';
     }
-    $('status').textContent = ids.length || hostsIds.length ? 'Incidentes atualizados às ' + new Date().toLocaleTimeString('pt-BR') : '';
   } catch {
     if (token !== generation) return;
     summaryFailed = true;
-    $('status').textContent = 'Consulta ao Zabbix indisponível. Nova tentativa em um minuto.';
+    $('status').textContent = metricMode ? 'Consulta aos indicadores indisponível. Últimos dados preservados; nova tentativa em um minuto.' : 'Consulta ao Zabbix indisponível. Nova tentativa em um minuto.';
   } finally {
     if (token === generation) setRefreshBusy(false);
   }
+  if (token !== generation) return;
   draw();
   popSummary.render();
+  updateMapOverview();
   timer = setTimeout(() => refresh(token), 60000);
 }
 
@@ -451,6 +519,11 @@ function openMap(map, edit = false) {
   past.length = future.length = 0;
   baseline = map ? JSON.stringify({...current.layout, camera:current.layout.camera ?? null}) : null;
   states.clear();
+  metricStates.clear();
+  metricRange = null;
+  $('map-query-controls').hidden = edit;
+  $('map-surface-heading').hidden = $('map-footer').hidden = edit;
+  (map ? $('map-footer') : $('page-status')).append($('status'));
   $('editor').hidden = !edit;
   $('library').hidden = !!map;
   $('workspace').hidden = !map;
@@ -473,6 +546,7 @@ function openMap(map, edit = false) {
   $('status').textContent = edit ? 'Editando topologia' : map ? 'Consultando incidentes…'
     : '';
   draw();
+  updateMapOverview();
   if (map && !map.layout.camera) fitToView();
   refresh(generation);
 }
@@ -664,7 +738,7 @@ function layoutForSave() {
 function mayLeave() {
   return !editing || baseline === JSON.stringify(layoutForSave()) || confirm('Descartar alterações não salvas?');
 }
-$('back').onclick = () => { if (mayLeave()) openMap(null); };
+
 $('edit').onclick = () => openMap(current, true);
 $('cancel').onclick = () => { if (mayLeave()) openMap(maps.find(m => m.id === current.id)); };
 
