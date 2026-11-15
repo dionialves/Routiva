@@ -22,15 +22,14 @@
 .auth-form input[readonly] { background:#1b2d3c; color:#b9c7d8; }
 .auth-form svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 .auth-form .auth-icon { position:absolute; right:6px; top:50%; transform:translateY(-50%); display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:6px; background:transparent; color:#aebdd0; cursor:pointer; }
-.auth-icon:hover { color:#00d1ff; }
-.auth-icon:focus-visible { outline:2px solid #00d1ff; outline-offset:2px; }
+.auth-icon:hover { color:var(--cyan); }
+.auth-icon:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
 .auth-user-row > .system-button { flex-shrink:0; }
 .auth-password-content { display:grid; gap:18px; }
 #password-stage { animation:auth-reveal 180ms ease-out; }
 #login-submit { width:100%; }
-.auth-form .is-loading::before { content:''; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:auth-spin 700ms linear infinite; }
+.auth-form .is-loading::before { content:''; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:system-spin 700ms linear infinite; }
 .auth-form .is-loading svg { display:none; }
-@keyframes auth-spin { to { transform:rotate(360deg); } }
 @keyframes auth-reveal { from { opacity:0; max-height:0; overflow:hidden; } to { opacity:1; max-height:600px; overflow:hidden; } }
 @media (prefers-reduced-motion:reduce) { #password-stage, .auth-form .is-loading::before { animation:none; } }
 .auth-code-check { position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#50e8a5; }

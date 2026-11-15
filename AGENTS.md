@@ -116,3 +116,21 @@ docker compose exec -T collector routiva-collector --health | jq '{coletor: .col
 - All application action buttons follow the Zabbix settings reference through `buttons.css`: `system-button system-button-primary` for blue primary actions and `system-button` for dark bordered secondary/cancel actions. Use 36px height, 12px/600 typography, 6px corners, 16px leading icons, and an 8px icon/text gap. Do not override these styles per page or enlarge heading actions. `query-primary-action` is only a placement hook for primary page actions (including “Importar”, “Novo mapa”, and “Novo usuário”).
 
 - Place “Importar” (Access Points) and “Novo mapa” in the upper-right page heading, aligned with the title, outside the filter bar. Use `page-action-heading` and preserve the shared `query-primary-action` style.
+
+## Design system do front-end
+
+Toda página Thymeleaf carrega a base no head com `th:replace="~{design-system :: base}"`. O fragmento em `templates/design-system.html` concentra os endereços e versões dos estilos compartilhados. A base importa `static/design-tokens.css`, fonte da paleta e da família tipográfica. Use propriedades como `var(--panel-bg)`, `var(--text)`, `var(--border)` e `var(--focus)` inclusive nas variantes. Mantenha os componentes no contexto visual da aplicação com os fragmentos sidebar, topbar e icon de shell.html.
+
+| Necessidade | Implementação a reutilizar |
+|---|---|
+| Layout | Fragmento layout e page-layout.css para títulos, espaçamento e ações da página. |
+| Filtros | Para períodos use design-system :: period(controlId, fieldName, selectedMinutes). Fragmentos filters e picker, classes query-filter-* e multi-picker.html. Use multi-picker.js para a interação e query-filters.js para as ações comuns. |
+| Indicador simples | Fragmento indicator(title, valueId, description, descriptionId). Passe um ID único por valor atualizado por JS e null para descrição estática. Para o conjunto de disponibilidade com explicações, inclua availability-components :: metrics e availability.css. |
+| Gráfico | availability-components :: historyChart(groupView) fornece título, controles, legenda e área de desenho. availability-chart.js desenha a série de disponibilidade. performance-chart.js usa AvailabilityView e AvailabilityChart para gráficos de desempenho. Carregue as dependências antes do consumidor e use history-charts.css para os controles. Consulte availability.html e diagnostics.html como exemplos. |
+| Tabela | Use design-system :: dataTable(label, sections) para listas, passando thead e tbody como um fragmento local. A base define cabeçalhos, células e rolagem. Declare as colunas no template consumidor, use th com scope e atualize aria-sort quando houver ordenação. |
+| Botão | Use design-system :: action(buttonId, iconName, label) para uma ação secundária simples. Inclua o fragmento actions e aplique system-button e as variantes descritas acima. Forneça nome acessível para ações apenas com ícone. |
+| Modal | Inclua o fragmento dialogStyles. Use design-system :: formDialog(dialogId, titleId, descriptionId, content) com conteúdo local, título ligado por aria-labelledby, connection-form e settings-actions. Ajuste a largura com --form-dialog-width. Abra com showModal() e mantenha o fechamento por teclado. |
+
+Antes de criar uma tela, procure o componente no catálogo e confira um consumidor em produção. O CSS da página cuida da composição e das particularidades daquela tela. Para uma variação recorrente, acrescente uma classe modificadora ao CSS do componente. Extraia marcação repetida para um fragmento com parâmetros e comportamento repetido para um módulo JS usado por todos os consumidores. Preserve IDs referenciados por scripts, formulários, HTMX e atributos ARIA.
+
+Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as ocorrências equivalentes e atualize esta tabela na mesma alteração. Verifique telas pequenas, foco, teclado e os estados vazio, carregando e erro quando aplicáveis. Execute os testes JS e, para mudanças nos templates, os testes Maven.

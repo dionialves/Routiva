@@ -178,8 +178,8 @@
 .host-page .host-chart-grid #availability-chart > svg { min-height:230px; }
 .host-page .host-chart-grid .availability-axis { fill:#abc0d5; font-size:11px; }
 .host-page .host-chart-grid .loss-key { color:#f59e0b; }
-.host-page .host-chart-grid .technical-key { color:#00d1ff; }
-.host-page .host-chart-grid .healthy-key { color:#14b8a6; }
+.host-page .host-chart-grid .technical-key { color:var(--cyan); }
+.host-page .host-chart-grid .healthy-key { color:var(--teal); }
 .host-page .interface-type-icon { display:inline-block; float:left; width:18px; height:18px; min-height:0; margin-right:8px; }
 .interface-table tr[data-running=true] td:nth-child(3)::before,.interface-table tr[data-running=false] td:nth-child(3)::before { content:''; display:inline-block; width:7px; height:7px; margin-right:7px; border-radius:50%; background:#34d399; }
 .interface-table tr[data-running=false] td:nth-child(3)::before { background:#94a3b8; }

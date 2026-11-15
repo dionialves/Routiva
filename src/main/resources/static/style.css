@@ -1,10 +1,12 @@
+@import url("/design-tokens.css");
+
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
   background: #07131f;
-  color: #f8fafc;
+  color: var(--text);
   font:
     15px system-ui,
     sans-serif;
@@ -27,7 +29,7 @@ h1 {
   letter-spacing: -2px;
 }
 h1 span {
-  color: #00d1ff;
+  color: var(--cyan);
 }
 p {
   color: #97a5bd;
@@ -37,7 +39,7 @@ p {
   letter-spacing: 3px;
 }
 .live {
-  color: #00d1ff;
+  color: var(--cyan);
   background: #10334d;
   border-radius: 24px;
   padding: 12px 18px;
@@ -56,7 +58,7 @@ p {
   margin-bottom: 24px;
 }
 .legend span:nth-child(1) {
-  color: #00d1ff;
+  color: var(--cyan);
 }
 .legend span:nth-child(2) {
   color: #ffb629;
@@ -93,7 +95,7 @@ p {
   min-width: 0;
 }
 .green {
-  --accent: #00d1ff;
+  --accent: var(--cyan);
 }
 .yellow {
   --accent: #ffb629;
@@ -194,7 +196,7 @@ footer {
 }
 .page-nav a.active {
   background: #10334d;
-  color: #00d1ff;
+  color: var(--cyan);
   border-color: #176184;
 }
 .filters {
@@ -223,13 +225,13 @@ footer {
   width: 100%;
   padding: 12px;
   background: #07131f;
-  color: #f8fafc;
+  color: var(--text);
   border: 1px solid #2b4254;
   border-radius: 8px;
   font: inherit;
 }
 .filters button {
-  background: #00d1ff;
+  background: var(--cyan);
   color: #07131f;
   border: 0;
   padding: 13px 20px;
@@ -245,7 +247,7 @@ footer {
 .filters select:focus-visible,
 .filters button:focus-visible,
 .page-nav a:focus-visible {
-  outline: 2px solid #00d1ff;
+  outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
 @media (max-width: 600px) {
@@ -259,7 +261,7 @@ footer {
 
 .card-action a,
 .group-context a {
-  color: #00d1ff;
+  color: var(--cyan);
   text-underline-offset: 4px;
 }
 .card-action a {
@@ -268,7 +270,7 @@ footer {
 }
 .card-action a:focus-visible,
 .group-context a:focus-visible {
-  outline: 2px solid #00d1ff;
+  outline: 2px solid var(--cyan);
   outline-offset: 4px;
 }
 
@@ -337,7 +339,7 @@ footer time {
 }
 .refresh-interval select {
   font: inherit;
-  color: #00d1ff;
+  color: var(--cyan);
   background: #10334d;
   border: 1px solid #176184;
   border-radius: 8px;
@@ -345,7 +347,7 @@ footer time {
 }
 .refresh-controls button {
   font: inherit;
-  background: #00d1ff;
+  background: var(--cyan);
   color: #07131f;
   border: 0;
   border-radius: 8px;
@@ -358,7 +360,7 @@ footer time {
 }
 .refresh-controls button:focus-visible,
 .refresh-interval select:focus-visible {
-  outline: 2px solid #00d1ff;
+  outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
 @media (max-width: 600px) {
@@ -381,7 +383,7 @@ footer time {
   background: #101f2d;
 }
 .table-scroll:focus-visible {
-  outline: 2px solid #00d1ff;
+  outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
 .hosts-table {
@@ -416,7 +418,7 @@ footer time {
   --accent: #8492aa;
 }
 .host-row.green {
-  --accent: #00d1ff;
+  --accent: var(--cyan);
 }
 .host-row.yellow {
   --accent: #ffb629;
@@ -496,12 +498,12 @@ footer time {
 }
 
 .host-name a {
-  color: #00d1ff;
+  color: var(--cyan);
   text-decoration: underline;
   text-underline-offset: 4px;
 }
 .host-name a:focus-visible {
-  outline: 2px solid #00d1ff;
+  outline: 2px solid var(--cyan);
   outline-offset: 4px;
 }
 .group-members {
@@ -519,15 +521,15 @@ footer time {
   padding: 4px 0;
 }
 .sort-link:hover {
-  color: #00d1ff;
+  color: var(--cyan);
 }
 .sort-link:focus-visible {
-  outline: 2px solid #00d1ff;
+  outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
 .hosts-table th[aria-sort='ascending'],
 .hosts-table th[aria-sort='descending'] {
-  color: #00d1ff;
+  color: var(--cyan);
 }
 
 .pagination {
@@ -561,7 +563,7 @@ footer time {
   min-height: 44px;
   padding: 10px 16px;
   background: #07131f;
-  color: #00d1ff;
+  color: var(--cyan);
   border: 1px solid #2b4254;
   border-radius: 8px;
   text-decoration: none;
@@ -577,7 +579,7 @@ footer time {
   border-color: #176184;
 }
 .pagination .page-link:focus-visible {
-  outline: 2px solid #00d1ff;
+  outline: 2px solid var(--cyan);
   outline-offset: 3px;
 }
 @media (max-width: 600px) {
@@ -601,7 +603,7 @@ footer time {
 
 .back-link,
 .host-memberships a {
-  color: #00d1ff;
+  color: var(--cyan);
   text-underline-offset: 4px;
 }
 .host-memberships {
@@ -652,7 +654,7 @@ footer time {
   min-height: 180px;
 }
 .healthy-key {
-  color: #00d1ff;
+  color: var(--cyan);
 }
 .technical-key {
   color: #7dafff;
@@ -710,16 +712,9 @@ footer time {
 /* TraceOne application shell and shared design tokens. */
 :root {
   color-scheme: dark;
-  --navy: #0b1f3f;
-  --cyan: #00d1ff;
-  --teal: #14b8a6;
-  --slate: #475569;
-  --text: #f8fafc;
-  --muted: #a5b4c5;
-  --border: #1c2d3e;
   --sidebar-width: 268px;
 }
-body { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; background: #07131f; color: var(--text); }
+body { font-family: var(--font-ui); font-size: 14px; line-height: 1.5; background: #07131f; color: var(--text); }
 button, input, select { font: inherit; }
 button, summary, a { -webkit-tap-highlight-color: transparent; }
 a, button, input, select, summary { outline-offset: 4px; }
@@ -881,7 +876,7 @@ main.settings-page { max-width: none; margin: 0; }
 /* Availability dashboard */
 .availability-filters { display:flex; gap:20px; flex-wrap:wrap; margin:28px 0 20px; }
 .availability-filters label { display:flex; flex-direction:column; gap:8px; min-width:200px; color:#97a5bd; }
-.availability-filters select { padding:12px; border:1px solid #294258; border-radius:8px; background:#0d2030; color:#f8fafc; font:inherit; }
+.availability-filters select { padding:12px; border:1px solid #294258; border-radius:8px; background:#0d2030; color:var(--text); font:inherit; }
 .availability-page .card { margin-bottom:20px; }
 .availability-page .availability-grid .card { min-width:0; }
 .availability-page .availability-grid strong { font-size:30px; }
@@ -889,19 +884,19 @@ main.settings-page { max-width: none; margin: 0; }
 .availability-page button:disabled { opacity:.4; cursor:default; }
 .availability-page #availability-chart svg { display:block; width:100%; min-height:180px; }
 .availability-page .hosts-table td { font-variant-numeric:tabular-nums; }
-.availability-page :focus-visible { outline:2px solid #00d1ff; outline-offset:3px; }
+.availability-page :focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
 @media(max-width:700px) { .availability-filters label { flex:1; min-width:160px; } .availability-page h1 { font-size:30px; } }
 .availability-page .healthy-key { color:#34d399; }
-.availability-page .technical-key { color:#00d1ff; }
-.availability-page .availability-grid strong { color:#f8fafc; }
+.availability-page .technical-key { color:var(--cyan); }
+.availability-page .availability-grid strong { color:var(--text); }
 /* Interactive availability chart; styles are scoped to this component. */
 .availability-timeseries .availability-chart-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
 .availability-timeseries .availability-chart-heading h2 { margin:0; }
 .availability-timeseries .availability-chart-heading label { display:flex; align-items:center; gap:10px; color:#b6c7da; font-size:13px; }
 .availability-timeseries select { font:inherit; color:#edf5ff; background:#0b1e2d; border:1px solid #294258; border-radius:7px; padding:10px 12px; }
 .availability-timeseries .availability-chart-legend { display:flex; gap:22px; margin:18px 0; }
-.availability-timeseries .healthy-key { color:#14B8A6; }
-.availability-timeseries .technical-key { color:#00D1FF; }
+.availability-timeseries .healthy-key { color:var(--teal); }
+.availability-timeseries .technical-key { color:var(--cyan); }
 .availability-timeseries #availability-chart { position:relative; min-height:300px; }
 .availability-timeseries #availability-chart svg { width:100%; height:auto; display:block; touch-action:pan-y; }
 .availability-timeseries .availability-gridline { stroke:#294252; stroke-opacity:.55; stroke-width:1; }
@@ -950,23 +945,6 @@ main.settings-page { max-width: none; margin: 0; }
 
 /* Shared application design tokens and navigation. */
 :root {
-  --app-bg: #071521;
-  --sidebar-bg: #081723;
-  --panel-bg: #0d202e;
-  --surface-bg: #132b3c;
-  --selected-bg: #183e64;
-  --hover-bg: #142f43;
-  --primary: #2383ef;
-  --primary-hover: #4099fb;
-  --success: #35d28b;
-  --success-bg: #0d352c;
-  --warning: #efbb4f;
-  --warning-bg: #352d1c;
-  --error: #f4777d;
-  --error-bg: #39232d;
-  --disabled-text: #74889a;
-  --border-strong: #355569;
-  --focus: #91c7ff;
   --sidebar-width: 240px;
   --sidebar-compact-width: 72px;
 }
@@ -1056,3 +1034,6 @@ body:has([aria-modal="true"]) {
   scrollbar-gutter:stable;
 }
 dialog[open], [aria-modal="true"] { overscroll-behavior:contain; }
+
+@keyframes system-spin { to { transform: rotate(360deg); } }
+@keyframes system-pulse { to { opacity: .35; } }

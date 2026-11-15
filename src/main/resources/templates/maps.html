@@ -4,10 +4,10 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="stylesheet" href="/style.css?v=20261109-2"><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <link rel="stylesheet" href="/form-dialog.css?v=1"><link rel="stylesheet" href="/maps.css?v=20261115-round-indicators"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/maps.js?v=20261115-pop-availability" defer></script>
-  <link rel="stylesheet" href="/query-filters.css?v=20261112-4">
-<link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
+  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261109-2">
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/maps.css?v=20261115-round-indicators"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/maps.js?v=20261115-pop-availability" defer></script>
+  <th:block th:replace="~{design-system :: filters}"></th:block>
+<th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('maps')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -24,10 +24,10 @@
     </section>
     <section class="card availability-host-section" aria-labelledby="library-title">
       <div class="hosts-toolbar"><h2 id="library-title">Mapas cadastrados</h2></div>
-      <div class="table-scroll" role="region" aria-label="Mapas cadastrados" tabindex="0"><table class="hosts-table">
+      <div th:replace="~{design-system :: dataTable('Mapas cadastrados', ~{maps :: listSections})}"><th:block th:fragment="listSections">
         <thead><tr><th>Nome do mapa</th><th>Elementos</th><th>Conexões</th><th>Atualizado em</th><th>Status</th><th>Ações</th></tr></thead>
         <tbody id="maps"></tbody>
-      </table></div>
+      </th:block></div>
       <p id="maps-empty" hidden>Nenhum mapa encontrado.</p>
       <nav class="pagination" aria-label="Paginação dos mapas"><span id="map-count" role="status"></span>
         <button id="previous" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-left"></use></svg>Anterior</button><button id="next" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>Próxima</button>
@@ -56,7 +56,7 @@
           <select id="map-view" hidden aria-hidden="true" tabindex="-1"><option value="incidents">Incidentes</option><option value="latency">Latência</option><option value="loss">Perda de pacotes</option></select>
         </div>
         <label id="map-period-field" class="query-filter-field" hidden><span class="query-filter-label"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Período</span>
-          <select id="map-period"><option th:each="period : ${T(br.com.scriptping.availability.AvailabilityPeriod).OPTIONS}" th:value="${period.minutes()}" th:text="${period.label()}" th:selected="${period.minutes() == 1440}"></option></select>
+          <select th:replace="~{design-system :: period('map-period', null, 1440)}"></select>
         </label>
         <div id="map-state-legend" class="map-state-legend" aria-label="Legenda dos estados"></div>
         <div id="map-updated" class="map-updated">
@@ -102,7 +102,7 @@
   </section>
   </section>
   <div id="page-status"><p id="status" role="status">Carregando mapas…</p></div>
-  <dialog id="create-dialog" class="settings-panel form-dialog" aria-labelledby="create-title" aria-describedby="create-description">
+  <dialog th:replace="~{design-system :: formDialog('create-dialog', 'create-title', 'create-description', ~{maps :: create-dialog-content})}"><th:block th:fragment="create-dialog-content">
     <form id="create-form" class="connection-form" novalidate>
       <div><h2 id="create-title">Novo mapa</h2>
         <p id="create-description">Dê um nome ao mapa para começar a organizar sua topologia.</p>
@@ -113,8 +113,8 @@
       <div class="settings-actions"><button type="button" id="cancel-create" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button>
         <button type="submit" id="submit-create" class="system-button system-button-primary"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#plus"></use></svg><span id="submit-create-label">Criar mapa</span></button></div>
     </form>
-  </dialog>
-  <dialog id="map-dialog" class="settings-panel form-dialog" aria-labelledby="map-dialog-title"><form class="connection-form" id="map-form">
+  </th:block></dialog>
+  <dialog th:replace="~{design-system :: formDialog('map-dialog', 'map-dialog-title', null, ~{maps :: map-dialog-content})}"><th:block th:fragment="map-dialog-content"><form class="connection-form" id="map-form">
     <h2 id="map-dialog-title">Propriedades do mapa</h2>
     <label>Nome do mapa<input id="name" required maxlength="120"></label>
     <label>Severidade mínima dos incidentes<select id="minimum-severity">
@@ -133,8 +133,8 @@
     </select></label>
     <div class="settings-actions"><button type="button" id="close-map" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button type="submit" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Aplicar alterações</span></button></div>
     <p id="map-error" role="alert"></p>
-  </form></dialog>
-  <dialog id="element-dialog" class="settings-panel form-dialog" aria-labelledby="element-title"><form class="connection-form" id="element-form">
+  </form></th:block></dialog>
+  <dialog th:replace="~{design-system :: formDialog('element-dialog', 'element-title', null, ~{maps :: element-dialog-content})}"><th:block th:fragment="element-dialog-content"><form class="connection-form" id="element-form">
     <div class="element-heading">
       <h2 id="element-title">Elemento do mapa</h2>
       <button type="button" id="close-element" aria-label="Fechar" title="Fechar" class="system-button system-button-icon-only"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg></button>
@@ -161,5 +161,5 @@
     </section>
     <div class="settings-actions"><button type="button" id="remove" class="system-button"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>Excluir</button>
       <button type="button" id="cancel-element" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button type="submit" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Salvar</span></button></div>
-  </form></dialog>
+  </form></th:block></dialog>
 </main></div></body></html>

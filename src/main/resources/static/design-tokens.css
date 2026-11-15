@@ -1,0 +1,27 @@
+:root {
+  --cyan: #00d1ff;
+  --navy: #0b1f3f;
+  --teal: #14b8a6;
+  --slate: #475569;
+  --text: #f8fafc;
+  --muted: #a5b4c5;
+  --border: #1c2d3e;
+  --app-bg: #071521;
+  --sidebar-bg: #081723;
+  --panel-bg: #0d202e;
+  --surface-bg: #132b3c;
+  --selected-bg: #183e64;
+  --hover-bg: #142f43;
+  --primary: #2383ef;
+  --primary-hover: #4099fb;
+  --success: #35d28b;
+  --success-bg: #0d352c;
+  --warning: #efbb4f;
+  --warning-bg: #352d1c;
+  --error: #f4777d;
+  --error-bg: #39232d;
+  --disabled-text: #74889a;
+  --border-strong: #355569;
+  --focus: #91c7ff;
+  --font-ui: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}

@@ -49,9 +49,8 @@
 #incident-page-status { font-size:12px; color:#b0c1d2; }
 .incident-empty { text-align:center; padding:40px 16px; color:#a6bdcf; }
 .incident-empty svg { width:30px; height:30px; color:#31cda8; }
-.incident-skeleton span { display:block; height:16px; width:85%; background:#244356; border-radius:4px; animation:incident-pulse 1s infinite alternate; }
+.incident-skeleton span { display:block; height:16px; width:85%; background:#244356; border-radius:4px; animation:system-pulse 1s infinite alternate; }
 .incident-skeleton td:first-child::before { display:none; }
-@keyframes incident-pulse { to { opacity:.35; } }
 @media (prefers-reduced-motion:reduce) { .incidents-page * { animation:none !important; transition:none !important; } }
 @media (max-width:700px) { .incidents-filters form { grid-template-columns:minmax(0,1fr); } .incidents-heading > div { flex-wrap:wrap; gap:9px; } .incidents-heading h2 { font-size:18px; } }
 .incidents-page .incidents-table { min-width:960px; }

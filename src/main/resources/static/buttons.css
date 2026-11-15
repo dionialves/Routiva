@@ -3,9 +3,9 @@
 :root {
   --button-height:36px;
   --button-radius:6px;
-  --button-border:#355569;
-  --button-background:#132b3c;
-  --button-primary:#2383ef;
+  --button-border:var(--border-strong);
+  --button-background:var(--surface-bg);
+  --button-primary:var(--primary);
 }
 button.system-button {
   display:inline-flex !important;
@@ -22,8 +22,8 @@ button.system-button {
   border:1px solid var(--button-border) !important;
   border-radius:var(--button-radius) !important;
   background:var(--button-background) !important;
-  color:#f8fafc !important;
-  font:600 12px/20px Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  color:var(--text) !important;
+  font:600 12px/20px var(--font-ui) !important;
   letter-spacing:normal;
   white-space:nowrap;
   cursor:pointer;
@@ -72,7 +72,6 @@ button.system-button-icon-only {
 
 button.system-button-label::after { content:attr(aria-label); }
 button.system-button > [data-ap-icon] svg { width:16px; height:16px; }
-.chart-actions { flex-wrap:wrap; }
 
 /* Keep the shared clear action at the trailing edge of each filter bar. */
 .query-filter-row > button.query-clear-filters,

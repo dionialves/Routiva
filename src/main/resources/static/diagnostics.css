@@ -43,9 +43,6 @@
 .diagnostic-charts .chart-card { min-width:0; }
 .diagnostic-charts h2 { margin:0 0 10px; }
 #latency-chart,#loss-chart { position:relative; min-height:230px; }
-.diagnostic-chart-tooltip { position:absolute; top:8px; max-width:min(280px,calc(100% - 16px)); padding:10px 12px; border:1px solid #315066; border-radius:8px; background:#102a3df5; color:#f1f5f9; font-size:12px; line-height:1.6; pointer-events:none; z-index:2; box-shadow:0 4px 12px #0003; }
-.diagnostic-chart-empty { display:flex; justify-content:center; align-items:center; gap:10px; min-height:210px; margin:0; color:#94a3b8; font-size:13px; }
-.diagnostic-chart-empty svg { width:22px; height:22px; }
 .diagnostics-dashboard .hosts-toolbar { gap:14px; margin-bottom:10px; }
 .host-summary { display:flex; gap:16px; flex-wrap:wrap; align-items:center; color:#b0c1d2; font-size:12px; }
 .host-summary > span { display:flex; align-items:center; gap:7px; }
@@ -139,12 +136,10 @@
 .availability-page .diagnostic-groups-table thead th:nth-child(7) { text-align:center; }
 .diagnostic-groups-table tbody th a { display:inline-block; }
 .diagnostic-groups-table .diagnostic-badge { border-radius:5px; min-width:28px; padding:3px 7px; }
-.group-skeleton span { display:block; height:12px; min-width:40px; background:#1d3b4e; border-radius:4px; animation:group-pulse 1.2s ease-in-out infinite alternate; }
-#groups-refresh.refreshing svg { animation:group-spin 1s linear infinite; }
+.group-skeleton span { display:block; height:12px; min-width:40px; background:#1d3b4e; border-radius:4px; animation:system-pulse 1.2s ease-in-out infinite alternate; }
+#groups-refresh.refreshing svg { animation:system-spin 1s linear infinite; }
 #diagnostic-groups .pagination { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; font-size:12px; }
 #diagnostic-groups .pagination button { font-size:12px; }
-@keyframes group-pulse { to { opacity:.35; } }
-@keyframes group-spin { to { transform:rotate(360deg); } }
 @media(prefers-reduced-motion:reduce) { .group-skeleton span,#groups-refresh.refreshing svg { animation:none; } }
 @media(max-width:650px) { .group-filters .host-search { flex-basis:100%; } .group-filters .group-period { flex:1; } #groups-page-status { text-align:center; } }
 .availability-page .diagnostic-groups-table thead th:nth-child(n) { width:auto; }

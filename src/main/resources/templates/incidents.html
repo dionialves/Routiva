@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 <head>
-  <th:block th:replace="~{shell :: security}"></th:block><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Incidentes • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/multi-picker.css?v=20261112-standard"><link rel="stylesheet" href="/incidents.css?v=20261113-severity-picker"><link rel="stylesheet" href="/host-menu.css?v=20261113-link-style"><script src="/host-menu.js?v=20261113" defer></script><script src="/shell.js" defer></script><script src="/multi-picker.js?v=20261112-name-filter" defer></script><script src="/incidents.js?v=20261113-severity-picker" defer></script><link rel="stylesheet" href="/query-filters.css?v=20261112-1"><link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/form-dialog.css"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
+  <th:block th:replace="~{shell :: security}"></th:block><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Incidentes • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css"><th:block th:replace="~{design-system :: picker}"></th:block><link rel="stylesheet" href="/incidents.css?v=20261113-severity-picker"><link rel="stylesheet" href="/host-menu.css?v=20261113-link-style"><script src="/host-menu.js?v=20261113" defer></script><script src="/shell.js" defer></script><script src="/multi-picker.js?v=20261112-name-filter" defer></script><script src="/incidents.js?v=20261113-severity-picker" defer></script><th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: dialogStyles}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard"><aside th:replace="~{shell :: sidebar('incidents')}"></aside><div class="app-workspace"><header th:replace="~{shell :: topbar}"></header><main class="page-content availability-page incidents-page" th:attr="data-time-zone=${timeZone},data-can-update=${isAdmin == true}">
 <div class="availability-heading"><div><p class="eyebrow">ZABBIX</p><h1>Incidentes</h1><p>Incidentes ativos dos hosts monitorados, do mais recente ao mais antigo.</p></div></div>
 <section class="card incidents-filters query-filter-bar" aria-label="Filtros de incidentes"><form class="query-filter-row" id="incident-filters" method="get" action="/incidentes">
@@ -18,7 +18,7 @@
 <p id="incident-range" class="note" role="status">Carregando incidentes…</p>
 </section><noscript>Ative o JavaScript para consultar os incidentes.</noscript>
 </main></div>
-<dialog id="incident-dialog" class="settings-panel form-dialog" aria-labelledby="incident-dialog-title">
+<dialog th:replace="~{design-system :: formDialog('incident-dialog', 'incident-dialog-title', null, ~{incidents :: incident-dialog-content})}"><th:block th:fragment="incident-dialog-content">
   <form id="incident-update-form" class="connection-form">
     <header class="incident-modal-header"><h2 id="incident-dialog-title">Atualizar incidente</h2><button id="incident-dialog-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar modal"><svg th:replace="~{shell :: icon('close')}"></svg></button></header>
     <section class="incident-modal-summary" aria-label="Identificação do incidente">
@@ -49,7 +49,7 @@
     </div>
     <footer class="incident-modal-footer"><div class="incident-footer-note"><svg th:replace="~{shell :: icon('info')}"></svg><div><p>A atualização será aplicada a este incidente e registrada no histórico do Zabbix.</p></div></div><p id="incident-update-error" role="alert"></p><div class="settings-actions"><button id="incident-dialog-cancel" type="button" class="system-button">Cancelar</button><button id="incident-update-save" type="submit" class="system-button system-button-primary" disabled><svg th:replace="~{shell :: icon('check')}"></svg><span id="incident-update-save-label">Atualizar incidente</span></button></div></footer>
   </form>
-</dialog>
+</th:block></dialog>
 <div id="incident-comments-host"><section id="incident-comments-tooltip" class="incident-comments-tooltip" popover="manual" role="tooltip" aria-label="Comentários do incidente" hidden>
   <p id="incident-comments-state" role="status" aria-live="polite"></p>
   <div id="incident-comments-table" class="incident-comments-scroll" tabindex="0" role="region" aria-label="Comentários registrados" hidden>

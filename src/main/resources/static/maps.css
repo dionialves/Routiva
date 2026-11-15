@@ -62,8 +62,7 @@
 #map-tools button:hover { border-color:var(--cyan); }
 #map-tools svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; }
 #refresh-map[aria-busy=true] { cursor:progress; }
-#refresh-map[aria-busy=true] svg { animation:map-refresh-spin 1s linear infinite; }
-@keyframes map-refresh-spin { to { transform:rotate(360deg); } }
+#refresh-map[aria-busy=true] svg { animation:system-spin 1s linear infinite; }
 #workspace.map-expanded .page-heading { display:none; }
 body:has(#workspace.map-expanded) { overflow:hidden; }
 #workspace.map-expanded .map-stage { position:fixed; inset:0; z-index:100; }
@@ -223,8 +222,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .pop-summary .pop-empty small { margin-top:3px; }
 .pop-summary .pop-no-hosts { color:var(--muted); font-size:11px; margin:8px 0 0; }
 .pop-summary .pop-loading { display:flex; align-items:center; justify-content:center; gap:8px; min-height:64px; color:var(--muted); font-size:12px; }
-.pop-summary .pop-spinner { width:14px; height:14px; border:1.7px solid var(--border); border-top-color:var(--muted); border-radius:50%; animation:pop-spin 1s linear infinite; }
-@keyframes pop-spin { to { transform:rotate(360deg); } }
+.pop-summary .pop-spinner { width:14px; height:14px; border:1.7px solid var(--border); border-top-color:var(--muted); border-radius:50%; animation:system-spin 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .pop-summary .pop-spinner { animation:none; } }
 
 #map-dialog .connection-form > label.map-checkbox {
@@ -282,7 +280,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .map-updated > div { display:grid; gap:3px; }
 .map-updated time { font-size:12px; font-weight:600; white-space:nowrap; }
 .map-updated small { color:#fced4e; }
-.map-updated[aria-busy=true] > svg { animation:map-refresh-spin 1s linear infinite; }
+.map-updated[aria-busy=true] > svg { animation:system-spin 1s linear infinite; }
 #workspace.viewing .map-surface { padding:16px; background:linear-gradient(115deg,#0c2434,#091e2d); border:1px solid #204b63; border-radius:12px; min-width:0; }
 #workspace .map-surface-heading { padding:0; max-width:none; margin:0 0 16px; border:0; flex-direction:row; display:flex; align-items:center; gap:18px; margin-bottom:16px; flex-wrap:wrap; }
 .map-surface-heading h2 { display:flex; align-items:center; gap:12px; flex:1 1 auto; margin:0; font-size:20px; font-weight:600; }

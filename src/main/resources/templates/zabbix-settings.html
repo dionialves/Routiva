@@ -4,9 +4,9 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Integração Zabbix • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="stylesheet" href="/style.css?v=20261109-2"><link rel="stylesheet" href="/zabbix-settings.css?v=20261112-heading-alignment">
+  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/zabbix-settings.css?v=20261112-heading-alignment">
   <script src="/shell.js?v=20261109-2" defer></script><script src="/zabbix-import-results.js" defer></script><script src="/zabbix-settings.js" defer></script>
-<link rel="stylesheet" href="/page-layout.css?v=20261112-1"><link rel="stylesheet" href="/buttons.css?v=20261112-zabbix-standard"></head>
+<th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body>
 <aside th:replace="~{shell :: sidebar('settings')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -49,7 +49,7 @@
         </div>
         <label class="zabbix-select-all"><input type="checkbox" id="group-all">Selecionar todos os hosts do grupo</label>
         <div class="zabbix-scroll host-table-scroll"><table class="integration-table host-selection-table"><thead><tr><th scope="col"><span class="visually-hidden">Seleção</span></th><th scope="col">Host</th><th scope="col">IP</th><th scope="col">Situação</th></tr></thead><tbody id="host-list"></tbody></table></div>
-        <div class="zabbix-pagination"><button id="previous-page" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="page-label"></span><button id="next-page" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>Próxima</button></div>
+        <div class="zabbix-pagination"><button th:replace="~{design-system :: action('previous-page', 'chevron-left', 'Anterior')}"></button><span id="page-label"></span><button th:replace="~{design-system :: action('next-page', 'chevron-right', 'Próxima')}"></button></div>
       </section>
     </div>
     <section id="import-result" class="import-results" aria-labelledby="import-results-title" hidden>
@@ -63,7 +63,7 @@
       <div id="import-summary" class="import-summary"></div>
       <div id="import-filters" class="import-filters" role="group" aria-label="Filtrar resultados"></div>
       <div class="import-table-scroll"><table class="integration-table import-table"><thead><tr><th scope="col" id="import-sort-heading" aria-sort="ascending"><button type="button" id="import-sort">Host/ID<svg th:replace="~{shell :: icon('sort')}"></svg></button></th><th scope="col">Categoria</th><th scope="col">Mensagem</th><th scope="col">Status</th></tr></thead><tbody id="import-log"></tbody></table></div>
-      <div class="zabbix-pagination"><button id="import-previous" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="import-page"></span><button id="import-next" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>Próxima</button></div>
+      <div class="zabbix-pagination"><button th:replace="~{design-system :: action('import-previous', 'chevron-left', 'Anterior')}"></button><span id="import-page"></span><button th:replace="~{design-system :: action('import-next', 'chevron-right', 'Próxima')}"></button></div>
     </section>
     <p class="selection-policy">Desmarcar interrompe futuras sincronizações e preserva os dados históricos.</p>
     <div class="zabbix-actions"><div class="selection-action-summary"><svg th:replace="~{shell :: icon('monitor')}"></svg><div><strong id="selection-count" role="status"></strong><small id="selection-changes"></small></div></div><button id="cancel-selection" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar alterações</button><button id="save-selection" type="button" class="system-button system-button-primary button-primary"><svg th:replace="~{shell :: icon('download')}"></svg><span id="save-selection-text">Salvar e importar</span></button></div>
