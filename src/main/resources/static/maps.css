@@ -306,6 +306,37 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .map-info-footer > svg { width:16px; height:16px; flex:0 0 16px; }
 .map-info-footer #status { padding:0; margin:0; color:inherit; font:inherit; }
 #workspace:not(.viewing) .map-surface-heading, #workspace:not(.viewing) .map-info-footer { display:none; }
+/* Keep the live summary inside the expanded surface, including browser fullscreen. */
+#workspace.viewing.map-expanded .map-stage,
+#workspace.viewing .map-stage:fullscreen {
+  display:grid; grid-template-rows:auto minmax(0,1fr); background:#091e2d; border-radius:0;
+}
+#workspace.viewing.map-expanded .map-stage .map-surface-heading,
+#workspace.viewing .map-stage:fullscreen .map-surface-heading {
+  gap:12px; margin:0; padding:8px 16px; border-bottom:1px solid #204b63;
+}
+#workspace.viewing.map-expanded .map-surface-heading h2,
+#workspace.viewing .map-stage:fullscreen .map-surface-heading h2 { font-size:16px; gap:8px; }
+#workspace.viewing.map-expanded .map-surface-heading h2 svg,
+#workspace.viewing .map-stage:fullscreen .map-surface-heading h2 svg { width:22px; height:22px; }
+#workspace.viewing.map-expanded .map-node-indicators,
+#workspace.viewing .map-stage:fullscreen .map-node-indicators { flex:0 1 auto; gap:8px; }
+#workspace.viewing.map-expanded .map-node-indicators > div,
+#workspace.viewing .map-stage:fullscreen .map-node-indicators > div {
+  min-width:0; min-height:36px; padding:6px 10px; display:flex; gap:8px;
+}
+#workspace.viewing.map-expanded .map-node-indicators dd,
+#workspace.viewing .map-stage:fullscreen .map-node-indicators dd { font-size:15px; }
+#workspace.viewing.map-expanded .map-stage .map-viewport,
+#workspace.viewing .map-stage:fullscreen .map-viewport {
+  grid-area:2 / 1; position:relative; inset:auto; height:100%; min-height:0; max-height:none;
+  border:0; border-radius:0;
+}
+#workspace.viewing.map-expanded #map-tools,
+#workspace.viewing .map-stage:fullscreen #map-tools {
+  grid-area:2 / 1; position:relative; top:auto; right:auto;
+  align-self:start; justify-self:end; margin:12px; z-index:1;
+}
 @media(max-width:1100px) {
   .map-node-indicators { flex:1 1 100%; }
   .map-active-view { margin-left:auto; }

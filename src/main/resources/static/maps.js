@@ -346,8 +346,17 @@ new ResizeObserver(() => {
     if (followingFit) fitToView(); else resizeCanvas();
   }
 }).observe(viewport);
+function syncMapSummary() {
+  const stage = $('map-stage');
+  const expanded = $('workspace').classList.contains('map-expanded') ||
+    document.fullscreenElement === stage;
+  const heading = $('map-surface-heading');
+  if (expanded) stage.prepend(heading);
+  else stage.before(heading);
+}
 function setMapExpanded(expanded) {
   $('workspace').classList.toggle('map-expanded', expanded);
+  syncMapSummary();
   const button = $('maximize-map');
   button.setAttribute('aria-pressed', String(expanded));
   button.title = expanded ? 'Restaurar tamanho do mapa' : 'Maximizar mapa';
@@ -365,6 +374,7 @@ $('fullscreen-map').onclick = async () => {
   } catch { window.notify('Tela cheia indisponível neste navegador.', 'error'); }
 };
 document.addEventListener('fullscreenchange', () => {
+  syncMapSummary();
   const mapLabel = document.fullscreenElement === $('map-stage') ? 'Sair da tela cheia' : 'Exibir em tela cheia';
   $('fullscreen-map').title = mapLabel;
   $('fullscreen-map').setAttribute('aria-label', mapLabel);
