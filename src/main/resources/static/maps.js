@@ -23,6 +23,11 @@ function metricSummary(node) {
   const label = mapView === 'latency' ? 'Latência média' : 'Perda de pacote';
   const formatted = value == null ? 'Sem dados' : value.toLocaleString('pt-BR', {maximumFractionDigits:2}) + (mapView === 'latency' ? ' ms' : '%');
   return {view:mapView, current:mapView === 'loss' ? metric?.lossSummary : (typeof latencySummaries === 'undefined' ? null : latencySummaries.get(node.hostId ? 'host:' + node.hostId : 'group:' + node.groupId)), label, formatted, state:metricLabels[state] || 'Sem dados', color:metricColors[state] || colors[0],
+    detailsUrl: '/disponibilidade?' + new URLSearchParams({
+      minutes: $('map-period').value,
+      groupId: node.groupId || (typeof inventory === 'undefined' ? [] :
+        inventory.find(host => host.id === node.hostId)?.groups || []).map(group => group.id).join(',') || '__none__'
+    }),
     period: $('map-period').selectedOptions[0]?.textContent || '',
     range: metricRange ? new Date(metricRange.from).toLocaleString('pt-BR') + ' — ' + new Date(metricRange.to).toLocaleString('pt-BR') : ''};
 }
@@ -352,8 +357,14 @@ function syncMapSummary() {
   const expanded = $('workspace').classList.contains('map-expanded') ||
     document.fullscreenElement === stage;
   const heading = $('map-surface-heading');
-  if (expanded) stage.prepend(heading);
-  else stage.before(heading);
+  const controls = $('map-query-controls');
+  if (expanded) {
+    stage.prepend(heading);
+    $('map-surface-title').after(controls);
+  } else {
+    stage.before(heading);
+    $('editor').before(controls);
+  }
 }
 function setMapExpanded(expanded) {
   $('workspace').classList.toggle('map-expanded', expanded);

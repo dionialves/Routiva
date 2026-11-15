@@ -36,7 +36,7 @@ public final class NetworkMapModels {
     }
     public record Saved(String id, long revision, Layout layout, Long updatedAt) {}
 
-    public record HostOption(String id, String name, String ip) {}
+    public record HostOption(String id, String name, String ip, List<Host.Group> groups) {}
     public record Targets(Set<String> groups, Set<String> hosts) {}
     public record HostState(String id, String name, List<Host.Group> groups, List<ZabbixClient.Incident> incidents, String monitoring) {
         public HostState(String id, String name, List<Host.Group> groups, List<ZabbixClient.Incident> incidents) {

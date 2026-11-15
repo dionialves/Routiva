@@ -47,7 +47,7 @@ public class NetworkMapService {
     }
 
     public List<HostOption> hosts() {
-        return inventory.hosts().stream().map(h -> new HostOption(h.id(), h.name(), h.ip()))
+        return inventory.hosts().stream().map(h -> new HostOption(h.id(), h.name(), h.ip(), h.groups()))
             .sorted(Comparator.comparing(HostOption::name)).toList();
     }
 

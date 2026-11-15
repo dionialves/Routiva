@@ -27,7 +27,8 @@ class MapInventoryTests {
             new Host("3", "Outro", "", List.of())));
         var incident = new ZabbixClient.Incident("Temperatura", 4);
         when(zabbix.activeIncidents(List.of("1", "2"))).thenReturn(Map.of("1", List.of(), "2", List.of(incident)));
-        assertThat(controller.hosts()).contains(new NetworkMapModels.HostOption("2", "Router", "10.0.0.2"));
+        assertThat(controller.hosts()).contains(new NetworkMapModels.HostOption("2", "Router", "10.0.0.2", List.of()));
+        assertThat(controller.hosts().stream().filter(host -> host.id().equals("1")).findFirst().orElseThrow().groups()).containsExactly(group);
         var result = controller.states(new NetworkMapModels.Targets(Set.of("g"), Set.of("1", "2", "unknown")));
         assertThat(result).extracting(NetworkMapModels.HostState::id).containsExactly("1", "2");
         assertThat(result.getLast().incidents()).containsExactly(incident);

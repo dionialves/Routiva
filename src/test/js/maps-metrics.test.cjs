@@ -7,13 +7,15 @@ const source = fs.readFileSync(path.join(__dirname, '../../main/resources/static
 
 test('metric summary uses distinct host and group values, units and selected metric classification', () => {
   const context = vm.createContext({
-    colors: ['gray'],
-    $: () => ({selectedOptions: [{textContent:'Última 1 hora'}]}),
+    colors: ['gray'], URLSearchParams,
+    inventory: [{id:'a', groups:[{id:'g1'}, {id:'g2'}]}],
+    $: () => ({value:'60', selectedOptions: [{textContent:'Última 1 hora'}]}),
   });
   vm.runInContext(source.slice(source.indexOf('let mapView ='), source.indexOf('function changeMapQuery(')), context);
   vm.runInContext(`mapView = 'latency'; metricStates.set('host:a', {latency:21, latencyState:'CRITICO'});
     metricStates.set('group:a', {latency:10, latencyState:'NORMAL', loss:0.5, lossState:'ATENCAO'});`, context);
   let result = vm.runInContext("metricSummary({hostId:'a'})", context);
+  assert.equal(result.detailsUrl, '/disponibilidade?minutes=60&groupId=g1%2Cg2');
   assert.equal(result.color, '#ff0000');
   assert.equal(result.formatted, '21 ms');
   result = vm.runInContext("metricSummary({groupId:'a'})", context);
@@ -22,6 +24,7 @@ test('metric summary uses distinct host and group values, units and selected met
   result = vm.runInContext("mapView = 'loss'; metricSummary({groupId:'a'})", context);
   assert.equal(result.color, '#fced4e');
   assert.equal(result.formatted, '0,5%');
+  assert.equal(result.detailsUrl, '/disponibilidade?minutes=60&groupId=a');
   assert.equal(vm.runInContext("metricSummary({hostId:'missing'}).state", context), 'Sem dados');
   assert.equal(vm.runInContext("mapView = 'incidents'; metricSummary({hostId:'a'})", context), null);
 });

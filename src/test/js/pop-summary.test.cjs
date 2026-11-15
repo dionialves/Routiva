@@ -252,7 +252,7 @@ test('incident links open only their encoded event in a new tab for hosts and gr
 test('monitoring cards reuse the summary layout, format readings once and preserve details navigation', () => {
   for (const view of ['latency', 'loss']) {
     const preview = renderPreview([]);
-    preview.subject.metric = () => ({view, period:'Última 1 hora', current:{
+    preview.subject.metric = () => ({view, detailsUrl:'/disponibilidade?minutes=60&groupId=g', period:'Última 1 hora', current:{
       average:1.8, maximum:8.5, aboveLimit:1, state:'CRITICO', updatedAt:Date.now(),
       hosts:[{name:'AP <safe>', latency:8.5, state:'CRITICO'},
         {name:'Sem leitura', latency:null, state:'SEM_DADOS'}]
@@ -266,7 +266,7 @@ test('monitoring cards reuse the summary layout, format readings once and preser
     assert.equal(list.children[0].querySelector('.pop-reading').textContent, view === 'loss' ? '8,5%' : '8,5 ms');
     assert.equal(list.children[0].querySelector('small').textContent, view === 'loss' ? 'Perda de pacotes' : 'Latência atual');
     assert.equal(list.children[1].querySelector('.pop-reading').textContent, 'Sem dados');
-    assert.equal(preview.box.querySelector('.pop-details').attributes.href, '/diagnostico/grupos/g');
+    assert.equal(preview.box.querySelector('.pop-details').attributes.href, '/disponibilidade?minutes=60&groupId=g');
     preview.subject.metric = () => ({view});
     preview.subject.render();
     assert.ok(preview.box.querySelector('.pop-metrics').textContent.includes('Sem dados'));

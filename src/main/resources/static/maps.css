@@ -295,7 +295,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .map-node-indicators dt { grid-column:2; font-size:11px; color:#c6d6e4; white-space:nowrap; }
 .map-node-indicators dd { grid-column:2; margin:0; color:#f1f5f9; font-size:17px; line-height:20px; font-weight:600; }
 .map-node-indicators svg, .map-node-indicators i { grid-column:1; grid-row:1 / 3; width:20px; height:20px; color:#d5e2ed; }
-.map-node-indicators i { width:13px; height:13px; justify-self:center; }
+.map-node-indicators i { width:13px; height:13px; flex:0 0 13px; aspect-ratio:1; justify-self:center; }
 .metric-normal { background:#58bd83; }
 .metric-attention { background:#fced4e; }
 .metric-unknown { background:#687486; }
@@ -361,3 +361,35 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 }
 
 .pop-summary .pop-reading { align-self:center; color:var(--muted); font-size:11px; white-space:nowrap; }
+
+/* Reuse the live query controls in the expanded header, preserving their state. */
+#workspace.viewing .map-stage > .map-surface-heading h2 { flex:0 0 auto; }
+#workspace.viewing .map-stage > .map-surface-heading #map-query-controls {
+  flex:1 1 620px; width:auto; margin:0; padding-left:16px;
+  border-left:1px solid #24516a;
+}
+#workspace.viewing .map-stage > .map-surface-heading #map-query-controls .query-filter-bar {
+  min-height:0; padding:0; margin:0; border:0; border-radius:0; background:transparent;
+}
+#workspace.viewing .map-stage > .map-surface-heading #map-query-controls .query-filter-row {
+  justify-content:flex-start; gap:12px 22px;
+}
+#workspace.viewing .map-stage > .map-surface-heading #map-query-controls .query-filter-field:not([hidden]) {
+  display:flex; flex-direction:row; align-items:center; gap:10px;
+}
+#workspace.viewing .map-stage > .map-surface-heading #map-query-controls .query-filter-label {
+  flex:0 0 auto; white-space:nowrap;
+}
+#workspace.viewing .map-stage > .map-surface-heading #map-query-controls .query-filter-field::before {
+  top:50%; height:32px; transform:translateY(-50%);
+}
+#workspace.viewing .map-stage > .map-surface-heading :is(.map-state-legend, .map-updated) {
+  display:none;
+}
+#workspace.viewing .map-stage > .map-surface-heading .map-active-view { display:none; }
+#workspace.viewing .map-stage > .map-surface-heading .map-node-indicators { margin-left:auto; }
+@media(max-width:650px) {
+  #workspace.viewing .map-stage > .map-surface-heading #map-query-controls {
+    flex-basis:100%; padding:12px 0 0; border-left:0; border-top:1px solid #24516a;
+  }
+}

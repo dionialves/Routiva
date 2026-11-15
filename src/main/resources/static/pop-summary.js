@@ -340,8 +340,7 @@ class PopSummary {
     const updated = el('span', undefined, 'pop-updated');
     updated.append(popIcon('refresh', 12), el('span', undefined, 'pop-freshness'));
     const details = el('a', this.node.hostId ? 'Ver detalhes do host ↗' : 'Ver detalhes do POP ↗', 'pop-details');
-    details.setAttribute('href', this.node.hostId ? `/ap/${encodeURIComponent(this.node.hostId)}` :
-      `/diagnostico/grupos/${encodeURIComponent(this.node.groupId)}`);
+    details.setAttribute('href', metric.detailsUrl);
     details.setAttribute('target', '_blank');
     details.setAttribute('rel', 'noopener noreferrer');
     footer.append(updated, details);
