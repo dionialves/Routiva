@@ -79,28 +79,49 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 }
 .settings-panel button.map-primary:hover:not(:disabled) { filter:brightness(1.08); }
 .settings-panel button.map-primary[aria-busy=true] { cursor:progress; }
-#editor .editor-toolbar, #editor-footer {
-  padding:12px; border:1px solid var(--border); border-radius:8px; background:#102333;
+#editor .editor-toolbar {
+  display:flex; flex-wrap:wrap; padding:14px 16px; border:1px solid #204b63;
+  border-radius:12px; background:linear-gradient(115deg,#0c2434,#091e2d);
 }
-#editor .editor-toolbar button { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; }
-#editor .editor-toolbar button[aria-pressed=true] { outline:1px solid var(--cyan); color:var(--cyan); }
-#editor .editor-toolbar .interaction-tool {
-  width:40px; height:40px; padding:0; flex:none; background:#102b40; border:1px solid #294258;
+#editor .editor-toolbar button { flex:0 0 auto; }
+#editor .editor-toolbar button[aria-pressed=true] { outline:none; color:var(--text); }
+#editor .editor-toolbar button:focus-visible { outline:2px solid var(--cyan); outline-offset:3px; }
+#delete-item { margin-left:12px; position:relative; }
+#delete-item::before {
+  content:''; position:absolute; left:-13px; height:28px; border-left:1px solid #294b60;
 }
-#editor .interaction-tool svg { display:block; width:20px; height:20px; }
-#editor .editor-toolbar .interaction-tool[aria-pressed=true] {
-  outline:none; border-color:var(--cyan); background:#103348; color:var(--text);
+.editor-guidance { display:flex; align-items:flex-start; gap:10px; margin:12px 4px 16px; color:#bdcbd9; }
+#hint { color:inherit; margin:0; font-size:12px; line-height:20px; }
+#workspace:not(.viewing) { margin:0; padding:0; border:0; background:transparent; min-width:0; }
+#workspace:not(.viewing) > .page-heading { gap:20px; margin-bottom:24px; }
+#workspace:not(.viewing) #map-title { font-size:28px; font-weight:700; line-height:1.2; }
+#workspace:not(.viewing) #map-description { margin:0; font-size:14px; color:#bdcbd9; }
+#editor-actions { margin-left:auto; justify-content:flex-end; }
+#workspace:not(.viewing) .map-surface {
+  min-width:0; padding:8px 8px 0; background:#0b2231; border:1px solid #204b63; border-radius:12px;
 }
-#editor .editor-toolbar .interaction-tool:focus-visible { outline:2px solid var(--cyan); outline-offset:2px; }
-#undo { margin-left:8px; }
-#hint { color:var(--muted); margin:7px 0; font-size:.85rem; }
-#workspace:not(.viewing) .map-stage { border:1px solid var(--border); border-radius:8px 8px 0 0; overflow:hidden; }
-#workspace:not(.viewing) #canvas { background:#142538; }
+#workspace:not(.viewing) .map-stage { border:1px solid #2a3e58; border-radius:10px; overflow:hidden; background:#202c41; }
+#workspace:not(.viewing) .map-viewport { height:clamp(320px,calc(100dvh - 340px),900px); max-height:none; border-radius:10px; }
+#workspace:not(.viewing) #canvas { background:#202c41; }
 #canvas[data-tool=pan], #canvas[data-tool=pan] g { cursor:grab; }
 #canvas[data-tool=connect], #canvas[data-tool=connect] g { cursor:crosshair; }
 #canvas .selected-link { stroke:var(--cyan); }
 #canvas line[role=button] { cursor:pointer; }
-#editor-footer { display:flex; align-items:center; justify-content:flex-end; gap:1rem; flex-wrap:wrap; border-radius:0 0 8px 8px; }
+#editor-footer { display:flex; align-items:center; justify-content:space-between; gap:12px 20px; flex-wrap:wrap; padding:14px 12px; color:#c4d2e0; font-size:12px; line-height:1.6; }
+.editor-footer-message, #counts, .editor-counter { display:flex; align-items:center; gap:8px; }
+.editor-footer-message { flex:1 1 380px; }
+#counts { gap:16px; margin-left:auto; font-weight:600; }
+.editor-counter { padding-left:16px; border-left:1px solid #294b60; white-space:nowrap; }
+.editor-guidance > svg, #editor-footer svg { width:16px; height:16px; flex:0 0 16px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+@media(max-width:760px) {
+  #workspace:not(.viewing) > .page-heading { align-items:flex-start; gap:16px; }
+  #editor-actions { margin-left:0; justify-content:flex-start; }
+  #editor .editor-toolbar { gap:10px; padding:12px; }
+  #delete-item { margin-left:0; }
+  #delete-item::before { display:none; }
+  #workspace:not(.viewing) #map-title { font-size:24px; }
+  #workspace:not(.viewing) .map-viewport { height:55dvh; min-height:320px; }
+}
 #map-dialog { width:min(540px, calc(100vw - 32px)); }
 #map-error:empty { display:none; }
 #editor-actions button, #editor .editor-toolbar > button { display:inline-flex; gap:.5rem; align-items:center; justify-content:center; }

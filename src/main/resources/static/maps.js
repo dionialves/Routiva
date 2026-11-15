@@ -173,7 +173,8 @@ function draw() {
     $('undo').disabled = !past.length;
     $('redo').disabled = !future.length;
     $('delete-item').disabled = !selection.size && !selected && !selectedLink;
-    $('counts').textContent = nodes.length + ' elementos　│　' + links.length + ' conexões';
+    $('editor-node-count').textContent = nodes.length + ' elementos';
+    $('editor-link-count').textContent = links.length + ' conexões';
     $('hint').textContent = tool === 'connect' ? (selected ? 'Selecione o destino. Esc cancela.' : 'Selecione a origem. Esc cancela.')
       : tool === 'pan' ? 'Arraste para mover o mapa.' : 'Arraste no fundo para selecionar vários. Shift, Ctrl ou ⌘ + clique adiciona ou remove. Arraste a seleção para mover.';
   }
