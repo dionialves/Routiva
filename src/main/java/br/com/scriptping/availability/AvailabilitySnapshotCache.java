@@ -151,7 +151,11 @@ public class AvailabilitySnapshotCache {
             generation == null ? "" : generation.snapshot.version(), List.copyOf(rows));
     }
 
-    public record MapMetric(String type, String id, HostAvailabilityService.Metrics metrics) {}
+    public record MapMetric(String type, String id, HostAvailabilityService.Metrics metrics, Long lastSampleAt) {
+        public MapMetric(String type, String id, HostAvailabilityService.Metrics metrics) {
+            this(type, id, metrics, null);
+        }
+    }
     public record MapMetrics(long from, long to, String version, long builtAt, List<MapMetric> elements) {}
 
     /** Capture one published generation for every map element, without building time series. */
@@ -181,7 +185,7 @@ public class AvailabilitySnapshotCache {
         }
         var elements = totals.entrySet().stream().map(e -> {
             int separator = e.getKey().indexOf(':');
-            return new MapMetric(e.getKey().substring(0, separator), e.getKey().substring(separator + 1), e.getValue().metrics());
+            return new MapMetric(e.getKey().substring(0, separator), e.getKey().substring(separator + 1), e.getValue().metrics(), e.getValue().lastSampleAt());
         }).toList();
         return new MapMetrics(period.from(), generation.snapshot.to(), generation.snapshot.version(),
             generation.snapshot.builtAt(), elements);

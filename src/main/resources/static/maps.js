@@ -11,6 +11,7 @@ const selection = new Set();
 let marquee;
 let states = new Map(), generation = 0, timer;
 let summaryUpdatedAt = 0, summaryFailed = false;
+let latencySummaries = new Map();
 let mapView = 'incidents', metricStates = new Map(), metricRange;
 const metricColors = {NORMAL:'#58bd83', ATENCAO:'#fced4e', CRITICO:'#ff0000'};
 const metricLabels = {NORMAL:'Normal', ATENCAO:'Atenção', CRITICO:'Crítico'};
@@ -21,7 +22,7 @@ function metricSummary(node) {
   const state = metric?.[mapView + 'State'];
   const label = mapView === 'latency' ? 'Latência média' : 'Perda de pacote';
   const formatted = value == null ? 'Sem dados' : value.toLocaleString('pt-BR', {maximumFractionDigits:2}) + (mapView === 'latency' ? ' ms' : '%');
-  return {label, formatted, state:metricLabels[state] || 'Sem dados', color:metricColors[state] || colors[0],
+  return {view:mapView, current:mapView === 'loss' ? metric?.lossSummary : (typeof latencySummaries === 'undefined' ? null : latencySummaries.get(node.hostId ? 'host:' + node.hostId : 'group:' + node.groupId)), label, formatted, state:metricLabels[state] || 'Sem dados', color:metricColors[state] || colors[0],
     period: $('map-period').selectedOptions[0]?.textContent || '',
     range: metricRange ? new Date(metricRange.from).toLocaleString('pt-BR') + ' — ' + new Date(metricRange.to).toLocaleString('pt-BR') : ''};
 }
@@ -478,10 +479,14 @@ async function refresh(token) {
     const ids = [...new Set(current.layout.nodes.map(n => n.groupId).filter(Boolean))];
     const hostsIds = [...new Set(current.layout.nodes.map(n => n.hostId).filter(Boolean))];
     if (metricMode) {
-      const result = await api('/metrics', {groups:ids, hosts:hostsIds, minutes:Number($('map-period').value)});
+      const [result, latency] = await Promise.all([
+        api('/metrics', {groups:ids, hosts:hostsIds, minutes:Number($('map-period').value)}),
+        mapView === 'latency' ? api('/latency-summaries', {groups:ids, hosts:hostsIds}) : null
+      ]);
       if (token !== generation) return;
       metricStates = new Map(result.elements.map(e => [e.type + ':' + e.id, e]));
       metricRange = result;
+      if (latency) latencySummaries = new Map(Object.entries(latency));
       summaryUpdatedAt = result.builtAt;
       summaryFailed = false;
       $('status').textContent = 'Indicadores do período até ' + new Date(result.to).toLocaleString('pt-BR') + ' · atualização automática a cada minuto' + (Date.now() - result.builtAt > 90000 ? ' · Dados desatualizados' : '');

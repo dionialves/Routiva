@@ -248,3 +248,28 @@ test('incident links open only their encoded event in a new tab for hosts and gr
     assert.equal(link.attributes.rel, 'noopener noreferrer');
   }
 });
+
+test('monitoring cards reuse the summary layout, format readings once and preserve details navigation', () => {
+  for (const view of ['latency', 'loss']) {
+    const preview = renderPreview([]);
+    preview.subject.metric = () => ({view, period:'Última 1 hora', current:{
+      average:1.8, maximum:8.5, aboveLimit:1, state:'CRITICO', updatedAt:Date.now(),
+      hosts:[{name:'AP <safe>', latency:8.5, state:'CRITICO'},
+        {name:'Sem leitura', latency:null, state:'SEM_DADOS'}]
+    }});
+    preview.subject.render();
+    assert.equal(preview.box.querySelector('.pop-metrics').children.length, 3);
+    assert.equal(preview.box.querySelector('.pop-badge').textContent, '1 em alerta');
+    assert.equal(preview.box.querySelector('h3').textContent, view === 'loss' ? 'Maiores perdas' : 'Maiores latências');
+    const list = preview.box.querySelector('.pop-incidents');
+    assert.equal(list.children.length, 2);
+    assert.equal(list.children[0].querySelector('.pop-reading').textContent, view === 'loss' ? '8,5%' : '8,5 ms');
+    assert.equal(list.children[0].querySelector('small').textContent, view === 'loss' ? 'Perda de pacotes' : 'Latência atual');
+    assert.equal(list.children[1].querySelector('.pop-reading').textContent, 'Sem dados');
+    assert.equal(preview.box.querySelector('.pop-details').attributes.href, '/diagnostico/grupos/g');
+    preview.subject.metric = () => ({view});
+    preview.subject.render();
+    assert.ok(preview.box.querySelector('.pop-metrics').textContent.includes('Sem dados'));
+    assert.equal(preview.box.querySelector('.pop-freshness').textContent, 'Horário indisponível');
+  }
+});

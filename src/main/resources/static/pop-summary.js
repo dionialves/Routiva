@@ -39,7 +39,7 @@ function popIcon(name, size = 16) {
     icon.setAttribute(key, value);
   }
   const use = document.createElementNS(namespace, 'use');
-  use.setAttribute('href', `/icons.svg?v=20261110-4#${name}`);
+  use.setAttribute('href', `/icons.svg?v=20261115-pop-metrics#${name}`);
   icon.append(use);
   return icon;
 }
@@ -131,6 +131,7 @@ class PopSummary {
   render() {
     if (!this.node) return;
     const metric = this.metric?.(this.node);
+    this.monitoringUpdatedAt = undefined;
     if (metric) { this.renderMetric(metric); return; }
     const summary = summarizePop(this.hosts(this.node), this.minimumSeverity?.() ?? 0, this.showAcknowledged?.() ?? true);
     const fresh = this.freshness();
@@ -253,6 +254,10 @@ class PopSummary {
     this.updateFooter();
   }
   renderMetric(metric) {
+    if (metric.view === 'latency' || metric.view === 'loss') {
+      this.renderMonitoring(metric);
+      return;
+    }
     const el = (tag, text, className) => {
       const item = document.createElement(tag);
       item.textContent = text;
@@ -273,13 +278,86 @@ class PopSummary {
       this.updateFooter();
     }
   }
+  renderMonitoring(metric) {
+    const loss = metric.view === 'loss';
+    const summary = metric.current;
+    const el = (tag, text, className) => {
+      const item = document.createElement(tag);
+      if (text !== undefined) item.textContent = text;
+      if (className) item.className = className;
+      return item;
+    };
+    const colors = {NORMAL:'var(--success)', ATENCAO:'var(--warning, #fced4e)',
+      CRITICO:'#ff0000'};
+    const color = state => colors[state] || 'var(--muted)';
+    const format = value => value == null ? 'Sem dados' :
+      value.toLocaleString('pt-BR', {maximumFractionDigits:loss ? 1 : 2}) + (loss ? '%' : ' ms');
+    this.box.style.setProperty('--pop-severity', 'var(--warning, #fced4e)');
+    const heading = el('header');
+    const symbol = el('span', undefined, 'pop-symbol');
+    symbol.append(popIcon(loss ? 'packet-loss' : 'pulse'));
+    const name = el('div', undefined, 'pop-heading-copy');
+    name.append(el('strong', this.node.name), el('small', this.node.hostId ? 'Host Zabbix' :
+      `Grupo Zabbix: ${this.groupName(this.node.groupId)}`));
+    heading.append(symbol, name);
+    if (summary) heading.append(el('span', `${summary.aboveLimit} em alerta`, 'pop-badge'));
+    this.box.replaceChildren(heading);
+    const metrics = el('div', undefined, 'pop-metrics');
+    for (const [label, value, state] of [
+      [loss ? 'Perda média' : 'Latência média', format(summary?.average), null],
+      [loss ? 'Maior perda' : 'Maior latência', format(summary?.maximum), summary?.state],
+      ['Acima do limite', summary?.maximum == null ? 'Sem dados' : summary.aboveLimit,
+        summary?.aboveLimit ? summary.state : null]
+    ]) {
+      const item = el('div', undefined, 'pop-metric');
+      const line = el('div', undefined, 'pop-metric-value');
+      line.style.color = state ? color(state) : 'var(--text)';
+      line.append(el('strong', value));
+      item.append(line, el('small', label));
+      metrics.append(item);
+    }
+    this.box.append(metrics);
+    if (loss) this.box.append(el('small', 'Perda consolidada por pacotes · ' + metric.period, 'pop-note'));
+    if (this.freshness().failed) this.box.append(el('p', 'Não foi possível atualizar os dados deste POP.', 'pop-message'));
+    this.box.append(el('h3', loss ? 'Maiores perdas' : 'Maiores latências'));
+    const list = el('ul', undefined, 'pop-incidents');
+    for (const host of summary?.hosts || []) {
+      const item = el('li');
+      const bar = el('span', undefined, 'pop-severity');
+      bar.style.color = color(host.state);
+      bar.setAttribute('aria-label', host.state === 'CRITICO' ? 'Crítico' : host.state === 'ATENCAO' ? 'Atenção' : host.state === 'NORMAL' ? 'Normal' : 'Sem dados');
+      bar.setAttribute('role', 'img');
+      const copy = el('div', undefined, 'pop-incident-copy');
+      const row = el('div', undefined, 'pop-incident-heading');
+      row.append(el('strong', host.name));
+      copy.append(row, el('small', loss ? 'Perda de pacotes' : 'Latência atual'));
+      item.append(bar, copy, el('span', format(host.latency), 'pop-reading'));
+      list.append(item);
+    }
+    this.box.append(list);
+    if (!summary?.hosts?.length) this.box.append(el('p', 'Sem dados', 'pop-no-hosts'));
+    const footer = el('footer');
+    const updated = el('span', undefined, 'pop-updated');
+    updated.append(popIcon('refresh', 12), el('span', undefined, 'pop-freshness'));
+    const details = el('a', this.node.hostId ? 'Ver detalhes do host ↗' : 'Ver detalhes do POP ↗', 'pop-details');
+    details.setAttribute('href', this.node.hostId ? `/ap/${encodeURIComponent(this.node.hostId)}` :
+      `/diagnostico/grupos/${encodeURIComponent(this.node.groupId)}`);
+    details.setAttribute('target', '_blank');
+    details.setAttribute('rel', 'noopener noreferrer');
+    footer.append(updated, details);
+    this.box.append(footer);
+    this.monitoringUpdatedAt = summary?.updatedAt ?? null;
+    this.updateFooter();
+  }
   updateFooter() {
     const freshness = this.box.querySelector('.pop-freshness');
     if (!freshness) return;
     const fresh = this.freshness();
-    const age = Math.max(0, Math.floor((Date.now() - fresh.updatedAt) / 1000));
+    const updatedAt = this.monitoringUpdatedAt === undefined ? fresh.updatedAt : this.monitoringUpdatedAt;
+    if (!updatedAt) { freshness.textContent = 'Horário indisponível'; return; }
+    const age = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
     const text = fresh.failed || age > 90
-      ? `Dados desatualizados · última atualização ${new Date(fresh.updatedAt).toLocaleTimeString('pt-BR')}`
+      ? `Dados desatualizados · última atualização ${new Date(updatedAt).toLocaleTimeString('pt-BR')}`
       : `Atualizado há ${age} segundos`;
     if (freshness.textContent !== text) freshness.textContent = text;
   }

@@ -47,4 +47,5 @@
 <symbol id="zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></symbol>
 <symbol id="edit" viewBox="0 0 24 24"><path d="m16 3 5 5L8 21H3v-5Zm-2 2 5 5"/></symbol>
 <symbol id="copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+<symbol id="packet-loss" viewBox="0 0 24 24"><rect x="1" y="9" width="5" height="6" rx="1"/><path d="M9 15V10a1 1 0 0 1 1-1h3m1 3v2a1 1 0 0 1-1 1h-1M8 17l8-10"/><rect x="18" y="9" width="5" height="6" rx="1"/></symbol>
 </svg>

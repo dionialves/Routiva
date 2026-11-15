@@ -31,8 +31,8 @@ function refreshContext() {
   const controls = {'refresh-map': {setAttribute() {}}, 'status': {}, 'map-period': {value:'60'}};
   const context = vm.createContext({
     $: id => controls[id], current: {layout:{nodes:[{hostId:'a'}, {groupId:'g'}]}}, editing:false,
-    generation:1, timer:0, mapView:'latency', metricStates:new Map(), summaryUpdatedAt:0,
-    api: (path, body) => new Promise((resolve, reject) => pending.push({path, body, resolve, reject})),
+    generation:1, timer:0, latencySummaries:new Map(), mapView:'latency', metricStates:new Map(), summaryUpdatedAt:0,
+    api: (path, body) => path === '/latency-summaries' ? Promise.resolve({}) : new Promise((resolve, reject) => pending.push({path, body, resolve, reject})),
     clearTimeout() {}, setTimeout: () => 1, draw() {}, updateMapOverview() {}, popSummary:{render() {}},
   });
   vm.runInContext(source.slice(source.indexOf('function setRefreshBusy('), source.indexOf('function openMap(')), context);

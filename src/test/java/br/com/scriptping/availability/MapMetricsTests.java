@@ -29,6 +29,10 @@ class MapMetricsTests {
         var combined = result.elements().stream().filter(e -> e.id().equals("g")).findFirst().orElseThrow();
         assertThat(combined.latency()).isEqualTo(10d);
         assertThat(combined.loss()).isEqualTo(.1);
+        assertThat(combined.lossSummary().average()).isEqualTo(.1);
+        assertThat(combined.lossSummary().maximum()).isEqualTo(100d);
+        assertThat(combined.lossSummary().aboveLimit()).isEqualTo(1);
+        assertThat(combined.lossSummary().hosts().getFirst().id()).isEqualTo("b");
         assertThat(combined.latencyState()).isEqualTo("NORMAL");
         assertThat(combined.lossState()).isEqualTo("NORMAL");
         var lost = result.elements().stream().filter(e -> e.id().equals("b")).findFirst().orElseThrow();
@@ -52,9 +56,9 @@ class MapMetricsTests {
             new AvailabilitySnapshotCache.MapMetric("host", "a", counts(15, 0)),
             new AvailabilitySnapshotCache.MapMetric("host", "b", counts(20, 1)),
             new AvailabilitySnapshotCache.MapMetric("host", "c", counts(21, 0)));
-        when(cache.mapMetrics(60, Set.of(), Set.of(), List.of())).thenReturn(new AvailabilitySnapshotCache.MapMetrics(0, 100, "v", 100, elements));
+        when(cache.mapMetrics(60, Set.of(), Set.of("a", "b", "c"), List.of())).thenReturn(new AvailabilitySnapshotCache.MapMetrics(0, 100, "v", 100, elements));
         var result = new NetworkMapController(service, cache, new PacketLossPolicy())
-            .metrics(new NetworkMapController.MetricRequest(Set.of(), Set.of(), 60));
+            .metrics(new NetworkMapController.MetricRequest(Set.of(), Set.of("a", "b", "c"), 60));
         assertThat(result.elements()).extracting(NetworkMapController.MetricElement::latencyState)
             .containsExactly("ATENCAO", "ATENCAO", "CRITICO");
         assertThat(result.elements()).extracting(NetworkMapController.MetricElement::lossState)

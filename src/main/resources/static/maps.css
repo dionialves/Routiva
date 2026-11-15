@@ -359,3 +359,5 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
   #map-view-segments button { transition:none; }
   .map-updated[aria-busy=true] > svg { animation:none; }
 }
+
+.pop-summary .pop-reading { align-self:center; color:var(--muted); font-size:11px; white-space:nowrap; }
