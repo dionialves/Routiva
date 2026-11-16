@@ -1,11 +1,12 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org"><head>
-<link th:fragment="base" rel="stylesheet" href="/style.css?v=20261115-ds1">
+<link th:fragment="base" rel="stylesheet" href="/style.css?v=20261115-ui-pagination">
 <link th:fragment="actions" rel="stylesheet" href="/buttons.css?v=20261115-ds1">
 <link th:fragment="filters" rel="stylesheet" href="/query-filters.css?v=20261115-ds1">
 <link th:fragment="layout" rel="stylesheet" href="/page-layout.css?v=20261115-ds1">
 <link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261115-ds1">
 <link th:fragment="picker" rel="stylesheet" href="/multi-picker.css?v=20261115-ds1">
+<link th:fragment="analysisDialogStyles" rel="stylesheet" href="/analysis-dialog.css?v=20261115-shared">
 </head><body>
 <article th:fragment="indicator(title, valueId, description, descriptionId)" class="card">
   <h2 th:text="${title}"></h2>
@@ -19,6 +20,9 @@
 </select>
 <dialog th:fragment="formDialog(dialogId, titleId, descriptionId, content)"
         class="settings-panel form-dialog" th:id="${dialogId}" th:attr="aria-labelledby=${titleId},aria-describedby=${descriptionId}">
+  <th:block th:replace="${content}"></th:block>
+</dialog>
+<dialog th:fragment="analysisDialog(dialogId, titleId, descriptionId, content)" class="settings-panel form-dialog analysis-dialog" th:id="${dialogId}" th:attr="aria-labelledby=${titleId},aria-describedby=${descriptionId}">
   <th:block th:replace="${content}"></th:block>
 </dialog>
 <div th:fragment="dataTable(label, sections)" class="table-scroll" role="region" th:attr="aria-label=${label}" tabindex="0">

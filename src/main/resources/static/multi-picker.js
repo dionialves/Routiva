@@ -1,7 +1,7 @@
 /* Shared searchable multiple selection for incidents and host groups. */
 (() => {
   const $ = id => document.getElementById(id);
-  window.setupMultiPicker = function(kind, select, allLabel, onChange = () => {}) {
+  window.setupMultiPicker = function(kind, select, allLabel, onChange = () => {}, labels = {}) {
     const listeners = [];
     const listen = (element, type, handler) => {
       element.addEventListener(type, handler);
@@ -15,7 +15,7 @@
     allRow.className = 'incident-picker-all';
     const allCheckbox = document.createElement('input'); allCheckbox.type = 'checkbox';
     const allText = document.createElement('span');
-    allText.textContent = kind === 'group' ? 'Todos os grupos de hosts' : kind === 'name' ? 'Todos os incidentes' : 'Todos os Hosts';
+    allText.textContent = labels.allText || (kind === 'group' ? 'Todos os grupos de hosts' : kind === 'name' ? 'Todos os incidentes' : 'Todos os Hosts');
     allRow.append(allCheckbox, allText); container.append(allRow);
     listen(allCheckbox, 'change', () => {
       for (const option of select.options) {
@@ -51,7 +51,7 @@
       allCheckbox.checked = available.length > 0 && selected.length === available.length;
       allCheckbox.indeterminate = selected.length > 0 && selected.length < available.length;
       summary.textContent = !selected.length ? allLabel : selected.length === 1
-        ? selected[0].option.textContent : `${selected.length} ${kind === 'group' ? 'grupos selecionados' : kind === 'name' ? 'incidentes selecionados' : 'hosts selecionados'}`;
+        ? selected[0].option.textContent : `${selected.length} ${labels.selectedLabel || (kind === 'group' ? 'grupos selecionados' : kind === 'name' ? 'incidentes selecionados' : 'hosts selecionados')}`;
       $(`incident-${kind}-empty`).hidden = visible !== 0;
     }
     listen(search, 'input', refresh);
@@ -63,6 +63,7 @@
       let changed = false;
       if (entries.some(entry => !entry.label.hidden)) {
         for (const { option, label } of entries) {
+          if (labels.preserveSelection && label.hidden) continue;
           const selected = !label.hidden;
           if (option.selected !== selected) {
             option.selected = selected;
@@ -72,13 +73,21 @@
       }
       if (changed) onChange();
       refresh();
-      menu.open = false;
-      menu.querySelector('summary').focus();
+      if (!labels.preserveSelection) {
+        menu.open = false;
+        menu.querySelector('summary').focus();
+      }
     });
     listen(menu, 'toggle', () => {
       if (menu.open) search.focus();
     });
     listen(menu, 'keydown', event => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        if (!menu.open) { event.preventDefault(); menu.open = true; search.focus(); return; }
+        const controls = [search, ...container.querySelectorAll('input[type=checkbox]')].filter(input => !input.disabled && !input.closest('[hidden]'));
+        const index = controls.indexOf(document.activeElement);
+        if (index >= 0) { event.preventDefault(); controls[(index + (event.key === 'ArrowDown' ? 1 : -1) + controls.length) % controls.length].focus(); }
+      }
       if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
     });
     listen(document, 'click', event => { if (!menu.contains(event.target)) menu.open = false; });

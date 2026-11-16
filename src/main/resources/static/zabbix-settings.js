@@ -118,7 +118,7 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
       const row = node('tr'), cell = node('td', members.length ? 'Nenhum host corresponde ao filtro.' : 'Nenhum host neste grupo.', 'table-empty');
       cell.colSpan = 4; row.append(cell); list.append(row);
     }
-    $('page-label').textContent = `${matches.length} resultados · Página ${page + 1} de ${pages}`;
+    $('page-label').textContent = `Exibindo ${matches.length ? page * pageSize + 1 : 0}–${Math.min((page + 1) * pageSize, matches.length)} de ${matches.length} hosts`;
     $('previous-page').disabled = page === 0; $('next-page').disabled = page + 1 >= pages;
   }
   function render() {

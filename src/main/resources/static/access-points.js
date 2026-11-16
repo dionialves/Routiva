@@ -93,7 +93,7 @@
       const tr = document.createElement('tr'), th = document.createElement('th'), link = document.createElement('a');
       th.scope = 'row'; link.textContent = row.name; link.className = 'availability-host-name';
       link.href = '/ap/' + encodeURIComponent(row.hostId);
-      link.prepend(icon('wifi')); th.append(link); tr.append(th);
+      th.append(link); tr.append(th);
       for (const value of [row.ip, [row.manufacturer, row.model].filter(Boolean).join(' / '), row.available ? 'No inventário' : 'Não encontrado no inventário', row.connectedClients, row.lastCollectedAt ? new Date(row.lastCollectedAt).toLocaleString('pt-BR') : null]) {
         const td = document.createElement('td'); if (tr.children.length === 3) {
           const badge = document.createElement('span'); badge.className = 'ap-status'; badge.textContent = value; td.append(badge);
@@ -109,7 +109,7 @@
     }
     $('rows').replaceChildren(fragment);
     $('state').textContent = rows.length === 0 ? (document.querySelector('meta[name="is-admin"]')?.content === 'false' ? 'Nenhum AP cadastrado.' : 'Nenhum AP cadastrado. Clique em Importar para definir seus Access Points.') : filtered.length === 0 ? 'Nenhum AP encontrado para esta busca.' : `${filtered.length} Access Point(s). Clientes e última leitura refletem a última consulta válida na página do AP.`;
-    $('page-count').textContent = `Página ${page} de ${pages}`;
+    $('page-count').textContent = `Exibindo ${filtered.length ? (page - 1) * pageSize + 1 : 0}–${Math.min(page * pageSize, filtered.length)} de ${filtered.length} APs`;
     $('previous').disabled = page <= 1; $('next').disabled = page >= pages;
   }
   async function load() {

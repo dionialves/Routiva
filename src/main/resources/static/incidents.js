@@ -142,7 +142,7 @@
   function pagination(period, count, container) {
     const pages = Math.max(1, Math.ceil(count / size));
     if (pages === 1) return;
-    const nav = document.createElement('nav'); nav.className = 'pagination';
+    const nav = document.createElement('nav'); nav.className = 'pagination system-pagination';
     nav.setAttribute('aria-label', `Paginação: ${period.label}`);
     function button(label, target, disabled) {
       const node = document.createElement('button'); node.type = 'button';
@@ -153,7 +153,7 @@
     }
     button('‹ Anterior', period.page - 1, period.page <= 1);
     const status = document.createElement('span');
-    status.textContent = `Página ${period.page} de ${pages} · ${count} incidentes`;
+    status.textContent = `Exibindo ${count ? (period.page - 1) * size + 1 : 0}–${Math.min(period.page * size, count)} de ${count} incidentes`;
     nav.append(status);
     button('Próxima ›', period.page + 1, period.page >= pages);
     container.append(nav);
@@ -678,13 +678,13 @@
       node.append(document.createTextNode(label)); node.disabled = disabled;
       node.addEventListener('click', () => { occurrencePage = target; renderOccurrences(); }); nav.append(node);
     }
-    const count = document.createElement('span'); count.textContent = `${rows.length} registros`; nav.append(count);
+
     button('Anterior', occurrencePage - 1, occurrencePage === 1, 'chevron-left');
     const status = document.createElement('span');
     status.className = 'incident-trigger-page-status';
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
-    status.textContent = `Página ${occurrencePage} de ${pages}`;
+    status.textContent = `Exibindo ${rows.length ? (occurrencePage - 1) * 10 + 1 : 0}–${Math.min(occurrencePage * 10, rows.length)} de ${rows.length} registros`;
     nav.append(status);
     button('Próxima', occurrencePage + 1, occurrencePage === pages, 'chevron-right');
   }

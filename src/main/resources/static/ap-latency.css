@@ -98,15 +98,6 @@
 @media(max-width:1400px) { .latency-workspace { grid-template-columns:minmax(0,1fr); } .latency-table { min-width:850px; } }
 @media(max-width:1000px) { #ap-latency-modal { overflow:auto; } .latency-dialog-layout { height:auto; min-height:100%; } .latency-workspace { display:flex; flex-direction:column; flex:none; } .latency-sidebar { overflow:visible; } .latency-table-scroll { max-height:45vh; } .latency-execution { grid-template-columns:repeat(2,minmax(0,1fr)); } .latency-header,.latency-footer { position:sticky; z-index:3; background:#071a28; } .latency-header { top:-18px; } .latency-footer { bottom:-18px; } }
 @media(max-width:600px) { .latency-header { align-items:flex-start; flex-direction:column; } #ap-latency-modal h2 { font-size:20px; } .latency-title-icon { display:none; } .latency-execution-card { gap:12px; padding:10px; } .latency-execution-card strong { font-size:14px; } .latency-footer { align-items:flex-start; } .latency-footer p { font-size:12px; } }
-.latency-tabs { display:flex; gap:8px; border-bottom:1px solid #2c4b5d; flex-shrink:0; }
-.latency-tabs button { display:flex; align-items:center; gap:16px; padding:10px 20px; min-width:230px; background:#102b3d; border:1px solid #315b72; border-bottom:3px solid transparent; border-radius:7px 7px 0 0; color:#bdcede; font:inherit; text-align:left; cursor:pointer; }
-.latency-tabs button[aria-selected="true"] { border-color:#008ea9; border-bottom-color:#00d9ee; color:#f1f5f9; background:#0b3448; }
-.latency-tabs button:disabled { opacity:.5; cursor:not-allowed; }
-.latency-tabs svg { width:20px; height:20px; }
-.latency-tabs button[aria-selected="true"] svg { color:#00d9ee; }
-.latency-tabs strong,.latency-tabs small { display:block; }
-.latency-tabs strong { font-size:15px; margin-bottom:3px; }
-.latency-tabs small { font-size:12px; }
 .latency-tab-panel { flex:1; min-height:0; }
 .latency-tab-panel[hidden] { display:none; }
 .latency-diagnostic-panel { display:flex; flex-direction:column; gap:16px; }
@@ -171,7 +162,6 @@
 
 /* Results use the remaining space for rows; only the table scrolls on tall desktops. */
 .latency-dialog-layout { gap:12px; }
-.latency-tabs { margin-bottom:4px; }
 .latency-final-overview { padding:12px; }
 #ap-latency-modal .latency-final-heading { margin-bottom:12px; }
 .latency-final-heading h3 { line-height:1.2; }

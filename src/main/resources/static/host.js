@@ -2,6 +2,15 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const root = document.querySelector('[data-host-id]');
+  window.addEventListener('pageshow', event => { if (event.persisted && root.dataset.radioVisit) window.location.reload(); });
+  window.addEventListener('pagehide', () => {
+    if (!root.dataset.radioVisit) return;
+    const headers = {};
+    const token = document.querySelector('meta[name="_csrf"]')?.content;
+    const header = document.querySelector('meta[name="_csrf_header"]')?.content;
+    if (token && header) headers[header] = token;
+    fetch('/api/ap/' + encodeURIComponent(root.dataset.hostId) + '/radio-visits/' + root.dataset.radioVisit + '/close', { method:'POST', headers, keepalive:true }).catch(() => {});
+  });
   const base = '/api/hosts/' + encodeURIComponent(root.dataset.hostId);
   const signalPolicy = window.HostSignal.policy();
   let initialTab = true, overviewAt = 0, wirelessAvailable = false;
@@ -120,7 +129,8 @@
     $('signal-missing').textContent = wirelessAvailable ? '' : 'Aguardando dados válidos da API';
   }
   async function request(path, options = {}) {
-    const response = await fetch((/^\/(overview|interfaces|traffic|wireless)(?:\?|$)/.test(path) ? '/api/ap/' + encodeURIComponent(root.dataset.hostId) : base) + path, { cache:'no-store', ...options });
+    const response = await fetch((/^\/(overview|interfaces|traffic|wireless)(?:\?|$)/.test(path) ? '/api/ap/' + encodeURIComponent(root.dataset.hostId) : base) + path, { cache:'no-store', ...options, headers:{ ...options.headers, ...(root.dataset.radioVisit ? { 'X-Radio-Visit':root.dataset.radioVisit } : {}) } });
+    if (response.status === 410 && root.dataset.radioVisit) window.location.reload();
     if (!response.ok) {
       let message = 'Não foi possível consultar o equipamento.';
       try { const body = await response.json(); message = body.message || body.detail || message; } catch (_) { /* Empty response. */ }

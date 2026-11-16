@@ -68,7 +68,7 @@ window.AvailabilityView = (() => {
     $('host-count').textContent=`${page.total} de ${page.selectedTotal} hosts`;
     $('hosts-empty').hidden=page.total!==0;
     $('hosts-empty').textContent=page.selectedTotal===0?'Nenhum host disponível para este grupo.':'Nenhum host corresponde à pesquisa.';
-    $('page-status').textContent=`Página ${page.number} de ${page.pages}`;
+    $('page-status').textContent=`Exibindo ${page.total ? (page.number - 1) * page.size + 1 : 0}–${Math.min(page.number * page.size, page.total)} de ${page.total} hosts`;
     $('previous').disabled=page.number<=1; $('next').disabled=page.number>=page.pages;
   }
   function reset() {tableVersion=null; $('availability-hosts').replaceChildren(); $('hosts-empty').hidden=true; $('previous').disabled=true; $('next').disabled=true;}

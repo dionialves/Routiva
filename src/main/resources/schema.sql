@@ -206,3 +206,66 @@ CREATE TABLE IF NOT EXISTS app_user (
     last_login_at BIGINT,
     version BIGINT NOT NULL DEFAULT 0
 );
+
+-- Radio identity and immutable source observations. Millisecond UTC timestamps.
+CREATE TABLE IF NOT EXISTS radio_client (
+    id VARCHAR(36) PRIMARY KEY,
+    login VARCHAR(255) UNIQUE,
+    provisional_mac VARCHAR(17) UNIQUE,
+    created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS radio_identity_lock (id INTEGER PRIMARY KEY);
+INSERT INTO radio_identity_lock (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM radio_identity_lock WHERE id = 1);
+CREATE TABLE IF NOT EXISTS radio_mac_binding (
+    id VARCHAR(36) PRIMARY KEY,
+    client_id VARCHAR(36) NOT NULL REFERENCES radio_client(id),
+    mac VARCHAR(17) NOT NULL,
+    valid_from BIGINT NOT NULL,
+    valid_to BIGINT,
+    origin VARCHAR(16) NOT NULL,
+    operator_name VARCHAR(255),
+    recorded_at BIGINT NOT NULL,
+    CHECK (valid_to IS NULL OR valid_to >= valid_from)
+);
+CREATE INDEX IF NOT EXISTS idx_radio_binding_mac ON radio_mac_binding(mac, valid_from, valid_to);
+CREATE TABLE IF NOT EXISTS radio_visit (
+    id VARCHAR(36) PRIMARY KEY,
+    host_id VARCHAR(255) NOT NULL,
+    host_name VARCHAR(255) NOT NULL,
+    owner_id VARCHAR(255) NOT NULL,
+    started_at BIGINT NOT NULL,
+    touched_at BIGINT NOT NULL,
+    closed BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS idx_radio_visit_expiration ON radio_visit(closed, touched_at);
+CREATE TABLE IF NOT EXISTS radio_observation (
+    id VARCHAR(36) PRIMARY KEY,
+    visit_id VARCHAR(36) NOT NULL REFERENCES radio_visit(id),
+    client_id VARCHAR(36) NOT NULL REFERENCES radio_client(id),
+    mac VARCHAR(17) NOT NULL,
+    measured_at BIGINT NOT NULL,
+    observed_login VARCHAR(255),
+    raw_data TEXT NOT NULL,
+    UNIQUE(visit_id, mac, measured_at)
+);
+CREATE INDEX IF NOT EXISTS idx_radio_observation_client ON radio_observation(client_id, measured_at);
+CREATE TABLE IF NOT EXISTS radio_collection (
+    id VARCHAR(36) PRIMARY KEY,
+    visit_id VARCHAR(36) NOT NULL REFERENCES radio_visit(id),
+    client_id VARCHAR(36) NOT NULL REFERENCES radio_client(id),
+    host_id VARCHAR(255) NOT NULL,
+    mac VARCHAR(17) NOT NULL,
+    observed_from BIGINT NOT NULL,
+    observed_to BIGINT NOT NULL,
+    data TEXT NOT NULL,
+    UNIQUE(visit_id, client_id, mac)
+);
+CREATE INDEX IF NOT EXISTS idx_radio_collection_client_time ON radio_collection(client_id, observed_to);
+CREATE INDEX IF NOT EXISTS idx_radio_collection_host_time ON radio_collection(host_id, observed_to);
+CREATE TABLE IF NOT EXISTS radio_latency (
+    visit_id VARCHAR(36) NOT NULL REFERENCES radio_visit(id),
+    mac VARCHAR(17) NOT NULL,
+    tested_at BIGINT NOT NULL,
+    data TEXT NOT NULL,
+    PRIMARY KEY(visit_id, mac, tested_at)
+);

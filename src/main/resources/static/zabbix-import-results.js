@@ -149,7 +149,7 @@ class ZabbixImportResults {
         : 'Nenhum registro corresponde aos filtros. Execuções antigas podem conter apenas os detalhes de erros.');
       cell.colSpan = 4; cell.className = 'table-empty'; row.append(cell); list.append(row);
     }
-    this.$('import-page').textContent = `${total} registros · Página ${this.model.page + 1} de ${pages}`;
+    this.$('import-page').textContent = `Exibindo ${total ? this.model.page * this.model.pageSize + 1 : 0}–${Math.min((this.model.page + 1) * this.model.pageSize, total)} de ${total} registros`;
     this.$('import-previous').disabled = this.model.page === 0;
     this.$('import-next').disabled = this.model.page + 1 >= pages;
     this.$('import-sort-heading').setAttribute('aria-sort', this.model.descending ? 'descending' : 'ascending');

@@ -20,6 +20,9 @@ public class LatencyAssessmentController {
     private final Map<String, Assessment> assessments = new HashMap<>();
     private final Map<String, View> finalViews = new HashMap<>();
     private final Clock clock;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private br.com.scriptping.client.radio.RadioVisitService radio;
+    private final Map<String, String> radioVisits = new HashMap<>();
     public record Target(String name, String mac, String ip, String warning) {}
     public record Result(Target target, List<ClientPingSessions.Point> samples) {}
     public record View(String id, long startedAt, long endsAt, List<Result> results, int packetCount, boolean completed, boolean failed) {}
@@ -36,10 +39,14 @@ public class LatencyAssessmentController {
         this.aps = aps; this.ixc = ixc; this.pings = pings; this.collector = collector;
         this.clock = clock;
     }
-    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 1000)
     public synchronized void cleanup() {
         long now = clock.millis();
+        for (var assessment : List.copyOf(assessments.values())) {
+            if (!finalViews.containsKey(assessment.id) && expiresAt(assessment) > now) view(assessment);
+        }
         assessments.values().removeIf(a -> expiresAt(a) <= now);
+        radioVisits.keySet().retainAll(assessments.keySet());
         finalViews.keySet().retainAll(assessments.keySet());
     }
     @GetMapping
@@ -82,6 +89,17 @@ public class LatencyAssessmentController {
     }
     public ResponseEntity<?> start(String host, HttpSession owner) { return start(host, 60, owner); }
     @PostMapping
+    public synchronized ResponseEntity<?> startVisit(@PathVariable String host,
+        @RequestParam(defaultValue = "60") int packets,
+        @RequestHeader(value = "X-Radio-Visit", required = false) String visit, HttpSession owner) {
+        if (visit != null && radio != null) radio.owned(visit, host, owner.getId());
+        var response = start(host, packets, owner);
+        if (visit != null && response.getBody() instanceof View result) {
+            radioVisits.put(result.id(), visit);
+            if (result.completed() || result.failed()) capture(assessments.get(result.id()), result);
+        }
+        return response;
+    }
     public synchronized ResponseEntity<?> start(@PathVariable String host,
         @RequestParam(defaultValue = "60") int packets, HttpSession owner) {
         if (!Set.of(5, 10, 30, 60).contains(packets))
@@ -117,6 +135,7 @@ public class LatencyAssessmentController {
     @DeleteMapping("/{id}")
     public synchronized ResponseEntity<?> stop(@PathVariable String host, @PathVariable String id, HttpSession owner) {
         var assessment = owned(host, id, owner);
+        view(assessment);
         assessment.probes.stream().filter(p -> !p.isEmpty()).forEach(p -> pings.stop(p, host, owner.getId()));
         assessments.remove(id);
         finalViews.remove(id);
@@ -147,8 +166,28 @@ public class LatencyAssessmentController {
         boolean failed = !complete && clock.millis() >= a.end;
         var view = new View(a.id, a.start, complete || failed ? clock.millis() : a.end,
             List.copyOf(results), a.packets, complete, failed);
-        if (complete || failed) finalViews.put(a.id, view);
+        if (complete || failed) {
+            capture(a, view);
+            finalViews.put(a.id, view);
+        }
         return view;
+    }
+    private void capture(Assessment a, View view) {
+        String visit = radioVisits.get(a.id);
+        if (radio == null || visit == null) return;
+        for (var result : view.results()) {
+            if (result.target().mac().isBlank() || result.target().warning() != null) continue;
+            var measured = result.samples().stream().filter(p -> p.loss() != null).toList();
+            if (measured.isEmpty()) continue;
+            var replies = measured.stream().filter(p -> p.latency() != null).toList();
+            long lost = measured.stream().filter(p -> p.loss() > 0).count();
+            var stats = new LinkedHashMap<String, Object>();
+            stats.put("latency", replies.isEmpty() ? null : replies.stream().mapToDouble(p -> p.latency()).average().orElseThrow());
+            stats.put("loss", lost * 100d / measured.size());
+            stats.put("replies", replies.size()); stats.put("lost", lost); stats.put("total", measured.size());
+            stats.put("ip", result.target().ip()); stats.put("startedAt", a.start);
+            radio.latency(visit, a.host, a.owner, result.target().mac(), view.endsAt(), stats);
+        }
     }
     private ResponseEntity<?> fresh(Object body) { return ResponseEntity.ok().cacheControl(CacheControl.noStore())
         .headers(headers -> headers.setDate(clock.millis())).body(body); }

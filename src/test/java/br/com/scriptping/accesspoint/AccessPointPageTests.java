@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.not;
 class AccessPointPageTests {
     @Autowired MockMvc mvc;
     @MockitoBean AccessPointService service;
+    @MockitoBean br.com.scriptping.client.radio.RadioVisitService radio;
 
     @Test void rendersLatencySummaryWithSharedNavigationAndEscapedEquipmentName() throws Exception {
         when(service.pageHost("42")).thenReturn(new Host("42", "AP <teste>", "192.0.2.1", List.of()));
@@ -31,6 +32,7 @@ class AccessPointPageTests {
     }
     @Test void rendersHostAndSharedNavigationWithoutExposingCredentials() throws Exception {
         when(service.pageHost("42")).thenReturn(new Host("42", "MikroTik São Paulo", "192.0.2.1", List.of()));
+        when(service.host("42")).thenReturn(new Host("42", "MikroTik São Paulo", "192.0.2.1", List.of()));
         mvc.perform(get("/ap/42")).andExpect(status().isOk())
             .andExpect(content().string(containsString("MikroTik São Paulo")))
             .andExpect(content().string(containsString("data-host-id=\"42\"")))

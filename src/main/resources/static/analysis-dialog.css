@@ -1,0 +1,51 @@
+/* Shared analysis surface, based on the AP latency assessment. */
+dialog.analysis-dialog {
+  width:90vw;
+  max-width:1440px;
+  height:95dvh;
+  max-height:95dvh;
+  padding:18px;
+  overflow:hidden;
+  box-sizing:border-box;
+  color:var(--text);
+  background:var(--analysis-bg);
+  border:1px solid var(--analysis-border);
+  border-radius:10px;
+  font:13px var(--font-ui);
+}
+dialog.analysis-dialog::backdrop { background:rgb(0 7 14 / 75%); }
+.analysis-dialog-layout { display:flex; flex-direction:column; height:100%; gap:14px; min-height:0; }
+.analysis-header, .analysis-title, .analysis-footer { display:flex; align-items:center; gap:16px; }
+.analysis-header { justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--analysis-border); flex-shrink:0; }
+.analysis-title { min-width:0; }
+.analysis-title > div { min-width:0; }
+.analysis-dialog .analysis-title h2 { font-size:24px; margin:0 0 2px; overflow-wrap:anywhere; }
+.analysis-title p { color:var(--muted); margin:0; line-height:1.5; }
+.analysis-title-icon { width:48px; height:48px; display:grid; place-items:center; flex-shrink:0; color:var(--cyan); background:var(--surface-bg); border:1px solid var(--analysis-border); border-radius:7px; }
+.analysis-title-icon svg { width:24px; height:24px; }
+.analysis-tabs { display:flex; gap:8px; border-bottom:1px solid var(--analysis-border); flex-shrink:0; margin-bottom:4px; }
+.analysis-dialog .analysis-tabs button { display:flex; align-items:center; gap:16px; padding:10px 20px; min-width:230px; background:var(--analysis-tab-bg); border:1px solid var(--analysis-border); border-bottom:3px solid transparent; border-radius:7px 7px 0 0; color:var(--muted); font:inherit; text-align:left; cursor:pointer; }
+.analysis-dialog .analysis-tabs button[aria-selected=true] { border-color:var(--teal); border-bottom-color:var(--cyan); color:var(--text); background:var(--analysis-tab-active); }
+.analysis-dialog .analysis-tabs button:disabled { opacity:.5; cursor:not-allowed; }
+.analysis-tabs svg { width:20px; height:20px; flex-shrink:0; }
+.analysis-tabs button[aria-selected=true] svg { color:var(--cyan); }
+.analysis-tabs strong, .analysis-tabs small { display:block; }
+.analysis-tabs strong { font-size:15px; margin-bottom:3px; }
+.analysis-tabs small { font-size:12px; }
+.analysis-dialog :is(button,select,input,a,[tabindex]):focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+.analysis-body { flex:1; min-height:0; overflow:auto; padding:12px; border:1px solid var(--analysis-border); border-radius:8px; background:var(--panel-bg); }
+.analysis-body[hidden] { display:none; }
+.analysis-footer { justify-content:space-between; border-top:1px solid var(--analysis-border); padding-top:14px; flex-shrink:0; }
+.analysis-footer p { margin:0; color:var(--muted); line-height:1.5; }
+.analysis-dialog :is(.table-scroll, .latency-table-scroll) { overflow:auto; border:1px solid var(--analysis-border); border-radius:6px; }
+.analysis-dialog :is(.table-scroll, .latency-table-scroll) thead th { position:sticky; top:0; z-index:1; background:var(--analysis-table-head); color:var(--muted); font-size:11px; }
+.analysis-dialog :is(.table-scroll, .latency-table-scroll) tbody tr:nth-child(even) { background:var(--surface-bg); }
+@media(max-width:600px) {
+  dialog.analysis-dialog { width:calc(100vw - 16px); padding:12px; }
+  .analysis-header { align-items:flex-start; }
+  .analysis-title-icon { display:none; }
+  .analysis-dialog .analysis-title h2 { font-size:20px; }
+  .analysis-dialog .analysis-tabs button { min-width:0; flex:1; padding:8px; gap:8px; }
+  .analysis-tabs small { font-size:11px; }
+  .analysis-footer { flex-wrap:wrap; }
+}

@@ -664,8 +664,8 @@ function renderList() {
     actions.append(controls);
   }
   $('maps-empty').hidden = rows.length > 0;
-  $('map-count').textContent = 'Mostrando ' + rows.length + ' de ' + maps.length + ' mapas';
-  $('previous').hidden = $('next').hidden = filtered.length <= pageSize;
+  $('map-count').textContent = `Exibindo ${filtered.length ? start + 1 : 0}–${start + rows.length} de ${filtered.length} mapas`;
+  $('previous').hidden = $('next').hidden = false;
   $('previous').disabled = page === 0;
   $('next').disabled = start + rows.length >= filtered.length;
 }

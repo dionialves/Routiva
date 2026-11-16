@@ -25,3 +25,10 @@
   --focus: #91c7ff;
   --font-ui: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+:root {
+  --analysis-bg:#071a28;
+  --analysis-border:#315b72;
+  --analysis-tab-bg:#102b3d;
+  --analysis-tab-active:#0b3448;
+  --analysis-table-head:#103347;
+}

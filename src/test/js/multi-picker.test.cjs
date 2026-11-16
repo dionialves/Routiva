@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-function surface(kind = 'group') {
+function surface(kind = 'group', labels = {}) {
   class Element {
     constructor() { this.children = []; this.listeners = {}; this.value = ''; }
     append(...nodes) { this.children.push(...nodes); }
@@ -23,7 +23,7 @@ function surface(kind = 'group') {
     { textContent: 'POP indisponível', disabled: true, selected: false },
   ];
   let changes = 0;
-  context.setupMultiPicker(kind, { options }, 'Todos', () => changes++);
+  context.setupMultiPicker(kind, { options }, 'Todos', () => changes++, labels);
   const search = elements[`incident-${kind}-search`];
   const menu = elements[`incident-${kind}-picker`];
   const enter = extra => {
@@ -74,4 +74,11 @@ test('Enter narrows an existing selection of every option to the search matches'
   ui.enter();
   assert.deepEqual(ui.options.map(option => option.selected), [true, false, false, false]);
   assert.equal(ui.changes(), 1);
+});
+
+ test('generic radio checklist preserves hidden selections and stays open on Enter', () => {
+  const ui = surface('radio-client', { allText:'Todos os clientes', selectedLabel:'clientes selecionados', preserveSelection:true });
+  ui.menu.open = true; ui.search.value = 'POP A'; ui.enter();
+  assert.deepEqual(ui.options.map(option => option.selected), [true, false, true, false]);
+  assert.equal(ui.menu.open, true);
 });

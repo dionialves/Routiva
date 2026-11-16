@@ -45,7 +45,7 @@ test('page paginates hosts, group navigation does not change selection, filters 
   el['selection-filter'].value = 'selected'; el['selection-filter'].fire('change');
   assert.equal(el['host-list'].children.length, 1);
   el['selection-filter'].value = 'all'; el['selection-filter'].fire('change');
-  el['next-page'].fire('click'); assert.match(el['page-label'].textContent, /Página 2 de 3/);
+  el['next-page'].fire('click'); assert.match(el['page-label'].textContent, /Exibindo 51–100 de 120 hosts/);
   assert.match(el['selection-count'].textContent, /^1 hosts selecionados/);
 });
 test('refresh never imports, preserves edits on success and failure, cancel restores baseline', async () => {

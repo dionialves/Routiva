@@ -12,6 +12,8 @@ public class IxcController {
     private final IxcClient ixc;
     private final ZabbixService inventory;
     private final MikrotikService mikrotik;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private br.com.scriptping.client.radio.RadioVisitService radio;
 
     public IxcController(IxcClient ixc, ZabbixService inventory, MikrotikService mikrotik) {
         this.ixc = ixc; this.inventory = inventory; this.mikrotik = mikrotik;
@@ -54,7 +56,13 @@ public class IxcController {
     }
 
     @GetMapping("/api/hosts/{id}/ixc/login-names")
-    public ResponseEntity<Map<String, List<String>>> loginNames(@PathVariable String id) {
+    public ResponseEntity<Map<String, List<String>>> visitLoginNames(@PathVariable String id,
+        @RequestHeader(value = "X-Radio-Visit", required = false) String visit, jakarta.servlet.http.HttpSession owner) {
+        if (radio != null && visit != null) radio.owned(visit, id, owner.getId());
+        return loginNames(id, visit, owner.getId());
+    }
+    public ResponseEntity<Map<String, List<String>>> loginNames(String id) { return loginNames(id, null, null); }
+    private ResponseEntity<Map<String, List<String>>> loginNames(String id, String visit, String owner) {
         var host = inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host não encontrado."));
         var names = new LinkedHashMap<String, List<String>>();
@@ -63,12 +71,19 @@ public class IxcController {
             try { names.putIfAbsent(IxcClient.normalizeMac(row.get("mac-address")), new ArrayList<>()); }
             catch (ResponseStatusException ex) { /* Ignore missing or malformed MACs. */ }
         }
+        var ips = new LinkedHashMap<String, String>();
         if (!names.isEmpty()) {
-            for (var login : ixc.findByMacs(names.keySet())) {
+            var logins = ixc.findByMacs(names.keySet());
+            for (String mac : names.keySet()) {
+                var matches = logins.stream().filter(login -> mac.equals(login.mac)).toList();
+                if (matches.size() == 1) ips.put(mac, matches.getFirst().ip);
+            }
+            for (var login : logins) {
                 var matches = names.get(login.mac);
                 if (matches != null && !login.pppoe.isBlank() && !matches.contains(login.pppoe)) matches.add(login.pppoe);
             }
         }
+        if (radio != null && visit != null) radio.identities(visit, id, owner, names, ips);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(names);
     }
 

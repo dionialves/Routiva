@@ -5,7 +5,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/maps.css?v=20261115-round-indicators"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/maps.js?v=20261115-pop-availability" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/maps.css?v=20261115-round-indicators"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/maps.js?v=20261115-ui-pagination" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
@@ -29,7 +29,7 @@
         <tbody id="maps"></tbody>
       </th:block></div>
       <p id="maps-empty" hidden>Nenhum mapa encontrado.</p>
-      <nav class="pagination" aria-label="Paginação dos mapas"><span id="map-count" role="status"></span>
+      <nav class="pagination system-pagination" aria-label="Paginação dos mapas"><span id="map-count" role="status"></span>
         <button id="previous" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-left"></use></svg>Anterior</button><button id="next" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>Próxima</button>
       </nav>
     </section>

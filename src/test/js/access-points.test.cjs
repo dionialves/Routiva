@@ -75,13 +75,13 @@ test('failed save preserves selection and cancel does not persist', async () => 
 test('host selection, numeric sorting and pagination compose without new requests', async () => {
   const rows = Array.from({ length: 55 }, (_, index) => ({ hostId: String(index), name: `AP ${index + 1}`, ip: `192.0.2.${index + 1}`, available: true, groups: [{ id: index < 52 ? 'a' : 'b', name: index < 52 ? 'Grupo A' : 'Grupo B' }] }));
   const ui = await surface(rows), e = ui.elements;
-  assert.equal(e['ap-page-count'].textContent, 'Página 1 de 2');
+  assert.equal(e['ap-page-count'].textContent, 'Exibindo 1–50 de 55 APs');
   assert.equal(e['ap-rows'].children[0].children.length, 50);
   await ui.click('next');
-  assert.equal(e['ap-page-count'].textContent, 'Página 2 de 2');
+  assert.equal(e['ap-page-count'].textContent, 'Exibindo 51–55 de 55 APs');
   for (const option of e['incident-host'].children.slice(0, 52)) option.selected = true;
   e['incident-host'].handlers.change();
-  assert.equal(e['ap-page-count'].textContent, 'Página 1 de 2');
+  assert.equal(e['ap-page-count'].textContent, 'Exibindo 1–50 de 52 APs');
   await ui.click('sort-ip'); await ui.click('sort-ip');
   const firstRow = () => e['ap-rows'].children[0].children[0];
   assert.equal(firstRow().children[1].textContent, '192.0.2.52');
@@ -89,7 +89,7 @@ test('host selection, numeric sorting and pagination compose without new request
   assert.equal(firstRow().children[1].textContent, '192.0.2.2');
   for (const option of e['incident-host'].children) option.selected = option.value === '21';
   e['incident-host'].handlers.change();
-  assert.equal(e['ap-page-count'].textContent, 'Página 1 de 1');
+  assert.equal(e['ap-page-count'].textContent, 'Exibindo 1–1 de 1 APs');
   assert.equal(e['ap-next'].disabled, true);
   assert.equal(ui.requests.length, 1);
 });
@@ -134,7 +134,7 @@ test('host groups filter APs before combining host selection and reset paginatio
   await ui.click('next');
   e['incident-group'].children.find(option => option.value === 'b').selected = true;
   e['incident-group'].handlers.change();
-  assert.equal(e['ap-page-count'].textContent, 'Página 1 de 1');
+  assert.equal(e['ap-page-count'].textContent, 'Exibindo 1–2 de 2 APs');
   assert.equal(e['ap-rows'].children[0].children.length, 2);
   e['incident-host'].children.find(option => option.value === '52').selected = true;
   e['incident-host'].handlers.change();
