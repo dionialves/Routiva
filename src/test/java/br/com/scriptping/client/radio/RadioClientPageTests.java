@@ -19,6 +19,9 @@ class RadioClientPageTests {
     @MockitoBean AccessPointService aps;
     @Test void rendersSharedTableModalAndAccessibleTabsExactlyOnce() throws Exception {
         String html = mvc.perform(get("/clientes/radio")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(html.indexOf("incident-radio-group-picker")).isLessThan(html.indexOf("incident-radio-ap-picker"));
+        assertThat(html.indexOf("incident-radio-ap-picker")).isLessThan(html.indexOf("incident-radio-client-picker"));
+        assertThat(html.indexOf("incident-radio-client-picker")).isLessThan(html.indexOf("incident-radio-status-picker"));
         assertThat(html).contains("Clientes Rádio", "hosts-table", "form-dialog", "role=\"tablist\"", "aria-controls=\"radio-history\"", "Vincular login");
         assertThat(html.split("id=\"radio-overview\"", -1)).hasSize(2);
         assertThat(html.split("id=\"radio-title\"", -1)).hasSize(2);

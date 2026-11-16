@@ -73,11 +73,12 @@
     if (left == null || right == null) return left == null ? (right == null ? 0 : 1) : -1;
     return direction * (typeof left === 'number' ? left - right : String(left).localeCompare(String(right), 'pt-BR', { numeric:true, sensitivity:'base' }));
   }
-  function filterClients(clients, selectedClients, aps, statuses) {
+  function filterClients(clients, selectedClients, aps, statuses, groups = new Set()) {
     return clients.filter(client => {
       const values = tableValues(client);
       return (!selectedClients.size || selectedClients.has(client.id)) && (!aps.size || aps.has(values.apId))
-        && (!statuses.size || statuses.has(values.status));
+        && (!statuses.size || statuses.has(values.status))
+        && (!groups.size || (client.groups || []).some(group => groups.has(group.id)));
     });
   }
   if (typeof module !== 'undefined') module.exports = { format, tableValues, compareClients, filterClients, overviewFields, historyValues, collectionFields, paginateClients, observationPeriod, icmpDetails };
@@ -131,6 +132,8 @@
     pickers.set(kind, window.setupMultiPicker('radio-' + kind, select, allLabel, () => { clientPage = 1; render(); }, { allText:allLabel, selectedLabel, preserveSelection:true }));
   }
   function setupFilters() {
+    const groups = new Map(clients.flatMap(client => (client.groups || []).map(group => [group.id, group.name])));
+    setupPicker('group', [...groups].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')), 'Todos os grupos de hosts', 'grupos selecionados');
     setupPicker('client', clients.map(c => [c.id, c.login || c.provisional_mac || c.lastSeen?.mac || '-']), 'Todos os clientes', 'clientes selecionados');
     const aps = new Map(clients.map(c => { const v = tableValues(c); return [v.apId, v.ap]; }).filter(([id]) => id));
     setupPicker('ap', [...aps].sort((a, b) => a[1].localeCompare(b[1], 'pt-BR')), 'Todos os APs', 'APs selecionados');
@@ -138,7 +141,7 @@
   }
   const tableFormat = (value, unit = '') => value == null ? '-' : format(value, unit);
   function render() {
-    const visible = filterClients(clients, marked('client'), marked('ap'), marked('status'))
+    const visible = filterClients(clients, marked('client'), marked('ap'), marked('status'), marked('group'))
       .sort((a, b) => compareClients(a, b, sortKey, direction));
     const pagination = paginateClients(visible, clientPage); clientPage = pagination.page;
     $('radio-clients-previous').disabled = !pagination.previous;

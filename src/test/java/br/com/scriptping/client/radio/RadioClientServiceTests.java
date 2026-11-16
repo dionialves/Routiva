@@ -54,6 +54,17 @@ class RadioClientServiceTests {
         service.persistCollection(batch, resolved);
     }
     @SuppressWarnings("unchecked") Map<String, Object> data(Map<String, Object> collection) { return (Map<String, Object>) collection.get("data"); }
+    @Test void filtersUseCurrentGroupsOfTheApDisplayedForTheLatestValidCollection() {
+        when(inventory.hosts()).thenReturn(List.of(
+            new Host("ap1", "AP 1", "192.0.2.1", List.of(new Host.Group("g1", "Norte"))),
+            new Host("ap2", "AP 2", "192.0.2.2", List.of(new Host.Group("g2", "Sul")))));
+        complete("ap1", MAC, now - 40000, "alice");
+        // An insufficient later observation on another AP must not change the group of the displayed collection.
+        persist(batch("ap2", List.of(sample(MAC, now - 5000, "-60", "alice"))));
+        assertThat(service.list().getFirst().get("groups")).isEqualTo(List.of(new Host.Group("g1", "Norte")));
+        complete("ap2", MAC, now - 20000, "alice");
+        assertThat(service.list().getFirst().get("groups")).isEqualTo(List.of(new Host.Group("g2", "Sul")));
+    }
     @Test void loginSurvivesApMacAndIpChangesAndPreservesRawSamples() throws Exception {
         complete("ap1", MAC, now - 40000, "alice"); complete("ap2", OTHER, now - 20000, "alice");
         assertThat(service.list()).hasSize(1);

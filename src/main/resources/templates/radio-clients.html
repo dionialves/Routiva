@@ -12,7 +12,7 @@
   <th:block th:replace="~{design-system :: picker}"></th:block>
   <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
   <link rel="stylesheet" href="/radio-clients.css?v=20261115-no-collection-footer">
-  <script src="/multi-picker.js?v=20261115-radio" defer></script><script src="/shell.js" defer></script><script src="/radio-clients.js?v=20261115-no-collection-footer" defer></script>
+  <script src="/multi-picker.js?v=20261115-radio" defer></script><script src="/shell.js" defer></script><script src="/radio-clients.js?v=20261116-host-groups" defer></script>
 </head><body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('radio-clients')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -20,8 +20,9 @@
 <div class="availability-heading page-action-heading"><div><p class="eyebrow">REDE WIRELESS</p><h1>Clientes Rádio</h1><p>Acompanhe a identificação e o histórico dos clientes conectados aos seus APs.</p></div>
 </div>
 <section class="card query-filter-bar" aria-label="Pesquisar clientes"><div class="query-filter-row">
-<div th:replace="~{multi-picker :: checklist('radio-client', 'Clientes', 'user', 'Todos os clientes', 'Pesquisar login')}"></div>
+<div th:replace="~{multi-picker :: checklist('radio-group', 'Grupo de hosts', 'layers', 'Todos os grupos de hosts', 'Pesquisar grupo')}"></div>
 <div th:replace="~{multi-picker :: checklist('radio-ap', 'Access Point', 'radio-tower', 'Todos os APs', 'Pesquisar AP')}"></div>
+<div th:replace="~{multi-picker :: checklist('radio-client', 'Clientes', 'user', 'Todos os clientes', 'Pesquisar login')}"></div>
 <div th:replace="~{multi-picker :: checklist('radio-status', 'Conexão', 'activity', 'Todas as conexões', 'Pesquisar condição')}"></div>
 </div></section>
 <section class="card availability-host-section" aria-labelledby="radio-list-title">

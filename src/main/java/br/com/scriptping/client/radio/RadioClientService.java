@@ -294,6 +294,8 @@ public class RadioClientService {
     }
     public List<Map<String, Object>> list() {
         var result = new ArrayList<Map<String, Object>>(); Set<String> visible = visibleHosts();
+        var hostGroups = new HashMap<String, List<br.com.scriptping.zabbix.Host.Group>>();
+        inventory.hosts().forEach(host -> hostGroups.put(host.id(), host.groups()));
         for (var client : rows("SELECT * FROM radio_client ORDER BY login, provisional_mac")) {
             String clientId = client.get("id").toString();
             var observations = rows("SELECT o.*, v.host_id, v.host_name FROM radio_observation o JOIN radio_visit v ON v.id = o.visit_id WHERE o.client_id = ? ORDER BY o.measured_at DESC", clientId)
@@ -304,6 +306,9 @@ public class RadioClientService {
             observations.getFirst().put("radioName", source.get("radio-name"));
             observations.getFirst().put("interface", source.get("interface"));
             client.put("lastSeen", observations.getFirst());
+            var latest = (Map<?, ?>) client.get("latest");
+            String displayedHost = (latest == null ? observations.getFirst().get("host_id") : latest.get("host_id")).toString();
+            client.put("groups", hostGroups.getOrDefault(displayedHost, List.of()));
             client.put("observedFrom", observations.getLast().get("measured_at"));
             // Never send raw source rows to the list endpoint.
             ((Map<?, ?>) client.get("lastSeen")).remove("raw_data");

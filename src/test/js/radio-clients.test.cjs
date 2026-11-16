@@ -78,3 +78,13 @@ test('ICMP distinguishes no test from partial data and retains real zero values'
   assert.equal(Object.fromEntries(loss.fields)['Perda de pacote'],'100 %');
   assert.ok(loss.unavailable.includes('Latência'));
 });
+
+test('host group selection combines with AP, client and connection and accepts any selected membership', () => {
+  const a = { ...client('a', 0, -60, 'ap1'), groups: [{ id: 'g1', name: 'Norte' }, { id: 'g2', name: 'Rádio' }] };
+  const b = { ...client('b', 0, -60, 'ap2'), groups: [{ id: 'g3', name: 'Sul' }] };
+  const c = client('c', 0, -60, 'ap1');
+  assert.deepEqual(filterClients([a,b,c], new Set(), new Set(), new Set(), new Set(['g2','g3'])).map(c => c.id), ['a','b']);
+  assert.deepEqual(filterClients([a,b,c], new Set(['a','b']), new Set(['ap1']), new Set(['normal']), new Set(['g2'])).map(c => c.id), ['a']);
+  assert.equal(filterClients([a,b,c], new Set(), new Set(['ap2']), new Set(), new Set(['g1'])).length, 0);
+  assert.equal(filterClients([a,b,c], new Set(), new Set(), new Set(), new Set()).length, 3);
+});
