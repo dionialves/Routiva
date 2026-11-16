@@ -13,32 +13,27 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
-/** Persistence and identity analysis for closed visits. Source data remains immutable on relinking. */
+/** Persistence and identity analysis for captured task collections. Source data remains immutable on relinking. */
 @Service
 public class RadioClientService {
     private final JdbcTemplate db;
     private final TransactionTemplate tx;
     private final ObjectMapper json;
-    private final IxcClient ixc;
     private final ZabbixService inventory;
     private final int minimum;
     private final long coverage;
-    public RadioClientService(JdbcTemplate db, TransactionTemplate tx, ObjectMapper json, IxcClient ixc,
+    public RadioClientService(JdbcTemplate db, TransactionTemplate tx, ObjectMapper json,
             ZabbixService inventory, @Value("${radio.history.minimum-readings:2}") int minimum,
             @Value("${radio.history.minimum-duration-ms:10000}") long coverage) {
-        this.db = db; this.tx = tx; this.json = json; this.ixc = ixc; this.inventory = inventory;
+        this.db = db; this.tx = tx; this.json = json; this.inventory = inventory;
         this.minimum = Math.max(2, minimum); this.coverage = Math.max(0, coverage);
     }
-    /** Called only by the closed-visit worker. A failed batch rolls back as one unit. */
-    public void persistVisit(RadioVisitService.Batch batch) {
+    /** Only the scheduled task supplies captured data; this service performs no network queries. */
+    public void persistCollection(RadioCollection.Batch batch, List<IxcClient.Login> resolved) {
         var samples = batch.samples().stream().filter(sample -> sample.at() >= batch.startedAt()
-            && sample.at() <= batch.touchedAt() + 1000).sorted(Comparator.comparingLong(RadioVisitService.Sample::at)).toList();
+            && sample.at() <= batch.touchedAt() + 1000).sorted(Comparator.comparingLong(RadioCollection.Sample::at)).toList();
         var macs = new LinkedHashSet<String>(); samples.forEach(sample -> macs.add(IxcClient.normalizeMac(sample.mac())));
-        boolean alreadyClosed = one("SELECT id FROM radio_visit WHERE id = ? AND closed = TRUE", batch.id()) != null;
-        List<IxcClient.Login> resolved;
-        try { resolved = alreadyClosed ? List.of() : ixc.findByMacs(macs); }
-        catch (ResponseStatusException unavailable) { resolved = List.of(); }
-        final var identities = resolved;
+        final var identities = List.copyOf(resolved);
         locked(() -> {
             var existing = one("SELECT * FROM radio_visit WHERE id = ?", batch.id());
             if (existing != null && (!batch.host().equals(existing.get("host_id")) || !batch.owner().equals(existing.get("owner_id"))))
@@ -55,7 +50,7 @@ public class RadioClientService {
                     if (linkedNames.isEmpty()) {
                         // Later knowledge can link an earlier unknown sample without rewriting what was observed.
                         linkedNames = samples.stream().filter(s -> mac.equals(s.mac()) && s.at() >= sample.at() && !s.observedLogins().isEmpty())
-                            .map(RadioVisitService.Sample::observedLogins).findFirst().orElseGet(() -> identities.stream()
+                            .map(RadioCollection.Sample::observedLogins).findFirst().orElseGet(() -> identities.stream()
                                 .filter(login -> mac.equals(login.mac)).map(login -> login.pppoe.strip()).filter(n -> !n.isBlank()).distinct().toList());
                     }
                     String linkedLogin = linkedNames.size() == 1 ? linkedNames.getFirst() : null;

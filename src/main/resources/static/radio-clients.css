@@ -61,11 +61,6 @@
 #radio-dialog > .analysis-dialog-layout { height:auto; max-height:calc(100dvh - 78px); gap:16px; }
 #radio-dialog .analysis-header {
   border-bottom:0;
-  width:100%;
-  max-width:none;
-  margin:0;
-  padding:0 0 12px;
-  flex-direction:row;
   align-items:flex-start;
   justify-content:space-between;
 }

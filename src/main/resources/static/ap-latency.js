@@ -97,8 +97,6 @@
   const serverTimes = new WeakMap();
   async function request(path = '', method = 'GET') {
     const headers = {};
-    const visit = document.querySelector('[data-host-id]').dataset.radioVisit;
-    if (visit) headers['X-Radio-Visit'] = visit;
     const token = document.querySelector('meta[name="_csrf"]')?.content;
     const header = document.querySelector('meta[name="_csrf_header"]')?.content;
     if (token && header) headers[header] = token;

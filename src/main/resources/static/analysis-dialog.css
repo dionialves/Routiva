@@ -16,7 +16,7 @@ dialog.analysis-dialog {
 dialog.analysis-dialog::backdrop { background:rgb(0 7 14 / 75%); }
 .analysis-dialog-layout { display:flex; flex-direction:column; height:100%; gap:14px; min-height:0; }
 .analysis-header, .analysis-title, .analysis-footer { display:flex; align-items:center; gap:16px; }
-.analysis-header { justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--analysis-border); flex-shrink:0; }
+.analysis-dialog .analysis-header { width:100%; max-width:none; margin:0; padding:0 0 12px; flex-direction:row; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--analysis-border); flex-shrink:0; }
 .analysis-title { min-width:0; }
 .analysis-title > div { min-width:0; }
 .analysis-dialog .analysis-title h2 { font-size:24px; margin:0 0 2px; overflow-wrap:anywhere; }
@@ -49,3 +49,6 @@ dialog.analysis-dialog::backdrop { background:rgb(0 7 14 / 75%); }
   .analysis-tabs small { font-size:11px; }
   .analysis-footer { flex-wrap:wrap; }
 }
+
+/* Keep form action groups inside the shared analysis footer without extra separators. */
+.analysis-dialog .analysis-footer .settings-actions { margin:0; padding:0; border:0; gap:8px; }

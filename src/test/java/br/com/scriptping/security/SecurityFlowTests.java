@@ -147,9 +147,9 @@ class SecurityFlowTests {
             .andExpect(content().string(containsString("name=\"is-admin\" content=\"false\"")));
         mvc.perform(get("/ap").session(session)).andExpect(status().isOk());
         mvc.perform(get("/api/maps").session(session)).andExpect(status().isOk());
-        for (String url : new String[]{"/configuracao/usuarios", "/configuracao/zabbix", "/api/users", "/api/ap/candidates"})
+        for (String url : new String[]{"/configuracao/usuarios", "/configuracao/zabbix", "/configuracao/agendador", "/configuracao/agendador/api", "/api/users", "/api/ap/candidates"})
             mvc.perform(get(url).session(session)).andExpect(status().isForbidden());
-        for (String url : new String[]{"/api/maps", "/api/maps/", "/api/ap", "/api/users"})
+        for (String url : new String[]{"/api/maps", "/api/maps/", "/api/ap", "/api/users", "/configuracao/agendador/api", "/configuracao/agendador/preview", "/configuracao/agendador/api/id/delete", "/configuracao/agendador/api/id/run"})
             mvc.perform(post(url).session(session).with(csrf()).contentType("application/json").content("{}"))
                 .andExpect(status().isForbidden());
         mvc.perform(put("/api/users/1").session(session).with(csrf()).contentType("application/json").content("{}"))
@@ -239,4 +239,15 @@ class SecurityFlowTests {
         assertThat(users.bootstrap()).isNull();
         assertThat(repository.findByUsername("admin").orElseThrow().passwordHash()).isEqualTo(hash);
     }
+    @Test @WithMockUser(roles = "ADMIN")
+    void radioAssessmentTaskIsAvailableInTheRealSchedulerCatalog() throws Exception {
+        mvc.perform(get("/configuracao/agendador"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("value=\"radio-client-assessment\"")))
+            .andExpect(content().string(containsString("Avaliação de Cliente Rádio")));
+        mvc.perform(get("/configuracao/agendador/api"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.tasks[*].key", hasItem("radio-client-assessment")));
+    }
+
 }

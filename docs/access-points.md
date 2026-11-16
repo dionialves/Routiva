@@ -29,7 +29,7 @@ equipamento retornam indisponibilidade.
 A quantidade de clientes e o modelo são atualizados quando a análise do AP faz
 uma consulta válida. A lista não abre conexões com todos os equipamentos: exibe
 os últimos valores persistidos e a data da última consulta válida de resumo ou
-wireless. Não há coleta automática em segundo plano de clientes nesta entrega.
+wireless. A coleta automática de Clientes Rádio é feita exclusivamente pela tarefa Avaliação de Cliente Rádio, configurada no agendador. Abrir a página não persiste clientes.
 
 Para outro fabricante, implementar `EquipmentProvider`, normalizar as linhas ao
 contrato consumido pela apresentação e informar as capacidades disponíveis.
@@ -66,7 +66,7 @@ ignorando acentos e maiúsculas; os filtros e a ordenação não alteram as medi
 As cores usam os parâmetros iniciais de diferença acima de 2 ms para atenção,
 acima de 5 ms para crítico e perda acima de 2% para ao menos atenção.
 Há até 255 clientes por avaliação e limite global de 256 alvos temporários.
-Resultados ficam em memória por cinco minutos após a conclusão, sem histórico.
+Resultados da avaliação manual ficam em memória por cinco minutos após a conclusão. Apenas a avaliação executada pela tarefa atualiza o histórico de Clientes Rádio.
 **Executar novamente** limpa o teste anterior; fechar/cancelar encerra os alvos.
 
 Esta versão requer atualizar **app e collector**, pois o limite `max_packets` é

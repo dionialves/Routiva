@@ -28,7 +28,7 @@ class RadioClientServiceTests {
         db = new JdbcTemplate(source); ixc = mock(IxcClient.class); inventory = mock(ZabbixService.class);
         when(ixc.findByMacs(anyCollection())).thenReturn(List.of());
         when(inventory.hosts()).thenReturn(List.of(new Host("ap1", "AP 1", "192.0.2.1", List.of()), new Host("ap2", "AP 2", "192.0.2.2", List.of())));
-        service = new RadioClientService(db, new TransactionTemplate(new DataSourceTransactionManager(source)), mapper, ixc, inventory, 2, 10000);
+        service = new RadioClientService(db, new TransactionTemplate(new DataSourceTransactionManager(source)), mapper, inventory, 2, 10000);
         now = System.currentTimeMillis() - 1000;
     }
     IxcClient.Login login(String name, String mac) throws Exception {
@@ -36,16 +36,22 @@ class RadioClientServiceTests {
         constructor.setAccessible(true);
         return constructor.newInstance(mapper.readTree("{\"login\":\"" + name + "\",\"ip\":\"192.0.2.10\"}"), mac);
     }
-    RadioVisitService.Sample sample(String mac, long at, String signal, String... names) {
-        return new RadioVisitService.Sample(at, mac, Map.of("mac-address", mac, "signal", signal,
+    RadioCollection.Sample sample(String mac, long at, String signal, String... names) {
+        return new RadioCollection.Sample(at, mac, Map.of("mac-address", mac, "signal", signal,
             "avg-signal", "-999", "tx-ccq", "80", "p-throughput", "12000", "tx-rate", "1Gbps", "rx-rate", "500kbps"), List.of(names));
     }
-    RadioVisitService.Batch batch(String host, List<RadioVisitService.Sample> samples, RadioVisitService.Latency... tests) {
-        return new RadioVisitService.Batch(UUID.randomUUID().toString(), host, host, "owner", now - 60000, now, samples, List.of(tests));
+    RadioCollection.Batch batch(String host, List<RadioCollection.Sample> samples, RadioCollection.Latency... tests) {
+        return new RadioCollection.Batch(UUID.randomUUID().toString(), host, host, "owner", now - 60000, now, samples, List.of(tests));
     }
-    RadioVisitService.Batch complete(String host, String mac, long at, String... names) {
+    RadioCollection.Batch complete(String host, String mac, long at, String... names) {
         var batch = batch(host, List.of(sample(mac, at, "-60", names), sample(mac, at + 10000, "-80", names)));
-        service.persistVisit(batch); return batch;
+        persist(batch); return batch;
+    }
+    void persist(RadioCollection.Batch batch) {
+        List<IxcClient.Login> resolved;
+        try { resolved = ixc.findByMacs(batch.samples().stream().map(RadioCollection.Sample::mac).toList()); }
+        catch (ResponseStatusException unavailable) { resolved = List.of(); }
+        service.persistCollection(batch, resolved);
     }
     @SuppressWarnings("unchecked") Map<String, Object> data(Map<String, Object> collection) { return (Map<String, Object>) collection.get("data"); }
     @Test void loginSurvivesApMacAndIpChangesAndPreservesRawSamples() throws Exception {
@@ -86,16 +92,16 @@ class RadioClientServiceTests {
         assertThat(db.queryForObject("SELECT operator_name FROM radio_mac_binding WHERE valid_to IS NULL", String.class)).isEqualTo("operator");
     }
     @Test void batchesAreIdempotentAndShortVisitsDoNotReplaceEligibleHistory() {
-        var first = complete("ap1", MAC, now - 40000); service.persistVisit(first);
+        var first = complete("ap1", MAC, now - 40000); persist(first);
         var second = complete("ap1", MAC, now - 20000);
-        service.persistVisit(batch("ap1", List.of(sample(MAC, now, "-20"))));
+        persist(batch("ap1", List.of(sample(MAC, now, "-20"))));
         var client = service.list().getFirst(); assertThat(service.history(client.get("id").toString(), 0)).hasSize(2);
         assertThat(((Map<?, ?>) client.get("latest")).get("visit_id")).isEqualTo(second.id());
     }
     @Test void simultaneousFinalizersPersistExactlyOneCollection() throws Exception {
         var batch = batch("ap1", List.of(sample(MAC, now - 20000, "-60"), sample(MAC, now - 10000, "-70")));
         try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
-            var a = executor.submit(() -> service.persistVisit(batch)); var b = executor.submit(() -> service.persistVisit(batch)); a.get(); b.get();
+            var a = executor.submit(() -> persist(batch)); var b = executor.submit(() -> persist(batch)); a.get(); b.get();
         }
         assertThat(db.queryForObject("SELECT COUNT(*) FROM radio_collection", Integer.class)).isEqualTo(1);
     }
@@ -114,7 +120,7 @@ class RadioClientServiceTests {
     }
     @Test void manualMergeAndPartialPeriodKeepOriginalObservations() {
         complete("ap2", OTHER, now - 50000, "alice");
-        service.persistVisit(batch("ap1", List.of(sample(MAC, now - 40000, "-60"), sample(MAC, now - 30000, "-60"), sample(MAC, now - 20000, "-60"), sample(MAC, now - 10000, "-60"))));
+        persist(batch("ap1", List.of(sample(MAC, now - 40000, "-60"), sample(MAC, now - 30000, "-60"), sample(MAC, now - 20000, "-60"), sample(MAC, now - 10000, "-60"))));
         String source = service.list().stream().filter(c -> c.get("login") == null).findFirst().orElseThrow().get("id").toString();
         service.manual(source, "alice", now - 25000, "operator", true);
         assertThat(service.list()).hasSize(2);
@@ -125,16 +131,16 @@ class RadioClientServiceTests {
     @Test void latencyIsScopedToVisitAndLateCompletionUpdatesAnAlreadyPersistedBatch() {
         var visit = complete("ap1", MAC, now - 20000);
         var stats = new LinkedHashMap<String, Object>(); stats.put("latency", null); stats.put("loss", 100d); stats.put("startedAt", now - 15000);
-        service.persistVisit(new RadioVisitService.Batch(visit.id(), visit.host(), visit.hostName(), visit.owner(), visit.startedAt(), visit.touchedAt(), visit.samples(), List.of(new RadioVisitService.Latency(MAC, now, stats))));
+        persist(new RadioCollection.Batch(visit.id(), visit.host(), visit.hostName(), visit.owner(), visit.startedAt(), visit.touchedAt(), visit.samples(), List.of(new RadioCollection.Latency(MAC, now, stats))));
         var client = service.list().getFirst().get("id").toString(); assertThat(service.history(client, 0).getFirst()).containsKey("latency");
         complete("ap1", MAC, now - 10000); assertThat(service.history(client, 0).getFirst()).doesNotContainKey("latency");
     }
     @Test void ownersSharingOneMacInTheSameVisitKeepTheCorrectTestPeriod() {
         var samples = List.of(sample(MAC, now - 40000, "-60", "alice"), sample(MAC, now - 30000, "-60", "alice"),
             sample(MAC, now - 20000, "-60", "bob"), sample(MAC, now - 10000, "-60", "bob"));
-        service.persistVisit(batch("ap1", samples,
-            new RadioVisitService.Latency(MAC, now - 25000, Map.of("startedAt", now - 35000, "latency", 2d, "loss", 0d)),
-            new RadioVisitService.Latency(MAC, now, Map.of("startedAt", now - 15000, "latency", 4d, "loss", 50d))));
+        persist(batch("ap1", samples,
+            new RadioCollection.Latency(MAC, now - 25000, Map.of("startedAt", now - 35000, "latency", 2d, "loss", 0d)),
+            new RadioCollection.Latency(MAC, now, Map.of("startedAt", now - 15000, "latency", 4d, "loss", 50d))));
         assertThat(service.list()).hasSize(2);
         for (var client : service.list()) {
             var test = (Map<?, ?>) service.history(client.get("id").toString(), 0).getFirst().get("latency");
@@ -164,9 +170,9 @@ class RadioClientServiceTests {
         raw.put("signal-severity", "0"); raw.put("quality-severity", "3"); raw.put("quality", "Crítico");
         raw.put("quality-primary-reason", "TX CCQ reduzido sob tráfego significativo.");
         raw.put("quality-summary", "Degradação identificada sob tráfego.");
-        service.persistVisit(batch("ap1", List.of(
-            new RadioVisitService.Sample(now - 20000, MAC, raw, List.of()),
-            new RadioVisitService.Sample(now - 10000, MAC, raw, List.of()))));
+        persist(batch("ap1", List.of(
+            new RadioCollection.Sample(now - 20000, MAC, raw, List.of()),
+            new RadioCollection.Sample(now - 10000, MAC, raw, List.of()))));
         var stored = mapper.readTree(db.queryForObject("SELECT data FROM radio_collection", String.class));
         assertThat(stored.path("connectionSeverity").asInt()).isEqualTo(3);
         assertThat(stored.path("signalSeverity").asInt()).isZero();

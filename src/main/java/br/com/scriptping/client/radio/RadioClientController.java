@@ -1,6 +1,5 @@
 package br.com.scriptping.client.radio;
 
-import jakarta.servlet.http.HttpSession;
 import java.security.Principal;
 import java.util.*;
 import org.springframework.stereotype.Controller;
@@ -9,10 +8,7 @@ import org.springframework.web.bind.annotation.*;
 @Controller
 public class RadioClientController {
     private final RadioClientService clients;
-    private final RadioVisitService visits;
-    public RadioClientController(RadioClientService clients, RadioVisitService visits) {
-        this.clients = clients; this.visits = visits;
-    }
+    public RadioClientController(RadioClientService clients) { this.clients = clients; }
     @GetMapping("/clientes/radio") public String page() { return "radio-clients"; }
     @GetMapping("/api/clients/radio") @ResponseBody
     public Object list() { return clients.list(); }
@@ -22,12 +18,6 @@ public class RadioClientController {
     @PostMapping("/api/clients/radio/{id}/binding") @ResponseBody
     public Object bind(@PathVariable String id, @RequestBody Binding request, Principal operator) {
         return clients.manual(id, request.login(), request.from(), operator.getName(), request.confirm());
-    }
-    @PostMapping("/api/ap/{host}/radio-visits/{visit}/close") @ResponseBody
-    public Object close(@PathVariable String host, @PathVariable String visit, HttpSession owner) {
-        if (!clients.visibleHosts().contains(host))
-            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Sem acesso ao AP.");
-        visits.close(visit, host, owner.getId()); return org.springframework.http.ResponseEntity.accepted().body(Map.of("closed", true));
     }
     @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class) @ResponseBody
     public org.springframework.http.ResponseEntity<?> error(org.springframework.web.server.ResponseStatusException error) {

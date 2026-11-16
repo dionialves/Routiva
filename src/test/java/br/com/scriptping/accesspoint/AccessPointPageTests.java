@@ -18,7 +18,6 @@ import static org.hamcrest.Matchers.not;
 class AccessPointPageTests {
     @Autowired MockMvc mvc;
     @MockitoBean AccessPointService service;
-    @MockitoBean br.com.scriptping.client.radio.RadioVisitService radio;
 
     @Test void rendersLatencySummaryWithSharedNavigationAndEscapedEquipmentName() throws Exception {
         when(service.pageHost("42")).thenReturn(new Host("42", "AP <teste>", "192.0.2.1", List.of()));
@@ -37,6 +36,7 @@ class AccessPointPageTests {
             .andExpect(content().string(containsString("MikroTik São Paulo")))
             .andExpect(content().string(containsString("data-host-id=\"42\"")))
             .andExpect(content().string(containsString("Wireless")))
+            .andExpect(content().string(not(containsString("data-radio-visit"))))
             .andExpect(content().string(containsString("latency-execution-status")))
             .andExpect(content().string(containsString("latency-search")))
             .andExpect(content().string(not(containsString("latency-sidebar"))))

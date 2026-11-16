@@ -33,7 +33,7 @@ class AccessPointTests {
         when(provider.manufacturer()).thenReturn("MikroTik");
         when(provider.capabilities()).thenReturn(Set.of("overview", "wireless"));
         service = new AccessPointService(repository, inventory, List.of(provider));
-        mvc = MockMvcBuilders.standaloneSetup(new AccessPointController(service, mock(br.com.scriptping.client.radio.RadioVisitService.class))).build();
+        mvc = MockMvcBuilders.standaloneSetup(new AccessPointController(service)).build();
     }
     @Test void validatesEntireSelectionAndPersistsWithoutDuplicates() {
         assertThrows(ResponseStatusException.class, () -> service.define(List.of("42", "unknown")));

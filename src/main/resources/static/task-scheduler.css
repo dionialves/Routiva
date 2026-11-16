@@ -1,0 +1,27 @@
+.scheduler-page { font-family:var(--font-ui); }
+.scheduler-page > section { margin-top:28px; }
+.scheduler-page h2 { font-size:18px; }
+.scheduler-notice { padding:16px; border:1px solid var(--border); border-radius:6px; background:var(--panel-bg); color:var(--muted); }
+.scheduler-section-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.scheduler-page td { vertical-align:top; }
+:is(.scheduler-page, #schedule-dialog) :is(td, th) small { display:block; color:var(--muted); margin-top:5px; }
+.scheduler-page td:last-child { white-space:normal; overflow-wrap:anywhere; }
+
+.scheduler-state { font-weight:600; }
+.scheduler-state[data-state=FAILED], .scheduler-state[data-state=INTERRUPTED], #schedule-error, #delete-error { color:var(--error); }
+.scheduler-state[data-state=COMPLETED] { color:var(--success); }
+
+#schedule-dialog .connection-form { display:grid; grid-template-columns:1fr; }
+#schedule-dialog fieldset { border:1px solid var(--border); border-radius:6px; display:flex; flex-wrap:wrap; gap:12px; padding:12px; }
+#schedule-dialog fieldset label, #schedule-dialog .scheduler-checkbox { display:flex; align-items:center; gap:8px; }
+#schedule-dialog small { color:var(--muted); }
+#schedule-dialog input[type=checkbox] { accent-color:var(--focus); }
+#schedule-preview { padding-left:24px; line-height:1.8; }
+#schedule-summary { color:var(--muted); }
+.scheduler-page [hidden] { display:none !important; }
+@media(max-width:640px) { .scheduler-page .page-action-heading { align-items:flex-start; flex-direction:column; } }
+
+#delete-schedule-dialog { background:var(--panel-bg); }
+#schedule-dialog input:not([type=checkbox]), #schedule-dialog select { background:var(--app-bg); border-color:var(--border); color:var(--text); }
+
+#schedule-dialog .analysis-body .connection-form { max-width:640px; }

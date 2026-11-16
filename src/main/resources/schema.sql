@@ -269,3 +269,65 @@ CREATE TABLE IF NOT EXISTS radio_latency (
     data TEXT NOT NULL,
     PRIMARY KEY(visit_id, mac, tested_at)
 );
+
+-- Guided task scheduling. History deliberately has no cascading foreign key.
+CREATE TABLE IF NOT EXISTS task_schedule (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    task_key VARCHAR(80) NOT NULL,
+    task_label VARCHAR(200) NOT NULL,
+    rule_json TEXT NOT NULL,
+    parameters_json TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL,
+    next_run BIGINT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_schedule_due ON task_schedule(enabled, deleted, next_run);
+CREATE TABLE IF NOT EXISTS task_execution (
+    id VARCHAR(36) PRIMARY KEY,
+    schedule_id VARCHAR(36) NOT NULL,
+    schedule_name VARCHAR(120) NOT NULL,
+    task_label VARCHAR(200) NOT NULL,
+    zone VARCHAR(80) NOT NULL,
+    scheduled_at BIGINT NOT NULL,
+    started_at BIGINT,
+    finished_at BIGINT,
+    state VARCHAR(32) NOT NULL,
+    message TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_execution_schedule ON task_execution(schedule_id, scheduled_at);
+
+CREATE TABLE IF NOT EXISTS task_execution_item (
+    execution_id VARCHAR(36) NOT NULL,
+    host_id VARCHAR(255) NOT NULL,
+    host_name VARCHAR(255) NOT NULL,
+    state VARCHAR(32) NOT NULL,
+    message TEXT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (execution_id, host_id)
+);
+
+-- A task owns one non-deleted schedule. Preserve the newest legacy schedule and its history.
+ALTER TABLE task_schedule ADD COLUMN IF NOT EXISTS task_slot VARCHAR(80);
+UPDATE task_execution SET schedule_id = (
+    SELECT winner.id FROM task_schedule winner
+    WHERE winner.deleted = FALSE AND winner.task_key = (
+        SELECT original.task_key FROM task_schedule original WHERE original.id = task_execution.schedule_id
+    )
+    ORDER BY winner.updated_at DESC, winner.created_at DESC, winner.id DESC LIMIT 1
+) WHERE schedule_id IN (
+    SELECT older.id FROM task_schedule older WHERE older.deleted = FALSE AND EXISTS (
+        SELECT 1 FROM task_schedule newer WHERE newer.deleted = FALSE AND newer.task_key = older.task_key
+        AND (newer.updated_at > older.updated_at OR (newer.updated_at = older.updated_at AND newer.created_at > older.created_at)
+            OR (newer.updated_at = older.updated_at AND newer.created_at = older.created_at AND newer.id > older.id))
+    )
+);
+UPDATE task_schedule SET deleted = TRUE, enabled = FALSE, task_slot = NULL WHERE deleted = FALSE AND EXISTS (
+    SELECT 1 FROM task_schedule newer WHERE newer.deleted = FALSE AND newer.task_key = task_schedule.task_key
+    AND (newer.updated_at > task_schedule.updated_at OR (newer.updated_at = task_schedule.updated_at AND newer.created_at > task_schedule.created_at)
+        OR (newer.updated_at = task_schedule.updated_at AND newer.created_at = task_schedule.created_at AND newer.id > task_schedule.id))
+);
+UPDATE task_schedule SET task_slot = CASE WHEN deleted = TRUE THEN NULL ELSE task_key END;
+CREATE UNIQUE INDEX IF NOT EXISTS task_schedule_activity_unique ON task_schedule(task_slot);

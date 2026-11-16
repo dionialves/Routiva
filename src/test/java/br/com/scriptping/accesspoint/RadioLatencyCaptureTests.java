@@ -1,6 +1,6 @@
 package br.com.scriptping.accesspoint;
 
-import br.com.scriptping.client.radio.RadioVisitService;
+
 import br.com.scriptping.equipment.EquipmentProvider;
 import br.com.scriptping.ingestion.*;
 import br.com.scriptping.ixc.IxcClient;
@@ -23,7 +23,6 @@ class RadioLatencyCaptureTests {
         String mac = "AA:BB:CC:DD:EE:FF";
         var aps = mock(AccessPointService.class); var ixc = mock(IxcClient.class);
         var pings = mock(ClientPingSessions.class); var collector = mock(CollectorClient.class);
-        var radio = mock(RadioVisitService.class);
         var ready = new AtomicBoolean(false); var counter = new AtomicInteger();
         when(collector.enabled()).thenReturn(true);
         when(aps.host("ap")).thenReturn(new Host("ap", "AP", "192.0.2.1", List.of()));
@@ -45,16 +44,13 @@ class RadioLatencyCaptureTests {
             }
             return new ClientPingSessions.View(call.getArgument(0), "192.0.2.10", 0, samples);
         });
-        var controller = new LatencyAssessmentController(aps, ixc, pings, collector);
-        ReflectionTestUtils.setField(controller, "radio", radio);
-        var owner = new MockHttpSession();
-        controller.startVisit("ap", 5, "visit", owner);
-        verify(radio, never()).latency(anyString(), anyString(), anyString(), anyString(), anyLong(), anyMap());
-        ready.set(true); controller.cleanup(); controller.cleanup();
-        @SuppressWarnings("unchecked") var stats = org.mockito.ArgumentCaptor.forClass(Map.class);
-        verify(radio).latency(eq("visit"), eq("ap"), eq(owner.getId()), eq(mac), anyLong(), stats.capture());
-        assertThat(stats.getValue().get("loss")).isEqualTo(losses == -1 ? 50d : losses * 20d);
-        assertThat(stats.getValue().get("replies")).isEqualTo(losses == -1 ? 1 : 5 - losses);
-        assertThat(stats.getValue().get("latency")).isEqualTo(losses == 5 ? null : 4d);
+        var service = new LatencyAssessmentService(aps, ixc, pings, collector);
+        var started = service.start("ap", 5, "task:execution");
+        ready.set(true); service.cleanup(); service.cleanup();
+        var results = service.measurements(service.read("ap", started.id(), "task:execution"));
+        var stats = results.getFirst().data();
+        assertThat(stats.get("loss")).isEqualTo(losses == -1 ? 50d : losses * 20d);
+        assertThat(stats.get("replies")).isEqualTo(losses == -1 ? 1 : 5 - losses);
+        assertThat(stats.get("latency")).isEqualTo(losses == 5 ? null : 4d);
     }
 }
