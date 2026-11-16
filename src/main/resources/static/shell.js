@@ -18,6 +18,13 @@ window.notify = (message, type = 'success') => {
     stack.setAttribute('aria-label', 'Notificações');
     document.body.append(stack);
   }
+  const dialog = document.querySelector('dialog[open]');
+  if (dialog && stack.parentElement !== dialog) {
+    dialog.append(stack);
+    dialog.addEventListener('close', () => {
+      if (stack.parentElement === dialog) document.body.append(stack);
+    }, { once: true });
+  }
   const card = document.createElement('div');
   card.className = `toast toast-${type}`;
   card.setAttribute('role', type === 'error' ? 'alert' : 'status');

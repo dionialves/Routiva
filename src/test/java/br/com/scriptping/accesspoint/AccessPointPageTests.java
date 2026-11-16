@@ -44,6 +44,10 @@ class AccessPointPageTests {
             .andExpect(content().string(containsString("latency-results-panel")))
             .andExpect(content().string(containsString("latency-final-results")))
             .andExpect(content().string(not(containsString("latency-summary-link"))))
+            .andExpect(content().string(containsString("id=\"ap-configure\"")))
+            .andExpect(content().string(containsString("Configuração")))
+            .andExpect(content().string(containsString("id=\"ap-config-dialog\"")))
+            .andExpect(content().string(containsString("Excluir AP")))
             .andExpect(content().string(containsString("Clientes avaliados")))
             .andExpect(content().string(containsString("connected-clients")))
             .andExpect(content().string(containsString("signal-distribution")))
@@ -54,6 +58,16 @@ class AccessPointPageTests {
         mvc.perform(get("/hosts/42")).andExpect(status().isNotFound());
         mvc.perform(get("/ap")).andExpect(status().isOk())
             .andExpect(content().string(containsString("Hosts disponíveis")))
-            .andExpect(content().string(containsString("Definir como AP")));
+            .andExpect(content().string(containsString("Definir como AP")))
+            .andExpect(content().string(not(containsString("id=\"ap-config-dialog\""))))
+            .andExpect(content().string(not(containsString("Configurar Access Point:"))));
+    }
+
+    @Test @org.springframework.security.test.context.support.WithMockUser(roles = "USER")
+    void normalUsersDoNotSeeConfigurationActionOrDialog() throws Exception {
+        when(service.pageHost("42")).thenReturn(new Host("42", "AP", "192.0.2.1", List.of()));
+        mvc.perform(get("/ap/42")).andExpect(status().isOk())
+            .andExpect(content().string(not(containsString("id=\"ap-configure\""))))
+            .andExpect(content().string(not(containsString("id=\"ap-config-dialog\""))));
     }
 }

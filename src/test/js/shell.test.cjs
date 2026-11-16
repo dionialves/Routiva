@@ -4,10 +4,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function setup() {
+function setup(withDialog = false) {
   class Element {
     constructor() { this.children = []; this.listeners = {}; this.classList = { add() {} }; }
-    append(...children) { this.children.push(...children); }
+    append(...children) {
+      for (const child of children) {
+        if (child.parentElement) child.parentElement.children = child.parentElement.children.filter(item => item !== child);
+        child.parentElement = this; this.children.push(child);
+      }
+    }
     setAttribute() {}
     addEventListener(type, fn) { this.listeners[type] = fn; }
     emit(type) { this.listeners[type]?.(); }
@@ -16,7 +21,8 @@ function setup() {
     contains(target) { return target === this; }
   }
   const ready = [], listeners = {}, timers = new Map();
-  const body = new Element(), menu = new Element();
+  const body = new Element(), menu = new Element(), dialog = new Element();
+  let stack;
   menu.open = true;
   let serial = 0;
   const window = {};
@@ -25,7 +31,11 @@ function setup() {
     { window, document: {
       body,
       createElement: () => new Element(),
-      querySelector: () => body.children[0],
+      querySelector: selector => {
+        if (selector === 'dialog[open]') return withDialog ? dialog : null;
+        stack ||= body.children[0] || dialog.children[0];
+        return stack;
+      },
       querySelectorAll: selector => selector === '.utility-menu[open]' ? [menu] : [],
       addEventListener(type, fn) { if (type === 'DOMContentLoaded') ready.push(fn); else listeners[type] = fn; },
     },
@@ -34,7 +44,7 @@ function setup() {
     },
   );
   ready.forEach(fn => fn());
-  return { window, body, menu, listeners, timers, run(ms) {
+  return { window, body, menu, dialog, listeners, timers, run(ms) {
     const entry = [...timers].find(([, timer]) => timer.ms === ms);
     assert.ok(entry, `Expected a ${ms}ms timer`);
     timers.delete(entry[0]);
@@ -75,4 +85,16 @@ test('escape and outside clicks close menus while inside clicks preserve them', 
   ui.menu.open = true;
   ui.listeners.click({ target: {} });
   assert.equal(ui.menu.open, false);
+});
+
+test('system notifications remain visible inside open dialogs and return to shell on close', () => {
+  const ui = setup(true);
+  ui.window.notify('Salvo');
+  const stack = ui.dialog.children[0];
+  assert.equal(stack.children[0].children[0].textContent, 'Salvo');
+  assert.equal(ui.body.children.length, 0);
+  ui.window.notify('Conexão validada');
+  assert.equal(stack.children.length, 2);
+  ui.dialog.emit('close');
+  assert.equal(ui.body.children[0], stack);
 });

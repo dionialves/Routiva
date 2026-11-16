@@ -16,12 +16,14 @@ services:
       COLLECTOR_ADDRESS: unix:///run/routiva/collector.sock
       INDICATORS_AGGREGATION_PAGE_SIZE: ${INDICATORS_AGGREGATION_PAGE_SIZE:-10000}
       INDICATORS_AGGREGATION_INTERVAL_MS: ${INDICATORS_AGGREGATION_INTERVAL_MS:-60000}
+      AP_SECRETS_KEY_FILE: /var/lib/routiva/ap-secrets.key
       INDICATORS_LOG_PATH: /var/log/routiva/indicators.log
     ports:
       - '${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080'
     volumes:
       - collector_socket:/run/routiva
       - indicator_logs:/var/log/routiva
+      - app_data:/var/lib/routiva
     depends_on:
       collector:
         condition: service_healthy
@@ -69,6 +71,7 @@ services:
       retries: 10
       start_period: 10s
 volumes:
+  app_data:
   collector_socket:
   collector_logs:
   collector_data:

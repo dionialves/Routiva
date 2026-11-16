@@ -1,9 +1,9 @@
 /* Shared clear action for page queries; never reset editable settings or import selections. */
 document.addEventListener('DOMContentLoaded', () => {
+  if (location.pathname === '/ap' || location.pathname.startsWith('/ap/')) return;
   const storageByPage = {
     '/disponibilidade': ['routiva.availability.period'],
     '/incidentes': ['routiva.incidents.filters'],
-    '/ap': [],
     '/diagnostico/grupos': ['routiva.diagnostics.groups.filters'],
   };
   document.querySelectorAll('.query-filter-bar, .zabbix-filters, .import-results-tools').forEach(bar => {

@@ -4,23 +4,21 @@ import br.com.scriptping.zabbix.Host;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.Semaphore;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class MikrotikService {
-    private final String username, password;
-    private final int port;
-    private final boolean tls;
+    private final br.com.scriptping.accesspoint.AccessPointConnections settings;
     private final Semaphore connections = new Semaphore(8);
+    public MikrotikService(br.com.scriptping.accesspoint.AccessPointConnections settings) { this.settings = settings; }
 
-    public MikrotikService(@Value("${MIKROTIK_USERNAME:}") String username,
-            @Value("${MIKROTIK_PASSWORD:}") String password,
-            @Value("${MIKROTIK_API_PORT:8729}") int port,
-            @Value("${MIKROTIK_API_TLS:true}") boolean tls) {
-        this.username = username; this.password = password; this.port = port; this.tls = tls;
+    public void testConnection(Host host, br.com.scriptping.equipment.EquipmentProvider.Connection connection) {
+        var snapshot = query(host, "overview", null, connection);
+        String version = snapshot.rows().isEmpty() ? "" : snapshot.rows().getFirst().getOrDefault("version", "");
+        if (!version.startsWith("6.")) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+            "Versão não homologada. Selecione um equipamento MikroTik com RouterOS 6.x.");
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -29,12 +27,20 @@ public class MikrotikService {
     public record Snapshot(long measuredAt, List<Map<String, String>> rows, String warning) { }
 
     public Snapshot query(Host host, String section, String selectedInterface) {
-        if (username.isBlank() || password.isBlank()) throw new ResponseStatusException(
-            HttpStatus.SERVICE_UNAVAILABLE, "Configure MIKROTIK_USERNAME e MIKROTIK_PASSWORD no .env.");
+        return query(host, section, selectedInterface, settings.require(host));
+    }
+
+    public Snapshot query(Host host, String section, String selectedInterface,
+            br.com.scriptping.equipment.EquipmentProvider.Connection connection) {
+        return query(host, section, selectedInterface, connection, connection.tls());
+    }
+
+    Snapshot query(Host host, String section, String selectedInterface,
+            br.com.scriptping.equipment.EquipmentProvider.Connection connection, boolean tls) {
         if (host.ip() == null || !host.ip().matches("[0-9a-fA-F:.]+"))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Host sem endereço IP válido.");
         if (!connections.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Consultas ocupadas. Tente novamente.");
-        try (var api = new RouterOsConnection(host.ip(), port, tls, username, password)) {
+        try (var api = new RouterOsConnection(host.ip(), connection.port(), tls, connection.login(), connection.password())) {
             List<Map<String, String>> rows;
             String warning = "";
             switch (section) {

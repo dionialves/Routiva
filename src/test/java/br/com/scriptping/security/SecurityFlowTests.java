@@ -147,11 +147,16 @@ class SecurityFlowTests {
             .andExpect(content().string(containsString("name=\"is-admin\" content=\"false\"")));
         mvc.perform(get("/ap").session(session)).andExpect(status().isOk());
         mvc.perform(get("/api/maps").session(session)).andExpect(status().isOk());
-        for (String url : new String[]{"/configuracao/usuarios", "/configuracao/zabbix", "/configuracao/agendador", "/configuracao/agendador/api", "/api/users", "/api/ap/candidates"})
+        for (String url : new String[]{"/configuracao/usuarios", "/configuracao/zabbix", "/configuracao/agendador", "/configuracao/agendador/api", "/api/users", "/api/ap/candidates", "/api/ap/42/configuration"})
             mvc.perform(get(url).session(session)).andExpect(status().isForbidden());
         for (String url : new String[]{"/api/maps", "/api/maps/", "/api/ap", "/api/users", "/configuracao/agendador/api", "/configuracao/agendador/preview", "/configuracao/agendador/api/id/delete", "/configuracao/agendador/api/id/run"})
             mvc.perform(post(url).session(session).with(csrf()).contentType("application/json").content("{}"))
                 .andExpect(status().isForbidden());
+        mvc.perform(put("/api/ap/42/configuration").session(session).with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(post("/api/ap/42/configuration/test").session(session).with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(delete("/api/ap/42").session(session).with(csrf())).andExpect(status().isForbidden());
         mvc.perform(put("/api/users/1").session(session).with(csrf()).contentType("application/json").content("{}"))
             .andExpect(status().isForbidden());
         mvc.perform(post("/api/maps/states").session(session).with(csrf()).contentType("application/json").content("{\"groups\":[],\"hosts\":[]}"))

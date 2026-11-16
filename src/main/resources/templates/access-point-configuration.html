@@ -1,0 +1,40 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org"><body>
+<th:block th:fragment="dialog">
+<dialog th:replace="~{design-system :: formDialog('ap-config-dialog', 'ap-config-title', null, ~{access-point-configuration :: configurationContent})}"><th:block th:fragment="configurationContent">
+  <form id="ap-config-form" class="connection-form">
+    <header class="ap-config-header">
+      <span class="ap-config-emblem"><svg th:replace="~{shell :: icon('radio-tower')}"></svg></span>
+      <div><h2 id="ap-config-title">Configurar Access Point</h2><p>Integração com Zabbix</p></div>
+      <button id="ap-config-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar configuração"><svg th:replace="~{shell :: icon('close')}"></svg></button>
+    </header>
+    <div class="ap-config-body">
+      <fieldset id="ap-config-fields" class="ap-config-fields">
+        <section class="ap-config-section" aria-labelledby="ap-config-equipment-title">
+          <h3 id="ap-config-equipment-title">Informações do equipamento</h3>
+          <div class="ap-config-row"><label for="ap-config-manufacturer">Fabricante</label><select id="ap-config-manufacturer" required><option value="">Selecione o fabricante</option><option value="MikroTik">MikroTik — RouterOS 6.x</option></select></div>
+          <div class="ap-config-row"><label for="ap-config-name">Nome</label><input id="ap-config-name" readonly disabled></div>
+          <div class="ap-config-row"><label for="ap-config-enabled">Ativo</label><select id="ap-config-enabled"><option value="false">Não</option><option value="true">Sim</option></select></div>
+        </section>
+        <section class="ap-config-section" aria-labelledby="ap-config-access-title">
+          <h3 id="ap-config-access-title">Acesso ao equipamento</h3>
+          <div class="ap-config-row"><label for="ap-config-ip">IP</label><input id="ap-config-ip" readonly disabled></div>
+          <div class="ap-config-row"><label for="ap-config-login">Login</label><input id="ap-config-login" required maxlength="255" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+          <div class="ap-config-row"><label for="ap-config-password">Senha</label><div class="ap-config-password-field"><input id="ap-config-password" type="password" maxlength="4096" autocomplete="new-password" aria-describedby="ap-config-password-help" placeholder="Digite a senha"><small id="ap-config-password-help">Informe a senha do equipamento.</small></div></div>
+          <div class="ap-config-row"><label for="ap-config-port">Porta API</label><input id="ap-config-port" type="number" min="1" max="65535" required value="8728"></div>
+          <div class="ap-config-row"><label for="ap-config-tls">API com TLS</label><select id="ap-config-tls"><option value="false">Não</option><option value="true">Sim</option></select></div>
+        </section>
+      </fieldset>
+      <p id="ap-config-state" class="sr-only" role="status" aria-live="polite"></p>
+    <section id="ap-config-delete-confirm" hidden><p>Excluir somente o cadastro de AP? O host permanece no Zabbix e poderá ser importado novamente.</p><button id="ap-config-delete-confirm-button" type="button" class="system-button"><svg th:replace="~{shell :: icon('trash')}"></svg>Confirmar exclusão</button><button id="ap-config-delete-cancel" type="button" class="system-button">Cancelar exclusão</button></section>
+    </div>
+    <footer class="settings-actions">
+      <button id="ap-config-delete" type="button" class="system-button"><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir AP</button>
+      <button id="ap-config-test" type="button" class="system-button"><svg th:replace="~{shell :: icon('refresh')}"></svg>Testar conexão</button>
+      <button id="ap-config-cancel" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+      <button id="ap-config-save" type="submit" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg>Salvar</button>
+    </footer>
+  </form>
+</th:block></dialog>
+</th:block>
+</body></html>

@@ -28,9 +28,22 @@ class MikrotikControllerTests {
     }
 
     @Test void credentialsAreRequiredWithoutAttemptingConnection() {
-        var real = new MikrotikService("", "", 8729, true);
+        var settings = mock(br.com.scriptping.accesspoint.AccessPointConnections.class);
+        when(settings.require(host)).thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Configure o AP."));
+        var real = new MikrotikService(settings);
         var error = assertThrows(ResponseStatusException.class, () -> real.query(host, "overview", null));
-        assertEquals(503, error.getStatusCode().value());
+        assertEquals(409, error.getStatusCode().value());
         assertFalse(error.getReason().contains("secret"));
+    }
+
+    @Test void homologationAcceptsOnlyRouterOsSix() {
+        var real = spy(new MikrotikService(null));
+        var connection = new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "secret", 8729);
+        for (String version : List.of("6.49.18 (long-term)", "7.20", "", "unknown")) {
+            doReturn(new MikrotikService.Snapshot(1, List.of(Map.of("version", version)), ""))
+                .when(real).query(host, "overview", null, connection);
+            if (version.startsWith("6.")) assertDoesNotThrow(() -> real.testConnection(host, connection));
+            else assertThrows(ResponseStatusException.class, () -> real.testConnection(host, connection));
+        }
     }
 }

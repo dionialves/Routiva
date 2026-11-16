@@ -27,9 +27,9 @@ class RouterOsConnectionTests {
                     send(out, "!done");
                 } catch (IOException ex) { throw new UncheckedIOException(ex); }
             });
-            var service = new MikrotikService("viewer", "secret", server.getLocalPort(), false);
+            var service = new MikrotikService(null);
             var host = new br.com.scriptping.zabbix.Host("1", "Router", "127.0.0.1", List.of());
-            var row = service.query(host, "interfaces", null).rows().getFirst();
+            var row = service.query(host, "interfaces", null, new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "secret", server.getLocalPort()), false).rows().getFirst();
             assertEquals("ether", row.get("type"));
             assertEquals("true", row.get("running"));
             assertEquals("12000", row.get("rx-byte"));

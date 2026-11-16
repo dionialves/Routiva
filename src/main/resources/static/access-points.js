@@ -74,13 +74,17 @@
     }
     return response.json();
   }
+  function statusLabel(row) {
+    if (!row.available) return 'Fora do inventário';
+    return ({ PENDING: 'Configuração pendente', INACTIVE: 'Inativo', CONNECTION_FAILED: 'Falha na conexão', ACTIVE: 'Ativo' })[row.status] || 'Configuração pendente';
+  }
   function render() {
     const selectedHosts = new Set([...hostSelect.selectedOptions].map(option => option.value));
     const selectedGroups = new Set([...groupSelect.selectedOptions].map(option => option.value));
     const filtered = rows.filter(row => (!selectedHosts.size || selectedHosts.has(row.hostId))
       && (!selectedGroups.size || (row.groups || []).some(group => selectedGroups.has(group.id))));
     filtered.sort((a, b) => {
-      const left = a[sortKey], right = b[sortKey];
+      const left = sortKey === 'available' ? statusLabel(a) : a[sortKey], right = sortKey === 'available' ? statusLabel(b) : b[sortKey];
       if (left == null || right == null) return left == null ? (right == null ? 0 : 1) : -1;
       return direction * (typeof left === 'number' || typeof left === 'boolean'
         ? Number(left) - Number(right)
@@ -94,17 +98,12 @@
       th.scope = 'row'; link.textContent = row.name; link.className = 'availability-host-name';
       link.href = '/ap/' + encodeURIComponent(row.hostId);
       th.append(link); tr.append(th);
-      for (const value of [row.ip, [row.manufacturer, row.model].filter(Boolean).join(' / '), row.available ? 'No inventário' : 'Não encontrado no inventário', row.connectedClients, row.lastCollectedAt ? new Date(row.lastCollectedAt).toLocaleString('pt-BR') : null]) {
+      for (const value of [row.ip, [row.manufacturer, row.model].filter(Boolean).join(' / '), statusLabel(row), row.connectedClients, row.lastCollectedAt ? new Date(row.lastCollectedAt).toLocaleString('pt-BR') : null]) {
         const td = document.createElement('td'); if (tr.children.length === 3) {
-          const badge = document.createElement('span'); badge.className = 'ap-status'; badge.textContent = value; td.append(badge);
+          const badge = document.createElement('span'); badge.className = 'ap-status'; badge.textContent = value; badge.title = row.connectionMessage || ''; badge.setAttribute('data-status', row.status || 'PENDING'); td.append(badge);
         } else td.textContent = value ?? '—';
         tr.append(td);
       }
-      const actions = document.createElement('td'), menu = document.createElement('details');
-      menu.className = 'ap-row-actions';
-      const trigger = document.createElement('summary'); trigger.setAttribute('aria-label', 'Ações de ' + row.name); trigger.append(icon('ellipsis'));
-      const open = document.createElement('a'); open.href = link.href; open.textContent = 'Abrir Access Point';
-      menu.append(trigger, open); actions.append(menu); tr.append(actions);
       fragment.append(tr);
     }
     $('rows').replaceChildren(fragment);

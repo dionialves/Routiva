@@ -39,7 +39,7 @@ class RadioClientAssessmentTaskTests {
         when(latency.measurements(any())).thenCallRealMethod();
     }
     AccessPointService.Row ap(String id, boolean available) {
-        return new AccessPointService.Row(id, "AP " + id, "192.0.2.1", "MikroTik", "", 1, null, available, List.of());
+        return new AccessPointService.Row(id, "AP " + id, "192.0.2.1", "MikroTik", "", 1, null, available, List.of(), "ACTIVE", null);
     }
     EquipmentProvider.Snapshot snapshot() { return new EquipmentProvider.Snapshot(now.get(), List.of(Map.of("mac-address", MAC, "signal", "-60")), null); }
     IxcClient.Login login() throws Exception {

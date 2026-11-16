@@ -31,17 +31,20 @@ test('period filters clear only their own persisted state and retain the current
   assert.deepEqual(ui.removed, ['routiva.diagnostics.period']);
   assert.deepEqual(ui.navigated, ['/diagnostico/grupos/123']);
 });
-test('AP filters restart with all hosts and groups without removing other preferences', () => {
-  const ui = surface('/ap');
-  assert.deepEqual(ui.removed, []);
-  assert.deepEqual(ui.navigated, ['/ap']);
+test('AP list and detail pages omit the clear-filters action', () => {
+  for (const route of ['/ap', '/ap/123']) {
+    const ui = surface(route);
+    assert.equal(ui.button, undefined);
+    assert.deepEqual(ui.removed, []);
+    assert.deepEqual(ui.navigated, []);
+  }
 });
 test('local searches and period controls reset before notifying their page', () => {
   const events = [];
   const search = { tagName: 'INPUT', value: 'router', dispatchEvent(event) { events.push([event.type, this.value]); } };
   const select = { tagName: 'SELECT', options: [{ defaultSelected: false }, { defaultSelected: true }],
     dispatchEvent(event) { events.push([event.type, this.options[1].selected]); } };
-  const ui = surface('/ap/123', [search, select]);
+  const ui = surface('/clientes/radio', [search, select]);
   assert.equal(search.value, '');
   assert.equal(select.options[1].selected, true);
   assert.deepEqual(events, [['input', ''], ['change', true]]);

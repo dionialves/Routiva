@@ -11,6 +11,7 @@ public class MikrotikEquipmentProvider implements EquipmentProvider {
     public MikrotikEquipmentProvider(MikrotikService service) { this.service = service; }
     public String manufacturer() { return "MikroTik"; }
     public Set<String> capabilities() { return Set.of("overview", "interfaces", "traffic", "wireless"); }
+    public void testConnection(Host host, Connection connection) { service.testConnection(host, connection); }
     public Snapshot read(Host host, String section, String selectedInterface) {
         var result = service.query(host, section, selectedInterface);
         return new Snapshot(result.measuredAt(), result.rows(), result.warning());

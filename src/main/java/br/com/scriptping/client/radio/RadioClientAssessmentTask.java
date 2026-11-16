@@ -42,7 +42,7 @@ public class RadioClientAssessmentTask implements ScheduledTask {
     @Override public Outcome execute(Map<String, String> parameters, Context context) throws Exception {
         validate(parameters);
         if (!latency.ready()) throw new IllegalStateException("Coletor indisponível; nenhuma avaliação iniciada.");
-        var inventory = List.copyOf(aps.list());
+        var inventory = aps.list().stream().filter(ap -> "ACTIVE".equals(ap.status())).toList();
         if (inventory.isEmpty()) return Outcome.completed("Nenhum AP cadastrado para avaliação.");
         int done = 0, partial = 0, failed = 0;
         for (var ap : inventory) context.report().accept(new Detail(ap.hostId(), ap.name(), "PENDING", "Aguardando processamento."));

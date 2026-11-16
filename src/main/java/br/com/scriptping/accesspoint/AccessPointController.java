@@ -36,6 +36,18 @@ public class AccessPointController {
         var snapshot = service.read(id, section, selectedInterface);
         return fresh(snapshot);
     }
+    @GetMapping("/api/ap/{id}/configuration") @ResponseBody
+    public ResponseEntity<?> configuration(@PathVariable String id) { return fresh(service.configuration(id)); }
+    @PutMapping("/api/ap/{id}/configuration") @ResponseBody
+    public ResponseEntity<?> configure(@PathVariable String id, @RequestBody AccessPointService.ConfigurationInput input) {
+        return fresh(service.save(id, input));
+    }
+    @PostMapping("/api/ap/{id}/configuration/test") @ResponseBody
+    public ResponseEntity<?> test(@PathVariable String id, @RequestBody AccessPointService.ConfigurationInput input) {
+        return fresh(service.test(id, input));
+    }
+    @DeleteMapping("/api/ap/{id}") @ResponseBody
+    public ResponseEntity<?> delete(@PathVariable String id) { service.delete(id); return fresh(Map.of("deleted", true)); }
     private ResponseEntity<?> fresh(Object body) { return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(body); }
     @ExceptionHandler(ResponseStatusException.class) @ResponseBody
     public ResponseEntity<?> error(ResponseStatusException e) {

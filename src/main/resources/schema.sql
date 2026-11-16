@@ -331,3 +331,13 @@ UPDATE task_schedule SET deleted = TRUE, enabled = FALSE, task_slot = NULL WHERE
 );
 UPDATE task_schedule SET task_slot = CASE WHEN deleted = TRUE THEN NULL ELSE task_key END;
 CREATE UNIQUE INDEX IF NOT EXISTS task_schedule_activity_unique ON task_schedule(task_slot);
+
+-- Per-AP configuration. Existing imported APs intentionally require configuration.
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS api_login VARCHAR(255);
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS api_password TEXT;
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS api_port INTEGER;
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS connection_status VARCHAR(40) NOT NULL DEFAULT 'PENDING';
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS connection_message TEXT;
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS verified_ip VARCHAR(255);
+ALTER TABLE access_point ADD COLUMN IF NOT EXISTS api_tls BOOLEAN NOT NULL DEFAULT FALSE;

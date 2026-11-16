@@ -135,3 +135,6 @@
 .ap-filter-card .incident-host-field { flex:0 1 50%; }
 .ap-filter-card #ap-import { flex-shrink:0; margin-left:auto; height:38px; }
 @media(max-width:760px) { .ap-filter-card .incident-host-field { flex:1; } }
+
+.ap-status[data-status=ACTIVE]::before { background:var(--cyan); }
+.ap-status[data-status=CONNECTION_FAILED]::before { background:var(--error); }

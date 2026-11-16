@@ -492,3 +492,29 @@ O sistema impede a remoção do último perfil Administrador. Alterações de pe
 ou de nome de usuário invalidam as sessões anteriores. Senhas são armazenadas
 com PBKDF2; sessões expiram após 30 minutos de inatividade.
 Em instalações com HTTPS, configure `SESSION_COOKIE_SECURE=true`.
+
+### Configuração individual de Access Points
+
+A importação do Zabbix cadastra o AP com **Configuração pendente**, inclusive para
+cadastros anteriores à configuração individual. Nome e IP continuam sincronizados
+com o Zabbix. Na página do AP, em **Ações → Configuração**, configure fabricante, login, senha, porta API
+e Ativo. O fabricante homologado nesta etapa é **MikroTik RouterOS 6.x**, usando
+API sem TLS (porta padrão 8728) ou API com TLS (porta padrão 8729 e certificado
+válido para o endereço IP). A opção de TLS também é individual por AP, inclusive
+quando o equipamento usa uma porta personalizada.
+
+Salvar com Ativo = Sim sempre testa a conexão e a versão antes de liberar a coleta.
+Em caso de erro, os dados são salvos com **Falha na conexão** e a coleta fica bloqueada.
+Ativo = Não salva como **Inativo**, sem conectar. Testar conexão sozinho não salva
+nem ativa. Uma senha vazia na edição mantém a senha cadastrada. Mudanças no IP
+exigem salvar novamente para revalidar a conexão.
+
+Excluir AP remove somente seu cadastro e suas credenciais no Routiva. Não altera
+nem exclui o host do Zabbix; ele volta a estar disponível para importação.
+Configuração, testes e exclusão são restritos a administradores.
+
+As senhas são criptografadas individualmente, sem credenciais globais ou perfis de
+acesso. O arquivo interno de proteção é criado automaticamente em
+`data/ap-secrets.key` (ou `AP_SECRETS_KEY_FILE`). No Compose, fica no volume
+`app_data`, em `/var/lib/routiva/ap-secrets.key`. Preserve esse arquivo junto com
+os backups do banco; ele é necessário para recuperar as senhas armazenadas.
