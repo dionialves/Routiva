@@ -10,14 +10,48 @@ public final class NetworkMapModels {
 
     public enum LabelPosition { ABOVE, BELOW, LEFT, RIGHT }
 
-    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition) {
+    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor) {
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, null);
+        }
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, null);
+        }
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, List.of());
+        }
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, "circle", List.of());
+        }
         public Node {
             // Existing maps identify link endpoints by their host group.
             if (id == null) id = groupId;
+            if (icon == null) icon = "circle";
+            if (ports == null) ports = List.of();
+            if (slots == null) slots = List.of();
+            if (interfacesEnabled == null) interfacesEnabled = !ports.isEmpty() || !slots.isEmpty();
             if (labelPosition == null) labelPosition = LabelPosition.BELOW;
         }
     }
-    public record Link(String from, String to) {}
+    public record Slot(String id, String name, String capacity, int count) {}
+    public record Port(String id, String type, String slotId, String name, String capacity) {
+        public Port(String id, String type) { this(id, type, null, null, null); }
+    }
+    public record Bend(double x, double y) {}
+    public record Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle) {
+        public Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points) {
+            this(from, to, fromPort, toPort, style, points, "straight");
+        }
+        public Link(String from, String to) { this(from, to, null, null); }
+        public Link(String from, String to, String fromPort, String toPort) {
+            this(from, to, fromPort, toPort, "straight", List.of());
+        }
+        public Link {
+            if (style == null) style = "straight";
+            if (lineStyle == null) lineStyle = "straight";
+            if (points == null) points = List.of();
+        }
+    }
     public enum Publication { RASCUNHO, PUBLICADO }
 
     public record Camera(double x, double y, double scale) {}

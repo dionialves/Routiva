@@ -19,3 +19,20 @@ dialog.form-dialog::backdrop { background:rgb(3 12 20 / 68%); }
 .form-dialog .hosts-table tbody th .availability-host-name { color:var(--cyan); text-decoration:none; }
 .form-dialog .hosts-table tbody th .availability-host-name:is(:hover, :focus-visible) { text-decoration:underline; text-underline-offset:3px; }
 .form-dialog .hosts-table tbody th .availability-host-name:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
+
+/* A fixed header and footer with a scrolling form body, for larger configuration forms. */
+dialog.form-dialog:has(.form-dialog-frame) { padding:0; max-height:90vh; overflow:hidden; }
+.form-dialog .form-dialog-frame { display:flex; flex-direction:column; gap:0; max-width:none; max-height:90vh; margin:0; }
+.form-dialog .form-dialog-header { flex-shrink:0; margin:0; width:100%; max-width:none; padding:20px 24px 16px; border-bottom:1px solid var(--border); }
+.form-dialog .form-dialog-content { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:20px 24px; }
+.form-dialog .form-dialog-footer { flex-shrink:0; padding:16px 24px; border-top:1px solid var(--border); background:var(--panel-bg); }
+.system-switch, .form-dialog input.system-switch { appearance:none; position:relative; width:40px; height:24px; border:1px solid var(--border); border-radius:20px; background:var(--muted); flex-shrink:0; cursor:pointer; margin:0; }
+.system-switch::after { content:''; position:absolute; left:3px; top:3px; width:16px; height:16px; border-radius:50%; background:var(--text); transition:transform .15s; }
+.system-switch:checked, .form-dialog input.system-switch:checked { background:var(--cyan); border-color:var(--cyan); }
+.system-switch:checked::after { transform:translateX(16px); background:var(--panel-bg); }
+.system-switch:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
+@media (max-width:600px) {
+  .form-dialog .form-dialog-header, .form-dialog .form-dialog-content, .form-dialog .form-dialog-footer { padding:16px; }
+  .form-dialog .form-dialog-footer { gap:8px; }
+}
+@media (prefers-reduced-motion:reduce) { .system-switch::after { transition:none; } }

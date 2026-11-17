@@ -49,4 +49,5 @@
 <symbol id="copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
 <symbol id="packet-loss" viewBox="0 0 24 24"><rect x="1" y="9" width="5" height="6" rx="1"/><path d="M9 15V10a1 1 0 0 1 1-1h3m1 3v2a1 1 0 0 1-1 1h-1M8 17l8-10"/><rect x="18" y="9" width="5" height="6" rx="1"/></symbol>
 <symbol id="radio-tower" viewBox="0 0 24 24"><circle cx="12" cy="9" r="1"/><path d="m9 22 3-12 3 12m-5-4h4M5 3a10 10 0 0 0 0 12m14-12a10 10 0 0 1 0 12M8 6a5 5 0 0 0 0 6m8-6a5 5 0 0 1 0 6"/></symbol>
+<symbol id="trash-2" viewBox="0 0 24 24"><path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M19 6l-1 14H6L5 6M10 10v7m4-7v7"/></symbol>
 </svg>

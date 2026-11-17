@@ -1,0 +1,17 @@
+.single-picker-trigger, .settings-panel .single-picker-trigger { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--border); border-radius:6px; color:var(--text); background:var(--input-bg, var(--panel-bg)); font:inherit; text-align:left; cursor:pointer; }
+.single-picker-trigger:focus-visible, .single-picker-trigger[aria-expanded=true] { outline:2px solid var(--focus); outline-offset:1px; }
+.single-picker-current { display:flex; align-items:center; gap:12px; }
+.single-picker-thumbnail { width:46px; height:26px; object-fit:contain; flex-shrink:0; }
+.single-picker-circle { display:block; width:22px; height:22px; margin-inline:12px; border-radius:50%; background:var(--muted); flex-shrink:0; }
+.single-picker-popover { position:fixed; inset:auto; margin:0; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--panel-bg); color:var(--text); box-shadow:0 12px 32px rgb(0 0 0 / 35%); box-sizing:border-box; overflow:hidden; }
+.single-picker-popover:popover-open { display:flex; flex-direction:column; gap:8px; }
+.single-picker-popover input[type=search] { width:100%; min-height:40px; flex-shrink:0; }
+.single-picker-list { overflow:auto; min-height:0; }
+.single-picker-option, .settings-panel .single-picker-option { display:flex; align-items:center; gap:12px; width:100%; border:1px solid transparent; border-radius:6px; padding:10px 8px; background:transparent; color:var(--text); text-align:left; font:inherit; cursor:pointer; }
+.single-picker-option[hidden] { display:none; }
+.single-picker-option:hover, .single-picker-option:focus-visible { background:var(--hover-bg); outline:1px solid var(--focus); outline-offset:-1px; }
+.single-picker-option[aria-selected=true] { border-color:var(--focus); background:var(--hover-bg); }
+.single-picker-copy { display:grid; gap:3px; flex:1; }
+.single-picker-copy small, .single-picker-popover p { color:var(--muted); font-size:12px; }
+.single-picker-check { color:var(--focus); visibility:hidden; }
+.single-picker-option[aria-selected=true] .single-picker-check { visibility:visible; }

@@ -9,7 +9,14 @@ let inventory = [], pendingNode, baseline;
 const past = [], future = [];
 const selection = new Set();
 let marquee;
+let connectionOrigin = null;
+let configuredPorts = [];
+let configuredSlots = [];
+let configuredSwitchColor = null;
+let pendingLink = null, lastConnectionClick = null;
+let suppressConnectionUntil = 0;
 let states = new Map(), generation = 0, timer;
+let pingStates = new Map(), pingGeneration = 0, pingTimer;
 let summaryUpdatedAt = 0, summaryFailed = false;
 let latencySummaries = new Map();
 let mapView = 'incidents', metricStates = new Map(), metricRange;
@@ -117,6 +124,7 @@ function restore(source, destination) {
   if (!source.length) return;
   destination.push(JSON.stringify(current.layout));
   current.layout = JSON.parse(source.pop());
+  connectionOrigin = null;
   selection.clear();
   selected = selectedLink = drag = null;
   draw();
@@ -168,6 +176,7 @@ function alignDraggedNode(node, x, y, nodes, scale) {
 
 function draw() {
   const canvas = $('canvas');
+  const focusedPort = document.activeElement?.getAttribute('data-port-id');
   canvas.replaceChildren();
   if (!current) return;
   const { nodes, links } = current.layout;
@@ -181,25 +190,54 @@ function draw() {
     $('delete-item').disabled = !selection.size && !selected && !selectedLink;
     $('editor-node-count').textContent = nodes.length + ' elementos';
     $('editor-link-count').textContent = links.length + ' conexões';
-    $('hint').textContent = tool === 'connect' ? (selected ? 'Selecione o destino. Esc cancela.' : 'Selecione a origem. Esc cancela.')
+    $('hint').textContent = tool === 'connect' ? (connectionOrigin ? 'Selecione a porta de destino. Esc cancela.' : 'Selecione uma porta ou elemento de origem. Esc cancela.')
       : tool === 'pan' ? 'Arraste para mover o mapa.' : 'Arraste no fundo para selecionar vários. Shift, Ctrl ou ⌘ + clique adiciona ou remove. Arraste a seleção para mover.';
   }
   for (const guide of drag?.guides || []) {
     canvas.append(svg('line', {...guide, class:'alignment-guide', 'aria-hidden':'true'}));
   }
+  const connectors = svg('g', {class: 'map-connectors'});
   const byId = new Map(nodes.map(n => [n.id, n]));
   for (const link of links) {
     const a = byId.get(link.from), b = byId.get(link.to);
-    const line = svg('line', {x1:a.x, y1:a.y, x2:b.x, y2:b.y});
+    if (!a || !b) continue;
+    const start = MapSwitch.endpoint(a, link.fromPort), end = MapSwitch.endpoint(b, link.toPort);
+    const line = svg('path', {d: MapLinks.path(link, start, end), class: 'map-connector'});
     if (editing && tool === 'select') {
+      line.onpointerdown = event => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        if (link.style !== 'corners') return;
+        drag = {kind: 'new-bend', link, pointer: event.pointerId, x: event.clientX, y: event.clientY,
+          start: canvasPoint(event), moved: false};
+      };
       line.classList.toggle('selected-link', selectedLink === link);
       line.setAttribute('tabindex', 0);
       line.setAttribute('role', 'button');
       line.setAttribute('aria-label', 'Conexão entre ' + a.name + ' e ' + b.name);
-      line.onclick = () => { selectedLink = link; selected = null; selection.clear(); draw(); };
-      line.onkeydown = e => { if (e.key === 'Enter') line.onclick(); };
+      line.onclick = () => {
+        const now = Date.now();
+        if (now < suppressConnectionUntil) return;
+        if (lastConnectionClick?.link === link && now - lastConnectionClick.at < 400) {
+          lastConnectionClick = null; openLinkDialog(link); return;
+        }
+        lastConnectionClick = {link, at: now};
+        if (!editing || selectedLink === link) return;
+        selectedLink = link; selected = null; selection.clear(); draw();
+      };
+      line.onkeydown = event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openLinkDialog(link); }
+      };
+      line.ondblclick = event => {
+        event.preventDefault(); event.stopPropagation();
+        if (Date.now() >= suppressConnectionUntil) openLinkDialog(link);
+      };
     }
-    canvas.append(line);
+    const hit = svg('path', {d: line.getAttribute('d'), class: 'map-connector-hit',
+      fill: 'none', stroke: 'transparent', 'stroke-width': 16, 'vector-effect': 'non-scaling-stroke',
+      'aria-hidden': 'true'});
+    for (const handler of ['onpointerdown', 'onclick', 'ondblclick']) hit[handler] = line[handler];
+    connectors.append(line, hit);
   }
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
@@ -211,7 +249,12 @@ function draw() {
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
-    drawNode(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id);
+    if (n.icon === 'switch') MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
+      pingState: editing ? 'unknown' : pingStateFor(n.hostId),
+      interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
+      onPort: portId => connectEndpoint(n, portId)
+    });
+    else drawNode(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n, event.shiftKey || event.ctrlKey || event.metaKey); }
     };
@@ -243,6 +286,45 @@ function draw() {
     if (monitored) popSummary.bind(g, n);
     canvas.append(g);
   }
+  canvas.append(connectors);
+  if (editing && tool === 'select') for (const [linkIndex, link] of links.entries()) {
+    if (link.style !== 'corners') continue;
+    const route = linkRoute(link);
+    (link.points || []).forEach((point, index) => {
+      const d = MapLinks.bendPath(link, route[0], route[route.length - 1], index, camera.scale);
+      const mark = svg('path', {d, class: 'map-bend-mark', 'aria-hidden': 'true'});
+      const handle = svg('path', {d,
+        class: 'map-link-handle', tabindex: 0, role: 'button', 'data-bend': linkIndex + '-' + index,
+        'aria-label': 'Canto ' + (index + 1) + '. Setas movem; Delete remove.'});
+      handle.onpointerdown = event => {
+        if (event.button !== 0) return;
+        event.stopPropagation();
+        lastConnectionClick = null;
+        selectedLink = link; selected = null; selection.clear();
+        const start = canvasPoint(event);
+        drag = {kind: 'bend', link, index, pointer: event.pointerId, moved: false, dx: point.x - start.x, dy: point.y - start.y};
+      };
+      handle.onclick = event => { event.stopPropagation(); lastConnectionClick = null; };
+      handle.ondblclick = event => {
+        event.preventDefault?.(); event.stopPropagation();
+        lastConnectionClick = null; suppressConnectionUntil = Date.now() + 400;
+        checkpoint(); link.points.splice(index, 1); draw();
+      };
+      handle.onkeydown = event => {
+        const step = event.shiftKey ? 10 : 1;
+        const directions = {ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step]};
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+          event.preventDefault(); event.stopPropagation(); checkpoint(); link.points.splice(index, 1); draw();
+        } else if (directions[event.key]) {
+          event.preventDefault(); event.stopPropagation(); checkpoint();
+          const [dx, dy] = directions[event.key]; point.x += dx; point.y += dy; draw();
+          canvas.querySelector('[data-bend="' + linkIndex + '-' + index + '"]')?.focus();
+        }
+      };
+      canvas.append(mark, handle);
+    });
+  }
+  if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
       y:Math.min(marquee.start.y, marquee.end.y),
@@ -253,6 +335,10 @@ function draw() {
 
 function choose(node, additive = false) {
   if (!editing || tool === 'pan') return;
+  if (tool === 'connect') {
+    if (node.icon !== 'switch' || node.interfacesEnabled === false || !node.ports?.length) connectEndpoint(node, null);
+    return;
+  }
   const origin = selected;
   if (tool === 'select' && additive) {
     if (selection.has(node.id)) selection.delete(node.id);
@@ -267,14 +353,7 @@ function choose(node, additive = false) {
   selection.add(node.id);
   selected = node.id;
   selectedLink = null;
-  if (editing && tool === 'connect' && origin && origin !== node.id) {
-    const pair = [origin, node.id];
-    if (!current.layout.links.some(l => pair.includes(l.from) && pair.includes(l.to))) {
-      checkpoint();
-      current.layout.links.push({from:origin, to:node.id});
-    }
-    tool = 'select';
-  } else if (editing && tool === 'select' && wasSingle && origin === node.id) {
+  if (editing && tool === 'select' && wasSingle && origin === node.id) {
     openElement(node);
   }
   draw();
@@ -432,6 +511,31 @@ $('canvas').onpointermove = event => {
     return;
   }
   if (!drag || drag.pointer !== event.pointerId) return;
+  if (drag.kind === 'new-bend') {
+    if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
+    checkpoint();
+    selectedLink = drag.link; selected = null; selection.clear();
+    const route = linkRoute(drag.link);
+    drag.index = MapLinks.insertion(route, drag.start);
+    drag.link.points ||= [];
+    drag.link.points.splice(drag.index, 0, {x: drag.start.x, y: drag.start.y});
+    drag.kind = 'bend'; drag.moved = true;
+    lastConnectionClick = null;
+    $('canvas').setPointerCapture(event.pointerId);
+  }
+  if (drag.kind === 'bend') {
+    const point = canvasPoint(event);
+    point.x += drag.dx || 0; point.y += drag.dy || 0;
+    const snapped = MapLinks.snap(linkRoute(drag.link), drag.index + 1, point, camera.scale);
+    drag.guides = snapped.guides;
+    const previous = drag.link.points[drag.index];
+    if (previous.x === snapped.position.x && previous.y === snapped.position.y) { draw(); return; }
+    if (!drag.moved) { checkpoint(); $('canvas').setPointerCapture(event.pointerId); }
+    drag.moved = true;
+    drag.link.points[drag.index] = snapped.position;
+    draw();
+    return;
+  }
   if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
   const point = new DOMPoint(event.clientX, event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());
   if (!drag.moved) checkpoint();
@@ -455,6 +559,9 @@ $('canvas').onpointerup = event => {
     return;
   }
   if (drag?.pointer !== event.pointerId) return;
+  if (drag.kind === 'new-bend') { drag = null; return; }
+  if (drag.kind === 'bend' && drag.moved) suppressConnectionUntil = Date.now() + 400;
+  if (drag.kind === 'bend') { const redraw = drag.moved || drag.guides?.length; drag = null; if (redraw) draw(); return; }
   const {node, moved, wasSingle} = drag;
   drag = null;
   if (!moved && wasSingle) openElement(node);
@@ -528,8 +635,38 @@ async function refresh(token) {
   timer = setTimeout(() => refresh(token), 60000);
 }
 
+function pingStateFor(hostId) {
+  const reading = pingStates.get(hostId);
+  return reading?.measuredAt != null && Date.now() - reading.measuredAt <= 10000 ? reading.state : 'unknown';
+}
+function updatePingIndicators() {
+  for (const led of $('canvas').querySelectorAll('.switch-status-led')) {
+    const status = MapSwitch.pingIndicator(editing ? 'unknown' : pingStateFor(led.dataset.pingHost));
+    led.setAttribute('fill', status.color); led.setAttribute('aria-label', status.label);
+    led.querySelector('title').textContent = status.label;
+  }
+}
+async function refreshPingState(token) {
+  if (!current || editing || token !== pingGeneration) return;
+  clearTimeout(pingTimer);
+  const hosts = [...new Set(current.layout.nodes.filter(n => n.icon === 'switch').map(n => n.hostId).filter(Boolean))];
+  if (!hosts.length) return;
+  try {
+    const readings = await api('/ping-status', {hosts, groups: []});
+    if (token !== pingGeneration || editing) return;
+    pingStates = new Map(readings.map(reading => [reading.id, reading]));
+  } catch {
+    if (token !== pingGeneration || editing) return;
+    pingStates.clear();
+  }
+  if (token !== pingGeneration || editing) return;
+  updatePingIndicators();
+  pingTimer = setTimeout(() => refreshPingState(token), 2000);
+}
+
 function openMap(map, edit = false) {
   if (edit && !canManageMaps) return;
+  clearTimeout(pingTimer); pingGeneration++; pingStates.clear();
   popSummary.close();
   summaryUpdatedAt = 0;
   summaryFailed = false;
@@ -540,6 +677,7 @@ function openMap(map, edit = false) {
   editing = edit;
   selection.clear();
   marquee = null;
+  connectionOrigin = null;
   selected = drag = null;
   tool = 'select';
   selectedLink = null;
@@ -576,6 +714,7 @@ function openMap(map, edit = false) {
   updateMapOverview();
   if (map && !map.layout.camera) fitToView();
   refresh(generation);
+  refreshPingState(pingGeneration);
 }
 
 const pageSize = 10;
@@ -770,6 +909,7 @@ $('edit').onclick = () => openMap(current, true);
 $('cancel').onclick = () => { if (mayLeave()) openMap(maps.find(m => m.id === current.id)); };
 
 function setTool(mode) {
+  connectionOrigin = null;
   drag = marquee = null;
   tool = mode;
   selection.clear();
@@ -822,31 +962,213 @@ function populateBinding(type, id) {
   $('group-field').querySelector('[role=listbox]').setAttribute('aria-label',host ? 'Hosts' : 'Grupos');
   $('group-field').querySelector('p').textContent = 'Nenhum resultado.';
 }
+function canvasPoint(event) {
+  return new DOMPoint(event.clientX, event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());
+}
+function linkRoute(link) {
+  const a = current.layout.nodes.find(node => node.id === link.from);
+  const b = current.layout.nodes.find(node => node.id === link.to);
+  return MapLinks.points(link, MapSwitch.endpoint(a, link.fromPort), MapSwitch.endpoint(b, link.toPort));
+}
+function connectionEndpointLabel(link, from) {
+  const node = current.layout.nodes.find(n => n.id === (from ? link.from : link.to));
+  if (!node) return 'Equipamento indisponível';
+  const binding = node.hostId ? inventory.find(host => host.id === node.hostId)
+    : node.groupId ? groups.find(group => group.id === node.groupId) : null;
+  const type = node.hostId ? 'Host' : node.groupId ? 'Grupo de hosts' : 'Elemento';
+  const id = node.hostId || node.groupId;
+  const portId = from ? link.fromPort : link.toPort;
+  const port = portId && MapSwitch.geometry(node).ports.find(p => p.id === portId);
+  return `${type}: ${binding?.name || node.name}${id ? ' (ID: ' + id + ')' : ''}`
+    + (port ? ' · ' + port.label : '');
+}
+function drawLinkPreview() {
+  const link = {style: $('link-dialog-type').value, lineStyle: $('link-dialog-style').value,
+    points: [{x: 70, y: 110}, {x: 250, y: 110}, {x: 250, y: 30}]};
+  $('link-preview').replaceChildren(svg('path', {d: MapLinks.path(link, {x: 30, y: 30}, {x: 290, y: 30}),
+    fill: 'none', stroke: 'var(--focus)', 'stroke-width': 3}));
+}
+function openLinkDialog(link) {
+  if (!editing || $('link-dialog').open) return;
+  pendingLink = link;
+  selectedLink = link; selected = null; selection.clear();
+  $('link-from').value = connectionEndpointLabel(link, true);
+  $('link-to').value = connectionEndpointLabel(link, false);
+  $('link-dialog-type').value = link.style || 'straight';
+  $('link-dialog-style').value = link.lineStyle || 'straight';
+  draw(); drawLinkPreview();
+  $('link-dialog').showModal();
+  $('link-dialog-type').focus();
+}
+$('delete-link').onclick = () => {
+  if (!editing || !pendingLink || !current.layout.links.includes(pendingLink)) return;
+  selectedLink = pendingLink; selected = null; selection.clear();
+  deleteSelection();
+  if (!current.layout.links.includes(pendingLink)) $('link-dialog').close();
+};
+$('link-dialog-type').onchange = $('link-dialog-style').onchange = drawLinkPreview;
+$('cancel-link').onclick = () => $('link-dialog').close();
+$('link-dialog').onclose = () => { pendingLink = null; lastConnectionClick = null; };
+$('link-form').onsubmit = event => {
+  event.preventDefault();
+  if (!pendingLink || !current.layout.links.includes(pendingLink)) return;
+  const style = $('link-dialog-type').value, lineStyle = $('link-dialog-style').value;
+  if (pendingLink.style !== style || (pendingLink.lineStyle || 'straight') !== lineStyle) {
+    checkpoint();
+    const resetPoints = (pendingLink.lineStyle || 'straight') !== lineStyle;
+    pendingLink.style = style;
+    pendingLink.lineStyle = lineStyle;
+    if (resetPoints) pendingLink.points = [];
+    pendingLink.points ||= [];
+  }
+  $('link-dialog').close(); draw();
+};
+function switchDraft() {
+  return MapSwitch.portsForSlots(configuredPorts, configuredSlots);
+}
+function renderSwitchSlots() {
+  const panel = $('switch-slots');
+  panel.replaceChildren();
+  if (!configuredSlots.length) {
+    const row = document.createElement('tr'), cell = document.createElement('td');
+    cell.colSpan = 5; cell.className = 'element-slot-empty';
+    cell.textContent = 'Nenhum slot configurado. Adicione um slot para começar.';
+    row.append(cell); panel.append(row);
+  }
+  configuredSlots.forEach((slot, index) => {
+    const row = document.createElement('tr');
+    const heading = document.createElement('th'); heading.scope = 'row';
+    heading.textContent = index + 1; row.append(heading);
+    const field = (text, control) => {
+      const cell = document.createElement('td');
+      control.setAttribute('aria-label', text + ' do slot ' + (index + 1));
+      cell.append(control); row.append(cell);
+    };
+    const name = document.createElement('input');
+    name.type = 'text'; name.value = slot.name; name.maxLength = 80; name.required = true;
+    name.placeholder = 'Ex.: ether, 1/1/';
+    name.oninput = () => { slot.name = name.value; drawPreview(); };
+    field('Nome', name);
+    const capacity = document.createElement('select');
+    for (const [value, option] of Object.entries(MapSwitch.capacities)) capacity.add(new Option(option.label, value));
+    capacity.value = slot.capacity;
+    capacity.onchange = () => { slot.capacity = capacity.value; drawPreview(); };
+    field('Capacidade', capacity);
+    const count = document.createElement('input');
+    count.type = 'number'; count.min = 1; count.max = 96; count.required = true; count.value = slot.count;
+    count.oninput = () => { slot.count = Number(count.value); drawPreview(); };
+    field('Portas', count);
+    const remove = document.createElement('button');
+    remove.type = 'button'; remove.className = 'system-button system-button-icon-only';
+    remove.title = 'Remover slot'; remove.setAttribute('aria-label', 'Remover slot ' + (index + 1));
+    const icon = svg('svg', {class: 'system-button-icon', viewBox: '0 0 24 24', 'aria-hidden': 'true'});
+    icon.append(svg('use', {href: '/icons.svg#trash-2'})); remove.append(icon);
+    remove.onclick = () => {
+      configuredSlots.splice(index, 1); renderSwitchSlots(); drawPreview();
+      const inputs = $('switch-slots').querySelectorAll('input[type=text]');
+      (inputs[Math.min(index, inputs.length - 1)] || $('add-switch-slot')).focus();
+    };
+    const actions = document.createElement('td'); actions.append(remove); row.append(actions); panel.append(row);
+  });
+}
+$('add-switch-slot').onclick = () => {
+  configuredSlots.push({id: crypto.randomUUID(), name: '', capacity: 'electrical', count: 1});
+  renderSwitchSlots(); drawPreview();
+  $('switch-slots').lastElementChild.querySelector('input').focus();
+};
+function connectEndpoint(node, portId) {
+  if (!editing) return;
+  if (tool !== 'connect') { setTool('connect'); }
+  const occupied = (id, port) => port && current.layout.links.some(link =>
+    (link.from === id && link.fromPort === port) || (link.to === id && link.toPort === port));
+  if (occupied(node.id, portId)) { $('hint').textContent = 'Esta porta já possui uma conexão.'; return; }
+  if (!connectionOrigin) {
+    connectionOrigin = {nodeId: node.id, portId};
+    selected = node.id;
+    draw();
+    return;
+  }
+  const origin = connectionOrigin;
+  if (origin.nodeId === node.id) return;
+  const duplicate = current.layout.links.some(link =>
+    (link.from === origin.nodeId && link.to === node.id && (link.fromPort || null) === origin.portId && (link.toPort || null) === portId) ||
+    (link.to === origin.nodeId && link.from === node.id && (link.toPort || null) === origin.portId && (link.fromPort || null) === portId));
+  if (!duplicate) {
+    checkpoint();
+    current.layout.links.push({from: origin.nodeId, to: node.id, fromPort: origin.portId, toPort: portId});
+  }
+  setTool('select');
+  draw();
+}
 function drawPreview() {
   const preview = $('node-preview');
   const group = svg('g', {});
   preview.replaceChildren(group);
   const name = $('element-name').value.trim() || 'Nome do elemento';
-  drawNode(group, name, $('label-position').value, colors[0]);
+  const isSwitch = $('element-icon').value === 'switch';
+  $('element-color-note').hidden = isSwitch;
+  $('switch-color-field').hidden = !isSwitch;
+  $('reset-switch-color').disabled = !configuredSwitchColor;
+  const interfacesEnabled = $('interfaces-enabled').checked;
+  $('switch-config').hidden = !interfacesEnabled;
+  $('switch-config').disabled = !interfacesEnabled;
+  const ports = switchDraft();
+  $('port-error').textContent = interfacesEnabled && !ports ? 'Preencha o nome e a capacidade de cada slot e informe de 1 a 96 portas por slot.' : '';
+  const binding = {hostId: $('type').value === 'host' ? $('group').value : null,
+    groupId: $('type').value === 'group' ? $('group').value : null};
+  const monitored = !!(binding.hostId || binding.groupId);
+  const color = monitored ? metricSummary(binding)?.color || colors[groupLevel(nodeHosts(binding)) + 2] : colors[0];
+  if (isSwitch) MapSwitch.draw(svg, group, {name, labelPosition: $('label-position').value,
+    ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false);
+  else drawNode(group, name, $('label-position').value, color);
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
   preview.setAttribute('viewBox', [box.x + (box.width-w)/2, box.y + (box.height-h)/2, w, h].join(' '));
-  preview.setAttribute('aria-label', 'Círculo · ' + name);
+  preview.setAttribute('aria-label', (isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
 }
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {
+  configuredPorts = node.ports || [];
+  configuredSwitchColor = node.switchColor || null;
+  $('switch-color').value = configuredSwitchColor || '#e0e3e8';
+  $('element-icon').value = node.icon || 'circle';
+  configuredSlots = MapSwitch.slotsFor(node);
+  $('interfaces-enabled').checked = node.interfacesEnabled ?? !!(node.ports?.length || node.slots?.length);
+  renderSwitchSlots();
   $('element-name').value = node.name;
   $('label-position').value = node.labelPosition || 'BELOW';
   $('type').value = type;
+  syncElementIcons();
   $('remove').hidden = !!pendingNode;
   populateBinding(type,node.hostId || node.groupId);
   $('element-dialog').removeAttribute('style');
+  window.elementIconPicker?.sync();
   $('element-dialog').showModal();
+  $('element-form').querySelector('.form-dialog-content').scrollTop = 0;
   drawPreview();
   $('element-name').focus();
 }
+function syncElementIcons() {
+  const binding = $('type').value || 'free';
+  const select = $('element-icon');
+  for (const option of select.options) {
+    const allowed = (option.dataset.bindings || 'group host free').split(' ').includes(binding);
+    option.disabled = !allowed; option.hidden = !allowed;
+  }
+  const selectedOption = [...select.options].find(option => option.value === select.value);
+  if (!selectedOption || selectedOption.disabled) select.value = [...select.options].find(option => !option.disabled)?.value || '';
+  window.elementIconPicker?.sync();
+}
+window.elementIconPicker = window.setupSinglePicker($('element-icon'));
+$('element-icon').onchange = drawPreview;
+$('switch-color').oninput = () => { configuredSwitchColor = $('switch-color').value; drawPreview(); };
+$('reset-switch-color').onclick = () => {
+  configuredSwitchColor = null; $('switch-color').value = '#e0e3e8'; drawPreview();
+};
+$('interfaces-enabled').onchange = drawPreview;
 $('element-name').oninput = $('label-position').onchange = drawPreview;
 $('type').onchange = () => {
+  syncElementIcons();
   populateBinding($('type').value);
   drawPreview();
 };
@@ -863,9 +1185,29 @@ $('element-form').onsubmit = event => {
   if (!name) { $('element-name').focus(); return; }
   if (type && !binding) { $('group-field').querySelector('.group-picker-trigger').click(); return; }
   const node = pendingNode || current.layout.nodes.find(n => n.id === selected);
+  const icon = $('element-icon').value;
+  const interfacesEnabled = $('interfaces-enabled').checked;
+  const ports = switchDraft();
+  if (!ports) {
+    drawPreview();
+    $('port-error').textContent = 'Existem slots inválidos. Habilite as interfaces e preencha nome, capacidade e quantidade de 1 a 96 portas.';
+    $('port-error').scrollIntoView({block: 'nearest'});
+    return;
+  }
+  const ids = new Set(ports.map(port => port.id));
+  const affected = current.layout.links.filter(link => (link.from === node.id && link.fromPort && !ids.has(link.fromPort))
+    || (link.to === node.id && link.toPort && !ids.has(link.toPort)));
+  const affectedNames = affected.map(link => {
+    const other = current.layout.nodes.find(n => n.id === (link.from === node.id ? link.to : link.from));
+    const portId = link.from === node.id ? link.fromPort : link.toPort;
+    const port = MapSwitch.geometry(node).ports.find(p => p.id === portId);
+    return (port?.label || portId) + ' → ' + (other?.name || 'equipamento');
+  });
+  if (affected.length && !confirm('A alteração remove as conexões abaixo:\n' + affectedNames.join('\n') + '\nContinuar?')) return;
   checkpoint();
-  Object.assign(node, {name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
-    groupId:type === 'group' ? binding : null, color:null});
+  current.layout.links = current.layout.links.filter(link => !affected.includes(link));
+  Object.assign(node, {icon, switchColor: configuredSwitchColor, interfacesEnabled, ports, slots: configuredSlots.map(slot => ({...slot, name: slot.name.trim()})), name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
+    groupId:type === 'group' ? binding : null, color:node.color || null});
   if (pendingNode) current.layout.nodes.push(node);
   pendingNode = null;
   selected = node.id;

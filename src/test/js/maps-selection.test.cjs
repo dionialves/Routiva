@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.join(__dirname, '../../main/resources/static
 
 function setup() {
   const canvas = { setPointerCapture() {}, getScreenCTM: () => ({ inverse() {} }) };
-  const context = vm.createContext({ canvas, checkpoints: 0, opened: 0 });
+  const context = vm.createContext({ canvas, checkpoints: 0, opened: 0, MapLinks: require('../../main/resources/static/map-links.js') });
   vm.runInContext(`
     const $ = () => canvas;
     let editing = true, tool = 'select', selected, selectedLink, drag, marquee;
@@ -66,4 +66,55 @@ test('group drag preserves spacing, uses one undo step and clears guides on rele
   assert.equal(run('drag'), null);
   assert.equal(run('selection.size'), 2);
   assert.equal(run('opened'), 0);
+});
+
+test('dragging a connection corner changes only that waypoint and records one undo step', () => {
+  const {canvas, run} = setup();
+  run(`
+    function canvasPoint(event) { return {x:event.clientX, y:event.clientY}; }
+    function linkRoute(link) { return [{x:-100,y:0}, ...link.points, {x:300,y:0}]; }
+    const link = {points:[{x:0,y:80},{x:200,y:80}]};
+    selectedLink = link;
+    drag = {kind:'bend', link, index:0, pointer:4, moved:false};
+  `);
+  canvas.onpointermove({pointerId:4, clientX:20, clientY:100});
+  canvas.onpointermove({pointerId:4, clientX:30, clientY:110});
+  assert.equal(run('link.points[0].x'), 30);
+  assert.equal(run('link.points[0].y'), 110);
+  assert.equal(run('link.points[1].x'), 200);
+  assert.equal(run('checkpoints'), 1);
+  canvas.onpointerup({pointerId:4});
+  assert.equal(run('drag'), null);
+  assert.equal(run('opened'), 0);
+  assert.equal(run('selectedLink === link'), true);
+});
+
+test('dragging a line inserts one corner on the pressed segment with a single undo step', () => {
+  const {canvas,run} = setup();
+  run(`
+    function canvasPoint(event) {return {x:event.clientX,y:event.clientY};}
+    function linkRoute(link) {return [{x:0,y:0}, ...link.points, {x:200,y:0}];}
+    const link = {style:'corners',points:[]};
+    drag = {kind:'new-bend',link,pointer:9,x:100,y:0,start:{x:100,y:0},moved:false};
+  `);
+  canvas.onpointermove({pointerId:9,clientX:100,clientY:2});
+  assert.equal(run('link.points.length'),0);
+  assert.equal(run('checkpoints'),0);
+  canvas.onpointermove({pointerId:9,clientX:100,clientY:50});
+  canvas.onpointermove({pointerId:9,clientX:110,clientY:70});
+  assert.equal(run('link.points.length'),1);
+  assert.equal(run('link.points[0].x'),110);
+  assert.equal(run('link.points[0].y'),70);
+  assert.equal(run('checkpoints'),1);
+  canvas.onpointerup({pointerId:9});
+  assert.equal(run('drag'),null);
+  assert.equal(run('opened'),0);
+});
+
+test('clicking a line without dragging never creates a corner', () => {
+  const {canvas,run} = setup();
+  run(`const link={points:[]};drag={kind:'new-bend',link,pointer:9,moved:false};`);
+  canvas.onpointerup({pointerId:9});
+  assert.equal(run('link.points.length'),0);
+  assert.equal(run('checkpoints'),0);
 });

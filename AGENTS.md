@@ -125,14 +125,34 @@ Toda página Thymeleaf carrega a base no head com `th:replace="~{design-system :
 |---|---|
 | Layout | Fragmento layout e page-layout.css para títulos, espaçamento e ações da página. |
 | Filtros | Para períodos use design-system :: period(controlId, fieldName, selectedMinutes). Fragmentos filters e picker, classes query-filter-* e multi-picker.html (checklist(kind, label, iconName, allLabel, searchLabel) para seletores genéricos de múltipla seleção). Use multi-picker.js para a interação e query-filters.js para as ações comuns. Pesquisas textuais usam input[type=search] diretamente em query-filter-field e o estilo compartilhado em query-filters.css (Clientes Rádio, Usuários e biblioteca de Mapas). |
+| Seleção única com miniatura | `single-picker.js` e `single-picker.css`, via `setupSinglePicker(select)`: pesquisa por nome, miniatura e popover acima de modais; preserve o select como fonte dos valores. |
+| Ativação em formulários | `input[type=checkbox][role=switch].system-switch`, em form-dialog.css; estado explícito independente do ícone escolhido. |
 | Sinal wireless | Barras em signal-indicators.css, compartilhadas com APs; Clientes Rádio usa signal-bars-trailing e signalSeverity obtido da leitura original, sem recalcular o diagnóstico da conexão. |
 | Indicador simples | Fragmento indicator(title, valueId, description, descriptionId). Passe um ID único por valor atualizado por JS e null para descrição estática. Para o conjunto de disponibilidade com explicações, inclua availability-components :: metrics e availability.css. |
 | Gráfico | availability-components :: historyChart(groupView) fornece título, controles, legenda e área de desenho. availability-chart.js desenha a série de disponibilidade. performance-chart.js usa AvailabilityView e AvailabilityChart para gráficos de desempenho. Carregue as dependências antes do consumidor e use history-charts.css para os controles. Consulte availability.html e diagnostics.html como exemplos. |
 | Tabela | Use design-system :: dataTable(label, sections) para listas, passando thead e tbody como um fragmento local. A base define cabeçalhos, células e rolagem. Declare as colunas no template consumidor, use th com scope e atualize aria-sort quando houver ordenação. |
 | Botão | Use design-system :: action(buttonId, iconName, label) para uma ação secundária simples. Inclua o fragmento actions e aplique system-button e as variantes descritas acima. Forneça nome acessível para ações apenas com ícone. |
 | Paginação | Use system-pagination (pagination.css, carregado pela base): Anterior à esquerda, intervalo “Exibindo início–fim de total registros” no centro e Próxima à direita. Preserve os tamanhos de página de cada tela e desabilite as ações nos limites. |
-| Modal | Para análise com abas, use analysisDialog e analysisDialogStyles de design-system, com analysis-header, analysis-tabs, analysis-body e analysis-footer (grupos de botões do rodapé usam settings-actions, sem separadores adicionais); o padrão é compartilhado por Clientes Rádio e Avaliação de latência. Inclua o fragmento dialogStyles. Use design-system :: formDialog(dialogId, titleId, descriptionId, content) com conteúdo local, título ligado por aria-labelledby, connection-form e settings-actions. Ajuste a largura com --form-dialog-width. Abra com showModal() e mantenha o fechamento por teclado. |
+| Modal | Para formulários extensos, use `form-dialog-frame` com `form-dialog-header`, `form-dialog-content` e `form-dialog-footer` (form-dialog.css): cabeçalho e rodapé fixos, conteúdo com rolagem. Para análise com abas, use analysisDialog e analysisDialogStyles de design-system, com analysis-header, analysis-tabs, analysis-body e analysis-footer (grupos de botões do rodapé usam settings-actions, sem separadores adicionais); o padrão é compartilhado por Clientes Rádio e Avaliação de latência. Inclua o fragmento dialogStyles. Use design-system :: formDialog(dialogId, titleId, descriptionId, content) com conteúdo local, título ligado por aria-labelledby, connection-form e settings-actions. Ajuste a largura com --form-dialog-width. Abra com showModal() e mantenha o fechamento por teclado. |
 
 Antes de criar uma tela, procure o componente no catálogo e confira um consumidor em produção. O CSS da página cuida da composição e das particularidades daquela tela. Para uma variação recorrente, acrescente uma classe modificadora ao CSS do componente. Extraia marcação repetida para um fragmento com parâmetros e comportamento repetido para um módulo JS usado por todos os consumidores. Preserve IDs referenciados por scripts, formulários, HTMX e atributos ARIA.
 
 Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as ocorrências equivalentes e atualize esta tabela na mesma alteração. Verifique telas pequenas, foco, teclado e os estados vazio, carregando e erro quando aplicáveis. Execute os testes JS e, para mudanças nos templates, os testes Maven.
+
+## Switches no mapa
+
+- `map-switch.js` compartilha composição SVG, geometria e pontos de conexão entre o mapa e a prévia. Reutilize `MapSwitch` para equipamentos com portas; imagens em `static/map-assets/`. Portas têm IDs estáveis, coordenadas locais e uma conexão por porta.
+
+- `map-links.js` concentra a geometria das conexões: reta ou caminho com cantos editáveis. Os pontos intermediários são coordenadas do mapa; extremidades continuam vinculadas ao equipamento/porta.
+
+- Conexões separam `style` (straight/corners: Direta/Com ponto) de `lineStyle` (straight/curved: Reta/Curvada). `MapLinks.path` suaviza os cantos sem alterar pontos e âncoras; duplo clique abre o modal compartilhado de configuração.
+
+- Switches usam slots de interfaces (`id`, `name`, `capacity`, `count`). `MapSwitch.slotsFor` migra portas antigas; `portsForSlots` preserva IDs por slot e numera os nomes. Capacidades: electrical, sfp1g, sfp10g, sfp40g, sfp100g. Agrupe portas por slot, com espaçamento compacto uniforme e numeração de baixo para cima.
+
+- O seletor de ícones reutilizável é `single-picker.js`/`single-picker.css`: seleção única com miniatura, pesquisa e popover nativo acima de modais. A biblioteca vem das opções do select, sem entradas fictícias. `interfacesEnabled` é independente de `icon` e preserva portas/slots quando desativado; não descarte dados ao trocar o ícone.
+
+- O LED único do switch usa o último ping do coletor, via `/api/maps/ping-status`, atualizado a cada 2s sem redesenhar o mapa. Resposta = verde; timeout ICMP = vermelho; edição, erro de coleta ou amostra com mais de 10s = cinza. Não use severidade de incidentes ou médias de latência para colorir esse LED.
+
+- `switchColor` personaliza apenas o gabinete do switch, via filtro SVG compartilhado em `MapSwitch.draw`. Preserve `color` e o comportamento do círculo; nunca aplique a personalização às portas ou ao LED de ping. `null` restaura a arte original.
+
+- Categorias do seletor de ícones seguem o vínculo do elemento: grupo de hosts oferece Círculo; host oferece Switch; elemento livre mantém ambos. `data-bindings` nas opções declara a biblioteca por categoria; trocar tipo só ajusta as opções e não apaga slots ou `switchColor`.

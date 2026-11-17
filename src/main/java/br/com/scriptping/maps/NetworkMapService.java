@@ -99,12 +99,54 @@ public class NetworkMapService {
             if (node == null || node.id() == null || node.id().isBlank() || !ids.add(node.id())
                 || (node.groupId() != null && node.hostId() != null)
                 || (node.color() != null && !node.color().matches("#[0-9a-fA-F]{6}"))
+                || (node.switchColor() != null && !node.switchColor().matches("#[0-9a-fA-F]{6}"))
                 || node.name() == null) throw invalid();
         }
-        var pairs = new HashSet<Set<String>>();
+        var nodes = layout.nodes().stream().collect(java.util.stream.Collectors.toMap(Node::id, n -> n));
+        for (var node : layout.nodes()) {
+            if (!Set.of("circle", "switch").contains(node.icon())) throw invalid();
+            var capacities = Map.of("electrical", "rj45", "sfp1g", "sfp", "sfp10g", "sfp", "sfp40g", "qsfp", "sfp100g", "qsfp");
+            var slots = new HashMap<String, Slot>();
+            for (var slot : node.slots()) {
+                if (slot == null || slot.id() == null || slot.id().isBlank() || slot.id().length() > 80
+                    || slots.putIfAbsent(slot.id(), slot) != null || slot.name() == null || slot.name().isBlank()
+                    || slot.name().length() > 80 || slot.capacity() == null || !capacities.containsKey(slot.capacity())
+                    || slot.count() < 1 || slot.count() > 96) throw invalid();
+            }
+            if (!slots.isEmpty() && node.slots().stream().mapToLong(Slot::count).sum() != node.ports().size()) throw invalid();
+            var slotCounts = new HashMap<String, Integer>();
+            var portIds = new HashSet<String>();
+            for (var port : node.ports()) {
+                if (port == null || port.id() == null || port.id().isBlank() || port.id().length() > 80
+                    || !portIds.add(port.id()) || port.type() == null
+                    || !Set.of("rj45", "sfp", "qsfp").contains(port.type())) throw invalid();
+                if (!slots.isEmpty() || port.slotId() != null) {
+                    var slot = slots.get(port.slotId());
+                    if (slot == null) throw invalid();
+                    int index = slotCounts.merge(slot.id(), 1, Integer::sum);
+                    if (index > slot.count() || !slot.capacity().equals(port.capacity())
+                        || !capacities.get(slot.capacity()).equals(port.type())
+                        || !(slot.name() + index).equals(port.name())) throw invalid();
+                }
+            }
+        }
+        var pairs = new HashSet<Set<List<String>>>();
+        var occupied = new HashSet<List<String>>();
         for (var link : layout.links()) {
-            if (link == null || !ids.contains(link.from()) || !ids.contains(link.to()) || link.from().equals(link.to())
-                || !pairs.add(Set.of(link.from(), link.to()))) throw invalid();
+            if (link == null || !ids.contains(link.from()) || !ids.contains(link.to()) || link.from().equals(link.to())) throw invalid();
+            if (!Set.of("straight", "corners").contains(link.style())
+                || !Set.of("straight", "curved").contains(link.lineStyle())) throw invalid();
+            for (var point : link.points()) {
+                if (point == null || !Double.isFinite(point.x()) || !Double.isFinite(point.y())) throw invalid();
+            }
+            var endpoints = List.of(List.of(link.from(), link.fromPort() == null ? "" : link.fromPort()),
+                List.of(link.to(), link.toPort() == null ? "" : link.toPort()));
+            if (!pairs.add(Set.copyOf(endpoints))) throw invalid();
+            for (var endpoint : endpoints) {
+                if (endpoint.get(1).isEmpty()) continue;
+                if (nodes.get(endpoint.get(0)).ports().stream().noneMatch(port -> port.id().equals(endpoint.get(1)))
+                    || !occupied.add(endpoint)) throw invalid();
+            }
         }
         long now = System.currentTimeMillis();
         var data = json.writeValueAsString(layout);

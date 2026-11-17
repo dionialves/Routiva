@@ -5,7 +5,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/maps.css?v=20261115-round-indicators"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/maps.js?v=20261115-ui-pagination" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261117-bend-marks"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261117-switch-color" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/maps.js?v=20261117-bend-marks" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
@@ -72,7 +72,8 @@
       <button class="system-button interaction-tool" id="pan-tool" title="Mover" aria-label="Mover"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V6a1.5 1.5 0 0 1 3 0v5-7a1.5 1.5 0 0 1 3 0v7-6a1.5 1.5 0 0 1 3 0v7-4a1.5 1.5 0 0 1 3 0v7a7 7 0 0 1-7 7h-1c-2.3 0-4-1.2-5.4-3.2L3 13a1.6 1.6 0 0 1 2.5-2Z"/></svg><span>Mover</span></button>
       <button id="delete-item" title="Excluir seleção" aria-label="Excluir seleção" class="system-button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg><span>Excluir seleção</span></button>
       <button id="undo" title="Desfazer (Ctrl+Z)" aria-label="Desfazer" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 4-5 5 5 5M3 9h11c7 0 8 9 2 11"/></svg><span>Desfazer</span></button><button id="redo" title="Refazer (Ctrl+Shift+Z)" aria-label="Refazer" class="system-button"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 5 5-5 5m5-5H10c-7 0-8 9-2 11"/></svg><span>Refazer</span></button>
-    </div><div class="editor-guidance"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg><p id="hint"></p></div></div>
+    </div>
+    <div class="editor-guidance"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg><p id="hint"></p></div></div>
   <section class="map-surface" aria-labelledby="map-surface-title">
     <header id="map-surface-heading" class="map-surface-heading">
       <h2 id="map-surface-title"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><path d="m10.5 7.5-4 9m7-9 4 9M8 19h8"/></svg>Mapa de rede</h2>
@@ -134,32 +135,82 @@
     <div class="settings-actions"><button type="button" id="close-map" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button type="submit" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Aplicar alterações</span></button></div>
     <p id="map-error" role="alert"></p>
   </form></th:block></dialog>
-  <dialog th:replace="~{design-system :: formDialog('element-dialog', 'element-title', null, ~{maps :: element-dialog-content})}"><th:block th:fragment="element-dialog-content"><form class="connection-form" id="element-form">
-    <div class="element-heading">
-      <h2 id="element-title">Elemento do mapa</h2>
-      <button type="button" id="close-element" aria-label="Fechar" title="Fechar" class="system-button system-button-icon-only"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg></button>
-      <p>Configure as propriedades e a identificação do elemento na topologia.</p>
-    </div>
-    <label>Nome *<input id="element-name" required></label>
-    <div class="map-dimensions">
-      <label>Tipo *<select id="type"><option value="">Elemento livre</option><option value="host">Host</option><option value="group">Grupo de hosts</option></select></label>
-      <label>Posição do nome<select id="label-position">
-        <option value="BELOW" selected>Abaixo</option><option value="ABOVE">Acima</option>
-        <option value="LEFT">Esquerda</option><option value="RIGHT">Direita</option>
-      </select></label>
-    </div>
-    <div id="group-field" hidden><span id="group-label">Selecionar grupo de hosts</span><select id="group" aria-labelledby="group-label"></select></div>
-    <div class="element-appearance">
-      <label>Ícone<select id="element-icon"><option value="circle">●　Círculo</option></select></label>
-      <div class="element-color-note"><strong>Cor do elemento</strong>
-        <p>A cor será definida automaticamente conforme o estado de monitoramento e os incidentes do Zabbix.</p>
+  <dialog th:replace="~{design-system :: formDialog('link-dialog', 'link-dialog-title', 'link-dialog-description', ~{maps :: link-dialog-content})}"><th:block th:fragment="link-dialog-content">
+    <form id="link-form" class="connection-form">
+      <h2 id="link-dialog-title">Configuração da conexão</h2>
+      <p id="link-dialog-description">Confira os equipamentos conectados e configure o desenho da linha.</p>
+      <label>Início<input id="link-from" readonly></label>
+      <label>Fim<input id="link-to" readonly></label>
+      <div class="map-dimensions">
+        <label>Tipo de linha<select id="link-dialog-type"><option value="straight">Direta</option><option value="corners">Com ponto</option></select></label>
+        <label>Estilo<select id="link-dialog-style"><option value="straight">Reta</option><option value="curved">Curvada</option></select></label>
       </div>
-    </div>
-    <section class="element-preview" aria-labelledby="preview-heading">
-      <h3 id="preview-heading">Pré-visualização</h3>
-      <svg id="node-preview" role="img" aria-label="Pré-visualização do elemento"></svg>
-    </section>
-    <div class="settings-actions"><button type="button" id="remove" class="system-button"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg>Excluir</button>
-      <button type="button" id="cancel-element" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button type="submit" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Salvar</span></button></div>
-  </form></th:block></dialog>
+      <svg id="link-preview" viewBox="0 0 320 140" role="img" aria-label="Pré-visualização da conexão"></svg>
+      <div class="settings-actions">
+        <button type="button" id="delete-link" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#trash-2"/></svg>Excluir</button>
+        <button type="button" id="cancel-link" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#close"/></svg>Cancelar</button>
+        <button type="submit" class="system-button system-button-primary"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>Salvar</button>
+      </div>
+    </form>
+  </th:block></dialog>
+  <dialog th:replace="~{design-system :: formDialog('element-dialog', 'element-title', 'element-description', ~{maps :: element-dialog-content})}"><th:block th:fragment="element-dialog-content">
+    <form class="connection-form form-dialog-frame" id="element-form">
+      <header class="element-heading form-dialog-header">
+        <h2 id="element-title">Elemento do mapa</h2>
+        <button type="button" id="close-element" aria-label="Fechar" title="Fechar" class="system-button system-button-icon-only"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"/></svg></button>
+        <p id="element-description">Configure as propriedades e a identificação do elemento na topologia.</p>
+      </header>
+      <div class="form-dialog-content element-config-content">
+        <section class="element-identification" aria-label="Identificação do elemento">
+          <label>Nome *<input id="element-name" required></label>
+          <div class="map-dimensions">
+            <label>Tipo *<select id="type"><option value="">Elemento livre</option><option value="host">Host</option><option value="group">Grupo de hosts</option></select></label>
+            <label>Posição do nome<select id="label-position"><option value="BELOW">Abaixo</option><option value="ABOVE">Acima</option><option value="LEFT">Esquerda</option><option value="RIGHT">Direita</option></select></label>
+          </div>
+          <div id="group-field" hidden><span id="group-label">Selecionar grupo de hosts</span><select id="group" aria-labelledby="group-label"></select></div>
+        </section>
+        <section class="element-visual-config" aria-labelledby="element-icon-title">
+          <div class="element-section-heading"><div><h3 id="element-icon-title">Ícone do elemento</h3><p>Selecione como o elemento será representado no mapa.</p></div></div>
+          <div class="element-icon-row">
+          <label><span class="sr-only">Ícone</span><select id="element-icon" aria-label="Ícone do elemento">
+            <option value="circle" data-bindings="group free" data-shape="circle" data-description="Representação simples.">Círculo</option>
+            <option value="switch" data-bindings="host free" data-image="/map-assets/switch.svg?v=20261117-ping-led" data-description="Equipamento com representação de interfaces.">Switch</option>
+          </select></label>
+          <div id="switch-color-field" hidden>
+            <label for="switch-color">Cor do switch</label>
+            <div class="element-switch-color-controls">
+              <input id="switch-color" type="color" value="#e0e3e8" aria-label="Cor do switch">
+              <button id="reset-switch-color" type="button" class="system-button" title="Restaurar cor original">Original</button>
+            </div>
+          </div>
+          </div>
+          <div class="element-interface-toggle">
+            <div><label for="interfaces-enabled">Habilitar interfaces</label><p id="interfaces-enabled-description">Permite configurar slots e portas do elemento.</p></div>
+            <input id="interfaces-enabled" type="checkbox" role="switch" class="system-switch" aria-describedby="interfaces-enabled-description" aria-controls="switch-config">
+          </div>
+          <p id="element-color-note" class="element-color-note">A cor do elemento acompanha o estado de monitoramento e os incidentes do Zabbix.</p>
+        </section>
+        <fieldset id="switch-config" hidden>
+          <legend class="sr-only">Interfaces</legend>
+          <div class="element-section-heading"><div><h3>Interfaces</h3><p>Configure os grupos de portas do equipamento.</p></div>
+            <button type="button" id="add-switch-slot" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>Adicionar slot</button>
+          </div>
+          <div class="element-slot-table-scroll" role="region" aria-label="Slots de interfaces" tabindex="0">
+            <table class="element-slot-table"><thead><tr><th scope="col">Slot</th><th scope="col">Nome</th><th scope="col">Capacidade</th><th scope="col">Portas</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="switch-slots"></tbody></table>
+          </div>
+          <small>O nome é seguido pelo número da porta: ether1, 1/1/1, sfp-sfpplus1. Até 96 portas por slot.</small>
+        </fieldset>
+        <p id="port-error" role="alert"></p>
+        <section class="element-preview" aria-labelledby="preview-heading">
+          <div><h3 id="preview-heading">Pré-visualização</h3><p>Como o elemento será exibido no mapa.</p></div>
+          <svg id="node-preview" role="img" aria-label="Pré-visualização do elemento"></svg>
+        </section>
+      </div>
+      <footer class="settings-actions form-dialog-footer">
+        <button type="button" id="remove" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#trash-2"/></svg>Excluir</button>
+        <button type="button" id="cancel-element" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#close"/></svg>Cancelar</button>
+        <button type="submit" class="system-button system-button-primary"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>Salvar</button>
+      </footer>
+    </form>
+  </th:block></dialog>
 </main></div></body></html>
