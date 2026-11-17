@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <th:block th:replace="~{shell :: security}"></th:block>
+  <title>Conexões • TraceOne</title><link rel="icon" href="/favicon.svg">
+  <th:block th:replace="~{design-system :: base}"></th:block>
+  <th:block th:replace="~{design-system :: layout}"></th:block>
+  <th:block th:replace="~{design-system :: filters}"></th:block>
+  <th:block th:replace="~{design-system :: actions}"></th:block>
+  <link rel="stylesheet" href="/availability.css">
+  <script src="/shell.js" defer></script><script src="/connections.js" defer></script>
+</head>
+<body class="availability-dashboard">
+<aside th:replace="~{shell :: sidebar('connections')}"></aside>
+<div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
+<main class="page-content availability-page">
+  <div class="availability-heading"><div><p class="eyebrow">REDE</p><h1>Conexões mapeadas</h1><p>Interfaces Ethernet MikroTik. Crie conexões pelo editor do mapa; consulte as duas pontas aqui.</p></div></div>
+  <section class="query-filter-bar card" aria-label="Pesquisar conexões"><div class="query-filter-row"><label class="query-filter-field"><span class="query-filter-label"><svg th:replace="~{shell :: icon('search')}"></svg>Conexão</span><input id="connection-search" type="search" placeholder="Buscar conexão…"></label></div></section>
+  <section id="connection-detail" class="card availability-host-section" hidden aria-labelledby="connection-detail-title">
+    <h2 id="connection-detail-title"></h2>
+    <p id="connection-detail-a"></p><p id="connection-detail-b"></p>
+    <a href="/conexoes" class="system-button">Ver todas as conexões</a>
+  </section>
+  <section class="card availability-host-section"><h2>Conexões cadastradas</h2>
+    <p id="connection-state" role="status" aria-live="polite">Carregando…</p>
+    <button id="connection-refresh" class="system-button" type="button"><svg th:replace="~{shell :: icon('refresh')}"></svg>Atualizar</button>
+    <div th:replace="~{design-system :: dataTable('Conexões mapeadas', ~{connections :: sections})}"><th:block th:fragment="sections"><thead><tr><th scope="col">Conexão</th><th scope="col">Equipamento / interface A</th><th scope="col">Equipamento / interface B</th><th scope="col">Estado A / B</th><th scope="col">Tráfego A (RX / TX)</th><th scope="col">Tráfego B (RX / TX)</th><th scope="col">Última leitura</th></tr></thead><tbody id="connection-rows"></tbody></th:block></div>
+  </section>
+</main></div>
+</body></html>

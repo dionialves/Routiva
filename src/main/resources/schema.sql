@@ -341,3 +341,12 @@ ALTER TABLE access_point ADD COLUMN IF NOT EXISTS connection_status VARCHAR(40) 
 ALTER TABLE access_point ADD COLUMN IF NOT EXISTS connection_message TEXT;
 ALTER TABLE access_point ADD COLUMN IF NOT EXISTS verified_ip VARCHAR(255);
 ALTER TABLE access_point ADD COLUMN IF NOT EXISTS api_tls BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS mapped_connection (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    host_a VARCHAR(100) NOT NULL,
+    interface_a VARCHAR(128) NOT NULL,
+    host_b VARCHAR(100) NOT NULL,
+    interface_b VARCHAR(128) NOT NULL
+);

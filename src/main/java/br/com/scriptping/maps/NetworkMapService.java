@@ -15,6 +15,8 @@ import static br.com.scriptping.maps.NetworkMapModels.*;
 
 @Service
 public class NetworkMapService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final NetworkMapRepository repository;
     private final ObjectMapper json;
     private final ZabbixService inventory;
@@ -136,6 +138,11 @@ public class NetworkMapService {
             if (link == null || !ids.contains(link.from()) || !ids.contains(link.to()) || link.from().equals(link.to())) throw invalid();
             if (!Set.of("straight", "corners").contains(link.style())
                 || !Set.of("straight", "curved").contains(link.lineStyle())) throw invalid();
+            if (link.mappedConnectionId() != null) {
+                var definitions = jdbc.queryForList("SELECT host_a, host_b FROM mapped_connection WHERE id = ?", link.mappedConnectionId());
+                if (definitions.size() != 1 || !Objects.equals(nodes.get(link.from()).hostId(), definitions.getFirst().get("HOST_A"))
+                    || !Objects.equals(nodes.get(link.to()).hostId(), definitions.getFirst().get("HOST_B"))) throw invalid();
+            }
             for (var point : link.points()) {
                 if (point == null || !Double.isFinite(point.x()) || !Double.isFinite(point.y())) throw invalid();
             }

@@ -12,7 +12,7 @@ function setup() {
   };
   const link = {from:'a',to:'b',fromPort:'r1',style:'corners',points:[{x:10,y:80}]};
   const context = vm.createContext({$, link, editing:true, pendingLink:null, selectedLink:null, selected:null,
-    lastConnectionClick:null,selection:new Set(),checkpoints:0,draw(){},svg:()=>({}),
+    savingConnection:false, loadConnectionInterfaces(){}, lastConnectionClick:null,selection:new Set(),checkpoints:0,draw(){},svg:()=>({}),
     current:{layout:{nodes:[{id:'a',hostId:'h1',name:'SW',ports:[{id:'r1',type:'rj45'}]},
       {id:'b',groupId:'g1',name:'Grupo'}],links:[link]}},
     inventory:[{id:'h1',name:'Switch Core'}],groups:[{id:'g1',name:'Datacenter'}],

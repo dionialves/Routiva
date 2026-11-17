@@ -70,7 +70,7 @@ test('renders eight columns safely and calculates durations locally', async () =
   assert.equal(cells.length, 8);
   assert.equal(cells[7].textContent, "—");
   assert.equal(cells[2].children[0].children[0].textContent, 'Router');
-  assert.equal(cells[2].children[0].children[1].children[0].href, 'winbox://10.0.0.1');
+  assert.equal(cells[2].children[0].children[1].children[0].children[2].href, 'winbox://10.0.0.1');
   assert.equal(cells[3].children[0].textContent, '10.0.0.1');
   assert.equal(cells[6].textContent, 'Não');
   assert.equal(cells[4].children[0].textContent, row.name);

@@ -18,20 +18,22 @@ function surface() {
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   return { api: context.HostMenu, link: new Element(), container: new Element() };
 }
-test('host menu preserves group navigation and launches WinBox only on explicit action', () => {
+test('host menu offers access actions and launches WinBox only on explicit action', () => {
   const { api, link, container } = surface();
   api.attach(link, container, { ip: '10.0.0.1', groupUrl: '/diagnostico/grupos/g' });
   const menu = container.children[0];
-  assert.equal(menu.children[0].href, '/diagnostico/grupos/g');
-  assert.equal(menu.children[1].href, 'winbox://10.0.0.1');
+  const access = menu.children[0];
+  assert.equal(access.children[1].href, 'http://10.0.0.1');
+  assert.equal(access.children[2].href, 'winbox://10.0.0.1');
+  assert.equal(access.children[3].href, 'ssh://10.0.0.1');
   let prevented = false;
   link.listeners.click({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
   assert.equal(menu.open, true);
-  assert.equal(menu.children[0].focused, true);
+  assert.equal(access.children[1].focused, true);
   menu.listeners.toggle({ newState: 'open' });
   assert.equal(link.attributes['aria-expanded'], 'true');
-  menu.children[1].listeners.click();
+  access.children[2].listeners.click();
   assert.equal(menu.open, false);
 });
 test('missing and malformed addresses never produce a WinBox action', () => {
@@ -41,4 +43,21 @@ test('missing and malformed addresses never produce a WinBox action', () => {
   }
   assert.equal(api.winboxUrl(' 10.0.0.1 '), 'winbox://10.0.0.1');
   assert.equal(api.winboxUrl('2001:db8::1'), 'winbox://[2001:db8::1]');
+});
+test('AP actions remain hidden until inventory confirms the host', () => {
+  const { api, link, container } = surface();
+  // The resolver shares the same cached AP inventory used throughout the shell.
+  let resolve;
+  const context = { document: { createElement: () => new link.constructor() } };
+  context.window = context;
+  context.AccessPointLinks = { attach(_element, id, callback) {
+    assert.equal(id, 'ap/1'); resolve = callback;
+  } };
+  vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
+  context.HostMenu.attach(link, container, { ip: '10.0.0.1', hostId: 'ap/1' });
+  const ap = container.children[0].children[1];
+  assert.equal(ap.hidden, true);
+  resolve('/ap/ap%2F1');
+  assert.equal(ap.hidden, false);
+  assert.equal(ap.children[2].href, '/ap/ap%2F1#avaliacao-latencia');
 });

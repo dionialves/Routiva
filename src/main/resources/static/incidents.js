@@ -249,6 +249,7 @@
     name.append(link);
     window.HostMenu.attach(link, name, {
       ip: item.ip,
+      hostId: item.id,
       groupUrl: selectedGroup ? `/diagnostico/grupos/${encodeURIComponent(selectedGroup)}` : null
     });
     return name;

@@ -158,13 +158,18 @@ document.addEventListener('DOMContentLoaded', () => {
 // Only classified APs link to the equipment analysis page.
 window.AccessPointLinks = (() => {
   let pending;
-  function attach(element, hostId) {
+  function attach(element, hostId, onResolve) {
     element.removeAttribute('href');
     pending ||= fetch('/api/ap', { cache: 'no-store' }).then(response => {
       if (!response.ok) throw new Error('AP inventory unavailable');
       return response.json();
     }).then(rows => new Set(rows.map(row => row.hostId))).catch(() => new Set());
-    pending.then(ids => { if (ids.has(hostId)) element.href = '/ap/' + encodeURIComponent(hostId); });
+    pending.then(ids => {
+      if (ids.has(hostId)) {
+        element.href = '/ap/' + encodeURIComponent(hostId);
+        onResolve?.(element.href);
+      }
+    });
   }
   return { attach };
 })();

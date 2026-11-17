@@ -82,6 +82,17 @@ public class MikrotikService {
                             .findFirst().ifPresent(row::putAll);
                     }
                 }
+                case "connection" -> {
+                    if (selectedInterface == null || selectedInterface.isBlank() || selectedInterface.length() > 128)
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione uma interface.");
+                    var interfaces = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled");
+                    var selected = interfaces.stream().filter(i -> selectedInterface.equals(i.get("name")) && "ether".equals(i.get("type"))).findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Interface Ethernet não encontrada."));
+                    var traffic = api.command("/interface/monitor-traffic", "=interface=" + selected.get(".id"), "=once=");
+                    var row = new HashMap<>(selected);
+                    if (!traffic.isEmpty()) row.putAll(traffic.getFirst());
+                    rows = List.of(row);
+                }
                 case "traffic" -> {
                     if (selectedInterface == null || selectedInterface.length() > 128) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione uma interface.");
                     var interfaces = api.command("/interface/print", "=.proplist=.id,name");

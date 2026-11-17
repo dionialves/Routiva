@@ -16,6 +16,7 @@ let configuredSwitchColor = null;
 let configuredNodeId = null;
 let pendingLink = null, lastConnectionClick = null;
 let suppressConnectionUntil = 0;
+let savingConnection = false;
 let states = new Map(), generation = 0, timer;
 let pingStates = new Map(), pingGeneration = 0, pingTimer;
 let summaryUpdatedAt = 0, summaryFailed = false;
@@ -239,6 +240,20 @@ function draw() {
       fill: 'none', stroke: 'transparent', 'stroke-width': 16, 'vector-effect': 'non-scaling-stroke',
       'aria-hidden': 'true'});
     for (const handler of ['onpointerdown', 'onclick', 'ondblclick']) hit[handler] = line[handler];
+    if (link.mappedConnectionId) {
+      for (const path of [line, hit]) {
+        const title = svg('title', {'data-connection-id': link.mappedConnectionId});
+        title.textContent = mappedConnectionTitle(link.mappedConnectionId);
+        path.append(title);
+      }
+      if (!editing) {
+        line.setAttribute('tabindex', 0);
+        line.setAttribute('role', 'link');
+        line.setAttribute('aria-label', 'Abrir conexão mapeada entre ' + a.name + ' e ' + b.name);
+        line.onclick = hit.onclick = () => { location.href = '/conexoes#' + encodeURIComponent(link.mappedConnectionId); };
+        line.onkeydown = event => { if (event.key === 'Enter') line.onclick(); };
+      }
+    }
     connectors.append(line, hit);
   }
   for (const n of nodes) {
@@ -718,6 +733,7 @@ function openMap(map, edit = false) {
   if (map && !map.layout.camera) fitToView();
   refresh(generation);
   refreshPingState(pingGeneration);
+  refreshMappedConnections();
 }
 
 const pageSize = 10;
@@ -1001,6 +1017,8 @@ function openLinkDialog(link) {
   $('link-dialog-style').value = link.lineStyle || 'straight';
   draw(); drawLinkPreview();
   $('link-dialog').showModal();
+  $('link-category').value = link.mappedConnectionId ? 'mapped' : 'simple';
+  loadConnectionInterfaces();
   $('link-dialog-type').focus();
 }
 $('delete-link').onclick = () => {
@@ -1012,9 +1030,28 @@ $('delete-link').onclick = () => {
 $('link-dialog-type').onchange = $('link-dialog-style').onchange = drawLinkPreview;
 $('cancel-link').onclick = () => $('link-dialog').close();
 $('link-dialog').onclose = () => { pendingLink = null; lastConnectionClick = null; };
-$('link-form').onsubmit = event => {
+$('link-form').onsubmit = async event => {
   event.preventDefault();
   if (!pendingLink || !current.layout.links.includes(pendingLink)) return;
+  if (savingConnection) return;
+  const target = pendingLink;
+  if ($('link-category').value === 'mapped') {
+    try {
+      const [a, b] = connectionNodes(target);
+      if (!a?.hostId || !b?.hostId) throw new Error('Selecione dois elementos vinculados a hosts.');
+      const name = $('connection-name').value.trim();
+      const interfaceA = $('connection-interface-a').value, interfaceB = $('connection-interface-b').value;
+      if (!name || !interfaceA || !interfaceB) throw new Error('Preencha o nome e as duas interfaces.');
+      const existing = connectionDefinitions.find(c => c.id === target.mappedConnectionId);
+      if (!existing || existing.name !== name || existing.interfaceA !== interfaceA || existing.interfaceB !== interfaceB || existing.hostA !== a.hostId || existing.hostB !== b.hostId) {
+        savingConnection = true;
+        const saved = await connectionRequest('/api/connections', {name, hostA:a.hostId, hostB:b.hostId, interfaceA, interfaceB});
+        if (pendingLink !== target || !current.layout.links.includes(target)) return;
+        checkpoint(); target.mappedConnectionId = saved.id; connectionDefinitions.push(saved);
+      }
+    } catch (error) { $('connection-message').textContent = error.message; return; }
+    finally { savingConnection = false; }
+  } else if (target.mappedConnectionId) { checkpoint(); delete target.mappedConnectionId; }
   const style = $('link-dialog-type').value, lineStyle = $('link-dialog-style').value;
   if (pendingLink.style !== style || (pendingLink.lineStyle || 'straight') !== lineStyle) {
     checkpoint();
@@ -1286,3 +1323,60 @@ $('save').onclick = async () => {
     openMap(null);
   } catch { $('status').textContent = 'Falha ao carregar os mapas. Recarregue a página para tentar novamente.'; }
 })();
+
+
+let connectionDefinitions = [], connectionReadings = new Map(), connectionBusy = false, connectionFailed = false;
+async function connectionRequest(url, body) {
+  const response = await fetch(url, body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || error.detail || 'Não foi possível consultar a conexão. Verifique a configuração da API.'); }
+  return response.json();
+}
+function connectionNodes(link) { return [link.from, link.to].map(id => current.layout.nodes.find(n => n.id === id)); }
+let interfaceLoad = 0;
+async function loadConnectionInterfaces() {
+  const sequence = ++interfaceLoad, link = pendingLink;
+  const mapped = $('link-category').value === 'mapped';
+  $('link-mapping').hidden = !mapped;
+  if (!mapped || !link) return;
+  const controls = [$('connection-interface-a'), $('connection-interface-b')];
+  controls.forEach(c => { c.replaceChildren(); c.disabled = true; });
+  $('connection-message').textContent = 'Carregando interfaces…';
+  try {
+    const nodes = connectionNodes(link);
+    if (nodes.some(n => !n?.hostId)) throw new Error('Conexões mapeadas exigem dois elementos vinculados a hosts.');
+    connectionDefinitions = await connectionRequest('/api/connections');
+    const existing = connectionDefinitions.find(c => c.id === link.mappedConnectionId);
+    $('connection-name').value = existing?.name || nodes.map(n => n.name).join(' ↔ ');
+    const interfaces = await Promise.all(nodes.map(n => connectionRequest('/api/connections/interfaces/' + encodeURIComponent(n.hostId))));
+    if (sequence !== interfaceLoad || pendingLink !== link) return;
+    interfaces.forEach((rows, i) => {
+      controls[i].append(new Option('Selecione a interface', ''));
+      rows.forEach(row => controls[i].append(new Option(row.name, row.name)));
+      controls[i].value = (i ? existing?.interfaceB : existing?.interfaceA) || '';
+      controls[i].disabled = false;
+    });
+    $('connection-message').textContent = interfaces.some(rows => !rows.length) ? 'Nenhuma interface Ethernet disponível.' : 'Interfaces carregadas.';
+  } catch (error) { if (sequence === interfaceLoad) $('connection-message').textContent = error.message; }
+}
+$('link-category').onchange = loadConnectionInterfaces;
+$('connection-retry').onclick = loadConnectionInterfaces;
+function connectionRate(value) { return value == null ? 'Sem dados' : (Number(value) / 1000000).toLocaleString('pt-BR', {maximumFractionDigits:2}) + ' Mbps'; }
+function mappedConnectionTitle(id) {
+  const reading = connectionReadings.get(id);
+  if (!reading) return connectionFailed ? 'Conexão mapeada · Consulta indisponível' : 'Conexão mapeada · Aguardando coleta';
+  return [reading.a, reading.b].map((e, i) => `${i ? 'B' : 'A'} · ${e.name}: ${Date.now() - e.measuredAt > 30000 ? 'Leitura desatualizada' : e.error || (e.up ? 'UP' : 'DOWN')} · RX ${connectionRate(e.rxBps)} · TX ${connectionRate(e.txBps)}`).join('\n');
+}
+async function refreshMappedConnections() {
+  if (connectionBusy || editing || !current || document.hidden) return;
+  const ids = [...new Set(current.layout.links.map(l => l.mappedConnectionId).filter(Boolean))];
+  if (!ids.length) return;
+  connectionBusy = true;
+  try { const rows = await connectionRequest('/api/connections/readings', ids); connectionFailed = false; connectionReadings = new Map(rows.map(r => [r.id, r])); }
+  catch { connectionReadings.clear(); connectionFailed = true; }
+  finally {
+    connectionBusy = false;
+    document.querySelectorAll('[data-connection-id]').forEach(title => { title.textContent = mappedConnectionTitle(title.dataset.connectionId); });
+  }
+}
+setInterval(refreshMappedConnections, 10000);
+refreshMappedConnections();

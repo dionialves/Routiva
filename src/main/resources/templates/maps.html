@@ -5,7 +5,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261117-gbic40-front"><script src="/shell.js?v=20261109-2" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261117-connected-ports" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/maps.js?v=20261117-gbic40-front" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261117-gbic40-front"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261117-connected-ports" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/maps.js?v=20261117-mapped-connections" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
@@ -141,6 +141,15 @@
       <p id="link-dialog-description">Confira os equipamentos conectados e configure o desenho da linha.</p>
       <label>Início<input id="link-from" readonly></label>
       <label>Fim<input id="link-to" readonly></label>
+      <label>Categoria<select id="link-category"><option value="simple">Simples</option><option value="mapped">Mapeada · Ethernet MikroTik</option></select></label>
+      <fieldset id="link-mapping" hidden><legend>Interfaces da conexão</legend>
+        <p>Os dois hosts devem ter a API MikroTik configurada em Access Points.</p>
+        <label>Nome<input id="connection-name" maxlength="120"></label>
+        <label>Interface A<select id="connection-interface-a"></select></label>
+        <label>Interface B<select id="connection-interface-b"></select></label>
+        <p id="connection-message" role="status" aria-live="polite"></p>
+        <button type="button" id="connection-retry" class="system-button"><svg th:replace="~{shell :: icon('refresh')}"></svg>Carregar interfaces</button>
+      </fieldset>
       <div class="map-dimensions">
         <label>Tipo de linha<select id="link-dialog-type"><option value="straight">Direta</option><option value="corners">Com ponto</option></select></label>
         <label>Estilo<select id="link-dialog-style"><option value="straight">Reta</option><option value="curved">Curvada</option></select></label>

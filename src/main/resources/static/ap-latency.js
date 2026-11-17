@@ -362,6 +362,9 @@
       start.disabled = false;
     } catch (error) { if (attempt === generation) { execution('Erro', 'error'); state.textContent = error.message; } }
   });
+  if (window.location?.hash === '#avaliacao-latencia') {
+    document.getElementById('ap-latency-open').click();
+  }
   start.addEventListener('click', async () => {
     if (busy || start.disabled) return;
     busy = true;

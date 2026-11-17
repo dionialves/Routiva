@@ -33,6 +33,17 @@ class NetworkMapPersistenceTests {
     @Autowired JdbcTemplate jdbc;
 
     @Test
+    void mappedReferencesPersistAndMustMatchEndpointHosts() throws Exception {
+        jdbc.update("INSERT INTO mapped_connection(id,name,host_a,interface_a,host_b,interface_b) VALUES ('c1','Cabo','h1','ether1','h2','ether2')");
+        var nodes = List.of(new Node("a", null, "h1", null, "A", 0, 0, null), new Node("b", null, "h2", null, "B", 200, 0, null));
+        var link = new Link("a", "b", null, null, "straight", List.of(), "straight", "c1");
+        var saved = service.save(new Saved(null, 0, new Layout(null, "Rede", null, 0, nodes, List.of(link)), null));
+        assertThat(service.maps().getFirst().layout().links().getFirst().mappedConnectionId()).isEqualTo("c1");
+        jdbc.update("UPDATE mapped_connection SET host_b = 'outro' WHERE id = 'c1'");
+        assertThatThrownBy(() -> service.save(saved)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void createsAndUpdatesMapsRejectingStaleOrMissingRevisions() throws Exception {
         var layout = new Layout(null, "Rede", null, null, List.of(), List.of());
         var created = service.save(new Saved(null, 0, layout, null));

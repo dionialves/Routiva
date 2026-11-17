@@ -38,7 +38,10 @@ public final class NetworkMapModels {
         public Port(String id, String type) { this(id, type, null, null, null); }
     }
     public record Bend(double x, double y) {}
-    public record Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle) {
+    public record Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId) {
+        public Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle) {
+            this(from, to, fromPort, toPort, style, points, lineStyle, null);
+        }
         public Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points) {
             this(from, to, fromPort, toPort, style, points, "straight");
         }
