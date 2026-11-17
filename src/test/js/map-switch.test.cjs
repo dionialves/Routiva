@@ -152,3 +152,75 @@ test('custom switch tint applies only to its cabinet and never to ports or the p
   switchMap.draw(make,original,{ports:[]},'gray',false);
   assert.equal(original.children.find(child=>child.tag==='image').attributes.filter,undefined);
 });
+
+test('connected interfaces show their plugged images and deleting the link restores empty ports',()=>{
+  const ports=[{id:'40',type:'qsfp',capacity:'sfp40g'},{id:'100',type:'qsfp',capacity:'sfp100g'},
+    {id:'10',type:'sfp',capacity:'sfp10g'}];
+  const node={id:'sw',icon:'switch',ports};
+  const make=(tag,attributes)=>({tag,attributes,children:[],append(...children){this.children.push(...children);}});
+  const render=links=>{
+    const root=make('g',{});
+    switchMap.draw(make,root,node,'gray',false,{connectedPorts:switchMap.connectedPorts(node,links)});
+    return root.children.filter(child=>child.attributes.class==='switch-port');
+  };
+  const links=ports.map(port=>({from:'sw',fromPort:port.id,to:'other',toPort:'other-port'}));
+  const occupied=render(links);
+  assert.equal(occupied[0].children.filter(child=>child.attributes.class==='switch-port-plug').length,1);
+  assert.match(occupied[0].children[0].textContent,/Em uso/);
+  assert.ok(occupied.every(port=>port.children.some(child=>child.attributes.class==='switch-port-plug')));
+  assert.ok(render([]).every(port=>!port.children.some(child=>child.attributes.class==='switch-port-plug')));
+  assert.equal(switchMap.connectedPorts({id:'other'},links).has('other-port'),true);
+});
+test('wire anchors start inside each module front and follow the port row',()=>{
+  const node={id:'sw',icon:'switch',x:100,y:200,ports:[
+    {id:'lower',type:'qsfp',capacity:'sfp40g'},
+    {id:'upper',type:'qsfp',capacity:'sfp40g'},
+    {id:'third',type:'qsfp',capacity:'sfp40g'},
+    {id:'100',type:'qsfp',capacity:'sfp100g'}]};
+  const geometry=switchMap.geometry(node);
+  for(const [id,direction] of [['lower',1],['upper',-1]]) {
+    const port=geometry.ports.find(p=>p.id===id);
+    assert.equal(switchMap.cableDirection(node,id),direction);
+    assert.deepEqual(switchMap.endpoint(node,id),{x:100+port.x,y:200+port.y+direction*4.2});
+  }
+  const port100=geometry.ports.find(p=>p.id==='100');
+  assert.equal(switchMap.cableDirection(node,'100'),-1);
+  assert.deepEqual(switchMap.endpoint(node,'100'),{x:100+port100.x,y:200+port100.y-2.6});
+  node.interfacesEnabled=false;
+  assert.equal(switchMap.cableDirection(node,'lower'),0);
+  assert.deepEqual(switchMap.endpoint(node,'lower'),{x:100,y:200});
+});
+
+test('every capacity uses the supplied connected art and its own socket, with neutral empty 40G',()=>{
+  const specs=[['electrical','rj45','rj45-plugged',3.6],['sfp1g','sfp','sfp-plugged',4.2],
+    ['sfp10g','sfp','sfp-plugged',4.2],['sfp40g','qsfp','qsfp40-plugged',4.2],['sfp100g','qsfp','qsfp100-plugged',2.6]];
+  const make=(tag,attributes)=>({tag,attributes,children:[],append(...children){this.children.push(...children);}});
+  for(const [capacity,type,asset,socketY] of specs) {
+    const node={id:'sw',icon:'switch',x:10,y:20,ports:[{id:'p',type,capacity}]};
+    const root=make('g',{});
+    switchMap.draw(make,root,node,'gray',false,{connectedPorts:new Set(['p'])});
+    const port=root.children.find(child=>child.attributes.class==='switch-port');
+    const plug=port.children.find(child=>child.attributes.class==='switch-port-plug');
+    assert.match(plug.children[0].attributes.href,new RegExp('/'+asset+'\\.svg'));
+    const position=switchMap.geometry(node).ports[0];
+    assert.deepEqual(switchMap.endpoint(node,'p'),{x:10+position.x,y:20+position.y+socketY});
+    if(capacity==='sfp40g') {
+      const empty=make('g',{});switchMap.draw(make,empty,node,'gray',false);
+      const emptyPort=empty.children.find(child=>child.attributes.class==='switch-port');
+      assert.match(emptyPort.children.find(child=>child.tag==='image').attributes.href,/\/qsfp40\.svg/);
+    }
+  }
+});
+
+test('electrical and SFP 1G/10G plugs stay upright in both rows and their cables follow the socket',()=>{
+  const make=(tag,attributes)=>({tag,attributes,children:[],append(...children){this.children.push(...children);}});
+  for(const [capacity,type,socketY] of [['electrical','rj45',3.6],['sfp1g','sfp',4.2],['sfp10g','sfp',4.2]]) {
+    const node={id:'sw',icon:'switch',x:100,y:200,ports:Array.from({length:3},(_,i)=>({id:'p'+i,type,capacity}))};
+    const root=make('g',{});
+    switchMap.draw(make,root,node,'gray',false,{connectedPorts:new Set(['p0','p1','p2'])});
+    const ports=root.children.filter(child=>child.attributes.class==='switch-port');
+    for(const port of ports) assert.equal(port.children.find(child=>child.attributes.class==='switch-port-plug').attributes.transform,'scale(1 1)');
+    const upper=switchMap.geometry(node).ports[1];
+    assert.deepEqual(switchMap.endpoint(node,'p1'),{x:100+upper.x,y:200+upper.y+socketY});
+  }
+});

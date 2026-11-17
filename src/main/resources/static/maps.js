@@ -13,6 +13,7 @@ let connectionOrigin = null;
 let configuredPorts = [];
 let configuredSlots = [];
 let configuredSwitchColor = null;
+let configuredNodeId = null;
 let pendingLink = null, lastConnectionClick = null;
 let suppressConnectionUntil = 0;
 let states = new Map(), generation = 0, timer;
@@ -202,7 +203,8 @@ function draw() {
     const a = byId.get(link.from), b = byId.get(link.to);
     if (!a || !b) continue;
     const start = MapSwitch.endpoint(a, link.fromPort), end = MapSwitch.endpoint(b, link.toPort);
-    const line = svg('path', {d: MapLinks.path(link, start, end), class: 'map-connector'});
+    const d = MapLinks.path(link, start, end);
+    const line = svg('path', {d, class: 'map-connector'});
     if (editing && tool === 'select') {
       line.onpointerdown = event => {
         if (event.button !== 0) return;
@@ -250,6 +252,7 @@ function draw() {
     title.textContent = description;
     g.append(title);
     if (n.icon === 'switch') MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
+      connectedPorts: MapSwitch.connectedPorts(n, links),
       pingState: editing ? 'unknown' : pingStateFor(n.hostId),
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
       onPort: portId => connectEndpoint(n, portId)
@@ -1119,7 +1122,8 @@ function drawPreview() {
   const monitored = !!(binding.hostId || binding.groupId);
   const color = monitored ? metricSummary(binding)?.color || colors[groupLevel(nodeHosts(binding)) + 2] : colors[0];
   if (isSwitch) MapSwitch.draw(svg, group, {name, labelPosition: $('label-position').value,
-    ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false);
+    ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
+    {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
   else drawNode(group, name, $('label-position').value, color);
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
@@ -1129,6 +1133,7 @@ function drawPreview() {
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {
   configuredPorts = node.ports || [];
+  configuredNodeId = node.id;
   configuredSwitchColor = node.switchColor || null;
   $('switch-color').value = configuredSwitchColor || '#e0e3e8';
   $('element-icon').value = node.icon || 'circle';

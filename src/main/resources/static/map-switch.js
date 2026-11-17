@@ -4,6 +4,14 @@
 const MapSwitch = (() => {
   const types = ['rj45', 'sfp', 'qsfp'];
   let tintSequence = 0;
+  // Socket centers in the shared 22×19 port drawing, independent of cabinet color.
+  const portArtwork = {
+    electrical: {empty: 'rj45', occupied: 'rj45-plugged', socketY: 3.6, upright: true},
+    sfp1g: {empty: 'sfp', occupied: 'sfp-plugged', socketY: 4.2, upright: true},
+    sfp10g: {empty: 'sfp', occupied: 'sfp-plugged', socketY: 4.2, upright: true},
+    sfp40g: {empty: 'qsfp40', occupied: 'qsfp40-plugged', socketY: 4.2},
+    sfp100g: {empty: 'qsfp', occupied: 'qsfp100-plugged', socketY: 2.6}
+  };
   const capacities = {electrical: {label: 'Elétrica', type: 'rj45'}, sfp1g: {label: 'SFP1G', type: 'sfp'},
     sfp10g: {label: 'SFP10G', type: 'sfp'}, sfp40g: {label: 'SFP40G', type: 'qsfp'}, sfp100g: {label: 'SFP100G', type: 'qsfp'}};
   const names = {rj45: 'RJ45', sfp: 'SFP', qsfp: 'QSFP+ 40G'};
@@ -56,20 +64,43 @@ const MapSwitch = (() => {
         const rowGap = 25;
         positioned.push({...port, label: port.name ? port.name + ' · ' + (capacities[port.capacity]?.label || names[port.type]) : names[port.type] + ' ' + (index + 1),
           x: left + 12 + column * group.pitch,
-          y: centerY + (singleRow || row === 0 ? rowGap / 2 : -rowGap / 2)});
+          y: centerY + (singleRow || row === 0 ? rowGap / 2 : -rowGap / 2),
+          cableDirection: singleRow || row === 0 ? 1 : -1});
       });
       left += group.width + gap;
     }
     return {width, height: 110, ports: positioned};
   }
 
+  function portVisual(port) {
+    if (!port) return null;
+    return portArtwork[port.capacity || {rj45: 'electrical', sfp: 'sfp10g', qsfp: 'sfp40g'}[port.type]] || null;
+  }
+  function connectedPorts(node, links) {
+    const ports = new Set();
+    for (const link of links) {
+      if (link.from === node.id && link.fromPort) ports.add(link.fromPort);
+      if (link.to === node.id && link.toPort) ports.add(link.toPort);
+    }
+    return ports;
+  }
+  function plugDirection(port) {
+    return portVisual(port)?.upright ? 1 : port.cableDirection;
+  }
+  function cableDirection(node, portId) {
+    if (node.icon !== 'switch' || node.interfacesEnabled === false) return 0;
+    const port = geometry(node).ports.find(port => port.id === portId);
+    return portVisual(port) ? plugDirection(port) : 0;
+  }
   function endpoint(node, portId) {
     const port = node.interfacesEnabled !== false && node.icon !== 'circle' && portId
       && geometry(node).ports.find(port => port.id === portId);
-    return {x: node.x + (port ? port.x : 0), y: node.y + (port ? port.y : 0)};
+    const visual = node.icon === 'switch' && portVisual(port);
+    return {x: node.x + (port ? port.x : 0),
+      y: node.y + (port ? port.y : 0) + (visual ? plugDirection(port) * visual.socketY : 0)};
   }
   function image(svg, parent, file, x, y, width, height, filter) {
-    parent.append(svg('image', {href: '/map-assets/' + file + '.svg' + (file === 'switch' ? '?v=20261117-ping-led' : ''), x, y, width, height,
+    parent.append(svg('image', {href: '/map-assets/' + file + '.svg' + (file === 'switch' ? '?v=20261117-ping-led' : '?v=20261117-connected-ports'), x, y, width, height,
       preserveAspectRatio: 'none', 'aria-hidden': 'true', 'pointer-events': 'none', ...(filter ? {filter} : {})}));
   }
   function pingIndicator(state) {
@@ -99,13 +130,19 @@ const MapSwitch = (() => {
     const statusTitle = svg('title', {}); statusTitle.textContent = status.label;
     led.append(statusTitle); group.append(led);
     for (const port of shape.ports) {
+      const visual = portVisual(port);
+      const plugged = visual && options.connectedPorts?.has(port.id);
+      const description = port.label + (plugged ? ' · Em uso' : '');
       const g = svg('g', {transform: `translate(${port.x} ${port.y})`, class: 'switch-port', 'data-port-id': port.id,
-        ...(options.interactive ? {tabindex: 0, role: 'button', 'aria-label': port.label,
+        ...(options.interactive ? {tabindex: 0, role: 'button', 'aria-label': description,
           'aria-pressed': String(options.origin === port.id)} : {})});
       const title = svg('title', {});
-      title.textContent = port.label;
+      title.textContent = description;
       g.append(title);
-      image(svg, g, port.type, -11, -10, 22, 19);
+      if (plugged) {
+        const module = svg('g', {class: 'switch-port-plug', transform: plugDirection(port) < 0 ? 'scale(1 -1)' : 'scale(1 1)'});
+        image(svg, module, visual.occupied, -11, -10, 22, 19); g.append(module);
+      } else image(svg, g, visual?.empty || port.type, -11, -10, 22, 19);
       g.append(svg('rect', {x: -11, y: -10, width: 22, height: 20, rx: 2,
         class: 'switch-port-hit' + (options.origin === port.id ? ' is-origin' : '')}));
       if (options.interactive) {
@@ -128,6 +165,6 @@ const MapSwitch = (() => {
     label.textContent = node.name;
     group.append(label);
   }
-  return {types, capacities, slotsFor, portsForSlots, portsFor, geometry, endpoint, pingIndicator, draw};
+  return {types, capacities, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
 })();
 if (typeof module !== 'undefined') module.exports = MapSwitch;

@@ -156,3 +156,5 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 - `switchColor` personaliza apenas o gabinete do switch, via filtro SVG compartilhado em `MapSwitch.draw`. Preserve `color` e o comportamento do círculo; nunca aplique a personalização às portas ou ao LED de ping. `null` restaura a arte original.
 
 - Categorias do seletor de ícones seguem o vínculo do elemento: grupo de hosts oferece Círculo; host oferece Switch; elemento livre mantém ambos. `data-bindings` nas opções declara a biblioteca por categoria; trocar tipo só ajusta as opções e não apaga slots ou `switchColor`.
+
+- Portas conectadas usam arte própria para Elétrica, SFP1G/10G, SFP40G e SFP100G, em `map-assets/*-plugged.svg`. A ocupação deriva dos links, sem estado persistido separado. `MapSwitch.portVisual` compartilha arte e centro de encaixe do cabo cinza; `endpoint` e `cableDirection` respeitam a fileira. Portas 40G usam moldura cinza também quando vazias.
