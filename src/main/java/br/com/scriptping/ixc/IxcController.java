@@ -1,6 +1,6 @@
 package br.com.scriptping.ixc;
 
-import br.com.scriptping.mikrotik.MikrotikService;
+import br.com.scriptping.accesspoint.AccessPointService;
 import br.com.scriptping.zabbix.ZabbixService;
 import java.util.*;
 import org.springframework.http.*;
@@ -11,9 +11,9 @@ import org.springframework.web.server.ResponseStatusException;
 public class IxcController {
     private final IxcClient ixc;
     private final ZabbixService inventory;
-    private final MikrotikService mikrotik;
-    public IxcController(IxcClient ixc, ZabbixService inventory, MikrotikService mikrotik) {
-        this.ixc = ixc; this.inventory = inventory; this.mikrotik = mikrotik;
+    private final AccessPointService equipment;
+    public IxcController(IxcClient ixc, ZabbixService inventory, AccessPointService equipment) {
+        this.ixc = ixc; this.inventory = inventory; this.equipment = equipment;
     }
 
     @GetMapping("/api/hosts/{id}/ixc/login")
@@ -21,7 +21,7 @@ public class IxcController {
         String normalized = IxcClient.normalizeMac(mac);
         var host = inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host não encontrado."));
-        boolean connected = mikrotik.query(host, "wireless", null).rows().stream().anyMatch(row -> {
+        boolean connected = equipment.read(host.id(), "wireless", null).rows().stream().anyMatch(row -> {
             if ("disconnected".equals(row.get("connection-status"))) return false;
             try { return normalized.equals(IxcClient.normalizeMac(row.get("mac-address"))); }
             catch (ResponseStatusException ex) { return false; }
@@ -57,7 +57,7 @@ public class IxcController {
         var host = inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host não encontrado."));
         var names = new LinkedHashMap<String, List<String>>();
-        for (var row : mikrotik.query(host, "wireless", null).rows()) {
+        for (var row : equipment.read(host.id(), "wireless", null).rows()) {
             if ("disconnected".equals(row.get("connection-status"))) continue;
             try { names.putIfAbsent(IxcClient.normalizeMac(row.get("mac-address")), new ArrayList<>()); }
             catch (ResponseStatusException ex) { /* Ignore missing or malformed MACs. */ }

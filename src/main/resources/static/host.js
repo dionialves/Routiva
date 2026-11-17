@@ -3,6 +3,15 @@
   const $ = id => document.getElementById(id);
   const root = document.querySelector('[data-host-id]');
   const base = '/api/hosts/' + encodeURIComponent(root.dataset.hostId);
+  let ccqLabel = root.dataset.manufacturer === 'Ubiquiti' ? 'CCQ' : 'TX CCQ';
+  document.addEventListener('ap-configuration-changed', event => {
+    if (event.detail?.hostId !== root.dataset.hostId || event.detail.deleted) return;
+    root.dataset.manufacturer = event.detail.manufacturer;
+    ccqLabel = root.dataset.manufacturer === 'Ubiquiti' ? 'CCQ' : 'TX CCQ';
+    document.querySelectorAll('[data-ccq-label]').forEach(label => { label.textContent = ccqLabel; });
+    document.querySelector('.equipment-kind').textContent = root.dataset.manufacturer + ' · Access Point';
+    $('ap-winbox').hidden = root.dataset.manufacturer !== 'MikroTik';
+  });
   const signalPolicy = window.HostSignal.policy();
   let initialTab = true, overviewAt = 0, wirelessAvailable = false;
   let lastValidAt = null, interfacesAt = 0, interfacesAvailable = false;
@@ -11,7 +20,7 @@
   let wirelessMeasuredAt, wirelessBaseline = null, wirelessTraffic = [];
   let liveTimer, historyTimer, controller, historyController;
   let generation = 0, selectedClient = null, selectedInterface = '', interfaceTrigger;
-  const labels = { identity:'Identificação', 'board-name':'Modelo', version:'RouterOS', uptime:'Tempo ligado',
+  const labels = { identity:'Identificação', 'board-name':'Modelo', version:'Firmware', uptime:'Tempo ligado',
     'cpu-load':'CPU', 'free-memory':'Memória livre', 'total-memory':'Memória total', frequency:'Frequência / Canal', channel:'Canal', ssid:'SSID',
     name:'Nome', type:'Tipo', running:'Em operação', disabled:'Desabilitada', mtu:'MTU',
     'actual-mtu':'MTU efetiva', 'mac-address':'MAC', 'rx-byte':'Download acumulado (bytes)', 'tx-byte':'Upload acumulado (bytes)',
@@ -286,7 +295,7 @@
     for (const [label, field, unit, metric] of [
       ['Sinal (médio)', 'avg-signal', ' dBm', 'signal'],
       ['SNR (médio)', 'avg-signal-to-noise', ' dB', 'signal-to-noise'],
-      ['TX CCQ (médio)', 'avg-tx-ccq', '%', 'tx-ccq'],
+      [ccqLabel + ' (médio)', 'avg-tx-ccq', '%', 'tx-ccq'],
       ['P Throughput (kbps)', 'p-throughput', ' kbps', null],
     ]) {
       const card = document.createElement('article'), title = document.createElement('span');
@@ -332,7 +341,7 @@
       return el;
     };
     if (!wirelessQualityNodes) {
-      const svg = node('svg', { viewBox:'0 0 760 220', role:'img', 'aria-label':'Sinal em dBm e TX CCQ em porcentagem ao longo da sessão' });
+      const svg = node('svg', { viewBox:'0 0 760 220', role:'img', 'aria-label':'Sinal em dBm e ' + ccqLabel + ' em porcentagem ao longo da sessão' });
       const grid = node('g'), lines = [node('path'), node('path')], points = node('g');
       lines.forEach((line, i) => { line.setAttribute('fill','none'); line.setAttribute('stroke',i ? '#4ade80' : '#22d3ee'); line.setAttribute('stroke-width',2); });
       svg.append(grid, ...lines, points); $('wireless-quality-chart').replaceChildren(svg);
@@ -360,13 +369,13 @@
         } else path += `M${x},${y} `;
         previous = { at:point.at, x, y };
         const dot = node('circle', { cx:x, cy:y, r:6, fill:'transparent', stroke:'none', 'pointer-events':'all' });
-        dot.append(node('title', {}, `${new Date(point.at).toLocaleTimeString('pt-BR')} · Sinal: ${Number.isFinite(point.signal) ? radioNumber(point.signal) + ' dBm' : '—'} · TX CCQ: ${Number.isFinite(point.ccq) ? radioNumber(point.ccq) + '%' : '—'}`)); dots.push(dot);
+        dot.append(node('title', {}, `${new Date(point.at).toLocaleTimeString('pt-BR')} · Sinal: ${Number.isFinite(point.signal) ? radioNumber(point.signal) + ' dBm' : '—'} · ${ccqLabel}: ${Number.isFinite(point.ccq) ? radioNumber(point.ccq) + '%' : '—'}`)); dots.push(dot);
       });
       wirelessQualityNodes.lines[index].setAttribute('d',path);
     });
     grid.push(node('text', { x:60, y:213 }, new Date(start).toLocaleTimeString('pt-BR')), node('text', { x:695, y:213, 'text-anchor':'end' }, new Date(end).toLocaleTimeString('pt-BR')));
     wirelessQualityNodes.grid.replaceChildren(...grid); wirelessQualityNodes.points.replaceChildren(...dots);
-    $('wireless-quality-range').textContent = `Sinal (dBm) · TX CCQ (%) · ${Math.round((end - start) / 1000)} s disponíveis nesta sessão`;
+    $('wireless-quality-range').textContent = `Sinal (dBm) · ${ccqLabel} (%) · ${Math.round((end - start) / 1000)} s disponíveis nesta sessão`;
   }
   let wirelessTrafficNodes = null;
   function wirelessTrafficChart(rates, at, redraw = false) {
@@ -879,7 +888,7 @@
           if (generation !== ownGeneration) return;
           const resource = overview.rows[0] || {};
           details('resource-details', { ...resource, frequency:resource.channel || resource.frequency }, ['identity','board-name','version','uptime','cpu-load','free-memory','total-memory','frequency','ssid']);
-          $('equipment-model').textContent = resource['board-name'] || 'Equipamento MikroTik';
+          $('equipment-model').textContent = resource['board-name'] || 'Access Point';
           overviewAt = Date.now();
         }
       } catch (error) {
@@ -927,7 +936,8 @@
         if (result.warning && $('wireless-modal').open) $('wireless-live-state').textContent = 'Dados desatualizados';
         $('wireless-state').textContent = result.warning
           ? result.warning + ' · últimos dados desatualizados · leitura válida: ' + (lastValidAt ? new Date(lastValidAt).toLocaleTimeString('pt-BR') : '—')
-          : 'TX CCQ exibe a média geral. Consulte o diagnóstico da linha para ver o CCQ sob tráfego.';
+          : !clients.some(client => client['connection-status'] !== 'disconnected') ? 'Nenhuma estação conectada.'
+            : ccqLabel + ' exibe a média geral. Consulte o diagnóstico da linha para ver o CCQ sob tráfego.';
         loadLoginNames();
       }
       if (interfaceResult) {
@@ -968,7 +978,8 @@
             $('interface-updated-at').textContent = 'Atualizado às ' + new Date(interfaceValidAt).toLocaleTimeString('pt-BR');
             $('interface-live-state').textContent = '';
           } else {
-            $('interface-live-state').textContent = 'Leitura indisponível · dados desatualizados';
+            $('interface-live-state').textContent = row?.['rx-byte'] != null && rx == null && tx == null
+              ? 'Aguardando segunda leitura para calcular o tráfego…' : 'Leitura indisponível · dados desatualizados';
             interfaceGap();
           }
         }
@@ -978,7 +989,7 @@
       if (!result.warning) lastValidAt = result.measuredAt;
       root.dataset.api = 'online';
       equipmentState();
-      $('equipment-api').textContent = 'API conectada';
+      $('equipment-api').textContent = 'Conexão estabelecida';
       $('host-updated').textContent = 'Última leitura válida: ' + (lastValidAt ? new Date(lastValidAt).toLocaleString('pt-BR') : '—');
       $('live-error').hidden = true;
     } catch (error) {
@@ -992,7 +1003,7 @@
         if ($('interface-modal').open) interfaceGap();
         root.dataset.api = 'unavailable';
         equipmentState();
-        $('equipment-api').textContent = 'API desconectada';
+        $('equipment-api').textContent = 'Conexão indisponível';
         $('live-error').textContent = error.message; $('live-error').hidden = false;
       }
     } finally { if (generation === ownGeneration && livePollingEnabled()) liveTimer = setTimeout(poll, 1000); }

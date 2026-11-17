@@ -18,9 +18,10 @@ function surface() {
   const nodes = new Proxy({}, { get: (o, key) => o[key] ||= new Element() });
   const context = {
     document: { querySelector: () => root, getElementById: id => nodes[id], addEventListener(type, fn) { handlers[type] = fn; } },
-    window: { openAccessPointConfiguration: id => calls.push(['configure', id]), location: { assign: url => calls.push(['navigate', url]) } },
+    window: { open: (...args) => calls.push(['open', ...args]), openAccessPointConfiguration: id => calls.push(['configure', id]), location: { assign: url => calls.push(['navigate', url]) } },
     addEventListener() {}, MutationObserver: class { observe() {} }
   };
+  vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/ap-actions.js', 'utf8'), context);
   return { nodes, calls, handlers };
 }
@@ -39,4 +40,11 @@ test('deleting current AP returns to list; saving or unrelated deletion does not
   assert.deepEqual(ui.calls, []);
   changed({ detail: { hostId: '42', deleted: true } });
   assert.deepEqual(ui.calls, [['navigate', '/ap']]);
+});
+
+test('browser action opens equipment IP in a separate tab even when API is offline', () => {
+  const ui = surface();
+  assert.equal(ui.nodes['ap-webfig'].disabled, false);
+  ui.nodes['ap-webfig'].handlers.click();
+  assert.deepEqual(ui.calls, [['open', 'http://192.0.2.1', '_blank', 'noopener,noreferrer']]);
 });

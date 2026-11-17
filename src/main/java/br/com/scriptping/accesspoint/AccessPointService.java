@@ -78,7 +78,8 @@ public class AccessPointService {
             c.encryptedPassword() != null, c.status(), c.message(), c.tls());
     }
     private EquipmentProvider provider(String manufacturer) {
-        if (!"MikroTik".equals(manufacturer)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione o fabricante homologado: MikroTik RouterOS 6.x.");
+        if (!Set.of("MikroTik", "Ubiquiti").contains(manufacturer == null ? "" : manufacturer))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione MikroTik ou Ubiquiti.");
         return providers.stream().filter(p -> p.manufacturer().equals(manufacturer)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Fabricante ainda não suportado."));
     }
@@ -88,21 +89,21 @@ public class AccessPointService {
         if (input.login() == null || input.login().isBlank() || input.login().length() > 255
                 || input.port() == null || input.port() < 1 || input.port() > 65535
                 || (input.password() != null && input.password().length() > 4096))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe login e porta API válida (1–65535).");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe login e porta válida (1–65535).");
         String password = input.password();
         if (password == null || password.isEmpty()) {
             String saved = repository.configuration(id).encryptedPassword();
             if (saved == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha do AP.");
             password = secrets.decrypt(saved);
         }
-        return new EquipmentProvider.Connection(input.login().trim(), password, input.port(), input.tls());
+        return new EquipmentProvider.Connection(input.login().trim(), password, input.port(), "MikroTik".equals(input.manufacturer()) && input.tls());
     }
     private ConnectionResult attempt(String id, String manufacturer, EquipmentProvider.Connection connection, Host host) {
         try {
             if (inventory.hosts().stream().noneMatch(h -> h.id().equals(id)))
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AP indisponível no inventário importado.");
             provider(manufacturer).testConnection(host, connection);
-            return new ConnectionResult(true, "Conexão validada com MikroTik RouterOS 6.x.");
+            return new ConnectionResult(true, "Conexão validada com " + manufacturer + ".");
         } catch (ResponseStatusException ex) {
             return new ConnectionResult(false, Objects.requireNonNullElse(ex.getReason(), "Falha na conexão com o AP."));
         }
@@ -118,7 +119,7 @@ public class AccessPointService {
         repository.configure(id, new AccessPointRepository.Configuration(input.manufacturer(), connection.login(),
             secrets.encrypt(connection.password()), connection.port(), input.enabled(),
             !input.enabled() ? "INACTIVE" : result.success() ? "ACTIVE" : "CONNECTION_FAILED", result.message(),
-            result.success() ? testedHost.ip() : null, input.tls()));
+            result.success() ? testedHost.ip() : null, connection.tls()));
         return configuration(id);
     }
     public synchronized void delete(String id) { pageHost(id); repository.delete(id); }
@@ -135,7 +136,7 @@ public class AccessPointService {
         if (result.warning() == null || result.warning().isBlank()) {
             String model = section.equals("overview") && !result.rows().isEmpty() ? result.rows().getFirst().get("board-name") : null;
             if (section.equals("overview") || section.equals("wireless"))
-                repository.observation(id, model, section.equals("wireless") ? result.rows().size() : null, result.measuredAt());
+                repository.observation(id, model, section.equals("wireless") ? (int) result.rows().stream().filter(row -> !"disconnected".equals(row.get("connection-status"))).count() : null, result.measuredAt());
         }
         return result;
     }

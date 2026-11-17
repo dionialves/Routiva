@@ -1,6 +1,7 @@
 package br.com.scriptping.ixc;
 
-import br.com.scriptping.mikrotik.MikrotikService;
+import br.com.scriptping.accesspoint.AccessPointService;
+import br.com.scriptping.equipment.EquipmentProvider;
 import br.com.scriptping.zabbix.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -13,10 +14,10 @@ class IxcControllerTests {
     @Test void modalIdentityIncludesPlanAndRouterAccessWithoutPppoePassword() throws Exception {
         var ixc = mock(IxcClient.class);
         var inventory = mock(ZabbixService.class);
-        var mikrotik = mock(MikrotikService.class);
+        var mikrotik = mock(AccessPointService.class);
         var host = new Host("42", "AP", "192.0.2.1", List.of());
         when(inventory.hosts()).thenReturn(List.of(host));
-        when(mikrotik.query(host, "wireless", null)).thenReturn(new MikrotikService.Snapshot(1,
+        when(mikrotik.read(host.id(), "wireless", null)).thenReturn(new EquipmentProvider.Snapshot(1,
             List.of(Map.of("mac-address", "AA:BB:CC:DD:EE:FF")), ""));
         var row = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
             "{\"login\":\"cliente\",\"ip\":\"192.0.2.15\",\"id_grupo\":\"7\",\"senha\":\"ppp-secret\",\"senha_router1\":\"router-secret\",\"porta_http\":\"8080\"}");
@@ -34,10 +35,10 @@ class IxcControllerTests {
     @Test void restrictsLookupsToMonitoredHostsAndTheirConnectedWirelessMacs() throws Exception {
         var ixc = mock(IxcClient.class);
         var inventory = mock(ZabbixService.class);
-        var mikrotik = mock(MikrotikService.class);
+        var mikrotik = mock(AccessPointService.class);
         var host = new Host("42", "Router", "192.0.2.1", List.of());
         when(inventory.hosts()).thenReturn(List.of(host));
-        when(mikrotik.query(host, "wireless", null)).thenReturn(new MikrotikService.Snapshot(1,
+        when(mikrotik.read(host.id(), "wireless", null)).thenReturn(new EquipmentProvider.Snapshot(1,
             List.of(Map.of("mac-address", "aa-bb-cc-dd-ee-ff")), ""));
         when(ixc.findByMac("AA:BB:CC:DD:EE:FF")).thenReturn(List.of());
         var mvc = MockMvcBuilders.standaloneSetup(new IxcController(ixc, inventory, mikrotik)).build();
@@ -52,10 +53,10 @@ class IxcControllerTests {
     @Test void automaticNameLookupReturnsOnlyDistinctPppoeNames() throws Exception {
         var ixc = mock(IxcClient.class);
         var inventory = mock(ZabbixService.class);
-        var mikrotik = mock(MikrotikService.class);
+        var mikrotik = mock(AccessPointService.class);
         var host = new Host("42", "Router", "192.0.2.1", List.of());
         when(inventory.hosts()).thenReturn(List.of(host));
-        when(mikrotik.query(host, "wireless", null)).thenReturn(new MikrotikService.Snapshot(1,
+        when(mikrotik.read(host.id(), "wireless", null)).thenReturn(new EquipmentProvider.Snapshot(1,
             List.of(Map.of("mac-address", "aa-bb-cc-dd-ee-ff")), ""));
         var row = new com.fasterxml.jackson.databind.ObjectMapper().readTree(
             "{\"login\":\"cliente.pppoe\",\"senha\":\"secret\",\"senha_router1\":\"router-secret\"}");

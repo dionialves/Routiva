@@ -16,6 +16,7 @@ services:
       COLLECTOR_ADDRESS: unix:///run/routiva/collector.sock
       INDICATORS_AGGREGATION_PAGE_SIZE: ${INDICATORS_AGGREGATION_PAGE_SIZE:-10000}
       INDICATORS_AGGREGATION_INTERVAL_MS: ${INDICATORS_AGGREGATION_INTERVAL_MS:-60000}
+      AP_SSH_KNOWN_HOSTS_FILE: /var/lib/routiva/ap-known-hosts
       AP_SECRETS_KEY_FILE: /var/lib/routiva/ap-secrets.key
       INDICATORS_LOG_PATH: /var/log/routiva/indicators.log
     ports:

@@ -83,3 +83,5 @@ button#ap-settings.system-button[aria-expanded=true] { background:#123b4d !impor
   .equipment-identity .equipment-badges { gap:8px; font-size:11px; }
   .equipment-identity .equipment-status { font-size:11px; }
 }
+
+.equipment-action-menu [role=menuitem][hidden] { display: none; }

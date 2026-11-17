@@ -13,7 +13,9 @@ public class AccessPointController {
     public AccessPointController(AccessPointService service) { this.service = service; }
     @GetMapping("/ap") public String index() { return "access-points"; }
     @GetMapping("/ap/{id}") public String page(@PathVariable String id, Model model) {
-        model.addAttribute("host", service.pageHost(id)); return "host";
+        model.addAttribute("host", service.pageHost(id));
+        var configuration = service.configuration(id);
+        model.addAttribute("manufacturer", configuration == null ? null : configuration.manufacturer()); return "host";
     }
     @GetMapping("/ap/{id}/latency/{assessment}")
     public String latencySummary(@PathVariable String id, @PathVariable String assessment, Model model) {

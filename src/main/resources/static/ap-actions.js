@@ -4,7 +4,7 @@
   const trigger = document.getElementById('ap-settings');
   const menu = document.getElementById('ap-settings-menu');
   if (!root || !trigger || !menu) return;
-  const items = () => Array.from(menu.querySelectorAll('[role=menuitem]:not(:disabled)'));
+  const items = () => Array.from(menu.querySelectorAll('[role=menuitem]:not(:disabled):not([hidden])'));
   function close(restore = false) {
     if (menu.matches(':popover-open')) menu.hidePopover();
     if (restore) trigger.focus();
@@ -35,6 +35,7 @@
       item.disabled = !online;
       item.title = online ? (item.id === 'ap-winbox' ? 'Requer WinBox e manipulador do protocolo winbox no computador.' : '') : 'Equipamento ou API indisponível.';
     });
+    document.getElementById('ap-webfig').disabled = !window.HostMenu.winboxUrl(root.dataset.managementIp);
     document.getElementById('ap-copy-ip').disabled = !root.dataset.managementIp;
   }
   function open(last = false) {
@@ -63,7 +64,7 @@
     if (next !== undefined) { event.preventDefault(); enabled[next]?.focus(); }
   });
   menu.addEventListener('click', event => {
-    const item = event.target.closest('[role=menuitem]:not(:disabled)');
+    const item = event.target.closest('[role=menuitem]:not(:disabled):not([hidden])');
     if (!item) return;
     close(true);
     if (item.id === 'ap-configure') window.openAccessPointConfiguration(root.dataset.hostId);
@@ -78,6 +79,11 @@
     const url = window.HostMenu.winboxUrl(root.dataset.managementIp);
     if (url) window.location.href = url;
     else window.notify('IP inválido para abrir o WinBox.', 'error');
+  });
+  document.getElementById('ap-webfig').addEventListener('click', () => {
+    const url = window.HostMenu.winboxUrl(root.dataset.managementIp);
+    if (url) window.open(url.replace(/^winbox:/, 'http:'), '_blank', 'noopener,noreferrer');
+    else window.notify('IP inválido para abrir no navegador.', 'error');
   });
   document.getElementById('ap-copy-ip').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(root.dataset.managementIp); window.notify('IP copiado'); }

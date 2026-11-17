@@ -12,7 +12,7 @@
       <fieldset id="ap-config-fields" class="ap-config-fields">
         <section class="ap-config-section" aria-labelledby="ap-config-equipment-title">
           <h3 id="ap-config-equipment-title">Informações do equipamento</h3>
-          <div class="ap-config-row"><label for="ap-config-manufacturer">Fabricante</label><select id="ap-config-manufacturer" required><option value="">Selecione o fabricante</option><option value="MikroTik">MikroTik — RouterOS 6.x</option></select></div>
+          <div class="ap-config-row"><label for="ap-config-manufacturer">Fabricante</label><select id="ap-config-manufacturer" required><option value="">Selecione o fabricante</option><option value="MikroTik">MikroTik</option><option value="Ubiquiti">Ubiquiti</option></select></div>
           <div class="ap-config-row"><label for="ap-config-name">Nome</label><input id="ap-config-name" readonly disabled></div>
           <div class="ap-config-row"><label for="ap-config-enabled">Ativo</label><select id="ap-config-enabled"><option value="false">Não</option><option value="true">Sim</option></select></div>
         </section>
@@ -21,8 +21,9 @@
           <div class="ap-config-row"><label for="ap-config-ip">IP</label><input id="ap-config-ip" readonly disabled></div>
           <div class="ap-config-row"><label for="ap-config-login">Login</label><input id="ap-config-login" required maxlength="255" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
           <div class="ap-config-row"><label for="ap-config-password">Senha</label><div class="ap-config-password-field"><input id="ap-config-password" type="password" maxlength="4096" autocomplete="new-password" aria-describedby="ap-config-password-help" placeholder="Digite a senha"><small id="ap-config-password-help">Informe a senha do equipamento.</small></div></div>
-          <div class="ap-config-row"><label for="ap-config-port">Porta API</label><input id="ap-config-port" type="number" min="1" max="65535" required value="8728"></div>
-          <div class="ap-config-row"><label for="ap-config-tls">API com TLS</label><select id="ap-config-tls"><option value="false">Não</option><option value="true">Sim</option></select></div>
+          <div class="ap-config-row" id="ap-config-api-row"><label for="ap-config-port">Porta API</label><input id="ap-config-port" type="number" min="1" max="65535" required value="8728"></div>
+          <div class="ap-config-row" id="ap-config-ssh-row" hidden><label for="ap-config-ssh-port">Porta SSH</label><input id="ap-config-ssh-port" type="number" min="1" max="65535" value="22" disabled></div>
+          <div class="ap-config-row" id="ap-config-tls-row"><label for="ap-config-tls">API com TLS</label><select id="ap-config-tls"><option value="false">Não</option><option value="true">Sim</option></select></div>
         </section>
       </fieldset>
       <p id="ap-config-state" class="sr-only" role="status" aria-live="polite"></p>

@@ -71,7 +71,7 @@
       const rows = [
         ['Sinal médio', 'avg-signal', ' dBm', 'signal', 'signal'],
         ['SNR médio', 'avg-signal-to-noise', ' dB', 'activity', 'signal-to-noise'],
-        ['TX CCQ médio', 'avg-tx-ccq', '%', 'gauge'],
+        [client.source === 'Ubiquiti' ? 'CCQ médio' : 'TX CCQ médio', 'avg-tx-ccq', '%', 'gauge'],
         ['Tráfego total atual', 'total-traffic-bps', ' kbps', 'activity'],
       ];
       for (const [label, field, unit, image, assessment] of rows) {

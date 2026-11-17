@@ -165,3 +165,36 @@ test('connection test request failure also uses the standard error notification'
   assert.equal(ui.node('state').textContent, '');
   assert.equal(ui.node('test').disabled, false);
 });
+
+test('Ubiquiti uses only its SSH port and never submits TLS', async () => {
+  const ui = surface({ manufacturer: 'Ubiquiti', port: 2222, tls: true });
+  await ui.open('42');
+  assert.equal(ui.node('api-row').hidden, true);
+  assert.equal(ui.node('tls-row').hidden, true);
+  assert.equal(ui.node('port').disabled, true);
+  assert.equal(ui.node('port').required, false);
+  assert.equal(ui.node('ssh-row').hidden, false);
+  assert.equal(ui.node('ssh-port').value, 2222);
+  assert.equal(ui.node('ssh-port').disabled, false);
+  assert.equal(ui.node('ssh-port').required, true);
+  await ui.click('test');
+  const body = JSON.parse(ui.requests.at(-1).body);
+  assert.equal(body.port, 2222);
+  assert.equal(body.tls, false);
+});
+
+test('switching manufacturers preserves custom ports and restores API controls', async () => {
+  const ui = surface({ port: 1234, tls: true }); await ui.open('42');
+  ui.node('manufacturer').value = 'Ubiquiti'; ui.node('manufacturer').handlers.change();
+  assert.equal(ui.node('ssh-port').value, 22);
+  ui.node('ssh-port').value = '2222';
+  ui.node('manufacturer').value = 'MikroTik'; ui.node('manufacturer').handlers.change();
+  assert.equal(ui.node('api-row').hidden, false);
+  assert.equal(ui.node('tls-row').hidden, false);
+  assert.equal(ui.node('ssh-row').hidden, true);
+  assert.equal(ui.node('ssh-port').disabled, true);
+  assert.equal(ui.node('ssh-port').required, false);
+  assert.equal(ui.node('port').value, 1234);
+  await ui.click('test');
+  assert.equal(JSON.parse(ui.requests.at(-1).body).tls, true);
+});

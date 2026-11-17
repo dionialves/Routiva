@@ -167,6 +167,25 @@ class AccessPointTests {
         assertFalse(service.configuration("42").passwordConfigured());
     }
 
+    @Test void ubiquitiConfigurationUsesSshPortAndDiscardsTls() {
+        var ubnt = mock(EquipmentProvider.class);
+        when(ubnt.manufacturer()).thenReturn("Ubiquiti");
+        when(ubnt.capabilities()).thenReturn(Set.of("overview", "wireless"));
+        service = new AccessPointService(repository, inventory, List.of(provider, ubnt), secrets);
+        service.define(List.of("42"));
+        var saved = service.save("42", new AccessPointService.ConfigurationInput("Ubiquiti", "reader", "secret", 2222, true, true));
+        assertEquals("ACTIVE", saved.status());
+        assertEquals("Ubiquiti", saved.manufacturer());
+        assertEquals(2222, saved.port());
+        assertFalse(saved.tls());
+        verify(ubnt).testConnection(host, new EquipmentProvider.Connection("reader", "secret", 2222, false));
+        when(ubnt.read(host, "wireless", null)).thenReturn(new EquipmentProvider.Snapshot(123,
+            List.of(Map.of("mac-address", "AA", "connection-status", "disconnected")), ""));
+        service.read("42", "wireless", null);
+        assertEquals(0, repository.all().getFirst().connectedClients());
+        verify(provider, never()).read(any(), any(), any());
+    }
+
     @Test void configurationApiSavesAndTestsWithoutReturningPasswords() throws Exception {
         service.define(List.of("42"));
         String body = "{\"manufacturer\":\"MikroTik\",\"login\":\"reader\",\"password\":\"private-secret\",\"port\":8729,\"enabled\":true}";

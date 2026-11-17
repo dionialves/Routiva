@@ -19,21 +19,30 @@
     }
     $('dialog').setAttribute('aria-busy', String(pending));
   }
+  function manufacturerFields() {
+    const ssh = $('manufacturer').value === 'Ubiquiti';
+    $('api-row').hidden = ssh; $('tls-row').hidden = ssh; $('ssh-row').hidden = !ssh;
+    $('port').disabled = ssh; $('port').required = !ssh;
+    $('tls').disabled = ssh; $('ssh-port').disabled = !ssh; $('ssh-port').required = ssh;
+  }
+  $('manufacturer').addEventListener('change', manufacturerFields);
   function payload() {
     return { manufacturer: $('manufacturer').value, login: $('login').value,
-      password: $('password').value, port: Number($('port').value), enabled: $('enabled').value === 'true', tls: $('tls').value === 'true' };
+      password: $('password').value, port: Number($($('manufacturer').value === 'Ubiquiti' ? 'ssh-port' : 'port').value), enabled: $('enabled').value === 'true', tls: $('manufacturer').value !== 'Ubiquiti' && $('tls').value === 'true' };
   }
-  function changed(deleted = false) { document.dispatchEvent(new CustomEvent('ap-configuration-changed', { detail: { hostId, deleted } })); }
+  function changed(deleted = false) { document.dispatchEvent(new CustomEvent('ap-configuration-changed', { detail: { hostId, deleted, manufacturer: $('manufacturer').value } })); }
   window.openAccessPointConfiguration = async id => {
     if (busy) return;
     hostId = id; loaded = false;
-    $('form').reset(); $('delete-confirm').hidden = true;
+    $('form').reset(); manufacturerFields(); $('delete-confirm').hidden = true;
     $('password').value = ''; $('state').textContent = 'Carregando configuração…';
     controls(true); $('dialog').showModal();
     try {
       const config = await request('/api/ap/' + encodeURIComponent(id) + '/configuration');
       for (const name of ['manufacturer', 'name', 'ip', 'login']) $(name).value = config[name] || '';
-      $('port').value = config.port || 8728; $('tls').value = String(config.tls || false); $('enabled').value = String(config.enabled);
+      $('port').value = config.manufacturer === 'Ubiquiti' ? 8728 : config.port || 8728;
+      $('ssh-port').value = config.manufacturer === 'Ubiquiti' ? config.port || 22 : 22;
+      manufacturerFields(); $('tls').value = String(config.tls || false); $('enabled').value = String(config.enabled);
       $('password').required = !config.passwordConfigured;
       $('password-help').textContent = config.passwordConfigured ? 'Senha cadastrada. Deixe em branco para manter a senha atual.' : 'Informe a senha do equipamento.';
       $('state').textContent = '';
