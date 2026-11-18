@@ -163,5 +163,5 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 ## Conexões mapeadas
 
 - `mapped_connection` mantém definições independentes do mapa; `Link.mappedConnectionId` referencia a entidade e deve corresponder aos hosts A/B do mapa. Conexões simples preservam o comportamento anterior.
-- Versão inicial: interfaces Ethernet MikroTik com credenciais de API já verificadas em Access Points. Nomes de interface persistidos; IDs RouterOS resolvidos novamente a cada coleta.
+- Versão inicial: interfaces Ethernet MikroTik com credenciais gerais do `.env` (`MIKROTIK_USERNAME`, `MIKROTIK_PASSWORD`, `MIKROTIK_API_PORT`, `MIKROTIK_API_TLS`), sem exigir cadastro em Access Points. Nomes de interface persistidos; IDs RouterOS resolvidos novamente a cada coleta.
 - `/api/connections/readings` consulta sob demanda, com cache por host/interface de 9,5s; mapa e lista consultam a cada 10s enquanto visíveis, sem sobrepor consultas. Erro de API e leitura antiga não significam porta DOWN.

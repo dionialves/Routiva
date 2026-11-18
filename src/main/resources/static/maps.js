@@ -1351,7 +1351,7 @@ async function loadConnectionInterfaces() {
     if (sequence !== interfaceLoad || pendingLink !== link) return;
     interfaces.forEach((rows, i) => {
       controls[i].append(new Option('Selecione a interface', ''));
-      rows.forEach(row => controls[i].append(new Option(row.name, row.name)));
+      rows.forEach(row => controls[i].append(new Option(row.comment?.trim() ? row.name + ' - ' + row.comment.trim() : row.name, row.name)));
       controls[i].value = (i ? existing?.interfaceB : existing?.interfaceA) || '';
       controls[i].disabled = false;
     });

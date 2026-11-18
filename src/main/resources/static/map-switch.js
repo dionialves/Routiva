@@ -45,9 +45,10 @@ const MapSwitch = (() => {
     const keys = [...new Set(ports.map(port => port.slotId || port.type))];
     const groups = keys.map(key => {
       const members = ports.filter(port => (port.slotId || port.type) === key);
-      const columns = members.length <= 2 ? members.length : Math.ceil(members.length / 2);
+      const singleRow = ports.length <= 10 || members.length <= 2;
+      const columns = singleRow ? members.length : Math.ceil(members.length / 2);
       const pitch = 23;
-      return {members, columns, pitch, width: Math.max(0, columns - 1) * pitch + 24};
+      return {members, columns, singleRow, pitch, width: Math.max(0, columns - 1) * pitch + 24};
     }).filter(group => group.members.length);
     const gap = 24;
     const contentWidth = groups.reduce((sum, group) => sum + group.width, 0) + Math.max(0, groups.length - 1) * gap;
@@ -58,7 +59,7 @@ const MapSwitch = (() => {
     const positioned = [];
     for (const group of groups) {
       group.members.forEach((port, index) => {
-        const singleRow = group.members.length <= 2;
+        const singleRow = group.singleRow;
         const column = singleRow ? index : Math.floor(index / 2);
         const row = index % 2;
         const rowGap = 25;

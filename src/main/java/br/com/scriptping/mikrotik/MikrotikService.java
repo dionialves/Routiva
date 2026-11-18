@@ -74,7 +74,7 @@ public class MikrotikService {
                     }
                 }
                 case "interfaces" -> {
-                    rows = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled,mtu,actual-mtu,mac-address,uptime,link-downs");
+                    rows = api.command("/interface/print", "=.proplist=.id,name,comment,type,running,disabled,mtu,actual-mtu,mac-address,uptime,link-downs");
                     var stats = api.command("/interface/print", "=stats-detail=",
                         "=.proplist=.id,name,rx-byte,tx-byte,rx-error,tx-error,rx-drop,tx-drop");
                     for (var row : rows) {
@@ -88,9 +88,12 @@ public class MikrotikService {
                     var interfaces = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled");
                     var selected = interfaces.stream().filter(i -> selectedInterface.equals(i.get("name")) && "ether".equals(i.get("type"))).findFirst()
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Interface Ethernet não encontrada."));
-                    var traffic = api.command("/interface/monitor-traffic", "=interface=" + selected.get(".id"), "=once=");
                     var row = new HashMap<>(selected);
-                    if (!traffic.isEmpty()) row.putAll(traffic.getFirst());
+                    var stats = api.command("/interface/print", "=stats-detail=", "?name=" + selectedInterface,
+                        "=.proplist=rx-byte,tx-byte");
+                    if (!stats.isEmpty()) row.putAll(stats.getFirst());
+                    var status = api.command("/interface/ethernet/monitor", "=numbers=" + selected.get(".id"), "=once=");
+                    if (!status.isEmpty()) row.putAll(status.getFirst());
                     rows = List.of(row);
                 }
                 case "traffic" -> {
