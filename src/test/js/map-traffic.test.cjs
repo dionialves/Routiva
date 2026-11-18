@@ -1,10 +1,12 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const traffic = require('../../main/resources/static/map-traffic.js');
-test('directional intensity uses real capacity and includes boundary values', () => {
-  assert.deepEqual([0, 1, 5, 5.1, 30, 30.1, 70, 70.1, 100, 120].map(n => traffic.count(n, 100)),
-    [0, 1, 1, 2, 2, 3, 3, 4, 4, 4]);
-  assert.equal(traffic.count(50, null), 0);
+test('utilization boundaries and proportional pulse spacing', () => {
+  assert.deepEqual([0, 59.9, 60, 79.9, 80, 89.9, 90, 100, 120].map(n => traffic.utilizationColor(n, 100)),
+    ['#22C55E', '#22C55E', '#EAB308', '#EAB308', '#F97316', '#F97316', '#EF4444', '#EF4444', '#EF4444']);
+  assert.equal(traffic.utilizationColor(null, 100), null);
+  assert.equal(traffic.utilizationColor(50, null), null);
+  assert.deepEqual([20, 110, 440, 660].map(traffic.count), [1, 1, 4, 6]);
 });
 test('missing, reset and invalid rates stay distinct from zero', () => {
   for (const n of [null, undefined, '', 'NaN', '-1', Infinity]) assert.equal(traffic.number(n), null);
@@ -26,28 +28,35 @@ function element(tag, attrs = {}) {
     append(child) { child.parentNode = this; this.children.push(child); },
     replaceChildren() { this.children = []; },
     getAttribute(key) { return this.attrs[key]; },
+    setAttribute(key, value) { this.attrs[key] = value; },
+    getTotalLength() { return attrs.length || 300; },
+    style: {setProperty(key, value) { attrs[key] = value; }},
     querySelectorAll() { return []; },
     contains() { return false; },
     classList: {toggle(name, value) { attrs[name] = value; }}};
 }
-test('SVG particles reuse curved geometry and travel independently in opposite directions', () => {
+test('pulses follow real geometry, preserve phase across metrics and respect direction', () => {
   const layer = element('g'); layer.parentNode = element('g');
   const d = 'M 0 0 L 0 80 Q 0 100 20 100 L 200 100';
   const path = element('path', {d});
   const a = {up:true, measuredAt:Date.now(), txBps:20, rxBps:80, capacityBps:100};
-  traffic.render(element, layer, path, [{x:0,y:0},{x:0,y:100},{x:200,y:100}], [], {a}, true);
-  const particles = layer.children.filter(n => n.tag === 'circle');
-  assert.equal(particles.length, 6);
-  assert.equal(particles.filter(n => n.attrs.fill === '#63E4FD').length, 2);
-  assert.equal(particles.filter(n => n.attrs.fill === '#4DE2A7').length, 4);
-  assert.ok(particles.every(n => n.children[0].attrs.path === d));
-  assert.equal(particles[0].children[0].attrs.keyPoints, '0;1');
-  assert.equal(particles[2].children[0].attrs.keyPoints, '1;0');
-  traffic.render(element, layer, path, [{x:0,y:0},{x:200,y:0}], [], {a}, true, true);
-  assert.equal(layer.children[0].children[0].attrs.keyPoints, '1;0');
-  traffic.render(element, layer, path, [{x:0,y:0},{x:200,y:0}], [], {a}, false);
-  assert.equal(layer.children.filter(n => n.tag === 'circle').length, 0);
-  assert.equal(layer.children[0].children.length, 2);
+  const route = [{x:0,y:0},{x:0,y:100},{x:200,y:100}];
+  traffic.render(element, layer, path, route, [], {a}, true);
+  const pulses = layer.trafficPulses;
+  assert.equal(pulses.children.length, 12);
+  assert.ok(pulses.children.every(n => n.tag === 'path' && n.attrs.d === d));
+  assert.ok(pulses.children.every(n => n.attrs.style.includes('animation-direction:normal')));
+  traffic.render(element, layer, path, route, [], {a:{...a, txBps:90}}, true);
+  assert.equal(layer.trafficPulses, pulses);
+  assert.equal(path.attrs['--traffic-color'], '#EF4444');
+  assert.equal(layer.trafficLabel.children[0].textContent, 'TX A → B: 0,00 Mbps');
+  traffic.render(element, layer, path, route, [], {a}, false);
+  assert.equal(layer.trafficPulses, pulses);
+  assert.equal(pulses.attrs.visibility, 'hidden');
+  traffic.render(element, layer, path, route, [], {a}, true, true);
+  assert.ok(layer.trafficPulses.children.every(n => n.attrs.style.includes('animation-direction:reverse')));
+  traffic.render(element, layer, path, route, [], {a:{...a, txBps:0, rxBps:80}}, true, true);
+  assert.equal(layer.trafficPulses.attrs.visibility, 'hidden');
 });
 
 test('a failed collection preserves DOWN and never animates presumed traffic', () => {
@@ -61,4 +70,20 @@ test('a failed collection preserves DOWN and never animates presumed traffic', (
   traffic.render(element, layer, path, route, [], undefined, true);
   assert.equal(path.attrs['traffic-down'], true);
   assert.equal(layer.children.filter(n => n.tag === 'circle').length, 0);
+});
+
+test('different lengths retain the same path speed without crowding short links', () => {
+  for (const length of [25, 440, 660, 1200]) {
+    const layer = element('g'); layer.parentNode = element('g');
+    const path = element('path', {d:`M 0 0 L ${length} 0`, length});
+    traffic.render(element, layer, path, [{x:0,y:0},{x:length,y:0}], [],
+      {a:{up:true, measuredAt:Date.now(), txBps:1, capacityBps:10}}, true);
+    const style = layer.trafficPulses.children[0].attrs.style;
+    const from = Number(style.match(/--pulse-from:([^p]+)/)[1]);
+    const to = Number(style.match(/--pulse-to:([^p]+)/)[1]);
+    const period = from - to;
+    const duration = Number(style.match(/animation-duration:([^s]+)/)[1]);
+    assert.ok(Math.abs(period / duration - 55) < 0.0001);
+    assert.equal(Math.round(length / period), traffic.count(length));
+  }
 });

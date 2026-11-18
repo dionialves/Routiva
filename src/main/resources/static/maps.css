@@ -461,10 +461,16 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 
 #delete-link { margin-right:auto; }
 
-#canvas .map-connector.traffic-down { stroke: #ef6464; }
+#canvas .map-connector.traffic-measured { stroke: var(--traffic-color); }
+#canvas .map-connector.traffic-down { stroke: #EF4444; }
 .map-traffic { pointer-events: none; }
 .traffic-label { font-family: var(--font-family, inherit); font-size: 11px; font-weight: 600; }
-.traffic-particle { filter: drop-shadow(0 0 2px currentColor); }
+.traffic-label { paint-order: stroke; stroke: var(--panel-bg); stroke-width: 4px; stroke-linejoin: round; }
+.traffic-pulse { animation: traffic-flow 2s linear infinite; }
+@keyframes traffic-flow {
+  from { stroke-dashoffset: var(--pulse-from); }
+  to { stroke-dashoffset: var(--pulse-to); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .traffic-particle { display: none; }
+  .traffic-pulses { display: none; }
 }
