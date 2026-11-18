@@ -6,7 +6,7 @@ const source = fs.readFileSync(require('node:path').join(__dirname, '../../main/
 function setup() {
   const elements = new Map();
   const $ = id => {
-    if (!elements.has(id)) elements.set(id, {value:'',open:false,focus(){},replaceChildren(){},
+    if (!elements.has(id)) elements.set(id, {value:'',open:false,options:[],focus(){},replaceChildren(...options){this.options=options;},
       showModal(){this.open=true;},close(){this.open=false;this.onclose?.();}});
     return elements.get(id);
   };
@@ -107,4 +107,72 @@ test('endpoint badge uses measured speed and never infers speed from port capaci
   assert.equal($('link-from-capacity').hidden, false);
   assert.equal($('link-from-capacity').textContent, '1Gbps');
   assert.equal($('connection-host-a').textContent, 'Switch Core · ID h1');
+});
+
+test('swap moves hosts, port summaries and complete interface choices only in the draft', () => {
+  const {$, run, context} = setup();
+  run('openLinkDialog(link)');
+  $('link-category').value = 'mapped';
+  $('connection-interface-a').options = [{value:'ether1', text:'Origem'}];
+  $('connection-interface-b').options = [{value:'sfp1', text:'Destino'}];
+  $('connection-interface-a').value = 'ether1';
+  $('connection-interface-b').value = 'sfp1';
+  $('swap-connection-endpoints').onclick();
+  assert.equal($('link-from').value, 'Datacenter');
+  assert.equal($('connection-interface-a').value, 'sfp1');
+  assert.equal($('connection-interface-a').options[0].text, 'Destino');
+  assert.equal($('connection-interface-b').value, 'ether1');
+  assert.equal(context.link.from, 'a');
+  assert.equal(context.link.fromPort, 'r1');
+  $('swap-connection-endpoints').onclick();
+  assert.equal($('link-from').value, 'Switch Core');
+  assert.equal($('connection-interface-a').value, 'ether1');
+  $('cancel-link').onclick();
+  assert.equal(context.checkpoints, 0);
+});
+test('saving a swapped mapped connection sends matching hosts and interfaces and reverses the route', async () => {
+  const {$, run, context} = setup();
+  let request;
+  context.connectionDefinitions = [{id:'old', name:'Uplink', hostA:'h1', hostB:'h2', interfaceA:'ether1', interfaceB:'sfp1'}];
+  context.connectionNodes = link => [link.from, link.to].map(id => context.current.layout.nodes.find(n => n.id === id));
+  context.connectionRequest = async (url, body) => { request = body; return {...body, id:'new'}; };
+  run("current.layout.nodes[1].hostId='h2'; link.toPort='p2'; link.points=[{x:10,y:80},{x:90,y:80}]; link.mappedConnectionId='old'; openLinkDialog(link)");
+  $('connection-name').value = 'Uplink';
+  $('connection-interface-a').value = 'ether1';
+  $('connection-interface-b').value = 'sfp1';
+  $('swap-connection-endpoints').onclick();
+  await $('link-form').onsubmit({preventDefault(){}});
+  assert.deepEqual({...request}, {name:'Uplink', hostA:'h2', hostB:'h1', interfaceA:'sfp1', interfaceB:'ether1'});
+  assert.equal(context.link.from, 'b');
+  assert.equal(context.link.to, 'a');
+  assert.equal(context.link.fromPort, 'p2');
+  assert.equal(context.link.toPort, 'r1');
+  assert.equal(context.link.points[0].x, 90);
+  assert.equal(context.link.mappedConnectionId, 'new');
+  assert.equal(context.checkpoints, 1);
+});
+test('swap is unavailable during loading and saving', () => {
+  const {$, run} = setup();
+  run('openLinkDialog(link)');
+  $('connection-interface-a').disabled = true;
+  $('swap-connection-endpoints').onclick();
+  assert.equal($('link-from').value, 'Switch Core');
+  $('connection-interface-a').disabled = false;
+  run('savingConnection=true');
+  $('swap-connection-endpoints').onclick();
+  assert.equal($('link-from').value, 'Switch Core');
+});
+
+test('cancel after swapping preserves saved endpoints and port bindings', () => {
+  const {$, run, context} = setup();
+  run('openLinkDialog(link)');
+  $('swap-connection-endpoints').onclick();
+  assert.equal($('link-from').value, 'Datacenter');
+  $('cancel-link').onclick();
+  assert.equal(context.link.from, 'a');
+  assert.equal(context.link.to, 'b');
+  assert.equal(context.link.fromPort, 'r1');
+  assert.equal(context.checkpoints, 0);
+  run('openLinkDialog(link)');
+  assert.equal($('link-from').value, 'Switch Core');
 });

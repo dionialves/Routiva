@@ -8,7 +8,7 @@ function setup() {
   const context = vm.createContext({
     $: id => { if (!controls.has(id)) controls.set(id, {}); return controls.get(id); },
     current:null, editing:false, inventory:[], MapTraffic:require('../../main/resources/static/map-traffic.js'), document:{hidden:false, querySelectorAll:()=>[], addEventListener(){}},
-    setInterval(){}, Date, Map, Set, Number, JSON, calls:0,
+    setInterval(){}, setTimeout(){}, Date, Map, Set, Number, JSON, calls:0,
     fetch:async () => { context.calls++; return {ok:true,json:async()=>[]}; }
   });
   vm.runInContext(source.slice(source.indexOf('let connectionDefinitions =')), context);
@@ -41,7 +41,39 @@ test('tooltips show endpoint rates and do not present old readings as UP', () =>
   run("connectionReadings.set('c1', {a:{name:'ether1',up:true,rxBps:'1000000',txBps:'2000000',measuredAt:Date.now()}, b:{name:'ether2',up:true,measuredAt:Date.now()-31000}})");
   const title = run("mappedConnectionTitle('c1')");
   assert.match(title, /ether1: UP/);
-  assert.match(title, /TX A → B: 2 Mbps/);
-  assert.match(title, /RX B → A: 1 Mbps/);
+  assert.match(title, /Download: 2 Mbps/);
+  assert.match(title, /Upload: 1 Mbps/);
   assert.match(title, /ether2: Leitura desatualizada/);
+});
+
+test('opening a map primes traffic with one early follow-up and skips it after navigation', async () => {
+  const {context, run} = setup();
+  const timers = [];
+  context.setTimeout = (callback, delay) => timers.push({callback, delay});
+  run("current = {layout:{links:[{mappedConnectionId:'c1'}]}};");
+  context.fetch = async () => {
+    context.calls++;
+    return {ok:true,json:async()=>[{id:'c1',a:{up:true,txBps:null,rxBps:null}}]};
+  };
+  await run('refreshMappedConnections(true)');
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 1200);
+  await timers[0].callback();
+  assert.equal(context.calls, 2);
+  assert.equal(timers.length, 1);
+  await run('refreshMappedConnections(true)');
+  context.editing = true;
+  await timers[1].callback();
+  assert.equal(context.calls, 3);
+  context.editing = false;
+  context.current = {layout:{links:[]}};
+  await timers[1].callback();
+  assert.equal(context.calls, 3);
+});
+test('opening a map with measured rates does not schedule an early follow-up', async () => {
+  const {context,run} = setup();
+  context.setTimeout = () => assert.fail('unexpected follow-up');
+  run("current = {layout:{links:[{mappedConnectionId:'c1'}]}};");
+  context.fetch = async () => ({ok:true,json:async()=>[{id:'c1',a:{up:true,txBps:'0',rxBps:'0'}}]});
+  await run('refreshMappedConnections(true)');
 });

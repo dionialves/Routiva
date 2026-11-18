@@ -25,7 +25,7 @@ test('stale samples and API errors cannot animate or imply DOWN', () => {
 });
 function element(tag, attrs = {}) {
   return {tag, attrs, children: [], parentNode: null,
-    append(child) { child.parentNode = this; this.children.push(child); },
+    append(...children) { children.forEach(child => { child.parentNode = this; this.children.push(child); }); },
     replaceChildren() { this.children = []; },
     getAttribute(key) { return this.attrs[key]; },
     setAttribute(key, value) { this.attrs[key] = value; },
@@ -49,7 +49,12 @@ test('pulses follow real geometry, preserve phase across metrics and respect dir
   traffic.render(element, layer, path, route, [], {a:{...a, txBps:90}}, true);
   assert.equal(layer.trafficPulses, pulses);
   assert.equal(path.attrs['--traffic-color'], '#EF4444');
-  assert.equal(layer.trafficLabel.children[0].textContent, 'TX A → B: 0,00 Mbps');
+  assert.equal(layer.trafficLabel.children[0].textContent, 'Download');
+  assert.equal(layer.trafficLabel.children[1].textContent, ': 0,00 Mbps');
+  assert.equal(layer.trafficLabel.children[2].textContent, 'Upload');
+  assert.equal(layer.trafficLabel.children[1].attrs.x, layer.trafficLabel.children[3].attrs.x);
+  assert.equal(layer.trafficLabel.children[0].attrs['text-anchor'], 'end');
+  assert.equal(layer.trafficLabel.children[2].attrs['text-anchor'], 'end');
   traffic.render(element, layer, path, route, [], {a}, false);
   assert.equal(layer.trafficPulses, pulses);
   assert.equal(pulses.attrs.visibility, 'hidden');

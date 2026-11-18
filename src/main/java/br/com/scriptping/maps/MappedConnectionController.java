@@ -111,8 +111,14 @@ public class MappedConnectionController {
             var h = host(hostId);
             var credentials = apiConnection(hostId);
             var source = new Source(h.ip(), hosts.credentials(hostId));
+            // A first counter sample has no rate yet: allow the startup follow-up after 1s.
+            var baseline = counters.get(key);
+            boolean warmingUp = previous != null && previous.error() == null && previous.up()
+                && (previous.rxBps() == null || previous.txBps() == null) && baseline != null
+                && baseline.rx() != null && baseline.tx() != null;
+            long cacheMillis = warmingUp ? 1000 : 9500;
             if (previous != null && Objects.equals(cacheSources.get(key), source)
-                    && System.currentTimeMillis() - previous.measuredAt() < 9500) return previous;
+                    && System.currentTimeMillis() - previous.measuredAt() < cacheMillis) return previous;
             if (!Objects.equals(cacheSources.get(key), source)) counters.remove(key);
             cacheSources.put(key, source);
             var snapshot = mikrotik.query(h, "connection", name, credentials);

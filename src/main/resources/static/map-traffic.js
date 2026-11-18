@@ -102,12 +102,20 @@ const MapTraffic = (() => {
     label.replaceChildren();
     label.setAttribute('x', position.x);
     label.setAttribute('y', position.y);
-    const values = data.down ? ['Enlace indisponível'] : [`TX A → B: ${rate(data.tx, true)}`, `RX B → A: ${rate(data.rx, true)}`];
-    values.forEach((value, i) => {
-      const text = svg('tspan', {x: position.x, dy: i ? 15 : 0, fill: data.down ? 'var(--text)' : colors[i]});
-      text.textContent = value;
+    if (data.down) {
+      const text = svg('tspan', {x: position.x, y: position.y, fill: 'var(--text)'});
+      text.textContent = 'Enlace indisponível';
       label.append(text);
-    });
+    } else {
+      ['Download', 'Upload'].forEach((name, i) => {
+        const attributes = {x: position.x + 52, y: position.y + i * 13, fill: colors[i]};
+        const caption = svg('tspan', {...attributes, 'text-anchor': 'end'});
+        caption.textContent = name;
+        const value = svg('tspan', {...attributes, 'text-anchor': 'start'});
+        value.textContent = ': ' + rate(i ? data.rx : data.tx, true);
+        label.append(caption, value);
+      });
+    }
   }
   return {number, count, utilizationColor, rate, state, render};
 })();

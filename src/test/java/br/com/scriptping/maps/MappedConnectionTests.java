@@ -17,6 +17,7 @@ import static org.mockito.Mockito.*;
 @Import(MappedConnectionController.class)
 class MappedConnectionTests {
     @Autowired MappedConnectionController controller;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
@@ -78,6 +79,25 @@ class MappedConnectionTests {
         assertThat(controller.readings(Set.of(c.id()))).containsExactly(first);
         verify(mikrotik, times(2)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
         assertThat(controller.readings(Set.of("missing"))).isEmpty();
+    }
+    @Test void firstCounterSampleExpiresEarlyButMeasuredRatesKeepNormalCache() {
+        equipment();
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts);
+        var c = controller.save(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
+        long now = System.currentTimeMillis();
+        var firstRows = List.of(Map.of("running", "true", "rx-byte", "1000", "tx-byte", "2000"));
+        var nextRows = List.of(Map.of("running", "true", "rx-byte", "2000", "tx-byte", "4000"));
+        when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class)))
+            .thenReturn(new MikrotikService.Snapshot(now - 1500, firstRows, ""))
+            .thenReturn(new MikrotikService.Snapshot(now - 1500, firstRows, ""))
+            .thenReturn(new MikrotikService.Snapshot(now, nextRows, ""));
+        var first = controller.readings(Set.of(c.id())).getFirst();
+        assertThat(first.a().txBps()).isNull();
+        var second = controller.readings(Set.of(c.id())).getFirst();
+        assertThat(second.a().txBps()).isEqualTo("10666");
+        assertThat(second.a().rxBps()).isEqualTo("5333");
+        assertThat(controller.readings(Set.of(c.id()))).containsExactly(second);
+        verify(mikrotik, times(4)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
     }
     @Test void computesRatesWithUnsigned64BitCountersAndRejectsResetsAndGaps() {
         var first = MappedConnectionController.counter("18446744073709550000");
