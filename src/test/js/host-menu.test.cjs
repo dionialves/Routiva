@@ -50,6 +50,7 @@ test('AP actions remain hidden until inventory confirms the host', () => {
   let resolve;
   const context = { document: { createElement: () => new link.constructor() } };
   context.window = context;
+  context.fetch = async () => ({ ok: true, json: async () => [] });
   context.AccessPointLinks = { attach(_element, id, callback) {
     assert.equal(id, 'ap/1'); resolve = callback;
   } };
@@ -60,4 +61,20 @@ test('AP actions remain hidden until inventory confirms the host', () => {
   resolve('/ap/ap%2F1');
   assert.equal(ap.hidden, false);
   assert.equal(ap.children[2].href, '/ap/ap%2F1#avaliacao-latencia');
+});
+
+test('Datacom panel uses the host id and hides WinBox after manufacturer resolution', async () => {
+  const { link, container } = surface();
+  let requests = 0;
+  const context = { document: { createElement: () => new link.constructor() },
+    fetch: async url => { assert.equal(url, '/api/equipment/datacom'); requests++; return { ok: true, json: async () => ['olt/42'] }; } };
+  context.window = context;
+  vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
+  context.HostMenu.attach(link, container, { ip: '192.0.2.42', hostId: 'olt/42' });
+  await new Promise(resolve => setImmediate(resolve));
+  const menu = container.children[0], equipment = menu.children[1];
+  assert.equal(equipment.hidden, false);
+  assert.equal(equipment.children[1].href, '/equipamentos/olt%2F42');
+  assert.equal(menu.children[0].children[2].hidden, true);
+  assert.equal(requests, 1);
 });

@@ -40,7 +40,9 @@ public class AccessPointService {
     public List<Host> candidates() {
         var registered = new HashSet<String>();
         repository.all().forEach(ap -> registered.add(ap.hostId()));
-        return inventory.hosts().stream().filter(h -> !registered.contains(h.id())).sorted(Comparator.comparing(Host::name)).toList();
+        var credentials = hosts.credentials();
+        return inventory.hosts().stream().filter(h -> !registered.contains(h.id()))
+            .filter(h -> credentials.get(h.id()) == null || !"Datacom".equals(credentials.get(h.id()).manufacturer())).sorted(Comparator.comparing(Host::name)).toList();
     }
     @Transactional
     public synchronized void define(List<String> ids) {
@@ -49,6 +51,11 @@ public class AccessPointService {
         var hosts = new HashMap<String, Host>();
         inventory.hosts().forEach(h -> hosts.put(h.id(), h));
         if (!hosts.keySet().containsAll(ids)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Há hosts fora do inventário importado. Atualize a seleção.");
+        for (String id : ids) {
+            var credentials = this.hosts.credentials(id);
+            if (credentials != null && "Datacom".equals(credentials.manufacturer()))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Datacom não é um Access Point. Abra o painel pelo menu do host.");
+        }
         new LinkedHashSet<>(ids).forEach(id -> {
             repository.add(hosts.get(id));
             authentication.validateSaved(id);

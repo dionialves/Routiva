@@ -1,0 +1,7 @@
+SW000-Edge# show platform | nomore
+Chassis/Slot  Product model      Role     Status        Firmware version
+------------  -----------------  -------  ------------  ----------------------
+1             DM4250             -        -             Not available
+1/1           24XS+2QX           Active   Ready         9.6.0-198-1-g0410437943
+1/PSU1        PSU-125-AC         None     Ready         Not available
+1/PSU2        PSU-125-AC         None     Ready         Not available

@@ -75,7 +75,7 @@ test('icon categories restrict groups to circle and hosts to switch while free e
   assert.equal(context.configuredSwitchColor,'#2288cc');
 });
 
-test('loading interfaces shows the table loading state and restores slots after a generic connection error', async () => {
+test('loading interfaces preserves slots and displays the server diagnostic as text', async () => {
   const {$,context}=setup();
   $('type').value='host'; $('group').value='42'; $('element-dialog').open=true;
   const states=[];
@@ -89,13 +89,12 @@ test('loading interfaces shows the table loading state and restores slots after 
   assert.equal(context.loadingInterfaces,true);
   assert.equal($('load-switch-interfaces').disabled,true);
   assert.deepEqual(states,[true]);
-  respond({ok:false,status:502,json:async()=>({message:'MikroTik recusou a consulta.'})});
+  respond({ok:false,status:502,json:async()=>({message:'SSH conectado, mas o formato de show interface link não foi reconhecido.'})});
   await pending;
   assert.deepEqual(states,[true,false]);
   assert.equal(context.configuredSlots.length,1);
   assert.equal($('interface-load-status').role,'alert');
-  assert.match($('interface-load-status').textContent,/conectar ao equipamento/);
-  assert.doesNotMatch($('interface-load-status').textContent,/MikroTik/);
+  assert.equal($('interface-load-status').textContent,'SSH conectado, mas o formato de show interface link não foi reconhecido.');
 });
 
 test('group submap selection is restored and persisted; changing type clears it',()=>{

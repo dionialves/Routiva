@@ -1,0 +1,42 @@
+SW000-Edge# show interface link | nomore
+Ten Gigabit Ethernet Interfaces:
+CHASSIS
+ID/SLOT
+ID/PORT                                 Disabled  Blocked  Parent
+ID       Link  Shutdown  Speed  Duplex  by        by       LAG     Description
+----------------------------------------------------------------------------------------
+1/1/1    Up    false     10G    full    -         -        -       ALT
+1/1/2    Down  true      -      -       -         -        -
+1/1/3    Up    false     10G    full    -         -        -       ENN
+1/1/4    Up    false     10G    full    -         -        -       MHNET
+1/1/5    Down  true      -      -       -         -        -
+1/1/6    Down  true      -      -       -         -        -
+1/1/7    Up    false     10G    full    -         -        -       NTI
+1/1/8    Down  true      -      -       -         -        -
+1/1/9    Down  true      -      -       -         -        -
+1/1/10   Down  true      -      -       -         -        -
+1/1/11   Down  true      -      -       -         -        -
+1/1/12   Down  true      -      -       -         -        -
+1/1/13   Down  true      -      -       -         -        -
+1/1/14   Down  true      -      -       -         -        -
+1/1/15   Down  true      -      -       -         -        -
+1/1/16   Down  true      -      -       -         -        -
+1/1/17   Down  true      -      -       -         -        -
+1/1/18   Up    false     10G    full    -         -        -       009-TRANS-VIA-ENN
+1/1/19   Down  false     -      -       -         -        -       058-TRANS-VIA-ALT
+1/1/20   Up    false     10G    full    -         -        -       058-TRANS-VIA-ENN
+1/1/21   Up    false     10G    full    -         -        -       057-TRANS-VIA-ENN
+1/1/22   Down  false     -      -       -         -        -       057-TRANS-VIA-MHNET
+1/1/23   Up    false     10G    full    -         -        -       003-TRANS-VIA-ALT
+1/1/24   Up    false     10G    full    -         -        -       006-TRANS-VIA-ALT
+
+Forty Gigabit Ethernet Interfaces:
+CHASSIS
+ID/SLOT
+ID/PORT                                 Disabled  Blocked  Parent
+ID       Link  Shutdown  Speed  Duplex  by        by       LAG     Description
+----------------------------------------------------------------------------------------
+1/1/1    Up    false     40G    full    -         -        -       SWCore-000
+1/1/2    Down  false     -      -       -         -        -
+
+SW000-Edge#

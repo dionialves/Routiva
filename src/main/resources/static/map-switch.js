@@ -102,13 +102,14 @@ const MapSwitch = (() => {
       const name = row.name;
       if (!name || ports.some(port => port.name === name)) continue;
       const hardware = (row['default-name'] || name).toLowerCase();
-      const optical = /sfp|qsfp/.test(hardware) || row['sfp-supported'] === 'true' || 'sfp-module-present' in row;
+      const declaredConnector = Object.hasOwn(connectors, row.connector || '') ? row.connector : null;
+      const optical = (declaredConnector != null && declaredConnector !== 'electrical') || /sfp|qsfp/.test(hardware) || row['sfp-supported'] === 'true' || 'sfp-module-present' in row;
       const speed = row.rate || row.speed || '';
       // Native SFP names identify cage capacity even without a transceiver.
       // Negotiated rate and configured speed never define physical capacity.
       const maximum = maximumSpeed(row.supported) || maximumSpeed(row['supported-rates'])
         || (!optical ? maximumSpeed(row.advertising) : 0);
-      const connector = discoveredConnector(hardware, optical, maximum);
+      const connector = declaredConnector || discoveredConnector(hardware, optical, maximum);
       const capacity = capacityFromInterfaceName(hardware)
         || Object.keys(portCapacities).find(key => maximumSpeed(portCapacities[key]) === maximum) || 'unknown';
       const interfaceName = row['default-name'] || name;

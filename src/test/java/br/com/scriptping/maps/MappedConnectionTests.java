@@ -20,6 +20,7 @@ class MappedConnectionTests {
     @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
+    @MockitoBean br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
 
@@ -83,7 +84,7 @@ class MappedConnectionTests {
     }
     @Test void firstCounterSampleExpiresEarlyButMeasuredRatesKeepNormalCache() {
         equipment();
-        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts);
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom);
         var c = controller.validate(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
         persist(c);
         long now = System.currentTimeMillis();
@@ -100,6 +101,28 @@ class MappedConnectionTests {
         assertThat(second.a().rxBps()).isEqualTo("5333");
         assertThat(controller.readings("map", Set.of(c.id()))).containsExactly(second);
         verify(mikrotik, times(4)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
+    }
+    @Test void supportsMixedDatacomAndMikrotikLinksWithoutClassifyingTheOltAsAnAp() {
+        equipment();
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom);
+        when(hosts.credentials("a")).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials(
+            "Datacom", "reader", "encrypted", 22, true, "ACTIVE", "", "10.0.0.1", false, 1L));
+        String port = "ten-gigabit-ethernet-1/1/1";
+        when(datacom.query(any(), eq("discover"), isNull(), any())).thenReturn(new EquipmentProvider.Snapshot(1,
+            List.of(Map.of("name", port, "type", "ether")), ""));
+        var c = controller.validate(new MappedConnectionController.Connection(null, "Uplink", "a", port, "b", "ether1"));
+        persist(c);
+        when(datacom.query(any(), eq("connection"), eq(port), any())).thenReturn(new EquipmentProvider.Snapshot(System.currentTimeMillis(),
+            List.of(Map.of("running", "true", "disabled", "false", "rx-byte", "18446744073709551600", "tx-byte", "100", "rate", "10Gbps")), ""));
+        when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class)))
+            .thenReturn(new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "false")), ""));
+        var reading = controller.readings("map", Set.of(c.id())).getFirst();
+        assertThat(reading.a().up()).isTrue();
+        assertThat(reading.a().rxBps()).isNull();
+        assertThat(reading.a().capacityBps()).isEqualTo(10000000000L);
+        assertThat(reading.b().up()).isFalse();
+        assertThat(reading.b().error()).isNull();
+        verify(datacom).query(any(), eq("discover"), isNull(), any());
     }
     void persist(MappedConnectionController.Connection connection) {
         try {

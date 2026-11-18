@@ -50,6 +50,10 @@ public class UbiquitiSsh {
     public static class Link implements AutoCloseable {
         private final Session session;
         Link(Session session) { this.session = session; }
+        /** A bounded interactive CLI, sharing the same pinned SSH host keys. */
+        public br.com.scriptping.datacom.DatacomCli datacomCli() throws Exception {
+            return new br.com.scriptping.datacom.DatacomCli(session);
+        }
         public String command(String command) throws Exception {
             if (!java.util.Set.of("mca-status", "wstalist", "cat /proc/net/dev", "ifconfig -a").contains(command))
                 throw new IllegalArgumentException("Unsupported SSH command");

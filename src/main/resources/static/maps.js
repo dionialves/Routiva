@@ -1205,7 +1205,9 @@ $('load-switch-interfaces').onclick = async () => {
     const response = await fetch('/api/maps/connections/discover/' + encodeURIComponent(hostId), {cache: 'no-store'});
     const data = await response.json();
     if (!response.ok) {
-      if (response.status === 400 || response.status === 409)
+      if (typeof data.message === 'string' && data.message.trim())
+        failureMessage = data.message;
+      else if (response.status === 400 || response.status === 409)
         failureMessage = 'Não foi possível carregar as interfaces. Configure e valide a autenticação do host e tente novamente.';
       throw new Error();
     }
@@ -1219,7 +1221,8 @@ $('load-switch-interfaces').onclick = async () => {
     configuredSlots = imported.slots;
     configuredPorts = imported.ports;
     renderSwitchSlots(); drawPreview();
-    $('interface-load-status').textContent = imported.ports.length + ' interfaces carregadas. Salve o elemento para aplicar.';
+    $('interface-load-status').textContent = imported.ports.length + ' interfaces carregadas. Salve o elemento para aplicar.'
+      + (imported.ports.some(port => port.capacity === 'unknown') ? ' Revise os conectores e as capacidades não identificados.' : '');
   } catch (error) {
     if (generation === interfaceLoadGeneration && $('type').value === 'host' && $('group').value === hostId) {
       $('interface-load-status').setAttribute('role', 'alert');

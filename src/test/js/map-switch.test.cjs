@@ -340,3 +340,45 @@ test('electrical ports use their own advertised maximum when physical supported 
   assert.deepEqual(result.ports.map(port=>port.capacity), ['1g','1g','1g','unknown','10g']);
   assert.equal(result.ports[0].speed,'100Mbps');
 });
+
+test('Datacom imports explicit connector and supported capacity without using negotiated speed', () => {
+  const result = switchMap.importInterfaces([{
+    name: 'ten-gigabit-ethernet-1/1/1', type: 'ether', connector: 'sfpplus',
+    supported: '1 Gbps, 10 Gbps', rate: '1Gbps', running: 'true',
+  }], []);
+  assert.equal(result.ports[0].connector, 'sfpplus');
+  assert.equal(result.ports[0].capacity, '10g');
+  assert.equal(result.ports[0].speed, '1Gbps');
+  const unknown = switchMap.importInterfaces([{
+    name: 'ten-gigabit-ethernet-1/1/2', connector: 'sfpplus', rate: '10Gbps',
+  }], []);
+  assert.equal(unknown.ports[0].capacity, 'unknown');
+});
+
+test('grouped Datacom families keep their ports separate even with the same chassis slot and port', () => {
+  const rows = [
+    ...Array.from({ length: 24 }, (_, i) => ({ name: `ten-gigabit-ethernet-1/1/${i + 1}`, type: 'ether', running: 'true', disabled: 'false', rate: '10Gbps' })),
+    ...Array.from({ length: 2 }, (_, i) => ({ name: `forty-gigabit-ethernet-1/1/${i + 1}`, type: 'ether', running: 'true', disabled: 'false', rate: '40Gbps' })),
+  ];
+  const imported = switchMap.importInterfaces(rows, []);
+  assert.equal(imported.ports.length, 26);
+  assert.deepEqual(imported.slots.map(slot => slot.count), [24, 2]);
+  assert.equal(new Set(imported.ports.map(port => port.name)).size, 26);
+  assert.equal(new Set(imported.ports.map(port => port.id)).size, 26);
+  assert.equal(imported.ports[24].speed, '40Gbps');
+  assert.equal(imported.ports[24].capacity, 'unknown');
+});
+
+test('DM4250 hardware metadata imports SFP+ 10G and QSFP+ 40G for down ports and preserves cable identities', () => {
+  const rows = [
+    ...Array.from({ length: 24 }, (_, i) => ({ name: `ten-gigabit-ethernet-1/1/${i + 1}`, type: 'ether', connector: 'sfpplus', supported: '10 Gbps', running: 'false', disabled: 'true' })),
+    ...Array.from({ length: 2 }, (_, i) => ({ name: `forty-gigabit-ethernet-1/1/${i + 1}`, type: 'ether', connector: 'qsfpplus', supported: '40 Gbps', running: 'false', disabled: 'false' })),
+  ];
+  const previous = switchMap.importInterfaces(rows.map(({ connector, supported, ...row }) => row), []);
+  const imported = switchMap.importInterfaces(rows, previous.ports);
+  assert.deepEqual(imported.slots.map(slot => [slot.connector, slot.capacity, slot.count]), [
+    ['sfpplus', '10g', 24], ['qsfpplus', '40g', 2],
+  ]);
+  assert.deepEqual(imported.ports.map(port => port.id), previous.ports.map(port => port.id));
+  assert.ok(imported.ports.every(port => port.running === false));
+});

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <th:block th:replace="~{shell :: security}"></th:block>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${host.name() + ' • Datacom'}">Datacom</title>
+  <th:block th:replace="~{design-system :: base}"></th:block>
+  <th:block th:replace="~{design-system :: layout}"></th:block>
+  <th:block th:replace="~{design-system :: filters}"></th:block>
+  <th:block th:replace="~{design-system :: actions}"></th:block>
+  <link rel="stylesheet" href="/availability.css"><link rel="stylesheet" href="/history-charts.css">
+  <script src="/shell.js" defer></script><script src="/host-traffic.js" defer></script>
+  <script src="/availability-chart.js" defer></script><script src="/datacom.js?v=20261118" defer></script>
+</head>
+<body class="availability-dashboard">
+<aside th:replace="~{shell :: sidebar('diagnostics')}"></aside>
+<div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
+<main class="page-content availability-page" th:attr="data-datacom-host=${host.id()}">
+  <div class="availability-heading page-action-heading"><div><p class="eyebrow">DATACOM · DMOS</p>
+    <h1 th:text="${host.name()}">Equipamento</h1><p>IP: <span th:text="${host.ip()}"></span></p>
+  </div><button th:replace="~{design-system :: action('datacom-refresh', 'refresh', 'Atualizar')}"></button></div>
+  <p id="datacom-state" role="status" aria-live="polite">Conectando ao equipamento…</p>
+  <section class="availability-grid" aria-label="Informações do equipamento">
+    <article th:replace="~{design-system :: indicator('Modelo', 'datacom-model', 'Datacom', null)}"></article>
+    <article th:replace="~{design-system :: indicator('Versão', 'datacom-version', 'DmOS', null)}"></article>
+    <article th:replace="~{design-system :: indicator('Tempo ativo', 'datacom-uptime', 'Desde a inicialização', null)}"></article>
+    <article th:replace="~{design-system :: indicator('CPU', 'datacom-cpu', 'Uso atual', null)}"></article>
+    <article th:replace="~{design-system :: indicator('Memória livre', 'datacom-memory', 'Livre / total', null)}"></article>
+  </section>
+  <section class="card" aria-labelledby="datacom-interfaces-title"><h2 id="datacom-interfaces-title">Interfaces</h2>
+    <p>RX e TX na perspectiva do equipamento. A primeira leitura prepara o cálculo do tráfego.</p>
+    <div th:replace="~{design-system :: dataTable('Interfaces Datacom', ~{::datacomTable})}">
+      <th:block th:fragment="datacomTable">
+        <thead><tr><th scope="col">Nome</th><th scope="col">Estado</th><th scope="col">Velocidade do link</th><th scope="col">MTU</th><th scope="col">MAC</th><th scope="col">RX</th><th scope="col">TX</th><th scope="col">Erros RX / TX</th></tr></thead>
+        <tbody id="datacom-interfaces"></tbody>
+      </th:block>
+    </div>
+  </section>
+  <section class="card chart-card" aria-labelledby="datacom-traffic-title">
+    <h2 id="datacom-traffic-title">Tráfego da interface</h2>
+    <div class="query-filter-bar query-filter-row"><label class="query-filter-field" for="datacom-interface">
+      <span class="query-filter-label"><svg th:replace="~{shell :: icon('server')}"></svg>Interface</span>
+      <select id="datacom-interface"><option value="">Selecione uma interface</option></select>
+    </label></div>
+    <p id="datacom-traffic-state" role="status">Selecione uma interface para acompanhar o tráfego.</p>
+    <div id="datacom-chart"></div>
+  </section>
+</main></div></body></html>

@@ -20,6 +20,7 @@ class MappedConnectionPageTests {
     @MockitoBean JdbcTemplate jdbc;
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
+    @MockitoBean br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
     @Test void standaloneConnectionPageHasBeenRemoved() throws Exception {

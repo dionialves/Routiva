@@ -223,7 +223,7 @@
       for (const name of ['manufacturer', 'login']) $(`host-auth-${name}`).value = c[name] || '';
       $('host-auth-password').value = ''; $('host-auth-port').value = c.port || 8728;
       $('host-auth-tls').checked = c.tls;
-      $('host-auth-tls-row').hidden = c.manufacturer === 'Ubiquiti';
+      $('host-auth-tls-row').hidden = ['Ubiquiti', 'Datacom'].includes(c.manufacturer);
       $('host-auth-password-help').textContent = c.passwordConfigured ? 'Senha cadastrada. Deixe em branco para preservar.' : 'Informe a senha do equipamento.';
       $('host-auth-state').textContent = '';
       authBaseline = JSON.stringify(authInput()); authLoaded = true;
@@ -231,7 +231,7 @@
     } catch (error) { if (current === host) $('host-auth-state').textContent = error.message; }
   }
   $('host-auth-manufacturer').addEventListener('change', () => {
-    const ssh = $('host-auth-manufacturer').value === 'Ubiquiti';
+    const ssh = ['Ubiquiti', 'Datacom'].includes($('host-auth-manufacturer').value);
     $('host-auth-port').value = ssh ? 22 : $('host-auth-tls').checked ? 8729 : 8728;
     $('host-auth-tls-row').hidden = ssh; if (ssh) $('host-auth-tls').checked = false;
   });

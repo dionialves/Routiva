@@ -14,12 +14,13 @@ import org.springframework.web.server.ResponseStatusException;
 @Controller
 public class MappedConnectionController {
     private final JdbcTemplate jdbc;
+    private final br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
     private final ZabbixService inventory;
     private final MikrotikService mikrotik;
     private final br.com.scriptping.hosts.HostConnections connections;
     private final br.com.scriptping.hosts.HostRepository hosts;
-    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, br.com.scriptping.hosts.HostConnections connections, br.com.scriptping.hosts.HostRepository hosts) {
-        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.connections = connections; this.hosts = hosts;
+    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, br.com.scriptping.hosts.HostConnections connections, br.com.scriptping.hosts.HostRepository hosts, br.com.scriptping.datacom.DatacomEquipmentProvider datacom) {
+        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.connections = connections; this.hosts = hosts; this.datacom = datacom;
     }
     public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Endpoint(long measuredAt, String name, boolean up, String rxBps, String txBps, String error, Long capacityBps) {}
@@ -61,8 +62,8 @@ public class MappedConnectionController {
         return hosts.target(id);
     }
     private EquipmentProvider.Connection apiConnection(String id) {
-        if (!"MikroTik".equals(hosts.credentials(id) == null ? null : hosts.credentials(id).manufacturer()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conexões mapeadas exigem um host MikroTik com autenticação configurada.");
+        if (!Set.of("MikroTik", "Datacom").contains(hosts.credentials(id) == null ? "" : hosts.credentials(id).manufacturer()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conexões mapeadas exigem um host MikroTik ou Datacom com autenticação configurada.");
         return connections.require(host(id));
     }
     @ExceptionHandler(ResponseStatusException.class) @ResponseBody
@@ -73,14 +74,27 @@ public class MappedConnectionController {
     @GetMapping("/api/maps/connections/discover/{hostId}") @ResponseBody
     public List<Map<String, String>> discover(@PathVariable String hostId) {
         var target = hosts.target(hostId);
-        var credentials = hosts.credentials(hostId);
-        if (credentials == null || !"MikroTik".equals(credentials.manufacturer()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Carregar interfaces exige um host MikroTik com autenticação configurada.");
-        return mikrotik.query(target, "discover", null, connections.require(target)).rows();
+        var credentials = apiConnectionFor(hostId);
+        return query(target, "discover", null, credentials).rows();
+    }
+    private EquipmentProvider.Connection apiConnectionFor(String hostId) {
+        var saved = hosts.credentials(hostId);
+        if (saved == null || !Set.of("MikroTik", "Datacom").contains(saved.manufacturer()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Carregar interfaces exige um host MikroTik ou Datacom com autenticação configurada.");
+        return connections.require(hosts.target(hostId));
+    }
+    private EquipmentProvider.Snapshot query(Host host, String section, String name, EquipmentProvider.Connection credentials) {
+        if ("Datacom".equals(hosts.credentials(host.id()).manufacturer())) {
+            return datacom.query(host, section.equals("interfaces") ? "discover" : section, name, credentials);
+        }
+        var result = mikrotik.query(host, section, name, credentials);
+        return new EquipmentProvider.Snapshot(result.measuredAt(), result.rows(), result.warning());
     }
     @GetMapping("/api/maps/connections/interfaces/{hostId}") @ResponseBody
     public List<Map<String, String>> interfaces(@PathVariable String hostId) {
-        return mikrotik.query(host(hostId), "interfaces", null, apiConnection(hostId)).rows().stream()
+        var credentials = apiConnectionFor(hostId);
+        var target = host(hostId);
+        return query(target, "interfaces", null, credentials).rows().stream()
             .filter(row -> "ether".equals(row.get("type"))).toList();
     }
     @PostMapping("/api/maps/connections/validate") @ResponseBody
@@ -113,7 +127,7 @@ public class MappedConnectionController {
                     && System.currentTimeMillis() - previous.measuredAt() < cacheMillis) return previous;
             if (!Objects.equals(cacheSources.get(key), source)) counters.remove(key);
             cacheSources.put(key, source);
-            var snapshot = mikrotik.query(h, "connection", name, credentials);
+            var snapshot = query(h, "connection", name, credentials);
             var row = snapshot.rows().getFirst();
             var sample = new Counters(snapshot.measuredAt(), counter(row.get("rx-byte")), counter(row.get("tx-byte")));
             var before = counters.put(key, sample);
@@ -124,7 +138,7 @@ public class MappedConnectionController {
             if (!row.containsKey("tx-byte") && counter(row.get("tx-bits-per-second")) != null) tx = row.get("tx-bits-per-second");
             result = new Endpoint(snapshot.measuredAt(), name, "true".equals(row.get("running")) && !"true".equals(row.get("disabled")), rx, tx, null, capacity(row.get("rate")));
         } catch (RuntimeException ex) {
-            result = new Endpoint(System.currentTimeMillis(), name, false, null, null, "Consulta indisponível. Verifique a API e a interface do equipamento.", previous == null ? null : previous.capacityBps());
+            result = new Endpoint(System.currentTimeMillis(), name, false, null, null, "Consulta indisponível. Verifique a conexão e a interface do equipamento.", previous == null ? null : previous.capacityBps());
             counters.remove(key);
         }
         if (cache.size() > 2000) cache.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue().measuredAt() > 30000);
