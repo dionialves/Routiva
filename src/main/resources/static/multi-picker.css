@@ -32,3 +32,6 @@
 .incident-picker-panel input[type="search"]:focus { outline:2px solid #00c5dc; outline-offset:3px; }
 .incident-picker-options { overscroll-behavior:contain; scrollbar-color:#65717a #263644; scrollbar-width:thin; }
 .incident-picker-options label { min-height:36px; box-sizing:border-box; font-weight:600; }
+
+/* Keep checklist rows horizontal inside shared settings/form dialogs. */
+.form-dialog .incident-picker .incident-picker-options label { display:flex; flex-direction:row; }

@@ -518,3 +518,35 @@ acesso. O arquivo interno de proteção é criado automaticamente em
 `data/ap-secrets.key` (ou `AP_SECRETS_KEY_FILE`). No Compose, fica no volume
 `app_data`, em `/var/lib/routiva/ap-secrets.key`. Preserve esse arquivo junto com
 os backups do banco; ele é necessário para recuperar as senhas armazenadas.
+
+### Cadastro de Hosts
+
+Administradores podem acessar **Configuração → Hosts** no menu (`/configuracao/hosts`) para criar e editar hosts no Zabbix.
+O cadastro contém nome técnico, nome visível, templates, grupos, interface SNMP (IP ou DNS e
+porta), versão SNMPv1/v2c, comunidade (incluindo macros como `{$SNMP_COMMUNITY}`) e estado ativo.
+Os grupos e templates são consultados na integração configurada; é necessário pelo menos um grupo.
+
+A entidade `ManagedHost` usa o ID do host no Zabbix. Nesta versão, o Zabbix é a fonte persistente
+do cadastro, sem uma segunda cópia no banco local. A lista inclui hosts ativos e inativos que o
+usuário da integração pode editar, independentemente dos filtros do inventário de monitoramento.
+Criar ou editar exige permissões de escrita na API do Zabbix. O app só informa sucesso após a
+confirmação da API; falhas de comunicação não são repetidas automaticamente. Se o resultado for
+incerto, atualize a lista antes de tentar novamente.
+
+A edição altera a interface SNMP principal e preserva outras interfaces e propriedades fora do
+formulário. Templates removidos são desvinculados, sem solicitar a limpeza de itens/histórico.
+Alterações de configuração detectadas desde a abertura do formulário exigem atualizar a lista.
+Hosts descobertos e hosts cuja interface SNMP principal usa v3 são exibidos, mas sua edição
+continua no Zabbix. A exclusão está disponível no modal de edição e exige confirmação explícita; a configuração de credenciais SNMPv3 não faz parte desta versão.
+
+A tabela de Hosts mostra nome visível, itens monitorados, triggers monitoradas, IP da interface,
+templates vinculados, status e disponibilidade SNMP. As contagens usam os filtros `monitored`
+da API: itens habilitados em hosts ativos e triggers habilitadas com itens habilitados em hosts
+ativos. A disponibilidade vem da interface SNMP principal: desconhecida, disponível ou
+indisponível; hosts inativos e ausência de interface são indicados separadamente. As colunas
+permitem ordenação, com comparação numérica de IPv4 e IPv6 e endereços ausentes ao final.
+
+O modal de Hosts organiza Identificação, Associação e Interface SNMP em seções com campos
+verticais, cabeçalho e rodapé fixos. Alterações pendentes exigem confirmação antes de fechar.
+A exclusão usa `host.delete`, exige perfil administrador, proteção CSRF, confirmação explícita
+e a revisão atual do cadastro. Recusas ou falhas sem confirmação não repetem a exclusão.

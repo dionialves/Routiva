@@ -141,6 +141,7 @@ class DashboardTests {
 
     @Test
     void removedPagesAreNotAccessibleAndHomeOpensAvailability() throws Exception {
+        mvc.perform(get("/configuracao/hosts")).andExpect(status().isOk());
         mvc.perform(get("/")).andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/disponibilidade"));
         for (String path : java.util.List.of("/hosts", "/grupos", "/hosts/details", "/dashboard")) {

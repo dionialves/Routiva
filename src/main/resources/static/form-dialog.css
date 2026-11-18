@@ -36,3 +36,10 @@ dialog.form-dialog:has(.form-dialog-frame) { padding:0; max-height:90vh; overflo
   .form-dialog .form-dialog-footer { gap:8px; }
 }
 @media (prefers-reduced-motion:reduce) { .system-switch::after { transition:none; } }
+
+/* Reusable sections for longer configuration dialogs. */
+.form-dialog-section { min-width:0; border:1px solid var(--border); border-radius:10px; background:var(--panel-bg); }
+.form-dialog-section-title { display:flex; align-items:center; gap:12px; margin:0; padding:16px 20px; font-size:15px; font-weight:600; border-bottom:1px solid var(--border); }
+.form-dialog-section-title svg { width:18px; height:18px; flex:0 0 18px; color:var(--cyan); }
+.form-dialog-section-fields { display:grid; gap:16px; padding:20px; min-width:0; }
+@media(max-width:600px) { .form-dialog-section-title, .form-dialog-section-fields { padding:16px; } }

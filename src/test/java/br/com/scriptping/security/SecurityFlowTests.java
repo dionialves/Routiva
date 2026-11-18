@@ -26,6 +26,25 @@ class SecurityFlowTests {
     @Autowired UserRepository repository;
     @MockitoBean ZabbixClient zabbix;
     @MockitoBean CollectorClient collector;
+    @Test @WithMockUser(roles = "USER")
+    void hostConfigurationRequiresAdministrator() throws Exception {
+        mvc.perform(get("/configuracao/hosts")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/host-configurations")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/host-configurations/options")).andExpect(status().isForbidden());
+        mvc.perform(delete("/api/host-configurations/42").with(csrf()).contentType("application/json").content("{\"confirmed\":true}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(post("/api/host-configurations").with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(put("/api/host-configurations/42").with(csrf()).contentType("application/json").content("{}"))
+            .andExpect(status().isForbidden());
+    }
+    @Test @WithMockUser(roles = "ADMIN")
+    void hostConfigurationWritesRequireCsrf() throws Exception {
+        mvc.perform(delete("/api/host-configurations/42").contentType("application/json").content("{\"confirmed\":true}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(post("/api/host-configurations").contentType("application/json").content("{}"))
+            .andExpect(status().isForbidden());
+    }
     private UserService.Saved create(AppUser.Role role) {
         return users.save(null, new UserService.Input("José da Silva", "user" + UUID.randomUUID().toString().substring(0, 8), role, null));
     }

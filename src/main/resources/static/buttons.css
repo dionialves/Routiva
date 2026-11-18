@@ -81,3 +81,6 @@ button.system-button > [data-ap-icon] svg { width:16px; height:16px; }
   flex-shrink:0;
   align-self:flex-end;
 }
+
+button.system-button.system-button-danger { color:var(--error) !important; border-color:var(--error) !important; background:var(--error-bg) !important; }
+button.system-button.system-button-danger:hover:not(:disabled) { background:color-mix(in srgb, var(--error) 20%, var(--error-bg)) !important; }

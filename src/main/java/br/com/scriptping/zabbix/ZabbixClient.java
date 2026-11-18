@@ -2,6 +2,7 @@ package br.com.scriptping.zabbix;
 
 
 import com.fasterxml.jackson.databind.JsonNode;
+import br.com.scriptping.hosts.ManagedHost;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.*;
@@ -340,6 +341,224 @@ public class ZabbixClient {
             result.put(row.path("hostid").asText(), Map.of("model", inventory.path("model").asText(""), "version", version));
         }
         return result;
+    }
+
+    public synchronized List<ManagedHost.Choice> hostTemplates() {
+        detectVersion();
+        if (session == null) login();
+        var result = new ArrayList<ManagedHost.Choice>();
+        for (var row : authenticatedRequest("template.get", Map.of("output", List.of("templateid", "name"))))
+            result.add(new ManagedHost.Choice(row.path("templateid").asText(), row.path("name").asText()));
+        result.sort(Comparator.comparing(ManagedHost.Choice::name, String.CASE_INSENSITIVE_ORDER));
+        return List.copyOf(result);
+    }
+
+    private JsonNode configurationRows(String id) {
+        detectVersion();
+        if (session == null) login();
+        var params = new LinkedHashMap<String, Object>();
+        params.put("output", List.of("hostid", "host", "name", "status", "flags"));
+        params.put("editable", true);
+        params.put(legacyGroups ? "selectGroups" : "selectHostGroups", List.of("groupid", "name"));
+        params.put("selectParentTemplates", List.of("templateid", "name"));
+        params.put("selectInterfaces", "extend");
+        if (id != null) params.put("hostids", List.of(id));
+        return authenticatedRequest("host.get", params);
+    }
+
+    private String configurationRevision(JsonNode row) {
+        // Availability/error counters change during polling and are not configuration edits.
+        var stable = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+        for (String key : List.of("hostid", "host", "name", "status", "flags")) stable.set(key, row.path(key));
+        for (String key : List.of(legacyGroups ? "groups" : "hostgroups", "parentTemplates", "interfaces")) {
+            var nodes = new ArrayList<JsonNode>();
+            row.path(key).forEach(nodes::add);
+            String identity = key.equals("interfaces") ? "interfaceid" : key.equals("parentTemplates") ? "templateid" : "groupid";
+            nodes.sort(Comparator.comparing(node -> node.path(identity).asText()));
+            var array = stable.putArray(key);
+            for (var node : nodes) {
+                if (!key.equals("interfaces")) { array.add(node.path(identity).asText()); continue; }
+                var face = array.addObject();
+                for (String field : List.of("interfaceid", "type", "main", "useip", "ip", "dns", "port", "details"))
+                    if (node.has(field)) face.set(field, node.get(field));
+            }
+        }
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(stable.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException ex) { throw new IllegalStateException(ex); }
+    }
+
+    private JsonNode primarySnmp(JsonNode row) {
+        JsonNode first = null;
+        for (var face : row.path("interfaces")) {
+            if (face.path("type").asInt() != 2) continue;
+            if (face.path("main").asInt() == 1) return face;
+            if (first == null) first = face;
+        }
+        return first;
+    }
+
+    public synchronized List<ManagedHost> managedHosts() {
+        var result = new ArrayList<ManagedHost>();
+        var rows = configurationRows(null);
+        var hostIds = new ArrayList<String>();
+        rows.forEach(row -> hostIds.add(row.path("hostid").asText()));
+        var itemCounts = new HashMap<String, Integer>();
+        var triggerCounts = new HashMap<String, Integer>();
+        // Fetch minimal fields in batches, rather than making two requests for every host.
+        for (int offset = 0; offset < hostIds.size(); offset += 500) {
+            var batch = hostIds.subList(offset, Math.min(offset + 500, hostIds.size()));
+            for (var item : authenticatedRequest("item.get", Map.of("hostids", batch,
+                    "output", List.of("hostid"), "monitored", true)))
+                itemCounts.merge(item.path("hostid").asText(), 1, Integer::sum);
+            for (var trigger : authenticatedRequest("trigger.get", Map.of("hostids", batch,
+                    "output", List.of("triggerid"), "selectHosts", List.of("hostid"), "monitored", true))) {
+                var counted = new HashSet<String>();
+                for (var host : trigger.path("hosts")) {
+                    String hostId = host.path("hostid").asText();
+                    if (batch.contains(hostId) && counted.add(hostId)) triggerCounts.merge(hostId, 1, Integer::sum);
+                }
+            }
+        }
+        for (var row : rows) {
+            var groups = new ArrayList<ManagedHost.Choice>();
+            for (var group : row.path(legacyGroups ? "groups" : "hostgroups"))
+                groups.add(new ManagedHost.Choice(group.path("groupid").asText(), group.path("name").asText()));
+            var templates = new ArrayList<ManagedHost.Choice>();
+            for (var template : row.path("parentTemplates"))
+                templates.add(new ManagedHost.Choice(template.path("templateid").asText(), template.path("name").asText()));
+            var face = primarySnmp(row);
+            int version = face == null ? 2 : face.path("details").path("version").asInt();
+            var address = face;
+            if (address == null) {
+                for (var candidate : row.path("interfaces")) {
+                    if (address == null || candidate.path("main").asInt() == 1) address = candidate;
+                    if (candidate.path("main").asInt() == 1) break;
+                }
+            }
+            String availability = face == null ? "none" : row.path("status").asInt() != 0 ? "disabled"
+                : switch (face.path("available").asInt()) { case 1 -> "available"; case 2 -> "unavailable"; default -> "unknown"; };
+            result.add(new ManagedHost(row.path("hostid").asText(), row.path("host").asText(),
+                row.path("name").asText(), List.copyOf(groups), List.copyOf(templates),
+                face == null ? "" : face.path("interfaceid").asText(), address == null ? "" : address.path("ip").asText(),
+                face == null ? "" : face.path("dns").asText(), face == null || face.path("useip").asInt() == 1,
+                face == null ? "161" : face.path("port").asText(), version,
+                face == null ? "{$SNMP_COMMUNITY}" : face.path("details").path("community").asText(),
+                row.path("status").asInt() == 0, configurationRevision(row),
+                row.path("flags").asInt() == 0 && (version == 1 || version == 2),
+                row.path("status").asInt() == 0 ? itemCounts.getOrDefault(row.path("hostid").asText(), 0) : 0,
+                row.path("status").asInt() == 0 ? triggerCounts.getOrDefault(row.path("hostid").asText(), 0) : 0,
+                availability));
+        }
+        result.sort(Comparator.comparing(ManagedHost::hostname, String.CASE_INSENSITIVE_ORDER));
+        return List.copyOf(result);
+    }
+
+    public synchronized void deleteManagedHost(String id, String revision) {
+        if (id == null || !id.matches("[1-9][0-9]*")) hostInvalid("Host inválido.");
+        var rows = configurationRows(id);
+        if (rows.isEmpty()) throw new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.NOT_FOUND, "Host não encontrado ou sem permissão de exclusão.");
+        var host = rows.get(0);
+        if (!configurationRevision(host).equals(revision))
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                "Host alterado no Zabbix. Atualize a página antes de excluir.");
+        if (host.path("flags").asInt() != 0) hostInvalid("Hosts descobertos devem ser gerenciados no Zabbix.");
+        var root = request("host.delete", List.of(id), session);
+        // Retry only an explicit expired session, never an ambiguous transport failure.
+        if (expired(root)) { session = null; login(); root = request("host.delete", List.of(id), session); }
+        if (root.has("error")) throw new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.BAD_GATEWAY, "Zabbix recusou a exclusão. Verifique as permissões da integração.");
+        var ids = root.path("result").path("hostids");
+        if (!ids.isArray() || ids.size() != 1 || !id.equals(ids.get(0).asText()))
+            throw new IllegalStateException("O Zabbix não confirmou a exclusão. Atualize a página antes de tentar novamente.");
+    }
+
+    private void hostInvalid(String message) {
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, message);
+    }
+
+    public synchronized String saveManagedHost(String id, ManagedHost.Input input) {
+        if (input == null) { hostInvalid("Informe os dados do host."); }
+        String hostname = Objects.requireNonNullElse(input.hostname(), "").strip();
+        String visible = Objects.requireNonNullElse(input.visibleName(), "").strip();
+        if (hostname.isEmpty() || hostname.length() > 128 || !hostname.matches("[A-Za-z0-9_. -]+"))
+            hostInvalid("Nome do host inválido. Use até 128 letras sem acentos, números, espaços, ponto, hífen ou sublinhado.");
+        if (visible.length() > 128) hostInvalid("Nome visível deve ter até 128 caracteres.");
+        if (input.groupIds() == null || input.groupIds().isEmpty()) hostInvalid("Selecione pelo menos um grupo.");
+        var templates = input.templateIds() == null ? List.<String>of() : input.templateIds();
+        if (java.util.stream.Stream.concat(input.groupIds().stream(), templates.stream())
+                .anyMatch(value -> value == null || !value.matches("[1-9][0-9]*"))) hostInvalid("Grupo ou template inválido.");
+        if (input.snmpVersion() != 1 && input.snmpVersion() != 2) hostInvalid("Use SNMPv1 ou SNMPv2c nesta versão.");
+        if (input.community() == null || input.community().isBlank() || input.community().length() > 255)
+            hostInvalid("Informe a comunidade SNMP, com até 255 caracteres. Macros Zabbix são aceitas.");
+        String ip = Objects.requireNonNullElse(input.ip(), "").strip();
+        String dns = Objects.requireNonNullElse(input.dns(), "").strip();
+        if ((input.useIp() ? ip : dns).isEmpty() || ip.length() > 64 || dns.length() > 255)
+            hostInvalid("Informe o endereço IP ou DNS da interface SNMP.");
+        if (input.port() == null || !input.port().matches("[0-9]{1,5}")
+                || Integer.parseInt(input.port()) < 1 || Integer.parseInt(input.port()) > 65535)
+            hostInvalid("Porta deve estar entre 1 e 65535.");
+        JsonNode existing = null;
+        if (id != null) {
+            if (!id.matches("[1-9][0-9]*")) hostInvalid("Host inválido.");
+            var rows = configurationRows(id);
+            if (rows.isEmpty()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Host não encontrado ou sem permissão de edição.");
+            existing = rows.get(0);
+            if (!configurationRevision(existing).equals(input.revision()))
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Host alterado no Zabbix. Feche o formulário e atualize a lista antes de editar.");
+            var snmp = primarySnmp(existing);
+            if (existing.path("flags").asInt() != 0 || (snmp != null && snmp.path("details").path("version").asInt() == 3))
+                hostInvalid("Hosts descobertos e interfaces SNMPv3 devem ser editados no Zabbix.");
+        }
+        var face = new LinkedHashMap<String, Object>();
+        face.put("type", 2); face.put("main", 1); face.put("useip", input.useIp() ? 1 : 0);
+        face.put("ip", ip); face.put("dns", dns); face.put("port", input.port());
+        var details = new LinkedHashMap<String, Object>();
+        details.put("version", input.snmpVersion()); details.put("community", input.community()); details.put("bulk", 1);
+        var interfaces = new ArrayList<Map<String, Object>>();
+        if (existing != null) {
+            var primary = primarySnmp(existing);
+            for (var other : existing.path("interfaces")) {
+                if (primary != null && other.path("interfaceid").equals(primary.path("interfaceid"))) {
+                    face.put("interfaceid", other.path("interfaceid").asText());
+                    face.put("main", other.path("main").asInt());
+                    // Preserve version-specific details, including bulk and newer Zabbix tuning fields.
+                    other.path("details").fields().forEachRemaining(e -> {
+                        if (!Set.of("version", "community").contains(e.getKey())) details.put(e.getKey(), e.getValue());
+                    });
+                } else {
+                    var preserved = new LinkedHashMap<String, Object>();
+                    for (String field : List.of("interfaceid", "type", "main", "useip", "ip", "dns", "port", "details"))
+                        if (other.has(field) && (!field.equals("details") || other.path("type").asInt() == 2))
+                            preserved.put(field, other.get(field));
+                    interfaces.add(preserved);
+                }
+            }
+        }
+        face.put("details", details); interfaces.add(face);
+        var params = new LinkedHashMap<String, Object>();
+        params.put("host", hostname); params.put("name", visible.isEmpty() ? hostname : visible);
+        params.put("status", input.active() ? 0 : 1);
+        params.put("groups", input.groupIds().stream().distinct().map(value -> Map.of("groupid", value)).toList());
+        params.put("templates", templates.stream().distinct().map(value -> Map.of("templateid", value)).toList());
+        params.put("interfaces", interfaces);
+        if (id != null) params.put("hostid", id);
+        detectVersion();
+        if (session == null) login();
+        String method = id == null ? "host.create" : "host.update";
+        // Do not retry ambiguous transport failures: host.create may already have committed.
+        var root = request(method, params, session);
+        if (expired(root)) { session = null; login(); root = request(method, params, session); }
+        if (root.has("error")) throw new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.BAD_GATEWAY,
+            "Zabbix recusou o cadastro. Verifique nome duplicado, endereço, grupos, templates e permissões da integração.");
+        var ids = root.path("result").path("hostids");
+        if (!ids.isArray() || ids.size() != 1 || !ids.get(0).asText().matches("[1-9][0-9]*")
+                || (id != null && !id.equals(ids.get(0).asText())))
+            throw new IllegalStateException("Zabbix não confirmou o host.");
+        return ids.get(0).asText();
     }
 
     public boolean configured() {

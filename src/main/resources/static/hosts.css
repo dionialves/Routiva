@@ -1,0 +1,60 @@
+/* Fixed column proportions keep the layout stable regardless of content. */
+.hosts-page .hosts-table { width:100%; min-width:1200px; table-layout:fixed; font-size:13px; }
+.hosts-page .hosts-table :is(th, td) { padding:9px 16px; text-align:left; white-space:normal; overflow-wrap:anywhere; }
+.hosts-page .hosts-table thead th { padding-top:12px; padding-bottom:12px; }
+.hosts-page .hosts-table thead th:nth-child(1) { width:25%; }
+.hosts-page .hosts-table thead th:nth-child(2) { width:6%; }
+.hosts-page .hosts-table thead th:nth-child(3) { width:7%; }
+.hosts-page .hosts-table thead th:nth-child(4) { width:15%; }
+.hosts-page .hosts-table thead th:nth-child(5) { width:25%; }
+.hosts-page .hosts-table thead th:nth-child(6) { width:9%; }
+.hosts-page .hosts-table thead th:nth-child(7) { width:13%; }
+.hosts-page .hosts-table tbody th, .hosts-page .hosts-table tbody th .availability-host-name { max-width:none; white-space:normal; overflow-wrap:anywhere; word-break:normal; }
+.hosts-page .hosts-table tbody td:nth-child(5) { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#host-dialog { --form-dialog-width:800px; }
+#host-dialog .host-dialog-heading { display:flex; flex-direction:row; flex-wrap:nowrap; align-items:flex-start; gap:16px; }
+#host-dialog .host-dialog-heading > div { flex:1; min-width:0; }
+#host-dialog .host-dialog-heading h2 { font-size:20px; font-weight:600; margin:0 0 6px; }
+.host-dialog-icon { display:grid; place-items:center; flex:0 0 44px; height:44px; border-radius:10px; background:var(--surface-bg); color:var(--cyan); }
+.host-dialog-icon svg { width:22px; height:22px; }
+#host-dialog-description { color:var(--muted); margin:0; font-size:13px; line-height:1.6; }
+.host-form-fields { display:grid; gap:24px; }
+#host-dialog .form-dialog-section-fields { gap:0; }
+#host-dialog .form-dialog-section-fields > label { display:block; width:100%; max-width:none; margin:16px 0 8px; font-size:13px; font-weight:600; }
+#host-dialog .form-dialog-section-fields > label:first-child { margin-top:0; }
+.host-field { display:grid; min-width:0; gap:8px; }
+#host-dialog .host-field :is(input, select) { width:100%; box-sizing:border-box; font-family:var(--font-ui); }
+#host-dialog .form-dialog-section-fields > .incident-picker-field + .incident-picker-field { margin-top:16px; }
+#host-dialog .query-filter-label > svg { display:none; }
+#host-dialog .query-filter-label { color:var(--text); font-size:13px; }
+#host-dialog small { color:var(--muted); font-size:12px; line-height:1.6; }
+#host-dialog .form-dialog-section-fields > label.host-active { display:flex; flex-direction:row; align-items:center; gap:10px; margin:16px 0 0; }
+.host-required, .host-field-error, #host-error { color:var(--error); }
+.host-field-error { font-size:12px; margin:0; line-height:1.6; }
+.host-field-error:empty { display:none; }
+#host-dialog [aria-invalid=true] { border-color:var(--error); }
+#host-delete { margin-right:auto; }
+#host-delete-dialog, #host-discard-dialog { --form-dialog-width:480px; }
+#host-delete-description, #host-discard-description { margin:0; line-height:1.7; overflow-wrap:anywhere; }
+@media(max-width:600px) {
+  #host-dialog .host-dialog-heading { gap:10px; }
+  #host-dialog .form-dialog-footer { flex-wrap:wrap; }
+  #host-delete { margin-right:0; }
+}
+
+.hosts-page [data-host-status=active], .hosts-page [data-snmp-availability=available] { color:var(--success); }
+.hosts-page [data-host-status=inactive], .hosts-page [data-snmp-availability=unknown],
+.hosts-page [data-snmp-availability=none], .hosts-page [data-snmp-availability=disabled] { color:var(--muted); }
+.hosts-page [data-snmp-availability=unavailable] { color:var(--error); }
+
+#host-dialog .host-endpoint-row { display:grid; grid-template-columns:130px minmax(0, 1fr) 100px; gap:16px; min-width:0; }
+#host-dialog .host-endpoint-mode, #host-dialog .host-endpoint-field { display:flex; flex-direction:column; gap:8px; min-width:0; }
+#host-dialog .host-endpoint-field > label, #host-endpoint-mode-label { display:block; margin:0; font-size:13px; font-weight:600; }
+.host-endpoint-buttons { display:flex; gap:6px; align-items:center; min-height:42px; }
+@media(max-width:480px) {
+  #host-dialog .host-endpoint-row { grid-template-columns:minmax(0, 1fr) 90px; }
+  #host-dialog .host-endpoint-mode { grid-column:1 / -1; }
+}
+
+#host-dialog .host-snmp-settings-row { display:grid; grid-template-columns:160px minmax(0, 1fr); gap:16px; min-width:0; margin-top:16px; }
+@media(max-width:480px) { #host-dialog .host-snmp-settings-row { grid-template-columns:minmax(0, 1fr); } }

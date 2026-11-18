@@ -1,11 +1,11 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org"><head>
 <link th:fragment="base" rel="stylesheet" href="/style.css?v=20261115-ui-pagination">
-<link th:fragment="actions" rel="stylesheet" href="/buttons.css?v=20261115-ds1">
+<link th:fragment="actions" rel="stylesheet" href="/buttons.css?v=20261118-danger">
 <link th:fragment="filters" rel="stylesheet" href="/query-filters.css?v=20261115-ds1">
 <link th:fragment="layout" rel="stylesheet" href="/page-layout.css?v=20261115-ds1">
-<link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261117-frame">
-<link th:fragment="picker" rel="stylesheet" href="/multi-picker.css?v=20261115-ds1">
+<link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261118-sections">
+<link th:fragment="picker" rel="stylesheet" href="/multi-picker.css?v=20261118-dialog">
 <link th:fragment="analysisDialogStyles" rel="stylesheet" href="/analysis-dialog.css?v=20261116-header">
 </head><body>
 <article th:fragment="indicator(title, valueId, description, descriptionId)" class="card">
@@ -25,6 +25,10 @@
 <dialog th:fragment="analysisDialog(dialogId, titleId, descriptionId, content)" class="settings-panel form-dialog analysis-dialog" th:id="${dialogId}" th:attr="aria-labelledby=${titleId},aria-describedby=${descriptionId}">
   <th:block th:replace="${content}"></th:block>
 </dialog>
+<section th:fragment="formSection(titleId, title, iconName, content)" class="form-dialog-section" th:attr="aria-labelledby=${titleId}">
+  <h3 class="form-dialog-section-title" th:id="${titleId}"><svg th:replace="~{shell :: icon(${iconName})}"></svg><span th:text="${title}"></span></h3>
+  <div class="form-dialog-section-fields"><th:block th:replace="${content}"></th:block></div>
+</section>
 <div th:fragment="dataTable(label, sections)" class="table-scroll" role="region" th:attr="aria-label=${label}" tabindex="0">
   <table class="hosts-table"><th:block th:replace="${sections}"></th:block></table>
 </div>
