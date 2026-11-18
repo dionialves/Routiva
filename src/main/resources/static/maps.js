@@ -276,6 +276,7 @@ function draw() {
       updateTrafficLayer(layer);
     }
   }
+  const groupCircles = [];
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
     const level = monitored ? groupLevel(nodeHosts(n)) + 2 : 1;
@@ -324,9 +325,11 @@ function draw() {
     };
     if (!editing && n.groupId && n.subMapId) g.onclick = event => { event.stopPropagation(); choose(n); };
     if (monitored) popSummary.bind(g, n);
-    canvas.append(g);
+    if (n.groupId && n.icon !== 'switch') groupCircles.push(g);
+    else canvas.append(g);
   }
   canvas.append(connectors);
+  for (const circle of groupCircles) canvas.append(circle);
   if (editing && tool === 'select') for (const [linkIndex, link] of links.entries()) {
     if (link.style !== 'corners') continue;
     const route = linkRoute(link);
@@ -713,8 +716,8 @@ async function refreshPingState(token) {
 }
 
 function openMap(map, edit = false, parents = []) {
-  mapParents = parents;
-  const parent = maps.find(item => item.id === parents.at(-1));
+  mapParents = mapAncestors(map?.id);
+  const parent = maps.find(item => item.id === mapParents.at(-1));
   $('parent-map').hidden = edit || !parent;
   const parentLabel = parent ? 'Voltar ao mapa principal: ' + parent.layout.name : 'Voltar ao mapa principal';
   $('parent-map').title = parentLabel;
@@ -766,17 +769,29 @@ function openMap(map, edit = false, parents = []) {
     : '';
   draw();
   updateMapOverview();
-  if (map && !map.layout.camera) fitToView();
+  if (map && (!edit || !map.layout.camera)) fitToView();
   refresh(generation);
   refreshPingState(pingGeneration);
   refreshMappedConnections(true);
 }
 
 let mapParents = [];
+function mapAncestors(mapId) {
+  const parents = [], seen = new Set([mapId]);
+  let parent;
+  while ((parent = maps.find(item => (item.layout.nodes || []).some(node => node.groupId && node.subMapId === mapId)))) {
+    if (seen.has(parent.id)) break;
+    seen.add(parent.id);
+    parents.unshift(parent.id);
+    mapId = parent.id;
+  }
+  return parents;
+}
 $('parent-map').onclick = event => {
   event.preventDefault();
   const parents = [...mapParents];
-  const parent = maps.find(map => map.id === parents.pop());
+  const parentId = parents.pop();
+  const parent = maps.find(map => map.id === parentId);
   if (!parent) { window.notify('Mapa principal indisponível.'); return; }
   openMap(parent, false, parents);
   setMapExpanded(true);
@@ -1301,7 +1316,12 @@ function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' 
 function syncSubMap(selectedId = $('sub-map').value) {
   $('sub-map-field').hidden = $('type').value !== 'group';
   $('sub-map').replaceChildren(new Option('Nenhum submapa', ''), ...maps
-    .filter(map => map.id !== current.id)
+    .filter(map => {
+      if (map.id === current.id || mapAncestors(current.id).includes(map.id)) return false;
+      return !maps.some(parent => (parent.id === current.id ? current.layout.nodes : parent.layout.nodes || [])
+        .some(node => (parent.id !== current.id || node.id !== configuredNodeId)
+          && node.groupId && node.subMapId === map.id));
+    })
     .map(map => new Option(map.layout.name, map.id)));
   if (selectedId && !maps.some(map => map.id === selectedId)) {
     $('sub-map').add(new Option('Indisponível (' + selectedId + ')', selectedId));

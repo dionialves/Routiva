@@ -17,7 +17,7 @@ function setup() {
   $('element-icon').options=[{value:'circle',dataset:{bindings:'group free'}},{value:'switch',dataset:{bindings:'host free'}}];
   $('element-name').value='Switch';$('element-icon').value='switch';$('label-position').value='BELOW';
   $('interfaces-enabled').checked=true;
-  const context=vm.createContext({$,MapSwitch,maps:[],Option:function(text,value){this.text=text;this.value=value;},current:{layout:{nodes:[node],links:[{from:'node',to:'other',fromPort:ports[0].id}]}},
+  const context=vm.createContext({$,MapSwitch,maps:[],mapAncestors:()=>[],Option:function(text,value){this.text=text;this.value=value;},current:{layout:{nodes:[node],links:[{from:'node',to:'other',fromPort:ports[0].id}]}},
     interfaceLoadGeneration:0,loadingInterfaces:false,configuredSlots:slots.map(s=>({...s})),configuredPorts:ports,configuredSwitchColor:null,pendingNode:null,selected:'node',selectedLink:null,
     selection:new Set(),tool:'select',timer:null,generation:0,checkpoint(){},refresh(){},clearTimeout(){},
     draw(){},drawPreview(){},populateBinding(){},renderSwitchSlots(){},window:{elementIconPicker:{sync(){}}},
@@ -111,4 +111,20 @@ test('group submap selection is restored and persisted; changing type clears it'
   $('type').value='';
   $('element-form').onsubmit({preventDefault(){}});
   assert.equal(node.subMapId,null);
+});
+test('submap selector excludes occupied maps, the current map and its ancestors',()=>{
+  const {$,context,run}=setup();
+  context.current.id='current';
+  context.configuredNodeId='node';
+  context.mapAncestors=()=>['root'];
+  context.maps=[
+    {id:'current',layout:context.current.layout},
+    {id:'root',layout:{name:'Raiz',nodes:[{id:'parent-node',groupId:'g',subMapId:'current'}]}},
+    {id:'used',layout:{name:'Ocupado',nodes:[]}},
+    {id:'other',layout:{name:'Outro',nodes:[{id:'node',groupId:'g',subMapId:'used'}]}},
+    {id:'available',layout:{name:'Disponível',nodes:[]}}
+  ];
+  $('type').value='group';
+  run("syncSubMap('')");
+  assert.deepEqual(Array.from($('sub-map').options, option=>option.value),['','other','available']);
 });

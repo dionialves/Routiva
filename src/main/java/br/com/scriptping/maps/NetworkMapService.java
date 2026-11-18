@@ -94,6 +94,7 @@ public class NetworkMapService {
         var camera = layout.camera();
         if (camera != null && (!Double.isFinite(camera.x()) || !Double.isFinite(camera.y())
             || !Double.isFinite(camera.scale()) || camera.scale() <= 0 || camera.scale() > 3)) throw invalid();
+        var hierarchy = repository.lockHierarchy();
         var ids = new HashSet<String>();
         for (var node : layout.nodes()) {
             if (node == null || node.id() == null || node.id().isBlank() || !ids.add(node.id())
@@ -104,6 +105,7 @@ public class NetworkMapService {
                 || (node.switchColor() != null && !node.switchColor().matches("#[0-9a-fA-F]{6}"))
                 || node.name() == null) throw invalid();
         }
+        validateHierarchy(input, hierarchy);
         var nodes = layout.nodes().stream().collect(java.util.stream.Collectors.toMap(Node::id, n -> n));
         for (var node : layout.nodes()) {
             if (!Set.of("circle", "switch").contains(node.icon())) throw invalid();
@@ -181,6 +183,29 @@ public class NetworkMapService {
         }
         if (repository.updateLayout(input.id(), input.revision(), data, now) != 1) throw new ResponseStatusException(HttpStatus.CONFLICT);
         return new Saved(input.id(), input.revision() + 1, layout, now);
+    }
+
+    private void validateHierarchy(Saved input, List<NetworkMapEntity> hierarchy) throws JsonProcessingException {
+        var parents = new HashMap<String, String>();
+        var layouts = new LinkedHashMap<String, Layout>();
+        for (var entity : hierarchy) {
+            if (!entity.id().equals(input.id())) layouts.put(entity.id(), json.readValue(entity.layout(), Layout.class));
+        }
+        layouts.put(input.id() == null ? UUID.randomUUID().toString() : input.id(), input.layout());
+        for (var entry : layouts.entrySet()) {
+            for (var node : entry.getValue().nodes()) {
+                if (node.groupId() == null || node.subMapId() == null) continue;
+                if (parents.putIfAbsent(node.subMapId(), entry.getKey()) != null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Um submapa só pode estar vinculado a um elemento de um mapa principal.");
+                }
+            }
+        }
+        for (var child : parents.keySet()) {
+            var visited = new HashSet<String>();
+            for (String id = child; id != null; id = parents.get(id)) {
+                if (!visited.add(id)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A hierarquia de submapas não pode formar um ciclo.");
+            }
+        }
     }
 
     private ResponseStatusException invalid() {

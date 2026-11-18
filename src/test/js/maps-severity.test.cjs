@@ -65,15 +65,15 @@ test('draw paints POP circles using the map threshold rather than unclassified i
   vm.runInContext(source.slice(source.indexOf('function hostLevel('), source.indexOf('function checkpoint(')), drawContext);
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')), drawContext);
   vm.runInContext('draw()', drawContext);
-  assert.equal(canvas.children[0].fill, 'green');
-  assert.equal(canvas.children[0].attributes['aria-label'], 'POP · Sem incidentes');
+  assert.equal(canvas.children.find(child => child.attributes?.['aria-label']?.startsWith('POP')).fill, 'green');
+  assert.equal(canvas.children.find(child => child.attributes?.['aria-label']?.startsWith('POP')).attributes['aria-label'], 'POP · Sem incidentes');
   hosts[0].incidents.push({severity: 1});
   vm.runInContext('draw()', drawContext);
-  assert.equal(canvas.children[0].fill, 'information');
+  assert.equal(canvas.children.find(child => child.attributes?.['aria-label']?.startsWith('POP')).fill, 'information');
   hosts[0].incidents = [{severity: 0}];
   drawContext.current.layout.minimumSeverity = 0;
   vm.runInContext('draw()', drawContext);
-  assert.equal(canvas.children[0].fill, 'unclassified');
+  assert.equal(canvas.children.find(child => child.attributes?.['aria-label']?.startsWith('POP')).fill, 'unclassified');
 });
 
 test('acknowledged incidents affect host and group colors only when enabled', () => {
@@ -88,4 +88,26 @@ test('acknowledged incidents affect host and group colors only when enabled', ()
   assert.equal(vm.runInContext('hostLevel(host)', context), 5);
   context.current.layout = {};
   assert.equal(vm.runInContext('hostLevel(host)', context), 5);
+});
+
+test('group circles cover connections while host and switch layers remain beneath them', () => {
+  const canvas = {children:[], dataset:{}, replaceChildren(){this.children=[];}, append(child){this.children.push(child);}};
+  const nodes = [
+    {id:'group',groupId:'g',icon:'circle',name:'Group',x:0,y:0},
+    {id:'host',hostId:'h',icon:'switch',name:'Host',x:100,y:0}
+  ];
+  const context = vm.createContext({
+    document:{activeElement:null}, current:{layout:{name:'Map',nodes,links:[]}},
+    editing:false,tool:'select',connectionOrigin:null,drag:null,marquee:null,selection:new Set(),selected:null,
+    colors:['gray','green'],labels:['No data','Healthy'],
+    $:id=>id==='canvas'?canvas:{}, metricSummary:()=>null,groupLevel:()=>-1,nodeHosts:()=>[],
+    svg:(tag,attributes)=>({tag,attributes,append(){}}),popSummary:{bind(){}},
+    drawNode(){},pingStateFor:()=> 'unknown',
+    MapSwitch:{draw(){},connectedPorts:()=>new Set()}
+  });
+  vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')),context);
+  vm.runInContext('draw()',context);
+  assert.equal(canvas.children[0].attributes['aria-label'],'Host · Healthy');
+  assert.equal(canvas.children[1].attributes.class,'map-connectors');
+  assert.equal(canvas.children[2].attributes['aria-label'],'Group · Healthy');
 });

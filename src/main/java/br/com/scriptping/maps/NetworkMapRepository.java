@@ -10,6 +10,10 @@ interface NetworkMapRepository extends JpaRepository<NetworkMapEntity, String> {
     @Query("SELECT m FROM NetworkMapEntity m ORDER BY m.updatedAt DESC NULLS LAST, m.id")
     List<NetworkMapEntity> findAllOrdered();
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT m FROM NetworkMapEntity m ORDER BY m.id")
+    List<NetworkMapEntity> lockHierarchy();
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         UPDATE NetworkMapEntity m

@@ -22,7 +22,7 @@ test('return link opens the parent in the same view, maximized', () => {
   const button = {};
   const parent = {id:'parent'};
   const calls = [];
-  const context = vm.createContext({$:()=>button, maps:[parent],
+  const context = vm.createContext({$:()=>button, maps:[{id:'other'}, parent],
     openMap:(...args)=>calls.push(args), setMapExpanded:value=>calls.push(value), fitToView:()=>calls.push('fit'),
     window:{notify:message=>calls.push(message)}});
   vm.runInContext(source.slice(source.indexOf('let mapParents = [];'), source.indexOf('const pageSize =')), context);
@@ -32,4 +32,18 @@ test('return link opens the parent in the same view, maximized', () => {
   assert.deepEqual(Array.from(calls[0][2]), ['root']);
   assert.equal(calls[1], true);
   assert.equal(calls[2], 'fit');
+});
+
+test('saved hierarchy restores the return path even when opening a nested submap directly', () => {
+  const button = {};
+  const maps = [
+    {id:'root',layout:{nodes:[{groupId:'g1',subMapId:'parent'}]}},
+    {id:'parent',layout:{nodes:[{groupId:'g2',subMapId:'child'}]}},
+    {id:'child',layout:{nodes:[]}}
+  ];
+  const context = vm.createContext({$:()=>button, maps});
+  vm.runInContext(source.slice(source.indexOf('let mapParents = [];'), source.indexOf('const pageSize =')), context);
+  assert.deepEqual(Array.from(vm.runInContext("mapAncestors('child')", context)), ['root','parent']);
+  assert.deepEqual(Array.from(vm.runInContext("mapAncestors('parent')", context)), ['root']);
+  assert.deepEqual(Array.from(vm.runInContext("mapAncestors('root')", context)), []);
 });

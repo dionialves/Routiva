@@ -32,6 +32,37 @@ class NetworkMapPersistenceTests {
     @Autowired NetworkMapRepository repository;
     @Autowired JdbcTemplate jdbc;
 
+    private Saved mapWithSubMap(String name, Saved existing, String child) throws Exception {
+        var node = new Node("group", "g1", null, null, "Grupo", 0, 0, null,
+            "circle", List.of(), List.of(), false, null, child);
+        return service.save(new Saved(existing == null ? null : existing.id(), existing == null ? 0 : existing.revision(),
+            new Layout(name, null, 0, List.of(node), List.of()), null));
+    }
+
+    @Test
+    void hierarchyAllowsNestedSubMapsAndRejectsMultipleParentsAndCycles() throws Exception {
+        var leaf = service.save(new Saved(null, 0, new Layout("Folha", null, 0, List.of(), List.of()), null));
+        var middle = mapWithSubMap("Intermediário", null, leaf.id());
+        var root = mapWithSubMap("Principal", null, middle.id());
+        assertThat(service.maps()).hasSize(3);
+        assertThatThrownBy(() -> mapWithSubMap("Outro", null, leaf.id()))
+            .isInstanceOf(ResponseStatusException.class).hasMessageContaining("mapa principal");
+        assertThatThrownBy(() -> mapWithSubMap("Folha", leaf, root.id()))
+            .isInstanceOf(ResponseStatusException.class).hasMessageContaining("ciclo");
+    }
+
+    @Test
+    void rejectsTwoElementsPointingToTheSameSubMap() throws Exception {
+        var child = service.save(new Saved(null, 0, new Layout("Filial", null, 0, List.of(), List.of()), null));
+        var first = new Node("one", "g1", null, null, "Grupo 1", 0, 0, null,
+            "circle", List.of(), List.of(), false, null, child.id());
+        var second = new Node("two", "g2", null, null, "Grupo 2", 0, 0, null,
+            "circle", List.of(), List.of(), false, null, child.id());
+        assertThatThrownBy(() -> service.save(new Saved(null, 0,
+            new Layout("Principal", null, 0, List.of(first, second), List.of()), null)))
+            .isInstanceOf(ResponseStatusException.class).hasMessageContaining("mapa principal");
+    }
+
     @Test
     void legacyPublicationIsIgnoredAndNotWrittenBack() throws Exception {
         var json = new ObjectMapper();
