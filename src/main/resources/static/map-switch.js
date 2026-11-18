@@ -2,6 +2,15 @@
 
 // Coordinates are local to the equipment; links and previews share this geometry.
 const MapSwitch = (() => {
+  // randomUUID requires HTTPS/localhost; getRandomValues also works on HTTP LAN deployments.
+  function newId() {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
   const types = ['rj45', 'sfp', 'qsfp'];
   let tintSequence = 0;
   // Socket centers in the shared 22×19 port drawing, independent of cabinet color.
@@ -72,7 +81,7 @@ const MapSwitch = (() => {
   const names = {rj45: 'RJ45', sfp: 'SFP', qsfp: 'QSFP+ 40G'};
   function portsFor(previous, counts) {
     return types.flatMap(type => Array.from({length: counts[type]}, (_, index) =>
-      previous.filter(port => port.type === type)[index] || {id: crypto.randomUUID(), type}));
+      previous.filter(port => port.type === type)[index] || {id: newId(), type}));
   }
   function slotsFor(node) {
     if (node.slots?.length) return node.slots.map(slot => ({...slot}));
@@ -90,7 +99,7 @@ const MapSwitch = (() => {
       const existing = previous.filter(port => port.slotId === slot.id ||
         (!port.slotId && slot.id === 'legacy-' + port.type));
       return Array.from({length: slot.count}, (_, index) => ({
-        ...existing[index], id: existing[index]?.id || crypto.randomUUID(), type, slotId: slot.id,
+        ...existing[index], id: existing[index]?.id || newId(), type, slotId: slot.id,
         name: slot.interfaceNames?.[index] || slot.name.trim() + (index + 1), capacity: slot.capacity,
         ...(slot.connector ? {connector: slot.connector} : {})
       }));
@@ -116,12 +125,12 @@ const MapSwitch = (() => {
       const slotName = (interfaceName.replace(/\d+$/, '') || interfaceName).slice(0, 80);
       let slot = slots.find(slot => slot.name === slotName && slot.connector === connector && slot.capacity === capacity && slot.count < 96);
       if (!slot) {
-        slot = {id: crypto.randomUUID(), name: slotName, connector, capacity, count: 0, interfaceNames: []};
+        slot = {id: newId(), name: slotName, connector, capacity, count: 0, interfaceNames: []};
         slots.push(slot);
       }
       slot.count++; slot.interfaceNames.push(name);
       const old = previous.find(port => port.name === name);
-      ports.push({id: old?.id || crypto.randomUUID(), slotId: slot.id, name, capacity,
+      ports.push({id: old?.id || newId(), slotId: slot.id, name, capacity,
         connector, type: connectors[connector].type, comment: row.comment || '', interfaceType: row.type || 'ether',
         speed, running: row.disabled === 'true' ? false : row.status ? row.status === 'link-ok' : row.running == null ? null : row.running === 'true'});
     }
@@ -258,6 +267,6 @@ const MapSwitch = (() => {
     label.textContent = node.name;
     group.append(label);
   }
-  return {importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
+  return {newId, importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
 })();
 if (typeof module !== 'undefined') module.exports = MapSwitch;

@@ -1200,12 +1200,17 @@ $('load-switch-interfaces').onclick = async () => {
   $('interface-load-status').textContent = '';
   $('interface-load-status').setAttribute('role', 'status');
   renderSwitchSlots();
-  let failureMessage = 'Não foi possível conectar ao equipamento. Verifique a conexão e a autenticação do host e tente novamente.';
+  let failureMessage = 'Não foi possível acessar a aplicação para consultar as interfaces. Verifique a conexão com o servidor.';
   try {
     const response = await fetch('/api/maps/connections/discover/' + encodeURIComponent(hostId), {cache: 'no-store'});
+    failureMessage = `A consulta de interfaces retornou uma resposta inválida (HTTP ${response.status}). Verifique a versão da aplicação e o servidor de acesso.`;
+    if (response.redirected) {
+      failureMessage = 'A consulta foi redirecionada. Entre novamente na aplicação e tente carregar as interfaces.';
+      throw new Error();
+    }
     const data = await response.json();
     if (!response.ok) {
-      if (typeof data.message === 'string' && data.message.trim())
+      if (typeof data?.message === 'string' && data.message.trim())
         failureMessage = data.message;
       else if (response.status === 400 || response.status === 409)
         failureMessage = 'Não foi possível carregar as interfaces. Configure e valide a autenticação do host e tente novamente.';
@@ -1213,6 +1218,8 @@ $('load-switch-interfaces').onclick = async () => {
     }
     if (generation !== interfaceLoadGeneration || !$('element-dialog').open
         || $('type').value !== 'host' || $('group').value !== hostId) return;
+    if (!Array.isArray(data)) throw new Error();
+    failureMessage = 'As interfaces foram recebidas, mas não foi possível montar as portas no navegador. Atualize a página para carregar a versão atual do mapa.';
     const imported = MapSwitch.importInterfaces(data, previous);
     if (!imported.ports.length) {
       failureMessage = 'Nenhuma interface física encontrada. A configuração atual foi preservada.';
@@ -1233,7 +1240,7 @@ $('load-switch-interfaces').onclick = async () => {
   }
 };
 $('add-switch-slot').onclick = () => {
-  configuredSlots.push({id: crypto.randomUUID(), name: '', connector: 'electrical', capacity: '1g', count: 1});
+  configuredSlots.push({id: MapSwitch.newId(), name: '', connector: 'electrical', capacity: '1g', count: 1});
   renderSwitchSlots(); drawPreview();
   $('switch-slots').lastElementChild.querySelector('input').focus();
 };

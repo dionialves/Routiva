@@ -74,3 +74,11 @@ Referências de comandos do fabricante:
 - [DmOS Quick Configuration Guide](https://stn2.pronet.net.br/DM4170/Manual/204.4292.38%20-%20DmOS%20-%20Quick%20Configuration%20Guide.pdf)
 
 - [Especificação DM4250 24XS+2QX — Datacom](https://datacom.com.br/uploads/product/file/73993eb304f71d39099aeaf05fb62f44.pdf)
+
+## Mapas acessados por HTTP
+
+A geração dos IDs de slots e portas usa `crypto.randomUUID` quando disponível e
+UUID v4 com `crypto.getRandomValues` em acessos HTTP por IP. Essa diferença do
+navegador não afeta a autenticação SSH. IDs já existentes são preservados ao
+recarregar interfaces. Erros na montagem das portas, respostas HTTP inválidas e
+redirecionamentos de sessão apresentam mensagens distintas de falhas do equipamento.

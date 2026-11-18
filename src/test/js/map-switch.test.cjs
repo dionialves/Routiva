@@ -382,3 +382,21 @@ test('DM4250 hardware metadata imports SFP+ 10G and QSFP+ 40G for down ports and
   assert.deepEqual(imported.ports.map(port => port.id), previous.ports.map(port => port.id));
   assert.ok(imported.ports.every(port => port.running === false));
 });
+
+test('HTTP deployments without randomUUID can import ports, add slots and preserve existing ids', () => {
+  const vm = require('node:vm');
+  const fs = require('node:fs');
+  const context = vm.createContext({ module: { exports: {} }, crypto: { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) } });
+  vm.runInContext(fs.readFileSync('src/main/resources/static/map-switch.js', 'utf8'), context);
+  const api = context.module.exports;
+  const rows = Array.from({ length: 26 }, (_, i) => ({ name: `ten-gigabit-ethernet-1/1/${i + 1}`, connector: 'sfpplus', supported: '10 Gbps' }));
+  const imported = api.importInterfaces(rows, []);
+  assert.equal(imported.ports.length, 26);
+  const ids = [...imported.slots, ...imported.ports].map(item => item.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.ok(ids.every(id => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)));
+  const slots = [...imported.slots, { id: api.newId(), name: 'extra', connector: 'sfpplus', capacity: '10g', count: 1 }];
+  const ports = api.portsForSlots(imported.ports, slots);
+  assert.equal(ports.length, 27);
+  assert.deepEqual(Array.from(ports.slice(0, 26), port => port.id), Array.from(imported.ports, port => port.id));
+});

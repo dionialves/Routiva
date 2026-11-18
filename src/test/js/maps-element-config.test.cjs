@@ -127,3 +127,32 @@ test('submap selector excludes occupied maps, the current map and its ancestors'
   run("syncSubMap('')");
   assert.deepEqual(Array.from($('sub-map').options, option=>option.value),['','other','available']);
 });
+
+for (const [label, response, message] of [
+  ['HTML gateway failure', { ok: false, status: 502, json: async () => { throw new SyntaxError('HTML'); } }, /HTTP 502/],
+  ['login redirect', { ok: true, status: 200, redirected: true }, /redirecionada/],
+  ['invalid success body', { ok: true, status: 200, json: async () => ({}) }, /resposta inválida/],
+]) {
+  test(`discovery identifies ${label} without reporting an equipment connection failure`, async () => {
+    const { $, context } = setup();
+    $('type').value = 'host'; $('group').value = '42'; $('element-dialog').open = true;
+    $('interface-load-status').setAttribute = function (key, value) { this[key] = value; };
+    context.fetch = async () => response;
+    vm.runInContext(source.slice(source.indexOf("$('load-switch-interfaces').onclick ="), source.indexOf("$('add-switch-slot').onclick =")), context);
+    await $('load-switch-interfaces').onclick();
+    assert.match($('interface-load-status').textContent, message);
+    assert.equal(context.configuredSlots.length, 1);
+    assert.equal(context.loadingInterfaces, false);
+  });
+}
+test('discovery distinguishes a browser port assembly error from an SSH failure', async () => {
+  const { $, context } = setup();
+  $('type').value = 'host'; $('group').value = '42'; $('element-dialog').open = true;
+  $('interface-load-status').setAttribute = function (key, value) { this[key] = value; };
+  context.fetch = async () => ({ ok: true, status: 200, json: async () => [{ name: 'ether1' }] });
+  context.MapSwitch = { ...MapSwitch, importInterfaces() { throw new TypeError('crypto.randomUUID is not a function'); } };
+  vm.runInContext(source.slice(source.indexOf("$('load-switch-interfaces').onclick ="), source.indexOf("$('add-switch-slot').onclick =")), context);
+  await $('load-switch-interfaces').onclick();
+  assert.match($('interface-load-status').textContent, /recebidas.*navegador/);
+  assert.equal(context.configuredSlots.length, 1);
+});
