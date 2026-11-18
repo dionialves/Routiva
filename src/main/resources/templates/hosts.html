@@ -9,26 +9,28 @@
   <th:block th:replace="~{design-system :: layout}"></th:block>
   <th:block th:replace="~{design-system :: actions}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
+  <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
   <th:block th:replace="~{design-system :: picker}"></th:block>
-  <link rel="stylesheet" href="/hosts.css?v=20261118-snmp-row">
+  <link rel="stylesheet" href="/hosts.css?v=20261118-connection-status">
   <script src="/shell.js?v=20261117-host-actions" defer></script>
-  <script src="/multi-picker.js" defer></script><script src="/hosts.js?v=20261118-ip-dns" defer></script>
+  <script src="/multi-picker.js" defer></script><script src="/hosts.js?v=20261118-connection-status" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('hosts')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
 <main class="page-content availability-page hosts-page">
   <div class="availability-heading page-action-heading"><div><p class="eyebrow">CONFIGURAÇÃO</p><h1>Hosts</h1><p>Cadastre e edite hosts com as alterações salvas no Zabbix.</p></div>
-    <button id="host-new" type="button" class="system-button system-button-primary query-primary-action" aria-haspopup="dialog" aria-controls="host-dialog" disabled><svg th:replace="~{shell :: icon('plus')}"></svg>Novo host</button>
+    <div class="settings-actions"><button id="host-sync" type="button" class="system-button"><svg th:replace="~{shell :: icon('refresh')}"></svg>Sincronizar</button><button id="host-new" type="button" class="system-button system-button-primary query-primary-action" aria-haspopup="dialog" aria-controls="host-dialog" disabled><svg th:replace="~{shell :: icon('plus')}"></svg>Novo host</button></div>
   </div>
   <section class="card query-filter-bar" aria-label="Filtros de hosts"><div class="query-filter-row">
     <div th:replace="~{multi-picker :: checklist('filter-group', 'Grupo de hosts', 'server', 'Todos os grupos', 'Pesquisar grupo de hosts')}"></div>
     <div th:replace="~{multi-picker :: checklist('filter-host', 'Hosts', 'server', 'Todos os hosts', 'Pesquisar host')}"></div>
+    <label class="query-filter-field"><span class="query-filter-label"><svg th:replace="~{shell :: icon('network')}"></svg>Conexão</span><select id="host-filter-connection"><option value="" selected>Todas as conexões</option><option value="NOT_CONFIGURED">Não configurado</option><option value="ACTIVE">Ativa</option><option value="ERROR">Erro</option></select></label>
     <label class="query-filter-field"><span class="query-filter-label"><svg th:replace="~{shell :: icon('search')}"></svg>IP</span><input id="host-search" type="search" placeholder="Pesquisar endereço IP…" autocomplete="off"></label>
   </div></section>
   <section class="card availability-host-section" aria-labelledby="hosts-title"><h2 id="hosts-title">Hosts</h2>
     <p id="hosts-state" role="status" aria-live="polite">Carregando hosts…</p>
-    <div th:replace="~{design-system :: dataTable('Hosts cadastrados', ~{hosts :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col" aria-sort="ascending"><button type="button" data-host-sort="name">Nome <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="items">Itens <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="triggers">Trigger <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="interface">Interface <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="templates">Templates <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="status">Status <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="availability">Disponibilidade <span aria-hidden="true">↕</span></button></th></tr></thead><tbody id="hosts-rows"></tbody></th:block></div>
+    <div th:replace="~{design-system :: dataTable('Hosts cadastrados', ~{hosts :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col" aria-sort="ascending"><button type="button" data-host-sort="name">Nome <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="items">Itens <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="triggers">Trigger <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="interface">Interface <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="templates">Templates <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="status">Status <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="connection">Conexão <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="availability">Disponibilidade <span aria-hidden="true">↕</span></button></th></tr></thead><tbody id="hosts-rows"></tbody></th:block></div>
     <nav class="system-pagination" aria-label="Paginação de hosts"><button id="hosts-prev" type="button" class="system-button" disabled>Anterior</button><span id="hosts-range"></span><button id="hosts-next" type="button" class="system-button" disabled>Próxima</button></nav>
   </section>
 </main></div>
@@ -40,6 +42,12 @@
       <button id="host-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar configuração do host"><svg th:replace="~{shell :: icon('close')}"></svg></button>
     </header>
     <div class="form-dialog-content host-form-fields">
+      <div class="analysis-tabs" role="tablist" aria-label="Configuração do host">
+        <button type="button" id="host-general-tab" role="tab" aria-selected="true" aria-controls="host-general"><span><strong>Configuração</strong><small>Cadastro e SNMP no Zabbix</small></span></button>
+        <button type="button" id="host-auth-tab" role="tab" aria-selected="false" aria-controls="host-auth" tabindex="-1"><span><strong>Autenticação</strong><small>Acesso do app ao equipamento</small></span></button>
+      </div>
+      <div id="host-general" class="host-form-fields" role="tabpanel" aria-labelledby="host-general-tab">
+
       <section th:replace="~{design-system :: formSection('host-identification-title', 'Identificação', 'info', ~{hosts :: hostIdentification})}"><th:block th:fragment="hostIdentification">
         <label for="host-hostname">Nome do host <span class="host-required" aria-hidden="true">*</span></label>
         <div class="host-field"><input id="host-hostname" name="hostname" required maxlength="128" pattern="[A-Za-z0-9_. \-]+" autocomplete="off" autofocus aria-describedby="host-hostname-help host-hostname-error"><small id="host-hostname-help">Nome técnico único no Zabbix, sem acentos.</small><p id="host-hostname-error" class="host-field-error" data-error-for="hostname" aria-live="polite"></p></div>
@@ -67,15 +75,28 @@
           <div class="host-endpoint-field"><label for="host-community">Comunidade SNMP <span class="host-required" aria-hidden="true">*</span></label><div class="host-field"><input id="host-community" name="community" required maxlength="255" value="{$SNMP_COMMUNITY}" autocomplete="off" spellcheck="false" aria-describedby="host-community-error"><p id="host-community-error" class="host-field-error" data-error-for="community" aria-live="polite"></p></div></div>
         </div>
       </th:block></section>
+      </div>
+      <div id="host-auth" class="host-form-fields" role="tabpanel" aria-labelledby="host-auth-tab" hidden>
+        <p>Credenciais exclusivas do app, compartilhadas por Access Points, mapas e análises. Salve o cadastro do host antes de configurar a autenticação.</p>
+        <fieldset id="host-auth-fields" class="host-auth-fields">
+          <label for="host-auth-manufacturer">Fabricante</label><select id="host-auth-manufacturer"><option value="">Selecione</option><option>MikroTik</option><option>Ubiquiti</option></select>
+          <label for="host-auth-login">Usuário</label><input id="host-auth-login" maxlength="255" autocomplete="off">
+          <label for="host-auth-password">Senha</label><input id="host-auth-password" type="password" maxlength="4096" autocomplete="new-password" aria-describedby="host-auth-password-help">
+          <small id="host-auth-password-help">Informe a senha do equipamento.</small>
+          <label for="host-auth-port">Porta API / SSH</label><input id="host-auth-port" type="number" min="1" max="65535" value="8728">
+          <label id="host-auth-tls-row"><input id="host-auth-tls" type="checkbox" role="switch" class="system-switch"> API com TLS</label>
+        </fieldset>
+        <p id="host-auth-state" role="status" aria-live="polite"></p>
+      </div>
       <p id="host-error" role="alert"></p>
     </div>
-    <footer class="form-dialog-footer settings-actions"><button id="host-delete" class="system-button system-button-danger" type="button" hidden><svg th:replace="~{shell :: icon('trash-2')}"></svg>Excluir host</button><button id="host-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button><button id="host-save" class="system-button system-button-primary" type="submit"><svg th:replace="~{shell :: icon('check')}"></svg><span id="host-save-label">Salvar no Zabbix</span></button></footer>
+    <footer class="form-dialog-footer settings-actions"><button id="host-delete" class="system-button system-button-danger" type="button" hidden><svg th:replace="~{shell :: icon('trash-2')}"></svg>Excluir host</button><button id="host-auth-test" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg>Testar conexão</button><button id="host-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button><button id="host-save" class="system-button system-button-primary" type="submit"><svg th:replace="~{shell :: icon('check')}"></svg><span id="host-save-label">Salvar no Zabbix</span></button></footer>
   </form>
 </th:block></dialog>
 <dialog th:replace="~{design-system :: formDialog('host-discard-dialog', 'host-discard-title', 'host-discard-description', ~{hosts :: hostDiscard})}"><th:block th:fragment="hostDiscard">
   <div class="form-dialog-frame"><header class="form-dialog-header"><h2 id="host-discard-title">Descartar alterações?</h2></header><div class="form-dialog-content"><p id="host-discard-description">Existem alterações não salvas. Deseja fechar o formulário e descartá-las?</p></div><footer class="form-dialog-footer settings-actions"><button id="host-discard-cancel" type="button" class="system-button">Continuar editando</button><button id="host-discard-confirm" type="button" class="system-button">Descartar alterações</button></footer></div>
 </th:block></dialog>
 <dialog th:replace="~{design-system :: formDialog('host-delete-dialog', 'host-delete-title', 'host-delete-description', ~{hosts :: hostDelete})}"><th:block th:fragment="hostDelete">
-  <div class="form-dialog-frame"><header class="form-dialog-header"><h2 id="host-delete-title">Excluir host?</h2></header><div class="form-dialog-content"><p id="host-delete-description">O host <strong id="host-delete-name"></strong> será excluído do Zabbix, incluindo seus itens, triggers e histórico. Esta ação não pode ser desfeita.</p><p id="host-delete-error" role="alert"></p></div><footer class="form-dialog-footer settings-actions"><button id="host-delete-cancel" type="button" class="system-button">Cancelar</button><button id="host-delete-confirm" type="button" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash-2')}"></svg><span id="host-delete-label">Excluir no Zabbix</span></button></footer></div>
+  <div class="form-dialog-frame"><header class="form-dialog-header"><h2 id="host-delete-title">Excluir host?</h2></header><div class="form-dialog-content"><p id="host-delete-description">O host <strong id="host-delete-name"></strong> será excluído do app e do Zabbix, incluindo seus itens, triggers e histórico. Esta ação não pode ser desfeita.</p><p id="host-delete-error" role="alert"></p></div><footer class="form-dialog-footer settings-actions"><button id="host-delete-cancel" type="button" class="system-button">Cancelar</button><button id="host-delete-confirm" type="button" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash-2')}"></svg><span id="host-delete-label">Excluir no Zabbix</span></button></footer></div>
 </th:block></dialog>
 </body></html>

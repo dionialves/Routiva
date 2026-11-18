@@ -1,0 +1,21 @@
+package br.com.scriptping.hosts;
+
+import br.com.scriptping.equipment.EquipmentProvider.Connection;
+import br.com.scriptping.zabbix.Host;
+import org.springframework.stereotype.Component;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+@Component
+public class HostConnections {
+    private final HostRepository repository;
+    private final HostSecrets secrets;
+    public HostConnections(HostRepository repository, HostSecrets secrets) { this.repository = repository; this.secrets = secrets; }
+    public Connection require(Host host) {
+        repository.require(host.id());
+        var c = repository.credentials(host.id());
+        if (c == null || !"ACTIVE".equals(c.status()) || !java.util.Objects.equals(c.verifiedIp(), host.ip()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Configure e valide a autenticação nas configurações do host.");
+        return new Connection(c.login(), secrets.decrypt(c.encryptedPassword()), c.port(), c.tls());
+    }
+}

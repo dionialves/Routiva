@@ -28,7 +28,7 @@ class MikrotikControllerTests {
     }
 
     @Test void credentialsAreRequiredWithoutAttemptingConnection() {
-        var settings = mock(br.com.scriptping.accesspoint.AccessPointConnections.class);
+        var settings = mock(br.com.scriptping.hosts.HostConnections.class);
         when(settings.require(host)).thenThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Configure o AP."));
         var real = new MikrotikService(settings);
         var error = assertThrows(ResponseStatusException.class, () -> real.query(host, "overview", null));

@@ -7,8 +7,8 @@ só é persistida ao clicar em Definir como AP. Isso não altera o Zabbix.
 
 A tabela `access_point` mantém o hostid, último nome/IP, fabricante/modelo e a
 última quantidade válida de clientes. Leituras desconhecidas são nulas. Nome/IP
-são conciliados com o inventário ao consultar a lista. A ausência no inventário
-não exclui o cadastro. O status da lista indica presença no inventário, e não
+são conciliados com o inventário ao consultar a lista. Retirar a seleção de monitoramento não exclui o cadastro; a exclusão confirmada
+no Zabbix exclui também o host e o AP no app. O status da lista indica presença no inventário, e não
 conectividade em tempo real.
 
 A análise fica em `/ap/{hostid}`. A antiga página `/hosts/{hostid}` foi removida,
@@ -22,7 +22,7 @@ equipamento retornam indisponibilidade.
 - `accesspoint`: cadastro, persistência, listagem e controlador das páginas/APIs.
 - `equipment.EquipmentProvider`: contrato de consulta por fabricante com capacidades.
 - `mikrotik.MikrotikEquipmentProvider`: primeiro adaptador; usa a integração RouterOS
-  existente. Os APs importados usam inicialmente este fabricante.
+  existente. O fabricante é escolhido na autenticação do host.
 - `/api/ap/{id}/overview|interfaces|traffic|wireless`: consultas neutras de equipamento.
 - APIs compartilhadas de disponibilidade, IXC e ping continuam em `/api/hosts/...`.
 
@@ -75,3 +75,11 @@ Os stubs Java são gerados normalmente pelo Maven. Para regenerar o stub Go,
 instale protoc-gen-go 1.36.6 e use o perfil Maven `collector-proto`, informando
 `-Dprotoc.go.executable=/caminho/absoluto/protoc-gen-go`. Não execute protoc
 manualmente.
+
+## Autenticação por host
+
+A aba **Autenticação** em Configuração → Hosts armazena fabricante (MikroTik/Ubiquiti), usuário, senha, porta, TLS para RouterOS. Os serviços de `hosts` validam e fornecem o acesso tanto aos APs quanto às conexões mapeadas. O AP não possui modal nem ação de configuração; a autenticação é gerenciada exclusivamente no host.
+
+Ao importar um AP, o app testa as credenciais cadastradas do host. Sem configuração ou com teste inválido, o AP é cadastrado, mas não coleta dados. Remover a classificação de AP preserva a autenticação. Excluir o host remove também seu AP e os vínculos dos mapas; a exclusão é replicada entre app e Zabbix na sincronização.
+
+A migração transfere as senhas protegidas existentes para `host_authentication`, sem sobrescrever configurações já presentes. Preserve `data/ap-secrets.key` (ou o caminho configurado em `ap.secrets-key-file`). Mapas que usavam credenciais gerais do `.env` precisam ter a autenticação cadastrada por host.

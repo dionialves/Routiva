@@ -1,6 +1,5 @@
 package br.com.scriptping.hosts;
 
-import br.com.scriptping.zabbix.ZabbixClient;
 import java.util.*;
 import org.springframework.http.*;
 import org.springframework.stereotype.Controller;
@@ -9,28 +8,52 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Controller
 public class HostController {
-    private final ZabbixClient zabbix;
-    public HostController(ZabbixClient zabbix) { this.zabbix = zabbix; }
+    private final HostCatalog catalog;
+    private final HostAuthentication authentication;
+    private final br.com.scriptping.zabbix.ZabbixService inventory;
+    public HostController(HostCatalog catalog, HostAuthentication authentication, br.com.scriptping.zabbix.ZabbixService inventory) {
+        this.catalog = catalog; this.authentication = authentication; this.inventory = inventory;
+    }
     @GetMapping("/configuracao/hosts") public String page() { return "hosts"; }
+    public record HostRow(@com.fasterxml.jackson.annotation.JsonUnwrapped ManagedHost configuration, String connectionStatus) {}
     @GetMapping("/api/host-configurations") @ResponseBody
-    public List<ManagedHost> list() { return zabbix.managedHosts(); }
+    public List<HostRow> list() {
+        var hosts = catalog.all();
+        var statuses = authentication.connectionStatuses(hosts);
+        return hosts.stream().map(host -> new HostRow(host, statuses.getOrDefault(host.id(), "NOT_CONFIGURED"))).toList();
+    }
     @GetMapping("/api/host-configurations/options") @ResponseBody
     public Map<String, ?> options() {
-        return Map.of("groups", zabbix.groups(), "templates", zabbix.hostTemplates());
+        return catalog.options();
     }
     @PostMapping("/api/host-configurations") @ResponseBody
     public Map<String, String> create(@RequestBody ManagedHost.Input input) {
-        return Map.of("id", zabbix.saveManagedHost(null, input));
+        String saved = catalog.save(null, input);
+        inventory.refreshLocalHosts();
+        return Map.of("id", saved);
     }
     @PutMapping("/api/host-configurations/{id}") @ResponseBody
     public Map<String, String> update(@PathVariable String id, @RequestBody ManagedHost.Input input) {
-        return Map.of("id", zabbix.saveManagedHost(id, input));
+        String saved = catalog.save(id, input);
+        inventory.refreshLocalHosts();
+        return Map.of("id", saved);
     }
+    @PostMapping("/api/host-configurations/synchronize") @ResponseBody
+    public List<HostRow> synchronize() { inventory.sync(); return list(); }
+    @GetMapping("/api/host-configurations/{id}/authentication") @ResponseBody
+    public HostAuthentication.View authentication(@PathVariable String id) { return authentication.view(id); }
+    @PutMapping("/api/host-configurations/{id}/authentication") @ResponseBody
+    public HostAuthentication.View authentication(@PathVariable String id, @RequestBody HostAuthentication.Input input) { return authentication.save(id, input); }
+    @PostMapping("/api/host-configurations/{id}/authentication/test") @ResponseBody
+    public HostAuthentication.Result test(@PathVariable String id, @RequestBody HostAuthentication.Input input) { return authentication.test(id, input); }
+    @ModelAttribute
+    public void noCache(jakarta.servlet.http.HttpServletResponse response) { response.setHeader("Cache-Control", "no-store"); }
     public record DeleteInput(String revision, boolean confirmed) {}
     @DeleteMapping("/api/host-configurations/{id}") @ResponseBody
     public Map<String, String> delete(@PathVariable String id, @RequestBody DeleteInput input) {
         if (!input.confirmed()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Confirme a exclusão do host.");
-        zabbix.deleteManagedHost(id, input.revision());
+        catalog.delete(id, input.revision());
+        inventory.forgetHosts(Set.of(id));
         return Map.of("id", id);
     }
     @ExceptionHandler(ResponseStatusException.class) @ResponseBody

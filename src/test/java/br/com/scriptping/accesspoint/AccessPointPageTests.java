@@ -37,7 +37,7 @@ class AccessPointPageTests {
         mvc.perform(get("/ap/42")).andExpect(status().isOk())
             .andExpect(content().string(containsString("data-manufacturer=\"Ubiquiti\"")))
             .andExpect(content().string(containsString("Ubiquiti · Access Point")))
-            .andExpect(content().string(containsString("id=\"ap-config-ssh-port\"")))
+            .andExpect(content().string(not(containsString("id=\"ap-config-host-link\""))))
             .andExpect(content().string(not(containsString("RouterOS 6.x"))))
             .andExpect(content().string(matchesPattern("(?s).*<button[^>]*id=\"ap-winbox\"[^>]*hidden=\"hidden\"[^>]*>.*")));
     }
@@ -57,10 +57,8 @@ class AccessPointPageTests {
             .andExpect(content().string(containsString("latency-results-panel")))
             .andExpect(content().string(containsString("latency-final-results")))
             .andExpect(content().string(not(containsString("latency-summary-link"))))
-            .andExpect(content().string(containsString("id=\"ap-configure\"")))
-            .andExpect(content().string(containsString("Configuração")))
-            .andExpect(content().string(containsString("id=\"ap-config-dialog\"")))
-            .andExpect(content().string(containsString("Excluir AP")))
+            .andExpect(content().string(not(containsString("id=\"ap-configure\""))))
+            .andExpect(content().string(not(containsString("id=\"ap-config-dialog\""))))
             .andExpect(content().string(containsString("Clientes avaliados")))
             .andExpect(content().string(containsString("connected-clients")))
             .andExpect(content().string(containsString("signal-distribution")))
@@ -72,6 +70,7 @@ class AccessPointPageTests {
         mvc.perform(get("/ap")).andExpect(status().isOk())
             .andExpect(content().string(containsString("Hosts disponíveis")))
             .andExpect(content().string(containsString("Definir como AP")))
+            .andExpect(content().string(not(containsString("ap-sort-available"))))
             .andExpect(content().string(not(containsString("id=\"ap-config-dialog\""))))
             .andExpect(content().string(not(containsString("Configurar Access Point:"))));
     }

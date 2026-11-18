@@ -67,7 +67,6 @@
     const item = event.target.closest('[role=menuitem]:not(:disabled):not([hidden])');
     if (!item) return;
     close(true);
-    if (item.id === 'ap-configure') window.openAccessPointConfiguration(root.dataset.hostId);
   });
   const reposition = () => { if (menu.matches(':popover-open')) position(); };
   addEventListener('resize', reposition);
@@ -88,9 +87,6 @@
   document.getElementById('ap-copy-ip').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(root.dataset.managementIp); window.notify('IP copiado'); }
     catch { window.notify('Não foi possível copiar o IP. Verifique a permissão da área de transferência.', 'error'); }
-  });
-  document.addEventListener('ap-configuration-changed', event => {
-    if (event.detail?.deleted && event.detail.hostId === root.dataset.hostId) window.location.assign('/ap');
   });
   states();
 })();

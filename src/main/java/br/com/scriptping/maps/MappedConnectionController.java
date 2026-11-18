@@ -1,7 +1,6 @@
 package br.com.scriptping.maps;
 
 import br.com.scriptping.equipment.EquipmentProvider;
-import org.springframework.core.env.Environment;
 import br.com.scriptping.mikrotik.MikrotikService;
 import br.com.scriptping.zabbix.Host;
 import br.com.scriptping.zabbix.ZabbixService;
@@ -17,14 +16,17 @@ public class MappedConnectionController {
     private final JdbcTemplate jdbc;
     private final ZabbixService inventory;
     private final MikrotikService mikrotik;
-    private final Environment environment;
-    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, Environment environment) {
-        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.environment = environment;
+    private final br.com.scriptping.hosts.HostConnections connections;
+    private final br.com.scriptping.hosts.HostRepository hosts;
+    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, br.com.scriptping.hosts.HostConnections connections, br.com.scriptping.hosts.HostRepository hosts) {
+        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.connections = connections; this.hosts = hosts;
     }
     public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Endpoint(long measuredAt, String name, boolean up, String rxBps, String txBps, String error, Long capacityBps) {}
     public record Reading(String id, Endpoint a, Endpoint b, String hostA, String hostB) {}
     private final Map<String, Endpoint> cache = new HashMap<>();
+    private record Source(String address, br.com.scriptping.hosts.HostRepository.Credentials credentials) {}
+    private final Map<String, Source> cacheSources = new HashMap<>();
     private record Counters(long at, java.math.BigInteger rx, java.math.BigInteger tx) {}
     private final Map<String, Counters> counters = new HashMap<>();
 
@@ -62,25 +64,16 @@ public class MappedConnectionController {
     private Host host(String id) {
         var host = inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Equipamento não encontrado."));
-        return host;
+        return hosts.target(id);
     }
-    private EquipmentProvider.Connection apiConnection() {
-        String username = environment.getProperty("MIKROTIK_USERNAME", "");
-        String password = environment.getProperty("MIKROTIK_PASSWORD", "");
-        boolean tls = Boolean.parseBoolean(environment.getProperty("MIKROTIK_API_TLS", "false"));
-        int port;
-        try {
-            port = Integer.parseInt(environment.getProperty("MIKROTIK_API_PORT", tls ? "8729" : "8728"));
-        } catch (NumberFormatException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "MIKROTIK_API_PORT inválida na configuração geral.");
-        }
-        if (username.isBlank() || password.isBlank() || port < 1 || port > 65535)
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Configure MIKROTIK_USERNAME, MIKROTIK_PASSWORD e MIKROTIK_API_PORT no .env para acessar os equipamentos.");
-        return new EquipmentProvider.Connection(username, password, port, tls);
+    private EquipmentProvider.Connection apiConnection(String id) {
+        if (!"MikroTik".equals(hosts.credentials(id) == null ? null : hosts.credentials(id).manufacturer()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conexões mapeadas exigem um host MikroTik com autenticação configurada.");
+        return connections.require(host(id));
     }
     @GetMapping("/api/connections/interfaces/{hostId}") @ResponseBody
     public List<Map<String, String>> interfaces(@PathVariable String hostId) {
-        return mikrotik.query(host(hostId), "interfaces", null, apiConnection()).rows().stream()
+        return mikrotik.query(host(hostId), "interfaces", null, apiConnection(hostId)).rows().stream()
             .filter(row -> "ether".equals(row.get("type"))).toList();
     }
     @PostMapping("/api/connections") @ResponseBody
@@ -100,11 +93,16 @@ public class MappedConnectionController {
     private synchronized Endpoint read(String hostId, String name) {
         String key = hostId + ":" + name;
         var previous = cache.get(key);
-        if (previous != null && System.currentTimeMillis() - previous.measuredAt() < 9500) return previous;
         Endpoint result;
         try {
             var h = host(hostId);
-            var snapshot = mikrotik.query(h, "connection", name, apiConnection());
+            var credentials = apiConnection(hostId);
+            var source = new Source(h.ip(), hosts.credentials(hostId));
+            if (previous != null && Objects.equals(cacheSources.get(key), source)
+                    && System.currentTimeMillis() - previous.measuredAt() < 9500) return previous;
+            if (!Objects.equals(cacheSources.get(key), source)) counters.remove(key);
+            cacheSources.put(key, source);
+            var snapshot = mikrotik.query(h, "connection", name, credentials);
             var row = snapshot.rows().getFirst();
             var sample = new Counters(snapshot.measuredAt(), counter(row.get("rx-byte")), counter(row.get("tx-byte")));
             var before = counters.put(key, sample);
@@ -121,6 +119,7 @@ public class MappedConnectionController {
         if (cache.size() > 2000) cache.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue().measuredAt() > 30000);
         cache.put(key, result);
         counters.keySet().retainAll(cache.keySet());
+        cacheSources.keySet().retainAll(cache.keySet());
         return result;
     }
     @PostMapping("/api/connections/readings") @ResponseBody

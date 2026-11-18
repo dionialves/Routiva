@@ -19,3 +19,14 @@ test('name sorts by visible name and monitored counts sort numerically', () => {
   assert.ok(compareHosts(a,b,'items') > 0);
   assert.ok(compareHosts(a,b,'triggers') < 0);
 });
+
+test('connection filter supports the three states and defaults missing configuration to gray', () => {
+  const { matchesConnection, connectionStatus } = require('../../main/resources/static/hosts.js');
+  const rows = [host('a', '', { connectionStatus:'ACTIVE' }), host('b', '', { connectionStatus:'ERROR' }), host('c', '')];
+  assert.deepEqual(rows.filter(h => matchesConnection(h, 'ACTIVE')).map(h => h.id), ['a']);
+  assert.deepEqual(rows.filter(h => matchesConnection(h, 'ERROR')).map(h => h.id), ['b']);
+  assert.deepEqual(rows.filter(h => matchesConnection(h, 'NOT_CONFIGURED')).map(h => h.id), ['c']);
+  assert.equal(rows.filter(h => matchesConnection(h, '')).length, 3);
+  assert.equal(connectionStatus(rows[2]), 'NOT_CONFIGURED');
+  assert.deepEqual([...rows].sort((a,b) => compareHosts(a,b,'connection')).map(h => h.id), ['a','b','c']);
+});

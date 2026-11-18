@@ -1,6 +1,6 @@
 package br.com.scriptping.ubiquiti;
 
-import br.com.scriptping.accesspoint.AccessPointConnections;
+import br.com.scriptping.hosts.HostConnections;
 import br.com.scriptping.equipment.EquipmentProvider;
 import br.com.scriptping.mikrotik.WirelessQuality;
 import br.com.scriptping.zabbix.Host;
@@ -14,14 +14,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class UbiquitiEquipmentProvider implements EquipmentProvider {
-    private final AccessPointConnections settings;
+    private final HostConnections settings;
     private final UbiquitiSsh ssh;
     private final ObjectMapper json;
     private final WirelessQuality quality;
     private final Semaphore connections = new Semaphore(8);
     private record Counter(long at, Map<String, String> row) {}
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
-    public UbiquitiEquipmentProvider(AccessPointConnections settings, UbiquitiSsh ssh, ObjectMapper json, WirelessQuality quality) {
+    public UbiquitiEquipmentProvider(HostConnections settings, UbiquitiSsh ssh, ObjectMapper json, WirelessQuality quality) {
         this.settings = settings; this.ssh = ssh; this.json = json; this.quality = quality;
     }
     public String manufacturer() { return "Ubiquiti"; }

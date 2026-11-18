@@ -24,6 +24,13 @@ class AccessPointTests {
     MockMvc mvc;
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path temp;
     AccessPointSecrets secrets;
+    br.com.scriptping.hosts.HostRepository hosts;
+    br.com.scriptping.hosts.HostAuthentication authentication;
+    br.com.scriptping.hosts.HostConnections connections;
+    void local(Host h) {
+        hosts.put(new br.com.scriptping.hosts.ManagedHost(h.id(), h.hostname(), h.name(),
+            h.groups().stream().map(g -> new br.com.scriptping.hosts.ManagedHost.Choice(g.id(),g.name())).toList(), List.of(), "", h.ip(), "", true, "161", 2, "public", true, "r", true, 0, 0, "unknown"));
+    }
     AccessPointService.ConfigurationInput valid = new AccessPointService.ConfigurationInput("MikroTik", "reader", "private-secret", 8729, true);
     Host host = new Host("42", "AP Outdoor", "192.0.2.42", List.of());
 
@@ -36,7 +43,11 @@ class AccessPointTests {
         when(provider.manufacturer()).thenReturn("MikroTik");
         when(provider.capabilities()).thenReturn(Set.of("overview", "wireless"));
         secrets = new AccessPointSecrets(temp.resolve("key").toString());
-        service = new AccessPointService(repository, inventory, List.of(provider), secrets);
+        hosts = new br.com.scriptping.hosts.HostRepository(new JdbcTemplate(source), new com.fasterxml.jackson.databind.ObjectMapper(), secrets);
+        local(host);
+        authentication = new br.com.scriptping.hosts.HostAuthentication(hosts, secrets, List.of(provider));
+        connections = new br.com.scriptping.hosts.HostConnections(hosts, secrets);
+        service = new AccessPointService(repository, inventory, List.of(provider), authentication, connections, hosts);
         mvc = MockMvcBuilders.standaloneSetup(new AccessPointController(service)).build();
     }
     @Test void validatesEntireSelectionAndPersistsWithoutDuplicates() {
@@ -46,12 +57,13 @@ class AccessPointTests {
         assertEquals(1, repository.all().size());
         assertNull(repository.all().getFirst().connectedClients());
         assertTrue(service.candidates().isEmpty());
-        var restarted = new AccessPointService(repository, inventory, List.of(provider), secrets);
+        var restarted = new AccessPointService(repository, inventory, List.of(provider), authentication, connections, hosts);
         assertEquals("42", restarted.list().getFirst().hostId());
     }
     @Test void inventoryChangesPreserveClassificationAndKnownReadings() {
         service.define(List.of("42"));
         repository.observation("42", "Radio", 0, 123);
+        local(new Host("42", "Novo nome", "192.0.2.43", List.of()));
         when(inventory.hosts()).thenReturn(List.of(new Host("42", "Novo nome", "192.0.2.43", List.of())));
         assertEquals("Novo nome", service.list().getFirst().name());
         when(inventory.hosts()).thenReturn(List.of());
@@ -80,6 +92,29 @@ class AccessPointTests {
         assertEquals(1, repository.all().getFirst().connectedClients());
         assertEquals(123L, repository.all().getFirst().lastCollectedAt());
     }
+    @Test void importingRevalidatesLegacyDisabledCredentialsAutomatically() {
+        hosts.configure("42", new br.com.scriptping.hosts.HostRepository.Credentials("MikroTik", "reader", secrets.encrypt("legacy-secret"),
+            8728, false, "INACTIVE", "", null, false, null));
+        service.define(List.of("42"));
+        assertEquals("ACTIVE", service.configuration("42").status());
+        assertEquals("legacy-secret", connections.require(host).password());
+        verify(provider).testConnection(eq(host), eq(new EquipmentProvider.Connection("reader", "legacy-secret", 8728, false)));
+    }
+
+    @Test void importingUsesHostAuthenticationAndRevalidatesIt() {
+        authentication.save("42", new br.com.scriptping.hosts.HostAuthentication.Input("MikroTik", "reader", "host-secret", 8728, true, false));
+        clearInvocations(provider);
+        service.define(List.of("42"));
+        assertEquals("ACTIVE", service.configuration("42").status());
+        verify(provider).testConnection(eq(host), eq(new EquipmentProvider.Connection("reader", "host-secret", 8728, false)));
+        service.delete("42");
+        assertNotNull(hosts.credentials("42"));
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY, "denied")).when(provider).testConnection(any(), any());
+        service.define(List.of("42"));
+        assertEquals("CONNECTION_FAILED", service.configuration("42").status());
+        assertThrows(ResponseStatusException.class, () -> service.read("42", "overview", null));
+    }
+
     @Test void newRoutesRequireClassificationAndOldPageIsRemoved() throws Exception {
         mvc.perform(get("/ap/42")).andExpect(status().isNotFound());
         mvc.perform(post("/api/ap").contentType("application/json").content("{\"hostIds\":[\"42\"]}"))
@@ -101,15 +136,15 @@ class AccessPointTests {
         var saved = service.save("42", valid);
         assertEquals("ACTIVE", saved.status());
         verify(provider).testConnection(eq(host), eq(new EquipmentProvider.Connection("reader", "private-secret", 8729)));
-        assertNotEquals("private-secret", repository.configuration("42").encryptedPassword());
-        assertEquals("private-secret", secrets.decrypt(repository.configuration("42").encryptedPassword()));
+        assertNotEquals("private-secret", hosts.credentials("42").encryptedPassword());
+        assertEquals("private-secret", secrets.decrypt(hosts.credentials("42").encryptedPassword()));
         doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY, "Autenticação recusada."))
             .when(provider).testConnection(any(), any());
         saved = service.save("42", new AccessPointService.ConfigurationInput("MikroTik", "other", "wrong", 1234, true));
         assertEquals("CONNECTION_FAILED", saved.status());
         assertTrue(saved.enabled());
         assertEquals("other", saved.login());
-        assertEquals("Autenticação recusada.", saved.message());
+        assertTrue(saved.message().contains("Falha na conexão"));
         assertThrows(ResponseStatusException.class, () -> service.read("42", "wireless", null));
     }
     @Test void testAloneDoesNotSaveOrActivateAndSavingRetests() {
@@ -120,28 +155,30 @@ class AccessPointTests {
         service.save("42", valid);
         verify(provider, times(2)).testConnection(any(), any());
     }
-    @Test void inactiveDoesNotConnectAndBlankPasswordPreservesSavedSecret() {
+    @Test void savingAlwaysValidatesAndBlankPasswordPreservesSavedSecret() {
         service.define(List.of("42"));
         service.save("42", valid);
         clearInvocations(provider);
         var saved = service.save("42", new AccessPointService.ConfigurationInput("MikroTik", "reader", "", 8729, false));
-        assertEquals("INACTIVE", saved.status());
-        assertEquals("private-secret", secrets.decrypt(repository.configuration("42").encryptedPassword()));
-        verify(provider, never()).testConnection(any(), any());
-        assertThrows(ResponseStatusException.class, () -> new AccessPointConnections(repository, secrets).require(host));
+        assertEquals("ACTIVE", saved.status());
+        assertEquals("private-secret", secrets.decrypt(hosts.credentials("42").encryptedPassword()));
+        verify(provider).testConnection(any(), any());
+        assertEquals("private-secret", connections.require(host).password());
     }
     @Test void equipmentCredentialsAreIsolatedAndIpChangeRequiresRevalidation() {
         var second = new Host("43", "Other AP", "192.0.2.43", List.of());
+        local(second);
         when(inventory.hosts()).thenReturn(List.of(host, second));
         service.define(List.of("42", "43")); service.save("42", valid);
         service.save("43", new AccessPointService.ConfigurationInput("MikroTik", "other", "other-secret", 1234, true, true));
-        var resolver = new AccessPointConnections(repository, secrets);
+        var resolver = new br.com.scriptping.hosts.HostConnections(hosts, secrets);
         assertEquals("private-secret", resolver.require(host).password());
         assertEquals("other-secret", resolver.require(second).password());
         assertEquals(1234, resolver.require(second).port());
         assertTrue(resolver.require(second).tls());
         assertFalse(resolver.require(host).tls());
         var changed = new Host("42", "Renamed", "192.0.2.99", List.of());
+        local(changed);
         when(inventory.hosts()).thenReturn(List.of(changed, second));
         assertThrows(ResponseStatusException.class, () -> resolver.require(changed));
         assertEquals("CONNECTION_FAILED", service.list().stream().filter(r -> r.hostId().equals("42")).findFirst().orElseThrow().status());
@@ -163,15 +200,16 @@ class AccessPointTests {
         assertEquals(List.of(host), service.candidates());
         verify(inventory, atLeastOnce()).hosts(); verifyNoMoreInteractions(inventory);
         service.define(List.of("42"));
-        assertEquals("PENDING", service.configuration("42").status());
-        assertFalse(service.configuration("42").passwordConfigured());
+        assertEquals("ACTIVE", service.configuration("42").status());
+        assertTrue(service.configuration("42").passwordConfigured());
     }
 
     @Test void ubiquitiConfigurationUsesSshPortAndDiscardsTls() {
         var ubnt = mock(EquipmentProvider.class);
         when(ubnt.manufacturer()).thenReturn("Ubiquiti");
         when(ubnt.capabilities()).thenReturn(Set.of("overview", "wireless"));
-        service = new AccessPointService(repository, inventory, List.of(provider, ubnt), secrets);
+        authentication = new br.com.scriptping.hosts.HostAuthentication(hosts, secrets, List.of(provider, ubnt));
+        service = new AccessPointService(repository, inventory, List.of(provider, ubnt), authentication, connections, hosts);
         service.define(List.of("42"));
         var saved = service.save("42", new AccessPointService.ConfigurationInput("Ubiquiti", "reader", "secret", 2222, true, true));
         assertEquals("ACTIVE", saved.status());
@@ -190,11 +228,12 @@ class AccessPointTests {
         service.define(List.of("42"));
         String body = "{\"manufacturer\":\"MikroTik\",\"login\":\"reader\",\"password\":\"private-secret\",\"port\":8729,\"enabled\":true}";
         mvc.perform(post("/api/ap/42/configuration/test").contentType("application/json").content(body))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
-        assertEquals("PENDING", service.configuration("42").status());
+            .andExpect(status().isNotFound());
         mvc.perform(put("/api/ap/42/configuration").contentType("application/json").content(body))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ACTIVE"))
-            .andExpect(jsonPath("$.password").doesNotExist());
+            .andExpect(status().isMethodNotAllowed());
+        service.save("42", valid);
+        mvc.perform(get("/api/ap/42/configuration")).andExpect(status().isOk())
+            .andExpect(jsonPath("$.password").doesNotExist()).andExpect(jsonPath("$.passwordConfigured").value(true));
         mvc.perform(get("/api/ap")).andExpect(status().isOk())
             .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("private-secret"))));
     }

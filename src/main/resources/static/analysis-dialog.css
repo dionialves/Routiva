@@ -24,9 +24,9 @@ dialog.analysis-dialog::backdrop { background:rgb(0 7 14 / 75%); }
 .analysis-title-icon { width:48px; height:48px; display:grid; place-items:center; flex-shrink:0; color:var(--cyan); background:var(--surface-bg); border:1px solid var(--analysis-border); border-radius:7px; }
 .analysis-title-icon svg { width:24px; height:24px; }
 .analysis-tabs { display:flex; gap:8px; border-bottom:1px solid var(--analysis-border); flex-shrink:0; margin-bottom:4px; }
-.analysis-dialog .analysis-tabs button { display:flex; align-items:center; gap:16px; padding:10px 20px; min-width:230px; background:var(--analysis-tab-bg); border:1px solid var(--analysis-border); border-bottom:3px solid transparent; border-radius:7px 7px 0 0; color:var(--muted); font:inherit; text-align:left; cursor:pointer; }
-.analysis-dialog .analysis-tabs button[aria-selected=true] { border-color:var(--teal); border-bottom-color:var(--cyan); color:var(--text); background:var(--analysis-tab-active); }
-.analysis-dialog .analysis-tabs button:disabled { opacity:.5; cursor:not-allowed; }
+.analysis-tabs button { display:flex; align-items:center; gap:16px; padding:10px 20px; min-width:230px; background:var(--analysis-tab-bg); border:1px solid var(--analysis-border); border-bottom:3px solid transparent; border-radius:7px 7px 0 0; color:var(--muted); font:inherit; text-align:left; cursor:pointer; }
+.analysis-tabs button[aria-selected=true] { border-color:var(--teal); border-bottom-color:var(--cyan); color:var(--text); background:var(--analysis-tab-active); }
+.analysis-tabs button:disabled { opacity:.5; cursor:not-allowed; }
 .analysis-tabs svg { width:20px; height:20px; flex-shrink:0; }
 .analysis-tabs button[aria-selected=true] svg { color:var(--cyan); }
 .analysis-tabs strong, .analysis-tabs small { display:block; }
@@ -45,7 +45,7 @@ dialog.analysis-dialog::backdrop { background:rgb(0 7 14 / 75%); }
   .analysis-header { align-items:flex-start; }
   .analysis-title-icon { display:none; }
   .analysis-dialog .analysis-title h2 { font-size:20px; }
-  .analysis-dialog .analysis-tabs button { min-width:0; flex:1; padding:8px; gap:8px; }
+  .analysis-tabs button { min-width:0; flex:1; padding:8px; gap:8px; }
   .analysis-tabs small { font-size:11px; }
   .analysis-footer { flex-wrap:wrap; }
 }

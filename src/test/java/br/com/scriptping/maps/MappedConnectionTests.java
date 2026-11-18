@@ -13,14 +13,19 @@ import org.springframework.web.server.ResponseStatusException;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-@JdbcTest(properties = {"MIKROTIK_USERNAME=map-reader", "MIKROTIK_PASSWORD=test-only", "MIKROTIK_API_PORT=8729", "MIKROTIK_API_TLS=true"})
+@JdbcTest
 @Import(MappedConnectionController.class)
 class MappedConnectionTests {
     @Autowired MappedConnectionController controller;
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
+    @MockitoBean br.com.scriptping.hosts.HostConnections connections;
+    @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
 
     void equipment() {
+        when(hosts.target(anyString())).thenAnswer(call -> new Host(call.getArgument(0), "Equipment", "10.0.0.1", List.of()));
+        when(hosts.credentials(anyString())).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials("MikroTik", "map-reader", "encrypted", 8729, true, "ACTIVE", "", "10.0.0.1", true, 1L));
+        when(connections.require(any())).thenAnswer(call -> new EquipmentProvider.Connection("map-reader", ((Host)call.getArgument(0)).id().equals("a") ? "test-a" : "test-b", 8729, true));
         when(inventory.hosts()).thenReturn(List.of(new Host("a", "A", "10.0.0.1", List.of()), new Host("b", "B", "10.0.0.2", List.of())));
         when(mikrotik.query(any(), eq("interfaces"), isNull(), any(EquipmentProvider.Connection.class))).thenReturn(new MikrotikService.Snapshot(1, List.of(Map.of(".id", "*1", "name", "ether1", "type", "ether"), Map.of("name", "bridge", "type", "bridge")), ""));
     }
@@ -32,32 +37,17 @@ class MappedConnectionTests {
         var credentials = org.mockito.ArgumentCaptor.forClass(EquipmentProvider.Connection.class);
         verify(mikrotik, times(2)).query(any(), eq("interfaces"), isNull(), credentials.capture());
         assertThat(credentials.getValue().login()).isEqualTo("map-reader");
-        assertThat(credentials.getValue().password()).isEqualTo("test-only");
+        assertThat(credentials.getAllValues()).extracting(EquipmentProvider.Connection::password).containsExactly("test-a", "test-b");
         assertThat(credentials.getValue().port()).isEqualTo(8729);
         assertThat(credentials.getValue().tls()).isTrue();
         assertThatThrownBy(() -> controller.save(new MappedConnectionController.Connection(null, "Inválida", "a", "bridge", "b", "ether1"))).isInstanceOf(ResponseStatusException.class);
         assertThat(controller.all()).hasSize(1);
     }
-    @Test void refusesMissingGlobalCredentialsWithoutQueryingEquipment() {
+    @Test void refusesMissingHostCredentialsWithoutQueryingEquipment() {
         when(inventory.hosts()).thenReturn(List.of(new Host("a", "A", "10.0.0.1", List.of())));
-        var isolated = new MappedConnectionController(mock(org.springframework.jdbc.core.JdbcTemplate.class), inventory, mikrotik,
-            new org.springframework.mock.env.MockEnvironment());
-        assertThatThrownBy(() -> isolated.interfaces("a")).isInstanceOfSatisfying(ResponseStatusException.class,
-            ex -> assertThat(ex.getReason()).contains("MIKROTIK_USERNAME"));
+        assertThatThrownBy(() -> controller.interfaces("a")).isInstanceOfSatisfying(ResponseStatusException.class,
+            ex -> assertThat(ex.getReason()).contains("autenticação"));
         verifyNoInteractions(mikrotik);
-    }
-
-    @Test void defaultsApiPortAccordingToTls() {
-        when(inventory.hosts()).thenReturn(List.of(new Host("a", "A", "10.0.0.1", List.of())));
-        when(mikrotik.query(any(), eq("interfaces"), isNull(), any(EquipmentProvider.Connection.class)))
-            .thenReturn(new MikrotikService.Snapshot(1, List.of(), ""));
-        var env = new org.springframework.mock.env.MockEnvironment().withProperty("MIKROTIK_USERNAME", "reader")
-            .withProperty("MIKROTIK_PASSWORD", "test-only").withProperty("MIKROTIK_API_TLS", "true");
-        var isolated = new MappedConnectionController(mock(org.springframework.jdbc.core.JdbcTemplate.class), inventory, mikrotik, env);
-        isolated.interfaces("a");
-        var credentials = org.mockito.ArgumentCaptor.forClass(EquipmentProvider.Connection.class);
-        verify(mikrotik).query(any(), eq("interfaces"), isNull(), credentials.capture());
-        assertThat(credentials.getValue().port()).isEqualTo(8729);
     }
 
     @Test void cachesReadingsAndSeparatesCollectionErrorFromDown() {

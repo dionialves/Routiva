@@ -350,3 +350,38 @@ CREATE TABLE IF NOT EXISTS mapped_connection (
     host_b VARCHAR(100) NOT NULL,
     interface_b VARCHAR(128) NOT NULL
 );
+
+
+-- Local host configuration mirrors Zabbix; authentication is owned by the app.
+CREATE TABLE IF NOT EXISTS app_host (
+    host_id VARCHAR(255) PRIMARY KEY,
+    payload TEXT NOT NULL,
+    synced_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_catalog_state (
+    id INTEGER PRIMARY KEY,
+    source_url TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS host_authentication (
+    host_id VARCHAR(255) PRIMARY KEY,
+    manufacturer VARCHAR(100),
+    api_login VARCHAR(255),
+    api_password TEXT,
+    api_port INTEGER,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    connection_status VARCHAR(40) NOT NULL DEFAULT 'PENDING',
+    connection_message TEXT,
+    verified_ip VARCHAR(255),
+    api_tls BOOLEAN NOT NULL DEFAULT FALSE,
+    tested_at BIGINT
+);
+INSERT INTO host_authentication(host_id,manufacturer,api_login,api_password,api_port,enabled,connection_status,connection_message,verified_ip,api_tls)
+SELECT host_id,manufacturer,api_login,api_password,api_port,enabled,connection_status,connection_message,verified_ip,api_tls
+FROM access_point a WHERE a.api_password IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM host_authentication h WHERE h.host_id=a.host_id
+);
+
+ALTER TABLE host_catalog_state ADD COLUMN IF NOT EXISTS options_payload TEXT;
+ALTER TABLE app_host ADD COLUMN IF NOT EXISTS zabbix_payload TEXT;
+-- The previous AP columns remain only for compatibility; do not keep a second secret copy.
+UPDATE access_point SET api_password=NULL, api_login=NULL, verified_ip=NULL;

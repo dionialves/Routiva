@@ -1,6 +1,6 @@
 package br.com.scriptping.ubiquiti;
 
-import br.com.scriptping.accesspoint.AccessPointConnections;
+import br.com.scriptping.hosts.HostConnections;
 import br.com.scriptping.equipment.EquipmentProvider.Connection;
 import br.com.scriptping.mikrotik.WirelessQuality;
 import br.com.scriptping.zabbix.Host;
@@ -16,7 +16,7 @@ class UbiquitiEquipmentProviderTests {
     private final Connection connection = new Connection("reader", "secret", 2222);
     private final UbiquitiSsh ssh = mock(UbiquitiSsh.class);
     private final UbiquitiSsh.Link link = mock(UbiquitiSsh.Link.class);
-    private final AccessPointConnections settings = mock(AccessPointConnections.class);
+    private final HostConnections settings = mock(HostConnections.class);
     private final WirelessQuality quality = mock(WirelessQuality.class);
     private final UbiquitiEquipmentProvider provider = new UbiquitiEquipmentProvider(settings, ssh, new ObjectMapper(), quality);
     @BeforeEach void setup() throws Exception {

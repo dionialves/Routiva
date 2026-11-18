@@ -18,6 +18,7 @@ class ZabbixServiceTests {
     private final Host host = new Host("h", "Router", "10.0.0.1", List.of(group));
     private ZabbixSettings.State state;
     private ZabbixService monitor;
+    private final br.com.scriptping.hosts.HostCatalog catalog = mock(br.com.scriptping.hosts.HostCatalog.class);
 
     @BeforeEach
     void setUp() {
@@ -25,13 +26,16 @@ class ZabbixServiceTests {
             Set.of("g"), Set.of("h"), List.of(host), 123L);
         when(settings.current()).thenAnswer(call -> state);
         doAnswer(call -> { state = call.getArgument(0); return null; }).when(settings).save(any());
-        monitor = new ZabbixService(client, collector, settings);
+        var localHost = new br.com.scriptping.hosts.ManagedHost("h", "Router", "Router", List.of(new br.com.scriptping.hosts.ManagedHost.Choice("g", "Rede")),
+            List.of(), "", "10.0.0.1", "", true, "161", 2, "public", true, "r", true, 0, 0, "unknown");
+        when(catalog.all()).thenReturn(List.of(localHost));
+        monitor = new ZabbixService(client, collector, settings, catalog);
         clearInvocations(client, collector, settings);
     }
 
     @Test
     void startupRestoresConnectionAndInventoryWithoutFetchingRemoteData() {
-        new ZabbixService(client, collector, settings);
+        new ZabbixService(client, collector, settings, catalog);
         verify(client).configure(state.url(), state.username(), state.password());
         verify(collector).synchronize(List.of(host));
         verify(client, never()).fetchSelected(anySet(), anySet());

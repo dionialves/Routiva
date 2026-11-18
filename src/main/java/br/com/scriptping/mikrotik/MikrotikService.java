@@ -10,7 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class MikrotikService {
-    private final br.com.scriptping.accesspoint.AccessPointConnections settings;
+    private final br.com.scriptping.hosts.HostConnections settings;
     private final Semaphore connections = new Semaphore(8);
     private final MappedRouterSessions mappedSessions = new MappedRouterSessions();
 
@@ -19,7 +19,7 @@ public class MikrotikService {
 
     @jakarta.annotation.PreDestroy
     public void closeMappedSessions() { mappedSessions.close(); }
-    public MikrotikService(br.com.scriptping.accesspoint.AccessPointConnections settings) { this.settings = settings; }
+    public MikrotikService(br.com.scriptping.hosts.HostConnections settings) { this.settings = settings; }
 
     public void testConnection(Host host, br.com.scriptping.equipment.EquipmentProvider.Connection connection) {
         var snapshot = query(host, "overview", null, connection);

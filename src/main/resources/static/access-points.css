@@ -103,9 +103,7 @@
 .ap-page .hosts-table tbody tr:hover { background:#003442; }
 .ap-page .availability-host-name { display:inline-flex; align-items:center; gap:16px; color:var(--ap-accent); }
 .ap-page .availability-host-name svg { width:16px; height:16px; color:#8de3e4; }
-.ap-page .hosts-table td:nth-child(2), .ap-page .hosts-table td:nth-child(6) { font-variant-numeric:tabular-nums; }
-.ap-status { display:inline-flex; align-items:center; gap:7px; border-radius:10px; background:#2a3d49; color:#e2e8ed; padding:4px 10px; font-size:11px; font-weight:500; }
-.ap-status::before { content:''; width:9px; height:9px; border-radius:50%; background:#c2cbd0; }
+.ap-page .hosts-table td:nth-child(2), .ap-page .hosts-table td:nth-child(5) { font-variant-numeric:tabular-nums; }
 .ap-row-actions { position:relative; }
 .ap-row-actions summary { list-style:none; display:flex; justify-content:center; padding:3px; border-radius:4px; cursor:pointer; }
 .ap-row-actions summary:hover { background:#28485e; }
@@ -135,6 +133,3 @@
 .ap-filter-card .incident-host-field { flex:0 1 50%; }
 .ap-filter-card #ap-import { flex-shrink:0; margin-left:auto; height:38px; }
 @media(max-width:760px) { .ap-filter-card .incident-host-field { flex:1; } }
-
-.ap-status[data-status=ACTIVE]::before { background:var(--cyan); }
-.ap-status[data-status=CONNECTION_FAILED]::before { background:var(--error); }

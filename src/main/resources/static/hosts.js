@@ -2,6 +2,9 @@
   'use strict';
   const availabilityLabels = { available: 'SNMP disponível', unavailable: 'SNMP indisponível',
     unknown: 'SNMP desconhecido', none: 'Sem interface SNMP', disabled: 'Não monitorado' };
+  const connectionLabels = { NOT_CONFIGURED: 'Não configurado', ACTIVE: 'Ativa', ERROR: 'Erro' };
+  const connectionStatus = host => Object.hasOwn(connectionLabels, host.connectionStatus) ? host.connectionStatus : 'NOT_CONFIGURED';
+  const matchesConnection = (host, status) => !status || connectionStatus(host) === status;
   const nameOf = host => host.visibleName || host.hostname;
   function ipValue(value) {
     const text = String(value || '').toLowerCase().split('%')[0];
@@ -43,19 +46,19 @@
     } else {
       const value = host => key === 'name' ? nameOf(host) : key === 'templates'
         ? host.templates.map(template => template.name).join(', ') : key === 'status'
-          ? (host.active ? 'Ativo' : 'Inativo') : availabilityLabels[host.snmpAvailability] || availabilityLabels.unknown;
+          ? (host.active ? 'Ativo' : 'Inativo') : key === 'connection' ? connectionLabels[connectionStatus(host)] : availabilityLabels[host.snmpAvailability] || availabilityLabels.unknown;
       order = value(a).localeCompare(value(b), 'pt-BR', { numeric: true, sensitivity: 'base' });
     }
     return direction * order || nameOf(a).localeCompare(nameOf(b), 'pt-BR', { numeric: true, sensitivity: 'base' })
       || String(a.id).localeCompare(String(b.id), 'en', { numeric: true });
   }
-  if (typeof module !== 'undefined' && module.exports) module.exports = { compareHosts, ipValue };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { compareHosts, ipValue, connectionStatus, matchesConnection };
   if (typeof document === 'undefined') return;
   const $ = id => document.getElementById(id);
   const form = $('host-form'), dialog = $('host-dialog');
   const field = name => form.elements.namedItem(name);
   const discardDialog = $('host-discard-dialog'), deleteDialog = $('host-delete-dialog');
-  let baseline = '', closeTrigger;
+  let baseline = '', closeTrigger, authBaseline = '', authLoaded = false, activeTab = 'general';
   let hosts = [], options, current, opener, busy = false, loading = false, page = 0;
   let sortKey = 'name', direction = 1;
   const pickers = {};
@@ -74,6 +77,7 @@
     const selectedHosts = new Set([...$('incident-filter-host').selectedOptions].map(option => option.value));
     const matches = hosts.filter(host => (!groups.size || host.groups.some(group => groups.has(group.id)))
       && (!selectedHosts.size || selectedHosts.has(host.id))
+      && matchesConnection(host, $('host-filter-connection').value)
       && (host.ip || '').toLowerCase().includes(query))
       .sort((a, b) => compareHosts(a, b, sortKey, direction));
     page = Math.min(page, Math.max(0, Math.ceil(matches.length / 50) - 1));
@@ -81,7 +85,7 @@
     $('hosts-rows').replaceChildren(...visible.map(host => {
       const row = document.createElement('tr'), heading = document.createElement('th');
       heading.scope = 'row';
-      if (host.editable && options) {
+      if (options) {
         const link = document.createElement('a');
         link.href = '#host-dialog'; link.className = 'availability-host-name';
         link.textContent = nameOf(host);
@@ -95,13 +99,14 @@
       row.append(heading);
       const values = [host.monitoredItems, host.monitoredTriggers, host.ip || '—',
         host.templates.map(template => template.name).join(', ') || '—', host.active ? 'Ativo' : 'Inativo',
-        availabilityLabels[host.snmpAvailability] || availabilityLabels.unknown];
+        connectionLabels[connectionStatus(host)], availabilityLabels[host.snmpAvailability] || availabilityLabels.unknown];
       for (const [index, value] of values.entries()) {
         const cell = document.createElement('td');
         cell.textContent = value == null ? '—' : String(value);
         if (index === 3) cell.title = host.templates.map(template => template.name).join('\n') || 'Sem templates';
         if (index === 4) cell.dataset.hostStatus = host.active ? 'active' : 'inactive';
-        if (index === 5) {
+        if (index === 5) cell.dataset.connectionStatus = connectionStatus(host);
+        if (index === 6) {
           cell.textContent = 'SNMP';
           cell.dataset.snmpAvailability = host.snmpAvailability || 'unknown';
           cell.title = value;
@@ -127,6 +132,11 @@
     try {
       const [rows, choices] = await Promise.all([request(), request('/options')]);
       hosts = rows; options = choices; setupFilters(); render(); $('host-new').disabled = false;
+      const wanted = new URLSearchParams(location.search).get('host');
+      if (wanted && !dialog.open) {
+        const host = hosts.find(h => h.id === wanted);
+        if (host) { open(host, $('host-new')); tab('auth'); history.replaceState(null, '', location.pathname); }
+      }
     } catch (error) { $('hosts-state').textContent = error.message; }
     finally { loading = false; }
   }
@@ -178,7 +188,76 @@
     return Object.assign(input, { useIp: field('useIp').value === 'true', snmpVersion: Number(field('snmpVersion').value),
       active: field('active').checked, groupIds: selected('host-group'), templateIds: selected('host-template') });
   }
-  const isDirty = () => JSON.stringify(readInput()) !== baseline;
+  function authInput() {
+    return { manufacturer: $('host-auth-manufacturer').value, login: $('host-auth-login').value,
+      password: $('host-auth-password').value, port: Number($('host-auth-port').value),
+      tls: $('host-auth-tls').checked };
+  }
+  function tab(name, focus = false) {
+    activeTab = name;
+    $('host-auth-test').hidden = name !== 'auth';
+    for (const key of ['general', 'auth']) {
+      const button = $(`host-${key}-tab`);
+      button.setAttribute('aria-selected', String(key === name)); button.tabIndex = key === name ? 0 : -1;
+      $(`host-${key}`).hidden = key !== name;
+      if (focus && key === name) button.focus();
+    }
+    $('host-save').disabled = busy || (name === 'auth' ? !authLoaded : current && !current.editable);
+    $('host-save-label').textContent = name === 'auth' ? 'Salvar autenticação' : 'Salvar no Zabbix';
+  }
+  for (const name of ['general', 'auth']) {
+    $(`host-${name}-tab`).addEventListener('click', () => tab(name));
+    $(`host-${name}-tab`).addEventListener('keydown', event => {
+      if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault(); tab(event.key === 'Home' ? 'general' : event.key === 'End' ? 'auth' : activeTab === 'auth' ? 'general' : 'auth', true);
+      }
+    });
+  }
+  async function loadAuth(host) {
+    authLoaded = false; $('host-auth-fields').disabled = true; $('host-auth-test').disabled = true;
+    $('host-auth-state').textContent = host ? 'Carregando autenticação…' : 'Salve o host para cadastrar a autenticação.';
+    if (!host) return;
+    try {
+      const c = await request('/' + host.id + '/authentication');
+      if (current !== host || !dialog.open) return;
+      for (const name of ['manufacturer', 'login']) $(`host-auth-${name}`).value = c[name] || '';
+      $('host-auth-password').value = ''; $('host-auth-port').value = c.port || 8728;
+      $('host-auth-tls').checked = c.tls;
+      $('host-auth-tls-row').hidden = c.manufacturer === 'Ubiquiti';
+      $('host-auth-password-help').textContent = c.passwordConfigured ? 'Senha cadastrada. Deixe em branco para preservar.' : 'Informe a senha do equipamento.';
+      $('host-auth-state').textContent = '';
+      authBaseline = JSON.stringify(authInput()); authLoaded = true;
+      $('host-auth-fields').disabled = false; $('host-auth-test').disabled = false; tab(activeTab);
+    } catch (error) { if (current === host) $('host-auth-state').textContent = error.message; }
+  }
+  $('host-auth-manufacturer').addEventListener('change', () => {
+    const ssh = $('host-auth-manufacturer').value === 'Ubiquiti';
+    $('host-auth-port').value = ssh ? 22 : $('host-auth-tls').checked ? 8729 : 8728;
+    $('host-auth-tls-row').hidden = ssh; if (ssh) $('host-auth-tls').checked = false;
+  });
+  $('host-auth-tls').addEventListener('change', () => {
+    if (['8728', '8729'].includes($('host-auth-port').value)) $('host-auth-port').value = $('host-auth-tls').checked ? 8729 : 8728;
+  });
+  async function saveAuth(testOnly) {
+    if (busy || !authLoaded || !current) return;
+    setBusy(true); $('host-auth-state').textContent = testOnly ? 'Testando conexão…' : 'Salvando e validando…';
+    try {
+      const result = await request('/' + current.id + '/authentication' + (testOnly ? '/test' : ''), testOnly ? 'POST' : 'PUT', authInput());
+      if (!testOnly) {
+        $('host-auth-password').value = ''; authBaseline = JSON.stringify(authInput());
+        current.connectionStatus = result.status === 'ACTIVE' ? 'ACTIVE' : 'ERROR';
+        const row = hosts.find(host => host.id === current.id);
+        if (row) row.connectionStatus = current.connectionStatus;
+        render();
+      }
+      $('host-auth-state').textContent = '';
+      const success = testOnly ? result.success : result.status === 'ACTIVE';
+      window.notify?.(testOnly ? result.message : 'Autenticação salva. ' + result.message, success ? 'success' : 'error');
+    } catch (error) { $('host-auth-state').textContent = error.message; }
+    finally { setBusy(false); }
+  }
+  $('host-auth-test').addEventListener('click', () => saveAuth(true));
+  const isDirty = () => JSON.stringify(readInput()) !== baseline || (authLoaded && JSON.stringify(authInput()) !== authBaseline);
   function clearErrors() {
     $('host-error').textContent = ''; $('host-groups-error').textContent = '';
     form.querySelectorAll('.host-field-error').forEach(error => { error.textContent = ''; });
@@ -202,7 +281,7 @@
   function validate() {
     clearErrors();
     let firstInvalid = null;
-    for (const control of form.querySelectorAll('input, select')) {
+    for (const control of $('host-general').querySelectorAll('input, select')) {
       if (!control.willValidate) continue;
       let message = '';
       if (!control.validity.valid) {
@@ -237,16 +316,17 @@
     $('host-dialog-title').textContent = host ? 'Editar host' : 'Novo host';
     $('host-dialog-description').textContent = host ? 'As alterações serão aplicadas ao host no Zabbix ao salvar.'
       : 'O novo host será cadastrado no Zabbix ao salvar.';
-    $('host-delete').hidden = !host;
+    $('host-delete').hidden = !host || !host.editable;
+    $('host-general').querySelectorAll('input, select, button').forEach(control => { control.disabled = Boolean(host && !host.editable); });
     if (host) {
       for (const name of ['hostname', 'visibleName', 'ip', 'dns', 'port', 'snmpVersion', 'community']) field(name).value = host[name];
       field('useIp').value = String(host.useIp); field('active').checked = host.active;
     }
     picker('host-group', options.groups, host?.groups || []);
     picker('host-template', options.templates, host?.templates || []);
-    endpointRequired(); baseline = JSON.stringify(readInput()); dialog.showModal(); field('hostname').focus();
+    endpointRequired(); baseline = JSON.stringify(readInput()); dialog.showModal(); tab('general'); loadAuth(host); field('hostname').focus();
   }
-  function closeNow() { dialog.close(); opener?.focus(); }
+  function closeNow() { dialog.close(); $('host-auth-password').value = ''; authLoaded = false; opener?.focus(); }
   function requestClose() {
     if (busy) return;
     if (isDirty()) {
@@ -260,6 +340,7 @@
     for (const control of deleteDialog.querySelectorAll('button')) control.disabled = value;
     $('host-save-label').textContent = value && operation === 'save' ? 'Salvando…' : 'Salvar no Zabbix';
     $('host-delete-label').textContent = value && operation === 'delete' ? 'Excluindo…' : 'Excluir no Zabbix';
+    if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; tab(activeTab); }
   }
   document.querySelectorAll('[data-host-sort]').forEach(button => {
     button.addEventListener('click', () => {
@@ -278,6 +359,7 @@
     event.preventDefault(); requestClose();
   });
   $('host-search').addEventListener('input', () => { page = 0; render(); });
+  $('host-filter-connection').addEventListener('change', () => { page = 0; render(); });
   $('hosts-prev').addEventListener('click', () => { page--; render(); });
   $('hosts-next').addEventListener('click', () => { page++; render(); });
   field('useIp').addEventListener('change', endpointRequired);
@@ -324,16 +406,35 @@
     }
   });
   form.addEventListener('submit', async event => {
-    event.preventDefault(); if (busy || !validate()) return;
+    event.preventDefault(); if (activeTab === 'auth') { await saveAuth(false); return; }
+    if (busy || !validate()) return;
     const input = { ...readInput(), revision: current?.revision };
     setBusy(true);
-    let saved = false;
+    let saved = false, createdId;
+    const pendingAuth = authLoaded && JSON.stringify(authInput()) !== authBaseline;
     try {
-      await request(current ? '/' + current.id : '', current ? 'PUT' : 'POST', input);
+      const result = await request(current ? '/' + current.id : '', current ? 'PUT' : 'POST', input);
+      if (!current) createdId = result.id;
       saved = true;
     } catch (error) { $('host-error').textContent = error.message; window.notify?.(error.message, 'error'); }
     finally { setBusy(false); }
-    if (saved) { closeNow(); window.notify?.('Host salvo no Zabbix.'); await load(); }
+    if (saved) {
+      window.notify?.('Host salvo no app e no Zabbix.');
+      if (pendingAuth && current) {
+        const id = current.id; baseline = JSON.stringify(readInput()); await load();
+        current = hosts.find(h => h.id === id) || current; tab('auth');
+        $('host-auth-state').textContent = 'Cadastro salvo. Salve também as alterações de autenticação.';
+      } else {
+        closeNow(); await load();
+        if (createdId) { const created = hosts.find(h => h.id === createdId); if (created) { open(created, $('host-new')); tab('auth'); } }
+      }
+    }
+  });
+  $('host-sync').addEventListener('click', async () => {
+    $('host-sync').disabled = true;
+    try { await request('/synchronize', 'POST'); await load(); }
+    catch (error) { $('hosts-state').textContent = error.message; }
+    finally { $('host-sync').disabled = false; }
   });
   load();
 })();

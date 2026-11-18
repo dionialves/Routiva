@@ -38,6 +38,18 @@ public class ZabbixSettings {
 
     public State current() { return state; }
 
+    public synchronized void forgetHosts(Set<String> ids) {
+        var s = state;
+        var selected = new HashSet<>(s.hosts()); selected.removeAll(ids);
+        var next = new State(s.url(), s.username(), s.password(), s.groups(), Set.copyOf(selected),
+            s.inventory().stream().filter(h -> !ids.contains(h.id())).toList(), s.lastSync(),
+            s.imported().stream().filter(h -> !ids.contains(h.id())).toList(), s.importResult());
+        try {
+            repository.saveAndFlush(new ZabbixSettingsEntity(mapper.writeValueAsString(next)));
+            state = next;
+        } catch (Exception ex) { throw new IllegalStateException("Não foi possível remover o host do inventário.", ex); }
+    }
+
     public synchronized void save(State next) {
         try {
             if (state != null && state.url().equals(next.url())) {

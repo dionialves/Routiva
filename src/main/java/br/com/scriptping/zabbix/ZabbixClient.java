@@ -357,8 +357,11 @@ public class ZabbixClient {
         detectVersion();
         if (session == null) login();
         var params = new LinkedHashMap<String, Object>();
-        params.put("output", List.of("hostid", "host", "name", "status", "flags"));
-        params.put("editable", true);
+        params.put("output", "extend");
+        params.put("selectInventory", "extend");
+        params.put("selectTags", "extend");
+        params.put("selectMacros", "extend");
+        if (id != null) params.put("editable", true);
         params.put(legacyGroups ? "selectGroups" : "selectHostGroups", List.of("groupid", "name"));
         params.put("selectParentTemplates", List.of("templateid", "name"));
         params.put("selectInterfaces", "extend");
@@ -398,6 +401,9 @@ public class ZabbixClient {
         }
         return first;
     }
+
+    private List<JsonNode> mirroredConfigurations = List.of();
+    public synchronized List<JsonNode> mirroredConfigurations() { return mirroredConfigurations; }
 
     public synchronized List<ManagedHost> managedHosts() {
         var result = new ArrayList<ManagedHost>();
@@ -442,7 +448,7 @@ public class ZabbixClient {
             result.add(new ManagedHost(row.path("hostid").asText(), row.path("host").asText(),
                 row.path("name").asText(), List.copyOf(groups), List.copyOf(templates),
                 face == null ? "" : face.path("interfaceid").asText(), address == null ? "" : address.path("ip").asText(),
-                face == null ? "" : face.path("dns").asText(), face == null || face.path("useip").asInt() == 1,
+                address == null ? "" : address.path("dns").asText(), address == null || address.path("useip").asInt() == 1,
                 face == null ? "161" : face.path("port").asText(), version,
                 face == null ? "{$SNMP_COMMUNITY}" : face.path("details").path("community").asText(),
                 row.path("status").asInt() == 0, configurationRevision(row),
@@ -452,6 +458,9 @@ public class ZabbixClient {
                 availability));
         }
         result.sort(Comparator.comparing(ManagedHost::hostname, String.CASE_INSENSITIVE_ORDER));
+        var configurations = new ArrayList<JsonNode>();
+        rows.forEach(row -> configurations.add(row.deepCopy()));
+        mirroredConfigurations = List.copyOf(configurations);
         return List.copyOf(result);
     }
 

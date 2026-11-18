@@ -59,7 +59,8 @@ test('arrows physically transfer hosts and only the saved selection is posted', 
   assert.deepEqual(JSON.parse(posted.options.body), { hostIds: ['42'] });
   assert.equal(e['ap-dialog'].open, false);
   assert.equal(e['ap-rows'].children[0].children[0].children[0].children[0].href, '/ap/42');
-  assert.equal(e['ap-rows'].children[0].children[0].children[4].textContent, 0);
+  assert.equal(e['ap-rows'].children[0].children[0].children[3].textContent, 0);
+  assert.equal(e['ap-rows'].children[0].children[0].children.length, 5);
 });
 test('failed save preserves selection and cancel does not persist', async () => {
   const ui = await surface(), e = ui.elements;

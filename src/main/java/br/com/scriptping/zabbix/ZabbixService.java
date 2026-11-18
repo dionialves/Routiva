@@ -11,9 +11,11 @@ public class ZabbixService {
     private final ZabbixClient zabbix;
     private final CollectorClient collector;
     private final ZabbixSettings settings;
+    private final br.com.scriptping.hosts.HostCatalog catalog;
     private volatile String status = "Aguardando sincronização manual";
 
-    public ZabbixService(ZabbixClient zabbix, CollectorClient collector, ZabbixSettings settings) {
+    public ZabbixService(ZabbixClient zabbix, CollectorClient collector, ZabbixSettings settings, br.com.scriptping.hosts.HostCatalog catalog) {
+        this.catalog = catalog;
         this.zabbix = zabbix;
         this.collector = collector;
         this.settings = settings;
@@ -36,6 +38,7 @@ public class ZabbixService {
         settings.save(new ZabbixSettings.State(url.strip(), username.strip(), secret,
             changed ? Set.of() : s.groups(), changed ? Set.of() : s.hosts(),
             changed ? List.of() : s.inventory(), changed ? null : s.lastSync()));
+        if (changed) catalog.resetSource(url.strip());
         zabbix.configure(url.strip(), username.strip(), secret);
         collector.synchronize(hosts());
         status = "Conexão salva. Teste a conexão antes de sincronizar.";
@@ -84,6 +87,12 @@ public class ZabbixService {
         if (!zabbix.configured()) throw new IllegalArgumentException("Salve a conexão com o Zabbix primeiro.");
         status = "Sincronização em andamento";
         try {
+            catalog.reconcile();
+            var present = catalog.all().stream().map(br.com.scriptping.hosts.ManagedHost::id).collect(java.util.stream.Collectors.toSet());
+            var removed = new HashSet<>(settings.current().hosts());
+            settings.current().imported().forEach(h -> removed.add(h.id()));
+            removed.removeAll(present);
+            forgetHosts(removed);
             var s = settings.current();
             var inventory = authorized(zabbix.fetchSelected(s.groups(), s.hosts()), s.groups(), s.hosts());
             var historical = new LinkedHashMap<String, Host>();
@@ -109,14 +118,16 @@ public class ZabbixService {
     }
 
     public synchronized Map<String, Object> saveAndImport(Set<String> ids) {
-        var s = settings.current();
+        catalog.reconcile();
         var groups = zabbix.groups();
         var groupIds = groups.stream().map(Host.Group::id).collect(java.util.stream.Collectors.toSet());
         var available = new LinkedHashMap<String, Host>();
         zabbix.discover(groupIds).forEach(h -> available.put(h.id(), h));
         var known = new HashSet<>(available.keySet());
-        known.addAll(s.hosts());
+        known.addAll(settings.current().hosts());
         if (!known.containsAll(ids)) throw new IllegalArgumentException("Seleção inválida. Atualize o inventário.");
+        if (zabbix.configured()) refreshLocalHosts();
+        var s = settings.current();
         var discovered = Map.copyOf(available);
         // Persist authorization first; an import failure must be distinguishable from a save failure.
         var active = s.inventory().stream().filter(h -> ids.contains(h.id())).toList();
@@ -225,6 +236,36 @@ public class ZabbixService {
         s.imported().forEach(h -> hosts.put(h.id(), h));
         s.inventory().forEach(h -> hosts.put(h.id(), h));
         return List.copyOf(hosts.values());
+    }
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void loadHostCatalog() {
+        catalog.restoreLegacy();
+        if (zabbix.configured()) {
+            try { sync(); } catch (RuntimeException ex) { status = "Falha na sincronização; último inventário preservado"; }
+        }
+    }
+    public synchronized void refreshLocalHosts() {
+        var local = catalog.all().stream().collect(java.util.stream.Collectors.toMap(br.com.scriptping.hosts.ManagedHost::id, h -> h));
+        var removed = new HashSet<>(settings.current().hosts());
+        settings.current().imported().forEach(h -> removed.add(h.id()));
+        removed.removeAll(local.keySet());
+        forgetHosts(removed);
+        var s = settings.current();
+        java.util.function.Function<Host, Host> refresh = previous -> {
+            var h = local.get(previous.id());
+            return h == null ? previous : new Host(h.id(), h.visibleName(), h.ip(), h.groups().stream()
+                .map(g -> new Host.Group(g.id(), g.name())).toList(), previous.acknowledgedIcmpProblem(), h.hostname());
+        };
+        settings.save(new ZabbixSettings.State(s.url(), s.username(), s.password(), s.groups(), s.hosts(),
+            s.inventory().stream().map(refresh).toList(), s.lastSync(), s.imported().stream().map(refresh).toList(), s.importResult()));
+        collector.synchronize(hosts());
+    }
+
+    public synchronized void forgetHosts(Set<String> ids) {
+        if (ids.isEmpty()) return;
+        settings.forgetHosts(ids);
+        collector.synchronize(hosts());
     }
 
     public List<Host> hosts() { return settings.current().inventory(); }

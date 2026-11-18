@@ -13,9 +13,14 @@ public class AccessPointService {
     private final AccessPointRepository repository;
     private final ZabbixService inventory;
     private final List<EquipmentProvider> providers;
-    private final AccessPointSecrets secrets;
-    public AccessPointService(AccessPointRepository repository, ZabbixService inventory, List<EquipmentProvider> providers, AccessPointSecrets secrets) {
-        this.repository = repository; this.inventory = inventory; this.providers = providers; this.secrets = secrets;
+    private final br.com.scriptping.hosts.HostAuthentication authentication;
+    private final br.com.scriptping.hosts.HostConnections connections;
+    private final br.com.scriptping.hosts.HostRepository hosts;
+    public AccessPointService(AccessPointRepository repository, ZabbixService inventory, List<EquipmentProvider> providers,
+        br.com.scriptping.hosts.HostAuthentication authentication, br.com.scriptping.hosts.HostConnections connections,
+        br.com.scriptping.hosts.HostRepository hosts) {
+        this.repository = repository; this.inventory = inventory; this.providers = providers;
+        this.authentication = authentication; this.connections = connections; this.hosts = hosts;
     }
     public record Row(String hostId, String name, String ip, String manufacturer, String model,
         Integer connectedClients, Long lastCollectedAt, boolean available, List<Host.Group> groups, String status, String connectionMessage) {}
@@ -24,17 +29,14 @@ public class AccessPointService {
     public List<Row> list() {
         var hosts = new HashMap<String, Host>();
         inventory.hosts().forEach(h -> hosts.put(h.id(), h));
-        repository.all().forEach(ap -> { if (hosts.containsKey(ap.hostId())) repository.refresh(hosts.get(ap.hostId())); });
-        var configurations = repository.configurations();
-        return repository.all().stream().filter(ap -> configurations.containsKey(ap.hostId())).map(ap -> {
-            var c = configurations.get(ap.hostId());
-            if ("ACTIVE".equals(c.status()) && !Objects.equals(c.verifiedIp(), ap.ip())) {
-                repository.connectionState(ap.hostId(), "CONNECTION_FAILED", "IP alterado no Zabbix. Salve a configuração para testar novamente.", null);
-                c = repository.configuration(ap.hostId());
-            }
-            return new Row(ap.hostId(), ap.name(), ap.ip(), ap.manufacturer(),
-            ap.model(), ap.connectedClients(), ap.lastCollectedAt(), hosts.containsKey(ap.hostId()), hosts.containsKey(ap.hostId()) ? hosts.get(ap.hostId()).groups() : List.of(), c.status(), c.message()); }).toList();
+        repository.all().forEach(ap -> { if (hosts.containsKey(ap.hostId())) repository.refresh(this.hosts.target(ap.hostId())); });
+        return repository.all().stream().map(ap -> {
+            var c = authentication.view(ap.hostId());
+            return new Row(ap.hostId(), ap.name(), ap.ip(), c.manufacturer(), ap.model(), ap.connectedClients(),
+                ap.lastCollectedAt(), hosts.containsKey(ap.hostId()), hosts.containsKey(ap.hostId()) ? hosts.get(ap.hostId()).groups() : List.of(), c.status(), c.message());
+        }).toList();
     }
+
     public List<Host> candidates() {
         var registered = new HashSet<String>();
         repository.all().forEach(ap -> registered.add(ap.hostId()));
@@ -47,18 +49,20 @@ public class AccessPointService {
         var hosts = new HashMap<String, Host>();
         inventory.hosts().forEach(h -> hosts.put(h.id(), h));
         if (!hosts.keySet().containsAll(ids)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Há hosts fora do inventário importado. Atualize a seleção.");
-        new LinkedHashSet<>(ids).forEach(id -> repository.add(hosts.get(id)));
+        new LinkedHashSet<>(ids).forEach(id -> {
+            repository.add(hosts.get(id));
+            authentication.validateSaved(id);
+        });
     }
     public Host pageHost(String id) {
-        var ap = repository.all().stream().filter(a -> a.hostId().equals(id)).findFirst()
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Host não definido como AP."));
-        return inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()
-            .orElseGet(() -> new Host(ap.hostId(), ap.name(), ap.ip(), List.of()));
+        if (!repository.contains(id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Host não definido como AP.");
+        return hosts.target(id);
     }
     public Host host(String id) {
-        if (!repository.contains(id)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Host não definido como AP.");
-        return inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AP indisponível no inventário importado."));
+        var host = pageHost(id);
+        if (inventory.hosts().stream().noneMatch(h -> h.id().equals(id)))
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AP indisponível no inventário importado.");
+        return host;
     }
     public record ConfigurationView(String hostId, String name, String ip, String manufacturer, String login,
         Integer port, boolean enabled, boolean passwordConfigured, String status, String message, boolean tls) {}
@@ -72,64 +76,34 @@ public class AccessPointService {
     }
     public record ConnectionResult(boolean success, String message) {}
     public ConfigurationView configuration(String id) {
-        var host = pageHost(id);
-        var c = repository.configuration(id);
-        return new ConfigurationView(id, host.name(), host.ip(), c.manufacturer(), c.login(), c.port(), c.enabled(),
-            c.encryptedPassword() != null, c.status(), c.message(), c.tls());
-    }
-    private EquipmentProvider provider(String manufacturer) {
-        if (!Set.of("MikroTik", "Ubiquiti").contains(manufacturer == null ? "" : manufacturer))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione MikroTik ou Ubiquiti.");
-        return providers.stream().filter(p -> p.manufacturer().equals(manufacturer)).findFirst()
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Fabricante ainda não suportado."));
-    }
-    private EquipmentProvider.Connection connection(String id, ConfigurationInput input) {
         pageHost(id);
-        provider(input.manufacturer());
-        if (input.login() == null || input.login().isBlank() || input.login().length() > 255
-                || input.port() == null || input.port() < 1 || input.port() > 65535
-                || (input.password() != null && input.password().length() > 4096))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe login e porta válida (1–65535).");
-        String password = input.password();
-        if (password == null || password.isEmpty()) {
-            String saved = repository.configuration(id).encryptedPassword();
-            if (saved == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha do AP.");
-            password = secrets.decrypt(saved);
-        }
-        return new EquipmentProvider.Connection(input.login().trim(), password, input.port(), "MikroTik".equals(input.manufacturer()) && input.tls());
+        var c = authentication.view(id);
+        return new ConfigurationView(id, c.name(), c.ip(), c.manufacturer(), c.login(), c.port(), c.enabled(), c.passwordConfigured(), c.status(), c.message(), c.tls());
     }
-    private ConnectionResult attempt(String id, String manufacturer, EquipmentProvider.Connection connection, Host host) {
-        try {
-            if (inventory.hosts().stream().noneMatch(h -> h.id().equals(id)))
-                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "AP indisponível no inventário importado.");
-            provider(manufacturer).testConnection(host, connection);
-            return new ConnectionResult(true, "Conexão validada com " + manufacturer + ".");
-        } catch (ResponseStatusException ex) {
-            return new ConnectionResult(false, Objects.requireNonNullElse(ex.getReason(), "Falha na conexão com o AP."));
-        }
+    private br.com.scriptping.hosts.HostAuthentication.Input hostInput(ConfigurationInput input) {
+        return new br.com.scriptping.hosts.HostAuthentication.Input(input.manufacturer(), input.login(), input.password(), input.port(), input.enabled(), input.tls());
     }
     public synchronized ConnectionResult test(String id, ConfigurationInput input) {
-        return attempt(id, input.manufacturer(), connection(id, input), pageHost(id));
+        pageHost(id);
+        var result = authentication.test(id, hostInput(input));
+        return new ConnectionResult(result.success(), result.message());
     }
     public synchronized ConfigurationView save(String id, ConfigurationInput input) {
-        var connection = connection(id, input);
-        var testedHost = pageHost(id);
-        var result = input.enabled() ? attempt(id, input.manufacturer(), connection, testedHost)
-            : new ConnectionResult(false, "AP desativado.");
-        repository.configure(id, new AccessPointRepository.Configuration(input.manufacturer(), connection.login(),
-            secrets.encrypt(connection.password()), connection.port(), input.enabled(),
-            !input.enabled() ? "INACTIVE" : result.success() ? "ACTIVE" : "CONNECTION_FAILED", result.message(),
-            result.success() ? testedHost.ip() : null, connection.tls()));
+        pageHost(id);
+        authentication.save(id, hostInput(input));
         return configuration(id);
     }
     public synchronized void delete(String id) { pageHost(id); repository.delete(id); }
     public EquipmentProvider.Snapshot read(String id, String section, String selectedInterface) {
         var host = host(id);
-        var ap = repository.all().stream().filter(a -> a.hostId().equals(id)).findFirst().orElseThrow();
-        var c = repository.configuration(id);
-        if (!c.enabled() || !"ACTIVE".equals(c.status()) || !Objects.equals(c.verifiedIp(), host.ip()))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Configure e valide a conexão do AP antes de iniciar a coleta.");
-        var provider = providers.stream().filter(p -> p.manufacturer().equalsIgnoreCase(ap.manufacturer())).findFirst()
+        var c = authentication.view(id);
+        if ("INACTIVE".equals(c.status())) {
+            authentication.validateSaved(id);
+            c = authentication.view(id);
+        }
+        connections.require(host);
+        String manufacturer = c.manufacturer();
+        var provider = providers.stream().filter(p -> p.manufacturer().equalsIgnoreCase(manufacturer)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Fabricante ainda não suportado."));
         if (!provider.capabilities().contains(section)) throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, "Recurso não suportado.");
         var result = provider.read(host, section, selectedInterface);

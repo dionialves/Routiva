@@ -33,6 +33,7 @@ class ZabbixSettingsTests {
         var shared = new Host("1", "Compartilhado", "10.0.0.1", List.of(a, b));
         var denied = new Host("2", "Bloqueado", "10.0.0.2", List.of(b));
         when(client.configured()).thenReturn(true);
+        when(client.managedHosts()).thenReturn(List.of(new br.com.scriptping.hosts.ManagedHost("1", "Compartilhado", "Compartilhado", List.of(new br.com.scriptping.hosts.ManagedHost.Choice("a", "Produção")), List.of(), "", "10.0.0.1", "", true, "161", 2, "public", true, "r", true, 0, 0, "unknown")));
         when(client.groups()).thenReturn(List.of(a, b));
         when(client.discover(Set.of("a"))).thenReturn(List.of(shared));
         when(client.fetchSelected(Set.of("a"), Set.of("1"))).thenReturn(List.of(shared, denied));

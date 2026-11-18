@@ -1,31 +1,25 @@
 # Página do host MikroTik
 
-Clique no nome de um host em **Disponibilidade** para acessar `/hosts/{id}`.
+Abra o painel de um AP para acessar `/ap/{id}`.
 A página consulta o IP atual do inventário monitorado; não aceita endereços de
 conexão arbitrários pelo navegador. Todos os comandos RouterOS são fixos e de
 leitura.
 
 ## Configuração
 
-Defina no `.env` (não versionar credenciais):
-
-```dotenv
-MIKROTIK_USERNAME='usuario-de-consulta'
-MIKROTIK_PASSWORD='senha'
-MIKROTIK_API_TLS=true
-MIKROTIK_API_PORT=8729
-```
+Em **Configuração → Hosts → Autenticação**, selecione MikroTik e informe usuário,
+senha e porta. Salve para validar o acesso. Essa configuração
+é individual por host e compartilhada entre APs, mapas e análises.
 
 API nativa com login moderno: RouterOS 6.43+ e 7. O serviço API-SSL deve estar
 acessível pelo servidor Routiva. TLS valida a cadeia do certificado e o IP do
 host no certificado; certificados privados exigem uma CA confiável na JVM.
 Não há opção de ignorar a validação. Para API simples em rede protegida,
-use `MIKROTIK_API_TLS=false` e `MIKROTIK_API_PORT=8728`.
+desative TLS e configure a porta 8728 na autenticação do host.
 O usuário precisa de permissões de leitura/API. O Routiva não envia comandos de escrita.
 
-Em Docker, recrie o serviço com `docker compose up -d --build app` após configurar.
-O `.env` já é passado ao app pelo Compose. O servidor deve alcançar diretamente
-os equipamentos; esta integração não passa pelo coletor Go.
+As alterações de autenticação são aplicadas ao salvar, sem reiniciar o app.
+O servidor deve alcançar diretamente os equipamentos; esta integração não passa pelo coletor Go.
 
 ## Dados e funcionamento
 
@@ -56,9 +50,8 @@ interface limpa seu gráfico. Nada é
 salvo no banco, localStorage ou sessionStorage. Falhas de gerenciamento não
 impedem a consulta independente ao histórico de ICMP.
 
-As credenciais compartilhadas ficam isoladas em `MikrotikService` para futura
-resolução por cliente autenticado. A vinculação a clientes/login ainda não
-faz parte desta entrega.
+As credenciais são resolvidas por `hosts.HostConnections`. Não existe autenticação
+geral via variáveis de ambiente nem fallback para uma senha compartilhada.
 
 Referência do protocolo: [API RouterOS](https://manual.mikrotik.com/docs/developer-guides/api/).
 

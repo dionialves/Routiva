@@ -2,13 +2,13 @@
 .hosts-page .hosts-table { width:100%; min-width:1200px; table-layout:fixed; font-size:13px; }
 .hosts-page .hosts-table :is(th, td) { padding:9px 16px; text-align:left; white-space:normal; overflow-wrap:anywhere; }
 .hosts-page .hosts-table thead th { padding-top:12px; padding-bottom:12px; }
-.hosts-page .hosts-table thead th:nth-child(1) { width:25%; }
-.hosts-page .hosts-table thead th:nth-child(2) { width:6%; }
-.hosts-page .hosts-table thead th:nth-child(3) { width:7%; }
-.hosts-page .hosts-table thead th:nth-child(4) { width:15%; }
-.hosts-page .hosts-table thead th:nth-child(5) { width:25%; }
-.hosts-page .hosts-table thead th:nth-child(6) { width:9%; }
-.hosts-page .hosts-table thead th:nth-child(7) { width:13%; }
+.hosts-page .hosts-table thead th:nth-child(1) { width:22%; }
+.hosts-page .hosts-table thead th:nth-child(2) { width:5%; }
+.hosts-page .hosts-table thead th:nth-child(3) { width:6%; }
+.hosts-page .hosts-table thead th:nth-child(4) { width:13%; }
+.hosts-page .hosts-table thead th:nth-child(5) { width:22%; }
+.hosts-page .hosts-table thead th:nth-child(6) { width:8%; }
+.hosts-page .hosts-table thead th:nth-child(7) { width:12%; }
 .hosts-page .hosts-table tbody th, .hosts-page .hosts-table tbody th .availability-host-name { max-width:none; white-space:normal; overflow-wrap:anywhere; word-break:normal; }
 .hosts-page .hosts-table tbody td:nth-child(5) { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #host-dialog { --form-dialog-width:800px; }
@@ -58,3 +58,14 @@
 
 #host-dialog .host-snmp-settings-row { display:grid; grid-template-columns:160px minmax(0, 1fr); gap:16px; min-width:0; margin-top:16px; }
 @media(max-width:480px) { #host-dialog .host-snmp-settings-row { grid-template-columns:minmax(0, 1fr); } }
+
+#host-dialog [hidden] { display:none !important; }
+#host-dialog .host-auth-fields { display:grid; gap:10px; border:0; padding:0; margin:0; min-width:0; }
+#host-dialog .host-auth-fields label { font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
+#host-dialog .host-auth-fields :is(input:not([type=checkbox]),select) { width:100%; box-sizing:border-box; }
+
+.hosts-page .hosts-table thead th:nth-child(8) { width:12%; }
+
+.hosts-page [data-connection-status=NOT_CONFIGURED] { color:var(--muted); }
+.hosts-page [data-connection-status=ACTIVE] { color:var(--success); }
+.hosts-page [data-connection-status=ERROR] { color:var(--error); }

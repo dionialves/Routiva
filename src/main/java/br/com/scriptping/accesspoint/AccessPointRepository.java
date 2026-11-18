@@ -33,32 +33,5 @@ public class AccessPointRepository {
         jdbc.update("UPDATE access_point SET model = COALESCE(?, model), connected_clients = COALESCE(?, connected_clients), last_collected_at = ?, updated_at = ? WHERE host_id = ?",
             model, clients, at, System.currentTimeMillis(), id);
     }
-    public record Configuration(String manufacturer, String login, String encryptedPassword, Integer port,
-        boolean enabled, String status, String message, String verifiedIp, boolean tls) {
-        @Override public String toString() { return "AP configuration [redacted]"; }
-    }
-    private Configuration configuration(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new Configuration(rs.getString("manufacturer"), rs.getString("api_login"), rs.getString("api_password"),
-            (Integer) rs.getObject("api_port"), rs.getBoolean("enabled"), rs.getString("connection_status"),
-            rs.getString("connection_message"), rs.getString("verified_ip"), rs.getBoolean("api_tls"));
-    }
-    public Map<String, Configuration> configurations() {
-        var result = new HashMap<String, Configuration>();
-        jdbc.query("SELECT * FROM access_point", (org.springframework.jdbc.core.RowCallbackHandler) rs ->
-            result.put(rs.getString("host_id"), configuration(rs)));
-        return result;
-    }
-    public Configuration configuration(String id) {
-        return jdbc.query("SELECT * FROM access_point WHERE host_id = ?", (rs, n) -> configuration(rs), id)
-            .stream().findFirst().orElse(null);
-    }
-    public void configure(String id, Configuration c) {
-        jdbc.update("UPDATE access_point SET manufacturer=?, api_login=?, api_password=?, api_port=?, enabled=?, connection_status=?, connection_message=?, verified_ip=?, api_tls=?, updated_at=? WHERE host_id=?",
-            c.manufacturer(), c.login(), c.encryptedPassword(), c.port(), c.enabled(), c.status(), c.message(), c.verifiedIp(), c.tls(), System.currentTimeMillis(), id);
-    }
-    public void connectionState(String id, String status, String message, String ip) {
-        jdbc.update("UPDATE access_point SET connection_status=?, connection_message=?, verified_ip=?, updated_at=? WHERE host_id=?",
-            status, message, ip, System.currentTimeMillis(), id);
-    }
     public void delete(String id) { jdbc.update("DELETE FROM access_point WHERE host_id=?", id); }
 }

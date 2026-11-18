@@ -4,14 +4,6 @@
   const root = document.querySelector('[data-host-id]');
   const base = '/api/hosts/' + encodeURIComponent(root.dataset.hostId);
   let ccqLabel = root.dataset.manufacturer === 'Ubiquiti' ? 'CCQ' : 'TX CCQ';
-  document.addEventListener('ap-configuration-changed', event => {
-    if (event.detail?.hostId !== root.dataset.hostId || event.detail.deleted) return;
-    root.dataset.manufacturer = event.detail.manufacturer;
-    ccqLabel = root.dataset.manufacturer === 'Ubiquiti' ? 'CCQ' : 'TX CCQ';
-    document.querySelectorAll('[data-ccq-label]').forEach(label => { label.textContent = ccqLabel; });
-    document.querySelector('.equipment-kind').textContent = root.dataset.manufacturer + ' · Access Point';
-    $('ap-winbox').hidden = root.dataset.manufacturer !== 'MikroTik';
-  });
   const signalPolicy = window.HostSignal.policy();
   let initialTab = true, overviewAt = 0, wirelessAvailable = false;
   let lastValidAt = null, interfacesAt = 0, interfacesAvailable = false;

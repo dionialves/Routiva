@@ -20,7 +20,8 @@ class MappedConnectionPageTests {
     @MockitoBean JdbcTemplate jdbc;
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
-    @MockitoBean AccessPointRepository equipment;
+    @MockitoBean br.com.scriptping.hosts.HostConnections connections;
+    @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
     @Test void rendersStandaloneTableWithSharedShellAndFilters() throws Exception {
         mvc.perform(get("/conexoes")).andExpect(status().isOk())
             .andExpect(content().string(containsString("Conexões mapeadas")))

@@ -37,4 +37,21 @@ class ZabbixSettingsPersistenceTests {
         assertThatIllegalStateException().isThrownBy(() -> settings.save(changed));
         assertThat(settings.current()).isSameAs(original);
     }
+    @Test void deletedHostsAreRemovedFromSelectionAndHistoricalCatalogueAcrossRestart() throws Exception {
+        var repository = mock(ZabbixSettingsRepository.class);
+        var json = new ObjectMapper();
+        var host = new Host("42", "Router", "192.0.2.42", List.of());
+        var state = new ZabbixSettings.State("url", "api", "secret", Set.of(), Set.of("42"), List.of(host), 1L);
+        when(repository.findById(1)).thenReturn(Optional.of(new ZabbixSettingsEntity(json.writeValueAsString(state))));
+        var settings = new ZabbixSettings(repository, json, "", "", "");
+        settings.forgetHosts(Set.of("42"));
+        assertThat(settings.current().inventory()).isEmpty();
+        assertThat(settings.current().imported()).isEmpty();
+        assertThat(settings.current().hosts()).isEmpty();
+        var saved = org.mockito.ArgumentCaptor.forClass(ZabbixSettingsEntity.class);
+        verify(repository).saveAndFlush(saved.capture());
+        when(repository.findById(1)).thenReturn(Optional.of(saved.getValue()));
+        assertThat(new ZabbixSettings(repository, json, "", "", "").current().imported()).isEmpty();
+    }
+
 }
