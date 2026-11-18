@@ -23,7 +23,7 @@ public class MappedConnectionController {
     }
     public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Endpoint(long measuredAt, String name, boolean up, String rxBps, String txBps, String error, Long capacityBps) {}
-    public record Reading(String id, Endpoint a, Endpoint b) {}
+    public record Reading(String id, Endpoint a, Endpoint b, String hostA, String hostB) {}
     private final Map<String, Endpoint> cache = new HashMap<>();
     private record Counters(long at, java.math.BigInteger rx, java.math.BigInteger tx) {}
     private final Map<String, Counters> counters = new HashMap<>();
@@ -120,11 +120,12 @@ public class MappedConnectionController {
         }
         if (cache.size() > 2000) cache.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue().measuredAt() > 30000);
         cache.put(key, result);
+        counters.keySet().retainAll(cache.keySet());
         return result;
     }
     @PostMapping("/api/connections/readings") @ResponseBody
     public List<Reading> readings(@RequestBody Set<String> ids) {
         if (ids == null || ids.size() > 100) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
-        return all().stream().filter(c -> ids.contains(c.id())).map(c -> new Reading(c.id(), read(c.hostA(), c.interfaceA()), read(c.hostB(), c.interfaceB()))).toList();
+        return all().stream().filter(c -> ids.contains(c.id())).map(c -> new Reading(c.id(), read(c.hostA(), c.interfaceA()), read(c.hostB(), c.interfaceB()), c.hostA(), c.hostB())).toList();
     }
 }

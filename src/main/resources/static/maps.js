@@ -255,6 +255,12 @@ function draw() {
       }
     }
     connectors.append(line, hit);
+    if (link.mappedConnectionId && !editing) {
+      const layer = svg('g', {class: 'map-traffic', 'aria-hidden': 'true'});
+      connectors.append(layer);
+      layer.trafficContext = {line, link, route: MapLinks.points(link, start, end), nodes};
+      updateTrafficLayer(layer);
+    }
   }
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
@@ -1360,21 +1366,55 @@ async function loadConnectionInterfaces() {
 }
 $('link-category').onchange = loadConnectionInterfaces;
 $('connection-retry').onclick = loadConnectionInterfaces;
-function connectionRate(value) { return value == null ? 'Sem dados' : (Number(value) / 1000000).toLocaleString('pt-BR', {maximumFractionDigits:2}) + ' Mbps'; }
+function connectionRate(value) { return MapTraffic.rate(value); }
+function updateTrafficLayer(layer) {
+  const {line, link, route, nodes} = layer.trafficContext;
+  const definition = connectionDefinitions.find(c => c.id === link.mappedConnectionId);
+  const from = nodes.find(n => n.id === link.from);
+  const reference = connectionReadings.get(link.mappedConnectionId)?.hostA || definition?.hostA;
+  MapTraffic.render(svg, layer, line, route, nodes, connectionReadings.get(link.mappedConnectionId),
+    $('traffic-animation').checked && !document.hidden, Boolean(reference && reference !== from?.hostId));
+}
+try { $('traffic-animation').checked = localStorage.getItem('map-traffic-animation') !== 'false'; } catch {}
+$('traffic-animation').onchange = () => {
+  try { localStorage.setItem('map-traffic-animation', String($('traffic-animation').checked)); } catch {}
+  document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
+};
+document.addEventListener('visibilitychange', () => document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer));
 function mappedConnectionTitle(id) {
   const reading = connectionReadings.get(id);
   if (!reading) return connectionFailed ? 'Conexão mapeada · Consulta indisponível' : 'Conexão mapeada · Aguardando coleta';
-  return [reading.a, reading.b].map((e, i) => `${i ? 'B' : 'A'} · ${e.name}: ${Date.now() - e.measuredAt > 30000 ? 'Leitura desatualizada' : e.error || (e.up ? 'UP' : 'DOWN')} · RX ${connectionRate(e.rxBps)} · TX ${connectionRate(e.txBps)}`).join('\n');
+  const definition = connectionDefinitions.find(c => c.id === id);
+  const data = MapTraffic.state(reading);
+  const utilization = value => value == null || !data.capacity ? 'Sem dados' : (value / data.capacity * 100).toLocaleString('pt-BR', {maximumFractionDigits: 2}) + '%';
+  return [reading.a, reading.b].map((e, i) => {
+    const hostId = i ? reading.hostB || definition?.hostB : reading.hostA || definition?.hostA;
+    const host = inventory.find(h => h.id === hostId);
+    return `${i ? 'B' : 'A'} · ${host?.name || hostId || ''} · ${e.name}: ${Date.now() - e.measuredAt > 30000 ? 'Leitura desatualizada' : e.error || (e.up ? 'UP' : 'DOWN')}`;
+  }).concat([`TX A → B: ${connectionRate(data.tx)} · ${utilization(data.tx)}`,
+    `RX B → A: ${connectionRate(data.rx)} · ${utilization(data.rx)}`,
+    `Capacidade: ${connectionRate(data.capacity)}`,
+    `Última coleta: ${new Date(reading.a.measuredAt).toLocaleString('pt-BR')}`]).join('\n');
 }
 async function refreshMappedConnections() {
+  document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
   if (connectionBusy || editing || !current || document.hidden) return;
   const ids = [...new Set(current.layout.links.map(l => l.mappedConnectionId).filter(Boolean))];
   if (!ids.length) return;
   connectionBusy = true;
-  try { const rows = await connectionRequest('/api/connections/readings', ids); connectionFailed = false; connectionReadings = new Map(rows.map(r => [r.id, r])); }
-  catch { connectionReadings.clear(); connectionFailed = true; }
+  const requestedMap = current;
+  try {
+    const rows = [];
+    for (let offset = 0; offset < ids.length; offset += 100)
+      rows.push(...await connectionRequest('/api/connections/readings', ids.slice(offset, offset + 100)));
+    if (current !== requestedMap || editing) return;
+    connectionFailed = false;
+    connectionReadings = new Map(rows.map(r => [r.id, r]));
+  }
+  catch { if (current === requestedMap) { connectionReadings.clear(); connectionFailed = true; } }
   finally {
     connectionBusy = false;
+    document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
     document.querySelectorAll('[data-connection-id]').forEach(title => { title.textContent = mappedConnectionTitle(title.dataset.connectionId); });
   }
 }

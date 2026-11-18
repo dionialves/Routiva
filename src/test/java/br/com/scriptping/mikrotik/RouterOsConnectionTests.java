@@ -39,6 +39,43 @@ class RouterOsConnectionTests {
         }
     }
 
+    @Test void mappedInterfacesReuseOneLoginAndResolveInterfaceIdsOnEveryCollection() throws Exception {
+        try (var server = new ServerSocket(0); var executor = Executors.newSingleThreadExecutor()) {
+            var router = executor.submit(() -> {
+                try (var socket = server.accept()) {
+                    socket.setSoTimeout(5000);
+                    var in = socket.getInputStream(); var out = socket.getOutputStream();
+                    assertEquals("/login", read(in).getFirst()); send(out, "!done");
+                    for (int collection = 1; collection <= 2; collection++) {
+                        assertEquals("/interface/print", read(in).getFirst());
+                        send(out, "!re", "=.id=*" + collection, "=name=ether" + collection, "=type=ether", "=running=true");
+                        send(out, "!done");
+                        var stats = read(in);
+                        assertTrue(stats.contains("=stats-detail="));
+                        assertTrue(stats.contains("?name=ether" + collection));
+                        send(out, "!re", "=rx-byte=12000", "=tx-byte=6000"); send(out, "!done");
+                        var status = read(in);
+                        assertEquals("/interface/ethernet/monitor", status.getFirst());
+                        assertTrue(status.contains("=numbers=*" + collection));
+                        send(out, "!re", "=rate=1Gbps"); send(out, "!done");
+                    }
+                    assertEquals(-1, in.read());
+                } catch (IOException ex) { throw new UncheckedIOException(ex); }
+            });
+            var service = new MikrotikService(null);
+            var host = new br.com.scriptping.zabbix.Host("1", "Router", "127.0.0.1", List.of());
+            var credentials = new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "test-only", server.getLocalPort());
+            try {
+                for (int i = 1; i <= 2; i++) {
+                    var row = service.query(host, "connection", "ether" + i, credentials, false).rows().getFirst();
+                    assertEquals("12000", row.get("rx-byte"));
+                    assertEquals("1Gbps", row.get("rate"));
+                }
+            } finally { service.closeMappedSessions(); }
+            router.get(5, TimeUnit.SECONDS);
+        }
+    }
+
     @Test void lengthsRoundTripAtEveryBoundary() throws Exception {
         for (int length : new int[]{0, 1, 127, 128, 16383, 16384, 2097151, 2097152, 268435455, 268435456, Integer.MAX_VALUE}) {
             var bytes = new ByteArrayOutputStream();

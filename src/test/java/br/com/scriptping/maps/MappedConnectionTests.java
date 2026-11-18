@@ -76,4 +76,16 @@ class MappedConnectionTests {
         verify(mikrotik, times(2)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
         assertThat(controller.readings(Set.of("missing"))).isEmpty();
     }
+    @Test void computesRatesWithUnsigned64BitCountersAndRejectsResetsAndGaps() {
+        var first = MappedConnectionController.counter("18446744073709550000");
+        var second = MappedConnectionController.counter("18446744073709551000");
+        assertThat(MappedConnectionController.rate(second, first, 2000)).isEqualTo("4000");
+        assertThat(MappedConnectionController.rate(first, second, 2000)).isNull();
+        assertThat(MappedConnectionController.rate(second, first, 0)).isNull();
+        assertThat(MappedConnectionController.rate(second, first, 31000)).isNull();
+        assertThat(MappedConnectionController.counter("18446744073709551616")).isNull();
+        assertThat(MappedConnectionController.counter("-1")).isNull();
+        assertThat(MappedConnectionController.capacity("2.5Gbps")).isEqualTo(2500000000L);
+        assertThat(MappedConnectionController.capacity("unknown")).isNull();
+    }
 }

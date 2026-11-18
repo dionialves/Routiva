@@ -7,7 +7,7 @@ function setup() {
   const controls = new Map();
   const context = vm.createContext({
     $: id => { if (!controls.has(id)) controls.set(id, {}); return controls.get(id); },
-    current:null, editing:false, document:{hidden:false, querySelectorAll:()=>[]},
+    current:null, editing:false, inventory:[], MapTraffic:require('../../main/resources/static/map-traffic.js'), document:{hidden:false, querySelectorAll:()=>[], addEventListener(){}},
     setInterval(){}, Date, Map, Set, Number, JSON, calls:0,
     fetch:async () => { context.calls++; return {ok:true,json:async()=>[]}; }
   });
@@ -40,6 +40,8 @@ test('tooltips show endpoint rates and do not present old readings as UP', () =>
   const {run} = setup();
   run("connectionReadings.set('c1', {a:{name:'ether1',up:true,rxBps:'1000000',txBps:'2000000',measuredAt:Date.now()}, b:{name:'ether2',up:true,measuredAt:Date.now()-31000}})");
   const title = run("mappedConnectionTitle('c1')");
-  assert.match(title, /ether1: UP · RX 1 Mbps · TX 2 Mbps/);
+  assert.match(title, /ether1: UP/);
+  assert.match(title, /TX A → B: 2 Mbps/);
+  assert.match(title, /RX B → A: 1 Mbps/);
   assert.match(title, /ether2: Leitura desatualizada/);
 });

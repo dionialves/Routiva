@@ -6,18 +6,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import javax.net.ssl.*;
 
-/** One bounded API connection per HTTP request; no background collection or persistence. */
+/** RouterOS API transport with bounded commands; may be reused serially across collections. */
 final class RouterOsConnection implements AutoCloseable {
     private final Socket socket;
     private final InputStream input;
     private final OutputStream output;
-    private final long deadline = System.nanoTime() + 15_000_000_000L;
 
     RouterOsConnection(String host, int port, boolean tls, String username, String password) throws IOException {
         socket = tls ? SSLSocketFactory.getDefault().createSocket() : new Socket();
         try {
             socket.connect(new InetSocketAddress(host, port), 3000);
             socket.setSoTimeout(4000);
+            socket.setKeepAlive(true);
             if (socket instanceof SSLSocket ssl) {
                 var parameters = ssl.getSSLParameters();
                 parameters.setEndpointIdentificationAlgorithm("HTTPS");
@@ -34,6 +34,7 @@ final class RouterOsConnection implements AutoCloseable {
     }
 
     List<Map<String, String>> command(String... words) throws IOException {
+        long deadline = System.nanoTime() + 15_000_000_000L;
         for (String word : words) {
             byte[] bytes = word.getBytes(StandardCharsets.UTF_8);
             writeLength(output, bytes.length);
