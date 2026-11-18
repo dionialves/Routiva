@@ -11,13 +11,13 @@ function setup() {
   const fields=new Map();
   const $=id=>{
     if(!fields.has(id))fields.set(id,{value:'',checked:false,open:false,focus(){},removeAttribute(){},
-      showModal(){this.open=true;},close(){this.open=false;},querySelector(){return {scrollTop:0,click(){}};}});
+      replaceChildren(...options){this.options=options;},add(option){this.options.push(option);},showModal(){this.open=true;},close(){this.open=false;},querySelector(){return {scrollTop:0,click(){}};}});
     return fields.get(id);
   };
   $('element-icon').options=[{value:'circle',dataset:{bindings:'group free'}},{value:'switch',dataset:{bindings:'host free'}}];
   $('element-name').value='Switch';$('element-icon').value='switch';$('label-position').value='BELOW';
   $('interfaces-enabled').checked=true;
-  const context=vm.createContext({$,MapSwitch,current:{layout:{nodes:[node],links:[{from:'node',to:'other',fromPort:ports[0].id}]}},
+  const context=vm.createContext({$,MapSwitch,maps:[],Option:function(text,value){this.text=text;this.value=value;},current:{layout:{nodes:[node],links:[{from:'node',to:'other',fromPort:ports[0].id}]}},
     interfaceLoadGeneration:0,loadingInterfaces:false,configuredSlots:slots.map(s=>({...s})),configuredPorts:ports,configuredSwitchColor:null,pendingNode:null,selected:'node',selectedLink:null,
     selection:new Set(),tool:'select',timer:null,generation:0,checkpoint(){},refresh(){},clearTimeout(){},
     draw(){},drawPreview(){},populateBinding(){},renderSwitchSlots(){},window:{elementIconPicker:{sync(){}}},
@@ -96,4 +96,19 @@ test('loading interfaces shows the table loading state and restores slots after 
   assert.equal($('interface-load-status').role,'alert');
   assert.match($('interface-load-status').textContent,/conectar ao equipamento/);
   assert.doesNotMatch($('interface-load-status').textContent,/MikroTik/);
+});
+
+test('group submap selection is restored and persisted; changing type clears it',()=>{
+  const {$,context,node,run}=setup();
+  context.maps=[{id:'child',layout:{name:'Filial'}}];
+  node.groupId='group';node.subMapId='child';
+  run('openElement(current.layout.nodes[0])');
+  assert.equal($('sub-map-field').hidden,false);
+  assert.equal($('sub-map').value,'child');
+  $('group').value='group';
+  $('element-form').onsubmit({preventDefault(){}});
+  assert.equal(node.subMapId,'child');
+  $('type').value='';
+  $('element-form').onsubmit({preventDefault(){}});
+  assert.equal(node.subMapId,null);
 });

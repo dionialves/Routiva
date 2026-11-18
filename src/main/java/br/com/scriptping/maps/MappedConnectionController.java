@@ -55,12 +55,6 @@ public class MappedConnectionController {
     @ModelAttribute
     public void noCache(jakarta.servlet.http.HttpServletResponse response) { response.setHeader("Cache-Control", "no-store"); }
 
-    @GetMapping("/conexoes") public String page() { return "connections"; }
-    @GetMapping("/api/connections") @ResponseBody
-    public List<Connection> all() {
-        return jdbc.query("SELECT * FROM mapped_connection ORDER BY name, id", (rs, n) -> new Connection(
-            rs.getString("id"), rs.getString("name"), rs.getString("host_a"), rs.getString("interface_a"), rs.getString("host_b"), rs.getString("interface_b")));
-    }
     private Host host(String id) {
         var host = inventory.hosts().stream().filter(h -> h.id().equals(id)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Equipamento não encontrado."));
@@ -76,7 +70,7 @@ public class MappedConnectionController {
         return org.springframework.http.ResponseEntity.status(ex.getStatusCode())
             .body(Map.of("message", ex.getReason() == null ? "Consulta indisponível." : ex.getReason()));
     }
-    @GetMapping("/api/connections/discover/{hostId}") @ResponseBody
+    @GetMapping("/api/maps/connections/discover/{hostId}") @ResponseBody
     public List<Map<String, String>> discover(@PathVariable String hostId) {
         var target = hosts.target(hostId);
         var credentials = hosts.credentials(hostId);
@@ -84,13 +78,13 @@ public class MappedConnectionController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Carregar interfaces exige um host MikroTik com autenticação configurada.");
         return mikrotik.query(target, "discover", null, connections.require(target)).rows();
     }
-    @GetMapping("/api/connections/interfaces/{hostId}") @ResponseBody
+    @GetMapping("/api/maps/connections/interfaces/{hostId}") @ResponseBody
     public List<Map<String, String>> interfaces(@PathVariable String hostId) {
         return mikrotik.query(host(hostId), "interfaces", null, apiConnection(hostId)).rows().stream()
             .filter(row -> "ether".equals(row.get("type"))).toList();
     }
-    @PostMapping("/api/connections") @ResponseBody
-    public Connection save(@RequestBody Connection input) {
+    @PostMapping("/api/maps/connections/validate") @ResponseBody
+    public Connection validate(@RequestBody Connection input) {
         if (input.name() == null || input.name().isBlank() || input.name().length() > 120
             || input.hostA() == null || input.hostB() == null || input.hostA().equals(input.hostB()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe nome e dois equipamentos diferentes.");
@@ -98,9 +92,7 @@ public class MappedConnectionController {
             if (interfaces(endpoint[0]).stream().noneMatch(i -> endpoint[1].equals(i.get("name"))))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Interface Ethernet não encontrada.");
         }
-        // Immutable definitions keep references in existing maps stable.
         var c = new Connection(UUID.randomUUID().toString(), input.name().trim(), input.hostA(), input.interfaceA(), input.hostB(), input.interfaceB());
-        jdbc.update("INSERT INTO mapped_connection(id,name,host_a,interface_a,host_b,interface_b) VALUES (?,?,?,?,?,?)", c.id(), c.name(), c.hostA(), c.interfaceA(), c.hostB(), c.interfaceB());
         return c;
     }
     private synchronized Endpoint read(String hostId, String name) {
@@ -141,9 +133,15 @@ public class MappedConnectionController {
         cacheSources.keySet().retainAll(cache.keySet());
         return result;
     }
-    @PostMapping("/api/connections/readings") @ResponseBody
-    public List<Reading> readings(@RequestBody Set<String> ids) {
+    @PostMapping("/api/maps/{mapId}/connections/readings") @ResponseBody
+    public List<Reading> readings(@PathVariable String mapId, @RequestBody Set<String> ids) {
         if (ids == null || ids.size() > 100) throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
-        return all().stream().filter(c -> ids.contains(c.id())).map(c -> new Reading(c.id(), read(c.hostA(), c.interfaceA()), read(c.hostB(), c.interfaceB()), c.hostA(), c.hostB())).toList();
+        var layouts = jdbc.queryForList("SELECT layout FROM network_map WHERE id=?", String.class, mapId);
+        if (layouts.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        try {
+            var layout = new com.fasterxml.jackson.databind.ObjectMapper().readValue(layouts.getFirst(), NetworkMapModels.Layout.class);
+            return layout.links().stream().map(NetworkMapModels.Link::connection).filter(Objects::nonNull)
+                .filter(c -> ids.contains(c.id())).map(c -> new Reading(c.id(), read(c.hostA(), c.interfaceA()), read(c.hostB(), c.interfaceB()), c.hostA(), c.hostB())).toList();
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) { throw new IllegalStateException(ex); }
     }
 }

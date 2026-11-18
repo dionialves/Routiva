@@ -7,11 +7,11 @@
   <th:block th:replace="~{design-system :: layout}"></th:block>
   <th:block th:replace="~{design-system :: actions}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
-  <link rel="stylesheet" href="/availability.css">
+  <link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
   <th:block th:replace="~{design-system :: filters}"></th:block>
   <th:block th:replace="~{design-system :: picker}"></th:block>
   <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
-  <link rel="stylesheet" href="/radio-clients.css?v=20261115-no-collection-footer">
+  <link rel="stylesheet" href="/radio-clients.css?v=20261118-compact-tables">
   <script src="/multi-picker.js?v=20261115-radio" defer></script><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/radio-clients.js?v=20261116-host-groups" defer></script>
 </head><body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('radio-clients')}"></aside>
@@ -25,7 +25,7 @@
 <div th:replace="~{multi-picker :: checklist('radio-client', 'Clientes', 'user', 'Todos os clientes', 'Pesquisar login')}"></div>
 <div th:replace="~{multi-picker :: checklist('radio-status', 'Conexão', 'activity', 'Todas as conexões', 'Pesquisar condição')}"></div>
 </div></section>
-<section class="card availability-host-section" aria-labelledby="radio-list-title">
+<section class="card availability-host-section system-table-compact" aria-labelledby="radio-list-title">
 <h2 id="radio-list-title">Clientes cadastrados</h2>
 <p id="radio-state" role="status" aria-live="polite">Carregando clientes…</p>
 <div th:replace="~{design-system :: dataTable('Clientes Rádio', ~{radio-clients :: sections})}">

@@ -43,19 +43,19 @@ class MappedConnectionTests {
         assertThatThrownBy(() -> controller.discover("a")).isInstanceOf(ResponseStatusException.class);
         verify(mikrotik, times(1)).query(any(), eq("discover"), isNull(), any(EquipmentProvider.Connection.class));
     }
-    @Test void savesIndependentEntityAndRejectsVirtualOrMissingInterfaces() {
+    @Test void validatesMapDraftWithoutPersistingAndRejectsVirtualInterfaces() {
         equipment();
-        var saved = controller.save(new MappedConnectionController.Connection(null, "Cabo A-B", "a", "ether1", "b", "ether1"));
+        var saved = controller.validate(new MappedConnectionController.Connection(null, "Cabo A-B", "a", "ether1", "b", "ether1"));
         assertThat(saved.id()).isNotBlank();
-        assertThat(controller.all()).containsExactly(saved);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM network_map", Integer.class)).isZero();
         var credentials = org.mockito.ArgumentCaptor.forClass(EquipmentProvider.Connection.class);
         verify(mikrotik, times(2)).query(any(), eq("interfaces"), isNull(), credentials.capture());
         assertThat(credentials.getValue().login()).isEqualTo("map-reader");
         assertThat(credentials.getAllValues()).extracting(EquipmentProvider.Connection::password).containsExactly("test-a", "test-b");
         assertThat(credentials.getValue().port()).isEqualTo(8729);
         assertThat(credentials.getValue().tls()).isTrue();
-        assertThatThrownBy(() -> controller.save(new MappedConnectionController.Connection(null, "Inválida", "a", "bridge", "b", "ether1"))).isInstanceOf(ResponseStatusException.class);
-        assertThat(controller.all()).hasSize(1);
+        assertThatThrownBy(() -> controller.validate(new MappedConnectionController.Connection(null, "Inválida", "a", "bridge", "b", "ether1"))).isInstanceOf(ResponseStatusException.class);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM network_map", Integer.class)).isZero();
     }
     @Test void refusesMissingHostCredentialsWithoutQueryingEquipment() {
         when(inventory.hosts()).thenReturn(List.of(new Host("a", "A", "10.0.0.1", List.of())));
@@ -66,24 +66,26 @@ class MappedConnectionTests {
 
     @Test void cachesReadingsAndSeparatesCollectionErrorFromDown() {
         equipment();
-        var c = controller.save(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
+        var c = controller.validate(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
+        persist(c);
         when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class))).thenAnswer(call -> {
             Host host = call.getArgument(0);
             if (host.id().equals("b")) throw new IllegalStateException("API indisponível");
             return new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "true", "rx-bits-per-second", "1000", "tx-bits-per-second", "2000")), "");
         });
-        var first = controller.readings(Set.of(c.id())).getFirst();
+        var first = controller.readings("map", Set.of(c.id())).getFirst();
         assertThat(first.a().up()).isTrue();
         assertThat(first.a().rxBps()).isEqualTo("1000");
         assertThat(first.b().error()).isNotNull();
-        assertThat(controller.readings(Set.of(c.id()))).containsExactly(first);
+        assertThat(controller.readings("map", Set.of(c.id()))).containsExactly(first);
         verify(mikrotik, times(2)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
-        assertThat(controller.readings(Set.of("missing"))).isEmpty();
+        assertThat(controller.readings("map", Set.of("missing"))).isEmpty();
     }
     @Test void firstCounterSampleExpiresEarlyButMeasuredRatesKeepNormalCache() {
         equipment();
         var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts);
-        var c = controller.save(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
+        var c = controller.validate(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
+        persist(c);
         long now = System.currentTimeMillis();
         var firstRows = List.of(Map.of("running", "true", "rx-byte", "1000", "tx-byte", "2000"));
         var nextRows = List.of(Map.of("running", "true", "rx-byte", "2000", "tx-byte", "4000"));
@@ -91,13 +93,21 @@ class MappedConnectionTests {
             .thenReturn(new MikrotikService.Snapshot(now - 1500, firstRows, ""))
             .thenReturn(new MikrotikService.Snapshot(now - 1500, firstRows, ""))
             .thenReturn(new MikrotikService.Snapshot(now, nextRows, ""));
-        var first = controller.readings(Set.of(c.id())).getFirst();
+        var first = controller.readings("map", Set.of(c.id())).getFirst();
         assertThat(first.a().txBps()).isNull();
-        var second = controller.readings(Set.of(c.id())).getFirst();
+        var second = controller.readings("map", Set.of(c.id())).getFirst();
         assertThat(second.a().txBps()).isEqualTo("10666");
         assertThat(second.a().rxBps()).isEqualTo("5333");
-        assertThat(controller.readings(Set.of(c.id()))).containsExactly(second);
+        assertThat(controller.readings("map", Set.of(c.id()))).containsExactly(second);
         verify(mikrotik, times(4)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
+    }
+    void persist(MappedConnectionController.Connection connection) {
+        try {
+            var json = new com.fasterxml.jackson.databind.ObjectMapper();
+            var link = Map.of("from", "a", "to", "b", "mappedConnectionId", connection.id(), "connection", connection);
+            jdbc.update("INSERT INTO network_map(id,revision,layout) VALUES ('map',1,?)",
+                json.writeValueAsString(Map.of("name", "Rede", "nodes", List.of(), "links", List.of(link))));
+        } catch (Exception ex) { throw new IllegalStateException(ex); }
     }
     @Test void computesRatesWithUnsigned64BitCountersAndRejectsResetsAndGaps() {
         var first = MappedConnectionController.counter("18446744073709550000");

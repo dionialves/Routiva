@@ -76,12 +76,10 @@ class HostCatalogTests {
     @Test void remoteDeletionRemovesHostApAuthenticationConnectionsAndMapReferences() {
         catalog.reconcile();
         jdbc.update("INSERT INTO access_point(host_id,host_name,created_at,updated_at) VALUES ('42','AP',1,1)");
-        jdbc.update("INSERT INTO mapped_connection(id,name,host_a,interface_a,host_b,interface_b) VALUES ('link','Cable','42','ether1','43','ether2')");
         jdbc.update("INSERT INTO network_map(id,revision,layout) VALUES ('map',1,?)", "{\"nodes\":[{\"id\":\"a\",\"hostId\":\"42\"},{\"id\":\"b\",\"hostId\":\"43\"}],\"links\":[{\"from\":\"a\",\"to\":\"b\"}]}");
         when(client.managedHosts()).thenReturn(List.of()); catalog.reconcile();
         assertThat(hosts.all()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM access_point", Integer.class)).isZero();
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM mapped_connection", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT layout FROM network_map", String.class)).doesNotContain("42").contains("43");
         assertThat(jdbc.queryForObject("SELECT revision FROM network_map", Long.class)).isEqualTo(2);
     }

@@ -22,11 +22,7 @@ class MappedConnectionPageTests {
     @MockitoBean MikrotikService mikrotik;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
-    @Test void rendersStandaloneTableWithSharedShellAndFilters() throws Exception {
-        mvc.perform(get("/conexoes")).andExpect(status().isOk())
-            .andExpect(content().string(containsString("Conexões mapeadas")))
-            .andExpect(content().string(containsString("connection-rows")))
-            .andExpect(content().string(containsString("query-filter-field")))
-            .andExpect(header().string("Cache-Control", "no-store"));
+    @Test void standaloneConnectionPageHasBeenRemoved() throws Exception {
+        mvc.perform(get("/conexoes")).andExpect(status().isNotFound());
     }
 }

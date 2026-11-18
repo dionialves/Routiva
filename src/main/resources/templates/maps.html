@@ -4,8 +4,8 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261118-connection-tooltip"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261118-electrical-advertising" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261118-pulse-motion" defer></script><script src="/map-connection-tooltip.js?v=20261118" defer></script><script src="/maps.js?v=20261118-connection-tooltip" defer></script>
+  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261118-map-types"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261118-electrical-advertising" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261118-pulse-motion" defer></script><script src="/map-connection-tooltip.js?v=20261118" defer></script><script src="/maps.js?v=20261118-map-types" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
@@ -22,10 +22,10 @@
 
       </div>
     </section>
-    <section class="card availability-host-section" aria-labelledby="library-title">
+    <section class="card availability-host-section system-table-compact" aria-labelledby="library-title">
       <div class="hosts-toolbar"><h2 id="library-title">Mapas cadastrados</h2></div>
       <div th:replace="~{design-system :: dataTable('Mapas cadastrados', ~{maps :: listSections})}"><th:block th:fragment="listSections">
-        <thead><tr><th>Nome do mapa</th><th>Elementos</th><th>Conexões</th><th>Atualizado em</th><th>Status</th><th>Ações</th></tr></thead>
+        <thead><tr><th scope="col">Nome do mapa</th><th scope="col">Elementos</th><th scope="col">Conexões</th><th scope="col">Atualizado em</th><th scope="col">Tipo</th></tr></thead>
         <tbody id="maps"></tbody>
       </th:block></div>
       <p id="maps-empty" hidden>Nenhum mapa encontrado.</p>
@@ -86,6 +86,7 @@
   <div class="map-stage" id="map-stage">
 <div class="map-viewport" id="viewport"><svg id="canvas" viewBox="0 0 1200 700" aria-label="Topologia de rede"></svg></div>
     <div id="map-tools" role="group" aria-label="Navegação do mapa">
+      <button id="parent-map" type="button" title="Voltar ao mapa principal" aria-label="Voltar ao mapa principal" class="system-button system-button-icon-only" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H4m6-6-6 6 6 6"/></svg></button>
       <button id="fit" title="Ajustar à tela" aria-label="Ajustar à tela" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4m10 6h-4m-6 10v-4M2 12h4"/></svg></button>
       <button id="zoom-in" title="Aumentar zoom" aria-label="Aumentar zoom" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button>
       <button id="zoom-out" title="Diminuir zoom" aria-label="Diminuir zoom" class="system-button system-button-icon-only"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
@@ -192,6 +193,7 @@
             <label>Posição do nome<select id="label-position"><option value="BELOW">Abaixo</option><option value="ABOVE">Acima</option><option value="LEFT">Esquerda</option><option value="RIGHT">Direita</option></select></label>
           </div>
           <div id="group-field" hidden><span id="group-label">Selecionar grupo de hosts</span><select id="group" aria-labelledby="group-label"></select></div>
+          <label id="sub-map-field" hidden>Submapa<select id="sub-map"><option value="">Nenhum submapa</option></select></label>
         </section>
         <section class="element-visual-config" aria-labelledby="element-icon-title">
           <div class="element-section-heading"><div><h3 id="element-icon-title">Ícone do elemento</h3><p>Selecione como o elemento será representado no mapa.</p></div></div>

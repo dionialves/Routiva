@@ -69,17 +69,17 @@ class DashboardTests {
             """;
         String saved = mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(draft))
             .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(1))
-            .andExpect(jsonPath("$.layout.publication").value("PUBLICADO"))
+            .andExpect(jsonPath("$.layout.publication").doesNotExist())
             .andExpect(jsonPath("$.updatedAt").isNumber())
             .andExpect(jsonPath("$.layout.width").doesNotExist())
             .andExpect(jsonPath("$.layout.height").doesNotExist())
             .andExpect(jsonPath("$.layout.nodes[0].id").value("a"))
             .andReturn().getResponse().getContentAsString();
         mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.links[0].to").value("b"));
-        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved.replace("PUBLICADO", "RASCUNHO")))
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved.replace("Backbone", "Backbone atualizado")))
             .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(2));
-        mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.publication").value("RASCUNHO"));
-        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved.replace("PUBLICADO", "EM_EDICAO")))
+        mvc.perform(get("/api/maps")).andExpect(jsonPath("$[0].layout.name").value("Backbone atualizado"));
+        mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved.replace("Backbone", "")))
             .andExpect(status().isBadRequest());
         mvc.perform(post("/api/maps").with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf()).contentType("application/json").content(saved))
             .andExpect(status().isConflict());

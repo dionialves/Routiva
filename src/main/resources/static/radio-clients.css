@@ -30,9 +30,7 @@
 }
 
 .radio-clients-page .query-filter-row > .query-filter-field { flex:1 1 240px; max-width:none; }
-.radio-clients-page .hosts-table { min-width:1150px; font-size:13px; }
-.radio-clients-page .hosts-table :is(th, td) { padding:9px 16px; text-align:left; white-space:nowrap; }
-.radio-clients-page .hosts-table thead th { padding-top:12px; padding-bottom:12px; }
+.radio-clients-page .system-table-compact { --compact-table-min-width:1150px; }
 #radio-rows tr { cursor:default; }
 :is(#radio-rows, #radio-history-items) [data-connection=normal] { color:var(--success); }
 :is(#radio-rows, #radio-history-items) [data-connection=attention] { color:var(--warning); }

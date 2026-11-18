@@ -10,7 +10,10 @@ public final class NetworkMapModels {
 
     public enum LabelPosition { ABOVE, BELOW, LEFT, RIGHT }
 
-    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor) {
+    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId) {
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, switchColor, null);
+        }
         public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled) {
             this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, null);
         }
@@ -42,8 +45,12 @@ public final class NetworkMapModels {
         public Port(String id, String type, String slotId, String name, String capacity) { this(id, type, slotId, name, capacity, null, null, null, null); }
         public Port(String id, String type) { this(id, type, null, null, null); }
     }
+    public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Bend(double x, double y) {}
-    public record Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId) {
+    public record Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId, Connection connection) {
+        public Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId) {
+            this(from, to, fromPort, toPort, style, points, lineStyle, mappedConnectionId, null);
+        }
         public Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle) {
             this(from, to, fromPort, toPort, style, points, lineStyle, null);
         }
@@ -60,18 +67,15 @@ public final class NetworkMapModels {
             if (points == null) points = List.of();
         }
     }
-    public enum Publication { RASCUNHO, PUBLICADO }
-
     public record Camera(double x, double y, double scale) {}
 
-    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"width", "height"})
-    public record Layout(Publication publication, String name, Camera camera, Integer minimumSeverity, Boolean showAcknowledged, List<Node> nodes, List<Link> links) {
-        public Layout(Publication publication, String name, Camera camera, Integer minimumSeverity, List<Node> nodes, List<Link> links) {
-            this(publication, name, camera, minimumSeverity, true, nodes, links);
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"width", "height", "publication"})
+    public record Layout(String name, Camera camera, Integer minimumSeverity, Boolean showAcknowledged, List<Node> nodes, List<Link> links) {
+        public Layout(String name, Camera camera, Integer minimumSeverity, List<Node> nodes, List<Link> links) {
+            this(name, camera, minimumSeverity, true, nodes, links);
         }
 
         public Layout {
-            if (publication == null) publication = Publication.PUBLICADO;
             if (minimumSeverity == null) minimumSeverity = 0;
             if (showAcknowledged == null) showAcknowledged = true;
         }

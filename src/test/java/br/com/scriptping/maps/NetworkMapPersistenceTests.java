@@ -33,11 +33,34 @@ class NetworkMapPersistenceTests {
     @Autowired JdbcTemplate jdbc;
 
     @Test
+    void legacyPublicationIsIgnoredAndNotWrittenBack() throws Exception {
+        var json = new ObjectMapper();
+        for (var status : List.of("RASCUNHO", "PUBLICADO")) {
+            var layout = json.readValue("{\"publication\":\"" + status
+                + "\",\"name\":\"Legado\",\"nodes\":[],\"links\":[]}", Layout.class);
+            var saved = service.save(new Saved(null, 0, layout, null));
+            assertThat(json.writeValueAsString(saved.layout())).doesNotContain("publication", status);
+        }
+    }
+
+    @Test
+    void groupSubMapPersistsAndRejectsSelfReference() throws Exception {
+        var child = service.save(new Saved(null, 0, new Layout("Filial", null, 0, List.of(), List.of()), null));
+        var node = new Node("group", "g1", null, null, "Filial", 0, 0, null,
+            "circle", List.of(), List.of(), false, null, child.id());
+        var parent = service.save(new Saved(null, 0, new Layout("Principal", null, 0, List.of(node), List.of()), null));
+        assertThat(service.maps().stream().filter(map -> map.id().equals(parent.id())).findFirst().orElseThrow()
+            .layout().nodes().getFirst().subMapId()).isEqualTo(child.id());
+        assertThatThrownBy(() -> service.save(new Saved(child.id(), child.revision(), parent.layout(), null)))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void connectorAndPortCapacityPersistIndependently() throws Exception {
         var slot = new Slot("slot", "sfp28-", "25g", 1, List.of("uplink"), "sfp28");
         var port = new Port("linked-port", "sfp", "slot", "uplink", "25g", "Core", "ether", "10Gbps", true, "sfp28");
         var node = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(port), List.of(slot));
-        var saved = service.save(new Saved(null, 0, new Layout(null, "Conectores", null, 0, List.of(node), List.of()), null));
+        var saved = service.save(new Saved(null, 0, new Layout("Conectores", null, 0, List.of(node), List.of()), null));
         var restored = service.maps().getFirst();
         assertThat(restored).isEqualTo(saved);
         assertThat(restored.layout().nodes().getFirst().ports()).containsExactly(port);
@@ -45,7 +68,7 @@ class NetworkMapPersistenceTests {
         var wrongConnector = new Port("linked-port", "sfp", "slot", "uplink", "25g", null, null, null, null, "sfpplus");
         var invalid = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(wrongConnector), List.of(slot));
         assertThatThrownBy(() -> service.save(new Saved(null, 0,
-            new Layout(null, "Inválido", null, 0, List.of(invalid), List.of()), null)))
+            new Layout("Inválido", null, 0, List.of(invalid), List.of()), null)))
             .isInstanceOf(ResponseStatusException.class);
     }
 
@@ -54,30 +77,35 @@ class NetworkMapPersistenceTests {
         var slots = List.of(new Slot("optical", "SFP10G", "sfp10g", 1, List.of("uplink-core")));
         var port = new Port("connected", "sfp", "optical", "uplink-core", "sfp10g", "Core", "ether", "10Gbps", true);
         var node = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(port), slots);
-        var saved = service.save(new Saved(null, 0, new Layout(null, "Descoberta", null, 0, List.of(node), List.of()), null));
+        var saved = service.save(new Saved(null, 0, new Layout("Descoberta", null, 0, List.of(node), List.of()), null));
         assertThat(service.maps()).contains(saved);
         assertThat(service.maps().getFirst().layout().nodes().getFirst().ports()).containsExactly(port);
         var invalid = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(port),
             List.of(new Slot("optical", "SFP10G", "sfp10g", 1, List.of("different"))));
         assertThatThrownBy(() -> service.save(new Saved(null, 0,
-            new Layout(null, "Inválido", null, 0, List.of(invalid), List.of()), null)))
+            new Layout("Inválido", null, 0, List.of(invalid), List.of()), null)))
             .isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
-    void mappedReferencesPersistAndMustMatchEndpointHosts() throws Exception {
-        jdbc.update("INSERT INTO mapped_connection(id,name,host_a,interface_a,host_b,interface_b) VALUES ('c1','Cabo','h1','ether1','h2','ether2')");
+    void connectionDataBelongsToMapAndMustMatchEndpointHosts() throws Exception {
         var nodes = List.of(new Node("a", null, "h1", null, "A", 0, 0, null), new Node("b", null, "h2", null, "B", 200, 0, null));
-        var link = new Link("a", "b", null, null, "straight", List.of(), "straight", "c1");
-        var saved = service.save(new Saved(null, 0, new Layout(null, "Rede", null, 0, nodes, List.of(link)), null));
-        assertThat(service.maps().getFirst().layout().links().getFirst().mappedConnectionId()).isEqualTo("c1");
-        jdbc.update("UPDATE mapped_connection SET host_b = 'outro' WHERE id = 'c1'");
-        assertThatThrownBy(() -> service.save(saved)).isInstanceOf(ResponseStatusException.class);
+        var connection = new Connection("c1", "Cabo", "h1", "ether1", "h2", "ether2");
+        var link = new Link("a", "b", null, null, "straight", List.of(), "straight", "c1", connection);
+        var saved = service.save(new Saved(null, 0, new Layout("Rede", null, 0, nodes, List.of(link)), null));
+        assertThat(service.maps().getFirst().layout().links().getFirst().connection()).isEqualTo(connection);
+        var copy = service.save(new Saved(null, 0, saved.layout(), null));
+        var changed = new Connection("c1", "Alterado", "h1", "ether3", "h2", "ether4");
+        var editedLink = new Link("a", "b", null, null, "straight", List.of(), "straight", "c1", changed);
+        service.save(new Saved(saved.id(), saved.revision(), new Layout("Rede", null, 0, nodes, List.of(editedLink)), null));
+        assertThat(service.maps().stream().filter(m -> m.id().equals(copy.id())).findFirst().orElseThrow().layout().links().getFirst().connection()).isEqualTo(connection);
+        var invalid = new Link("b", "a", null, null, "straight", List.of(), "straight", "c1", connection);
+        assertThatThrownBy(() -> service.save(new Saved(null, 0, new Layout("Inválido", null, 0, nodes, List.of(invalid)), null))).isInstanceOf(ResponseStatusException.class);
     }
 
     @Test
     void createsAndUpdatesMapsRejectingStaleOrMissingRevisions() throws Exception {
-        var layout = new Layout(null, "Rede", null, null, List.of(), List.of());
+        var layout = new Layout("Rede", null, null, List.of(), List.of());
         var created = service.save(new Saved(null, 0, layout, null));
         assertThat(created.revision()).isEqualTo(1);
         assertThat(service.maps()).containsExactly(created);
@@ -97,7 +125,7 @@ class NetworkMapPersistenceTests {
 
     @Test
     void persistsAcknowledgedIncidentVisibility() throws Exception {
-        var layout = new Layout(null, "Rede", null, 0, false, List.of(), List.of());
+        var layout = new Layout("Rede", null, 0, false, List.of(), List.of());
         var saved = service.save(new Saved(null, 0, layout, null));
         assertThat(service.maps()).containsExactly(saved);
         assertThat(service.maps().getFirst().layout().showAcknowledged()).isFalse();
@@ -113,7 +141,6 @@ class NetworkMapPersistenceTests {
         assertThat(service.maps()).extracting(Saved::id).containsExactly("a", "b", "older", "legacy");
         var saved = service.maps().getLast();
         assertThat(saved.revision()).isEqualTo(7);
-        assertThat(saved.layout().publication()).isEqualTo(Publication.PUBLICADO);
         assertThat(saved.layout().minimumSeverity()).isZero();
         assertThat(saved.layout().showAcknowledged()).isTrue();
         assertThat(saved.updatedAt()).isNull();
@@ -127,14 +154,14 @@ class NetworkMapPersistenceTests {
             List.of(new Port("b1", "rj45"), new Port("b2", "qsfp")));
         var links = List.of(new Link("a", "b", "a1", "b1"), new Link("b", "a", "b2", "a2"));
         var saved = service.save(new Saved(null, 0,
-            new Layout(null, "Portas", null, 0, List.of(a, b), links), null));
+            new Layout("Portas", null, 0, List.of(a, b), links), null));
         assertThat(service.maps()).contains(saved);
         for (var invalid : List.of(
             List.of(new Link("a", "b", "missing", "b1")),
             List.of(new Link("a", "b", "a1", "b1"), new Link("a", "b", "a1", "b2")),
             List.of(new Link("a", "b", "a1", "b1"), new Link("b", "a", "b1", "a1")))) {
             assertThatThrownBy(() -> service.save(new Saved(null, 0,
-                new Layout(null, "Inválido", null, 0, List.of(a, b), invalid), null)))
+                new Layout("Inválido", null, 0, List.of(a, b), invalid), null)))
                 .isInstanceOf(ResponseStatusException.class);
         }
     }
@@ -146,7 +173,7 @@ class NetworkMapPersistenceTests {
         var bends = List.of(new Bend(0, 80), new Bend(200, 80), new Bend(200, -60));
         var link = new Link("a", "b", null, null, "corners", bends, "curved");
         var saved = service.save(new Saved(null, 0,
-            new Layout(null, "Caminho", null, 0, List.of(a, b), List.of(link)), null));
+            new Layout("Caminho", null, 0, List.of(a, b), List.of(link)), null));
         assertThat(service.maps()).contains(saved);
         assertThat(saved.layout().links().getFirst().points()).isEqualTo(bends);
         assertThat(saved.layout().links().getFirst().lineStyle()).isEqualTo("curved");
@@ -154,7 +181,7 @@ class NetworkMapPersistenceTests {
                 new Link("a", "b", null, null, "unknown", List.of()),
                 new Link("a", "b", null, null, "corners", List.of(new Bend(Double.NaN, 0))))) {
             assertThatThrownBy(() -> service.save(new Saved(null, 0,
-                new Layout(null, "Inválido", null, 0, List.of(a, b), List.of(invalid)), null)))
+                new Layout("Inválido", null, 0, List.of(a, b), List.of(invalid)), null)))
                 .isInstanceOf(ResponseStatusException.class);
         }
     }
@@ -165,13 +192,13 @@ class NetworkMapPersistenceTests {
         var ports = List.of(new Port("p1", "rj45", "slot1", "ether1", "electrical"),
             new Port("p2", "qsfp", "slot2", "1/1/1", "sfp100g"));
         var node = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", ports, slots);
-        var saved = service.save(new Saved(null, 0, new Layout(null, "Slots", null, 0, List.of(node), List.of()), null));
+        var saved = service.save(new Saved(null, 0, new Layout("Slots", null, 0, List.of(node), List.of()), null));
         assertThat(service.maps()).contains(saved);
         assertThat(saved.layout().nodes().getFirst().slots()).isEqualTo(slots);
         var invalid = new Node("bad", null, null, null, "Switch", 0, 0, null, "switch", ports,
             List.of(new Slot("slot1", "ether", "electrical", 2)));
         assertThatThrownBy(() -> service.save(new Saved(null, 0,
-            new Layout(null, "Inválido", null, 0, List.of(invalid), List.of()), null)))
+            new Layout("Inválido", null, 0, List.of(invalid), List.of()), null)))
             .isInstanceOf(ResponseStatusException.class);
     }
 
@@ -181,7 +208,7 @@ class NetworkMapPersistenceTests {
         var ports = List.of(new Port("p", "rj45", "s", "ether1", "electrical"));
         var circle = new Node("a", null, null, null, "Circle", 0, 0, null, "circle", ports, slots, true);
         var disabled = new Node("b", null, null, null, "Switch", 200, 0, null, "switch", ports, slots, false);
-        var saved = service.save(new Saved(null, 0, new Layout(null, "Interfaces", null, 0,
+        var saved = service.save(new Saved(null, 0, new Layout("Interfaces", null, 0,
             List.of(circle, disabled), List.of(new Link("a", "b", "p", "p"))), null));
         assertThat(service.maps()).contains(saved);
         var restored = service.maps().getFirst().layout().nodes();
@@ -195,14 +222,14 @@ class NetworkMapPersistenceTests {
     void persistsSwitchColorSeparatelyAndRejectsInvalidValues() throws Exception {
         var node = new Node("sw", null, null, "#123456", "Switch", 0, 0, null, "switch",
             List.of(), List.of(), false, "#2288cc");
-        var saved = service.save(new Saved(null, 0, new Layout(null, "Cor", null, 0, List.of(node), List.of()), null));
+        var saved = service.save(new Saved(null, 0, new Layout("Cor", null, 0, List.of(node), List.of()), null));
         assertThat(service.maps()).contains(saved);
         assertThat(saved.layout().nodes().getFirst().switchColor()).isEqualTo("#2288cc");
         assertThat(saved.layout().nodes().getFirst().color()).isEqualTo("#123456");
         var invalid = new Node("bad", null, null, null, "Switch", 0, 0, null, "switch",
             List.of(), List.of(), false, "red");
         assertThatThrownBy(() -> service.save(new Saved(null, 0,
-            new Layout(null, "Cor inválida", null, 0, List.of(invalid), List.of()), null)))
+            new Layout("Cor inválida", null, 0, List.of(invalid), List.of()), null)))
             .isInstanceOf(ResponseStatusException.class);
     }
 
@@ -225,7 +252,7 @@ class NetworkMapPersistenceTests {
 
     @Test
     void rejectsInvalidTopologyBeforePersisting() {
-        var layout = new Layout(null, "", null, null, List.of(), List.of());
+        var layout = new Layout("", null, null, List.of(), List.of());
         assertThatThrownBy(() -> service.save(new Saved(null, 0, layout, null)))
             .isInstanceOfSatisfying(ResponseStatusException.class,
                 ex -> assertThat(ex.getStatusCode().value()).isEqualTo(400));

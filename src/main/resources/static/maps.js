@@ -185,6 +185,7 @@ function draw() {
   canvas.replaceChildren();
   if (!current) return;
   const { nodes, links } = current.layout;
+  connectionDefinitions = links.map(link => link.connection).filter(Boolean);
   $('map-title').textContent = (editing ? 'Editar mapa — ' : '') + current.layout.name;
   canvas.dataset.tool = editing ? tool : '';
   if (editing) {
@@ -261,9 +262,9 @@ function draw() {
       }
       if (!editing) {
         line.setAttribute('tabindex', 0);
-        line.setAttribute('role', 'link');
+        line.setAttribute('role', 'button');
         line.setAttribute('aria-label', 'Abrir conexão mapeada entre ' + a.name + ' e ' + b.name);
-        line.onclick = hit.onclick = () => { location.href = '/conexoes#' + encodeURIComponent(link.mappedConnectionId); };
+        line.onclick = hit.onclick = event => line.onfocus(event);
         line.onkeydown = event => { if (event.key === 'Enter') line.onclick(); };
       }
     }
@@ -281,7 +282,7 @@ function draw() {
     const metric = monitored ? metricSummary(n) : null;
     const description = metric ? `${n.name} · ${metric.label}: ${metric.formatted} · ${metric.state}` : monitored ? n.name + ' · ' + labels[level] : n.name;
     const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
-      ...(editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
+      ...(!editing && n.groupId && n.subMapId ? {tabindex:0, role:'link'} : editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
@@ -297,6 +298,7 @@ function draw() {
     };
     g.onpointerdown = event => {
       if (event.button !== 0 || (editing && tool === 'pan')) return;
+      if (!editing && n.groupId && n.subMapId) { event.stopPropagation(); return; }
       if (editing && tool === 'select') {
         const additive = event.shiftKey || event.ctrlKey || event.metaKey;
         const wasSingle = selection.size === 1 && selection.has(n.id);
@@ -320,6 +322,7 @@ function draw() {
       }
       choose(n);
     };
+    if (!editing && n.groupId && n.subMapId) g.onclick = event => { event.stopPropagation(); choose(n); };
     if (monitored) popSummary.bind(g, n);
     canvas.append(g);
   }
@@ -371,6 +374,14 @@ function draw() {
 }
 
 function choose(node, additive = false) {
+  if (!editing && node.groupId && node.subMapId) {
+    const target = maps.find(map => map.id === node.subMapId);
+    if (!target) { window.notify('Submapa indisponível.'); return; }
+    openMap(target, false, [...mapParents, current.id]);
+    setMapExpanded(true);
+    fitToView();
+    return;
+  }
   if (!editing || tool === 'pan') return;
   if (tool === 'connect') {
     if (node.icon !== 'switch' || node.interfacesEnabled === false || !node.ports?.length) connectEndpoint(node, null);
@@ -701,7 +712,13 @@ async function refreshPingState(token) {
   pingTimer = setTimeout(() => refreshPingState(token), 2000);
 }
 
-function openMap(map, edit = false) {
+function openMap(map, edit = false, parents = []) {
+  mapParents = parents;
+  const parent = maps.find(item => item.id === parents.at(-1));
+  $('parent-map').hidden = edit || !parent;
+  const parentLabel = parent ? 'Voltar ao mapa principal: ' + parent.layout.name : 'Voltar ao mapa principal';
+  $('parent-map').title = parentLabel;
+  $('parent-map').setAttribute('aria-label', parentLabel);
   if (edit && !canManageMaps) return;
   clearTimeout(pingTimer); pingGeneration++; pingStates.clear();
   popSummary.close();
@@ -737,7 +754,7 @@ function openMap(map, edit = false) {
   if ((!map || edit) && document.fullscreenElement === $('map-stage')) document.exitFullscreen();
   pan = null;
   $('workspace').classList.toggle('viewing', !!map && !edit);
-  setMapExpanded(false);
+  setMapExpanded(!!map && !edit);
   $('refresh-map').hidden = $('fullscreen-map').hidden = $('maximize-map').hidden = edit;
   if (map) {
     viewport.scrollTo(0, 0);
@@ -755,35 +772,19 @@ function openMap(map, edit = false) {
   refreshMappedConnections(true);
 }
 
+let mapParents = [];
+$('parent-map').onclick = event => {
+  event.preventDefault();
+  const parents = [...mapParents];
+  const parent = maps.find(map => map.id === parents.pop());
+  if (!parent) { window.notify('Mapa principal indisponível.'); return; }
+  openMap(parent, false, parents);
+  setMapExpanded(true);
+  fitToView();
+};
+
 const pageSize = 10;
 let page = 0;
-function action(label, handler) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'map-action system-button';
-  const glyph = svg('svg', {viewBox:'0 0 24 24', 'aria-hidden':true});
-  glyph.append(svg('use', {href:'/icons.svg#' + (label === 'Editar' ? 'settings' : 'check')}));
-  const text = document.createElement('span'); text.textContent = label;
-  button.append(glyph, text);
-  button.onclick = handler;
-  return button;
-}
-
-function positionMapOptions() {
-  const menu = $('maps').querySelector('.map-options:popover-open');
-  if (!menu) return;
-  const button = menu.previousElementSibling.getBoundingClientRect();
-  const box = menu.getBoundingClientRect();
-  const gap = 4;
-  const viewport = document.documentElement;
-  const below = button.bottom + gap;
-  const top = below + box.height <= viewport.clientHeight ? below : button.top - gap - box.height;
-  menu.style.top = Math.max(gap, Math.min(top, viewport.clientHeight - box.height - gap)) + 'px';
-  menu.style.left = Math.max(gap, Math.min(button.right - box.width, viewport.clientWidth - box.width - gap)) + 'px';
-}
-window.addEventListener('resize', positionMapOptions);
-document.addEventListener('scroll', positionMapOptions, true);
-
 function renderList() {
   const query = $('map-search').value.trim().toLocaleLowerCase('pt-BR');
   const filtered = maps.filter(m => m.layout.name.toLocaleLowerCase('pt-BR').includes(query))
@@ -806,39 +807,8 @@ function renderList() {
       map.updatedAt ? new Date(map.updatedAt).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'}) : '—']) {
       row.insertCell().textContent = value;
     }
-    const published = layout.publication === 'PUBLICADO';
-    const badge = document.createElement('span');
-    badge.className = 'status-label ' + (published ? 'green' : 'gray');
-    badge.textContent = published ? 'Publicado' : 'Rascunho';
-    row.insertCell().append(badge);
-    const actions = row.insertCell();
-    if (!canManageMaps) continue;
-    const menu = document.createElement('div');
-    menu.className = 'map-options utility-panel';
-    menu.popover = 'auto';
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'map-options-toggle';
-    toggle.popoverTargetElement = menu;
-    menu.addEventListener('toggle', event => {
-      if (event.newState === 'open') positionMapOptions();
-    });
-    toggle.setAttribute('aria-label', 'Mais opções para ' + layout.name);
-    const dots = svg('svg', {viewBox:'0 0 24 24', width:18, height:18, fill:'currentColor', 'aria-hidden':true});
-    for (const cy of [5, 12, 19]) dots.append(svg('circle', {cx:12, cy, r:1.8}));
-    toggle.append(dots);
-    menu.addEventListener('click', () => menu.hidePopover());
-    menu.append(action('Editar', () => openMap(map, true)),
-      action(published ? 'Mover para rascunho' : 'Publicar', async event => {
-        event.currentTarget.disabled = true;
-        try {
-          await persist({...map, layout:{...layout, publication:published ? 'RASCUNHO' : 'PUBLICADO'}});
-        } catch (error) { $('status').textContent = error.message; renderList(); }
-      }));
-    const controls = document.createElement('div');
-    controls.className = 'map-row-actions';
-    controls.append(toggle, menu);
-    actions.append(controls);
+    row.insertCell().textContent = maps.some(parent => parent.id !== map.id &&
+      parent.layout.nodes.some(node => node.groupId && node.subMapId === map.id)) ? 'Sub-mapa' : 'Principal';
   }
   $('maps-empty').hidden = rows.length > 0;
   $('map-count').textContent = `Exibindo ${filtered.length ? start + 1 : 0}–${start + rows.length} de ${filtered.length} mapas`;
@@ -886,7 +856,7 @@ createForm.onsubmit = async event => {
   $('submit-create').disabled = $('cancel-create').disabled = true;
   $('submit-create-label').textContent = 'Criando…';
   try {
-    const saved = await persist({layout:{name, publication:'RASCUNHO', nodes:[], links:[]}});
+    const saved = await persist({layout:{name, nodes:[], links:[]}});
     createDialog.close();
     openMap(saved, true);
     $('add').focus();
@@ -1101,6 +1071,7 @@ $('link-form').onsubmit = async event => {
   if (savingConnection) return;
   const target = pendingLink;
   let mappedConnectionId = target.mappedConnectionId;
+  let connection = target.connection;
   if ($('link-category').value === 'mapped') {
     try {
       const [a, b] = connectionNodes(linkEndpointDraft());
@@ -1111,9 +1082,9 @@ $('link-form').onsubmit = async event => {
       const existing = connectionDefinitions.find(c => c.id === target.mappedConnectionId);
       if (!existing || existing.name !== name || existing.interfaceA !== interfaceA || existing.interfaceB !== interfaceB || existing.hostA !== a.hostId || existing.hostB !== b.hostId) {
         savingConnection = true;
-        const saved = await connectionRequest('/api/connections', {name, hostA:a.hostId, hostB:b.hostId, interfaceA, interfaceB});
+        const saved = await connectionRequest('/api/maps/connections/validate', {name, hostA:a.hostId, hostB:b.hostId, interfaceA, interfaceB});
         if (pendingLink !== target || !current.layout.links.includes(target)) return;
-        mappedConnectionId = saved.id; connectionDefinitions.push(saved);
+        mappedConnectionId = saved.id; connection = saved;
       }
     } catch (error) { $('connection-message').textContent = error.message; return; }
     finally { savingConnection = false; }
@@ -1121,8 +1092,8 @@ $('link-form').onsubmit = async event => {
   const style = $('link-dialog-type').value, lineStyle = $('link-dialog-style').value;
   const appearanceChanged = target.style !== style || (target.lineStyle || 'straight') !== lineStyle;
   if (linkEndpointsReversed || mappedConnectionId !== target.mappedConnectionId || appearanceChanged) checkpoint();
-  if (mappedConnectionId) target.mappedConnectionId = mappedConnectionId;
-  else delete target.mappedConnectionId;
+  if (mappedConnectionId) { target.mappedConnectionId = mappedConnectionId; target.connection = connection; }
+  else { delete target.mappedConnectionId; delete target.connection; }
   if (linkEndpointsReversed) {
     const draft = linkEndpointDraft();
     Object.assign(target, {from:draft.from, to:draft.to, fromPort:draft.fromPort, toPort:draft.toPort});
@@ -1216,7 +1187,7 @@ $('load-switch-interfaces').onclick = async () => {
   renderSwitchSlots();
   let failureMessage = 'Não foi possível conectar ao equipamento. Verifique a conexão e a autenticação do host e tente novamente.';
   try {
-    const response = await fetch('/api/connections/discover/' + encodeURIComponent(hostId), {cache: 'no-store'});
+    const response = await fetch('/api/maps/connections/discover/' + encodeURIComponent(hostId), {cache: 'no-store'});
     const data = await response.json();
     if (!response.ok) {
       if (response.status === 400 || response.status === 409)
@@ -1319,12 +1290,23 @@ function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' 
   syncElementIcons();
   $('remove').hidden = !!pendingNode;
   populateBinding(type,node.hostId || node.groupId);
+  syncSubMap(node.subMapId || '');
   $('element-dialog').removeAttribute('style');
   window.elementIconPicker?.sync();
   $('element-dialog').showModal();
   $('element-form').querySelector('.form-dialog-content').scrollTop = 0;
   drawPreview();
   $('element-name').focus();
+}
+function syncSubMap(selectedId = $('sub-map').value) {
+  $('sub-map-field').hidden = $('type').value !== 'group';
+  $('sub-map').replaceChildren(new Option('Nenhum submapa', ''), ...maps
+    .filter(map => map.id !== current.id)
+    .map(map => new Option(map.layout.name, map.id)));
+  if (selectedId && !maps.some(map => map.id === selectedId)) {
+    $('sub-map').add(new Option('Indisponível (' + selectedId + ')', selectedId));
+  }
+  $('sub-map').value = selectedId || '';
 }
 function syncElementIcons() {
   const binding = $('type').value || 'free';
@@ -1348,6 +1330,7 @@ $('element-name').oninput = $('label-position').onchange = drawPreview;
 $('type').onchange = () => {
   syncElementIcons();
   populateBinding($('type').value);
+  syncSubMap();
   drawPreview();
 };
 $('group').addEventListener('change', () => {
@@ -1385,7 +1368,7 @@ $('element-form').onsubmit = event => {
   checkpoint();
   current.layout.links = current.layout.links.filter(link => !affected.includes(link));
   Object.assign(node, {icon, switchColor: configuredSwitchColor, interfacesEnabled, ports, slots: configuredSlots.map(slot => ({...slot, name: slot.name.trim()})), name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
-    groupId:type === 'group' ? binding : null, color:node.color || null});
+    groupId:type === 'group' ? binding : null, subMapId:type === 'group' ? $('sub-map').value || null : null, color:node.color || null});
   if (pendingNode) current.layout.nodes.push(node);
   pendingNode = null;
   selected = node.id;
@@ -1487,10 +1470,10 @@ async function loadConnectionInterfaces() {
   try {
     const nodes = connectionNodes(draft);
     if (nodes.some(n => !n?.hostId)) throw new Error('Conexões mapeadas exigem dois elementos vinculados a hosts.');
-    connectionDefinitions = await connectionRequest('/api/connections');
+    connectionDefinitions = current.layout.links.map(link => link.connection).filter(Boolean);
     const existing = connectionDefinitions.find(c => c.id === link.mappedConnectionId);
     $('connection-name').value = existing?.name || nodes.map(n => n.name).join(' ↔ ');
-    const interfaces = await Promise.all(nodes.map(n => connectionRequest('/api/connections/interfaces/' + encodeURIComponent(n.hostId))));
+    const interfaces = await Promise.all(nodes.map(n => connectionRequest('/api/maps/connections/interfaces/' + encodeURIComponent(n.hostId))));
     if (sequence !== interfaceLoad || pendingLink !== link) return;
     interfaces.forEach((rows, i) => {
       controls[i].append(new Option('Selecione a interface', ''));
@@ -1549,7 +1532,7 @@ async function refreshMappedConnections(warmup = false) {
   try {
     const rows = [];
     for (let offset = 0; offset < ids.length; offset += 100)
-      rows.push(...await connectionRequest('/api/connections/readings', ids.slice(offset, offset + 100)));
+      rows.push(...await connectionRequest('/api/maps/' + encodeURIComponent(requestedMap.id) + '/connections/readings', ids.slice(offset, offset + 100)));
     if (current !== requestedMap || editing) return;
     connectionFailed = false;
     connectionReadings = new Map(rows.map(r => [r.id, r]));

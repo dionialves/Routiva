@@ -70,7 +70,6 @@ public class HostRepository {
         jdbc.queryForList("SELECT host_id FROM app_host WHERE host_id=? FOR UPDATE", String.class, id);
         removeMapReferences(id);
         jdbc.update("DELETE FROM access_point WHERE host_id=?", id);
-        jdbc.update("DELETE FROM mapped_connection WHERE host_a=? OR host_b=?", id, id);
         jdbc.update("DELETE FROM host_authentication WHERE host_id=?", id);
         jdbc.update("DELETE FROM app_host WHERE host_id=?", id);
     }

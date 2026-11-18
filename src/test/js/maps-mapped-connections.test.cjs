@@ -16,9 +16,9 @@ function setup() {
 }
 test('mapped collection deduplicates links and pauses in editing or hidden tabs', async () => {
   const {context,run} = setup();
-  run("current = {layout:{links:[{mappedConnectionId:'c1'},{mappedConnectionId:'c1'},{}]}};");
+  run("current = {id:'map1',layout:{links:[{mappedConnectionId:'c1'},{mappedConnectionId:'c1'},{}]}};");
   context.fetch = async (url, options) => {
-    context.calls++; assert.deepEqual(JSON.parse(options.body), ['c1']);
+    context.calls++; assert.equal(url, '/api/maps/map1/connections/readings'); assert.deepEqual(JSON.parse(options.body), ['c1']);
     return {ok:true, json:async()=>[]};
   };
   await run('refreshMappedConnections()'); assert.equal(context.calls, 1);

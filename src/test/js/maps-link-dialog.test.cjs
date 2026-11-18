@@ -135,7 +135,7 @@ test('saving a swapped mapped connection sends matching hosts and interfaces and
   let request;
   context.connectionDefinitions = [{id:'old', name:'Uplink', hostA:'h1', hostB:'h2', interfaceA:'ether1', interfaceB:'sfp1'}];
   context.connectionNodes = link => [link.from, link.to].map(id => context.current.layout.nodes.find(n => n.id === id));
-  context.connectionRequest = async (url, body) => { request = body; return {...body, id:'new'}; };
+  context.connectionRequest = async (url, body) => { assert.equal(url, '/api/maps/connections/validate'); request = body; return {...body, id:'new'}; };
   run("current.layout.nodes[1].hostId='h2'; link.toPort='p2'; link.points=[{x:10,y:80},{x:90,y:80}]; link.mappedConnectionId='old'; openLinkDialog(link)");
   $('connection-name').value = 'Uplink';
   $('connection-interface-a').value = 'ether1';
@@ -149,6 +149,7 @@ test('saving a swapped mapped connection sends matching hosts and interfaces and
   assert.equal(context.link.toPort, 'r1');
   assert.equal(context.link.points[0].x, 90);
   assert.equal(context.link.mappedConnectionId, 'new');
+  assert.deepEqual({...context.link.connection}, {...request, id:'new'});
   assert.equal(context.checkpoints, 1);
 });
 test('swap is unavailable during loading and saving', () => {
