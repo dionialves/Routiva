@@ -27,8 +27,9 @@ test('modal shows endpoint bindings and ports; cancel leaves the connection unch
   const {$,run,context} = setup();
   run('openLinkDialog(link)');
   assert.equal($('link-dialog').open,true);
-  assert.match($('link-from').value,/Host: Switch Core.*RJ45 1/);
-  assert.match($('link-to').value,/Grupo de hosts: Datacenter/);
+  assert.equal($('link-from').value, 'Switch Core');
+  assert.equal($('link-from').title, 'Switch Core');
+  assert.equal($('link-to').value, 'Datacenter');
   $('link-dialog-style').value='curved';
   $('cancel-link').onclick();
   assert.equal(context.link.lineStyle,undefined);
@@ -73,4 +74,37 @@ test('delete in the connection modal uses confirmation and records one undo step
   assert.equal(context.current.layout.nodes.length,2);
   assert.equal($('link-dialog').open,false);
   assert.equal(context.checkpoints,1);
+});
+
+test('endpoint summaries follow interface selection without changing the link', () => {
+  const {$, run, context} = setup();
+  run('openLinkDialog(link)');
+  $('link-category').value = 'mapped';
+  $('connection-interface-a').value = 'sfp-sfpplus2';
+  $('connection-interface-b').value = 'ether3';
+  run('updateLinkEndpoints()');
+  assert.equal($('link-from-interface').textContent, 'sfp-sfpplus2 · ID h1');
+  assert.equal($('link-to-interface').textContent, 'ether3 · ID g1');
+  assert.match($('connection-host-a').textContent, /Switch Core/);
+  assert.equal($('link-from-capacity').hidden, true);
+  assert.equal(context.checkpoints, 0);
+});
+test('header close dismisses the dialog without applying draft appearance', () => {
+  const {$, run, context} = setup();
+  run('openLinkDialog(link)');
+  $('link-dialog-style').value = 'curved';
+  $('close-link').onclick();
+  assert.equal($('link-dialog').open, false);
+  assert.equal(context.link.lineStyle, undefined);
+  assert.equal(context.checkpoints, 0);
+});
+
+test('endpoint badge uses measured speed and never infers speed from port capacity', () => {
+  const {$, run} = setup();
+  run("current.layout.nodes[0].ports[0] = {id:'r1', name:'ether1', connector:'electrical', capacity:'10g'}; openLinkDialog(link)");
+  assert.equal($('link-from-capacity').hidden, true);
+  run("current.layout.nodes[0].ports[0].speed = '1Gbps'; updateLinkEndpoints()");
+  assert.equal($('link-from-capacity').hidden, false);
+  assert.equal($('link-from-capacity').textContent, '1Gbps');
+  assert.equal($('connection-host-a').textContent, 'Switch Core · ID h1');
 });
