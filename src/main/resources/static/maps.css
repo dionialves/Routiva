@@ -435,17 +435,22 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .element-slot-table :is(th, td) { padding:6px 8px; border-bottom:1px solid var(--border); text-align:left; font-size:12px; }
 .element-slot-table thead th { position:sticky; top:0; z-index:1; background:var(--panel-bg); font-weight:600; }
 .element-slot-table th:first-child { width:46px; text-align:center; }
-.element-slot-table th:nth-child(3) { width:140px; }
-.element-slot-table th:nth-child(4) { width:80px; }
+.element-slot-table th:nth-child(3) { width:120px; }
+.element-slot-table th:nth-child(4) { width:120px; }
+.element-slot-table th:nth-child(5) { width:70px; }
 .element-slot-table th:last-child { width:48px; }
 .form-dialog .element-slot-table :is(input, select) { box-sizing:border-box; width:100%; min-width:0; height:36px; min-height:36px; padding:6px 8px; border-radius:6px; font-size:13px; }
 .element-slot-table tr:last-child :is(td, th) { border-bottom:0; }
 .element-slot-table .element-slot-empty { color:var(--muted); text-align:center; padding:16px; }
-#switch-config > small { display:block; color:var(--muted); font-size:11px; }
+.element-interface-spinner { display:inline-block; width:22px; height:22px; border:2px solid var(--border); border-top-color:var(--focus); border-radius:50%; animation:system-spin 800ms linear infinite; }
+#interface-load-status { color:var(--muted); font-size:12px; margin:8px 0 0; }
+#interface-load-status:empty { display:none; }
+#interface-load-status[role=alert] { color:var(--error); }
+@media (prefers-reduced-motion:reduce) { .element-interface-spinner { animation:none; } }
 #element-form #port-error { margin:0; font-size:12px; }
 #element-form #port-error:empty { display:none; }
 @media(max-width:600px) {
-  .element-slot-table { min-width:540px; }
+  .element-slot-table { min-width:680px; }
   .element-section-heading { align-items:flex-start; flex-wrap:wrap; gap:10px; }
   .element-preview { grid-template-columns:1fr; gap:8px; }
   .element-identification .map-dimensions { grid-template-columns:1fr; }
@@ -474,3 +479,5 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 @media (prefers-reduced-motion: reduce) {
   .traffic-pulses { display: none; }
 }
+
+.element-interface-actions { display:flex; flex-wrap:wrap; gap:8px; }

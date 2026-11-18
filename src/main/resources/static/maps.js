@@ -12,6 +12,8 @@ let marquee;
 let connectionOrigin = null;
 let configuredPorts = [];
 let configuredSlots = [];
+let interfaceLoadGeneration = 0;
+let loadingInterfaces = false;
 let configuredSwitchColor = null;
 let configuredNodeId = null;
 let pendingLink = null, lastConnectionClick = null;
@@ -1075,9 +1077,20 @@ function switchDraft() {
 function renderSwitchSlots() {
   const panel = $('switch-slots');
   panel.replaceChildren();
+  panel.setAttribute('aria-busy', String(loadingInterfaces));
+  if (loadingInterfaces) {
+    const row = document.createElement('tr'), cell = document.createElement('td');
+    cell.colSpan = 6; cell.className = 'element-slot-empty';
+    const spinner = document.createElement('span');
+    spinner.className = 'element-interface-spinner'; spinner.setAttribute('aria-hidden', 'true');
+    const label = document.createElement('span');
+    label.className = 'sr-only'; label.textContent = 'Carregando interfaces';
+    cell.append(spinner, label); row.append(cell); panel.append(row);
+    return;
+  }
   if (!configuredSlots.length) {
     const row = document.createElement('tr'), cell = document.createElement('td');
-    cell.colSpan = 5; cell.className = 'element-slot-empty';
+    cell.colSpan = 6; cell.className = 'element-slot-empty';
     cell.textContent = 'Nenhum slot configurado. Adicione um slot para começar.';
     row.append(cell); panel.append(row);
   }
@@ -1092,15 +1105,23 @@ function renderSwitchSlots() {
     };
     const name = document.createElement('input');
     name.type = 'text'; name.value = slot.name; name.maxLength = 80; name.required = true;
+    name.readOnly = !!slot.interfaceNames;
     name.placeholder = 'Ex.: ether, 1/1/';
     name.oninput = () => { slot.name = name.value; drawPreview(); };
     field('Nome', name);
+    const connector = document.createElement('select');
+    for (const [value, option] of Object.entries(MapSwitch.connectors)) connector.add(new Option(option.label, value));
+    connector.value = slot.connector;
+    connector.onchange = () => { slot.connector = connector.value; drawPreview(); };
+    field('Conector', connector);
     const capacity = document.createElement('select');
-    for (const [value, option] of Object.entries(MapSwitch.capacities)) capacity.add(new Option(option.label, value));
+    capacity.add(new Option('Não identificada', 'unknown'));
+    for (const [value, label] of Object.entries(MapSwitch.portCapacities)) capacity.add(new Option(label, value));
     capacity.value = slot.capacity;
     capacity.onchange = () => { slot.capacity = capacity.value; drawPreview(); };
     field('Capacidade', capacity);
     const count = document.createElement('input');
+    count.readOnly = !!slot.interfaceNames;
     count.type = 'number'; count.min = 1; count.max = 96; count.required = true; count.value = slot.count;
     count.oninput = () => { slot.count = Number(count.value); drawPreview(); };
     field('Portas', count);
@@ -1117,8 +1138,47 @@ function renderSwitchSlots() {
     const actions = document.createElement('td'); actions.append(remove); row.append(actions); panel.append(row);
   });
 }
+$('load-switch-interfaces').onclick = async () => {
+  const hostId = $('type').value === 'host' ? $('group').value : null;
+  if (!hostId || loadingInterfaces) return;
+  const generation = interfaceLoadGeneration;
+  const previous = switchDraft() || configuredPorts;
+  loadingInterfaces = true;
+  $('load-switch-interfaces').disabled = true;
+  $('interface-load-status').textContent = '';
+  $('interface-load-status').setAttribute('role', 'status');
+  renderSwitchSlots();
+  let failureMessage = 'Não foi possível conectar ao equipamento. Verifique a conexão e a autenticação do host e tente novamente.';
+  try {
+    const response = await fetch('/api/connections/discover/' + encodeURIComponent(hostId), {cache: 'no-store'});
+    const data = await response.json();
+    if (!response.ok) {
+      if (response.status === 400 || response.status === 409)
+        failureMessage = 'Não foi possível carregar as interfaces. Configure e valide a autenticação do host e tente novamente.';
+      throw new Error();
+    }
+    if (generation !== interfaceLoadGeneration || !$('element-dialog').open
+        || $('type').value !== 'host' || $('group').value !== hostId) return;
+    const imported = MapSwitch.importInterfaces(data, previous);
+    if (!imported.ports.length) {
+      failureMessage = 'Nenhuma interface física encontrada. A configuração atual foi preservada.';
+      throw new Error();
+    }
+    configuredSlots = imported.slots;
+    configuredPorts = imported.ports;
+    renderSwitchSlots(); drawPreview();
+    $('interface-load-status').textContent = imported.ports.length + ' interfaces carregadas. Salve o elemento para aplicar.';
+  } catch (error) {
+    if (generation === interfaceLoadGeneration && $('type').value === 'host' && $('group').value === hostId) {
+      $('interface-load-status').setAttribute('role', 'alert');
+      $('interface-load-status').textContent = failureMessage;
+    }
+  } finally {
+    if (generation === interfaceLoadGeneration) { loadingInterfaces = false; renderSwitchSlots(); drawPreview(); }
+  }
+};
 $('add-switch-slot').onclick = () => {
-  configuredSlots.push({id: crypto.randomUUID(), name: '', capacity: 'electrical', count: 1});
+  configuredSlots.push({id: crypto.randomUUID(), name: '', connector: 'electrical', capacity: '1g', count: 1});
   renderSwitchSlots(); drawPreview();
   $('switch-slots').lastElementChild.querySelector('input').focus();
 };
@@ -1156,6 +1216,8 @@ function drawPreview() {
   $('switch-color-field').hidden = !isSwitch;
   $('reset-switch-color').disabled = !configuredSwitchColor;
   const interfacesEnabled = $('interfaces-enabled').checked;
+  $('load-switch-interfaces').hidden = !isSwitch || $('type').value !== 'host';
+  $('load-switch-interfaces').disabled = loadingInterfaces || !$('group').value;
   $('switch-config').hidden = !interfacesEnabled;
   $('switch-config').disabled = !interfacesEnabled;
   const ports = switchDraft();
@@ -1175,12 +1237,14 @@ function drawPreview() {
 }
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {
+  interfaceLoadGeneration++; loadingInterfaces = false;
+  $('interface-load-status').textContent = '';
   configuredPorts = node.ports || [];
   configuredNodeId = node.id;
   configuredSwitchColor = node.switchColor || null;
   $('switch-color').value = configuredSwitchColor || '#e0e3e8';
   $('element-icon').value = node.icon || 'circle';
-  configuredSlots = MapSwitch.slotsFor(node);
+  configuredSlots = MapSwitch.slotsFor(node).map(MapSwitch.normalizeSlot);
   $('interfaces-enabled').checked = node.interfacesEnabled ?? !!(node.ports?.length || node.slots?.length);
   renderSwitchSlots();
   $('element-name').value = node.name;

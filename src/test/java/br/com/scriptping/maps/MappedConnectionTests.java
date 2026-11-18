@@ -29,6 +29,19 @@ class MappedConnectionTests {
         when(inventory.hosts()).thenReturn(List.of(new Host("a", "A", "10.0.0.1", List.of()), new Host("b", "B", "10.0.0.2", List.of())));
         when(mikrotik.query(any(), eq("interfaces"), isNull(), any(EquipmentProvider.Connection.class))).thenReturn(new MikrotikService.Snapshot(1, List.of(Map.of(".id", "*1", "name", "ether1", "type", "ether"), Map.of("name", "bridge", "type", "bridge")), ""));
     }
+    @Test void discoversWithLocalHostAuthenticationWithoutRequiringMonitoredInventory() {
+        equipment();
+        when(inventory.hosts()).thenReturn(List.of());
+        var rows = List.of(Map.of("name", "uplink", "comment", "Core", "rate", "10Gbps", "running", "true"));
+        when(mikrotik.query(any(), eq("discover"), isNull(), any(EquipmentProvider.Connection.class)))
+            .thenReturn(new MikrotikService.Snapshot(1, rows, ""));
+        assertThat(controller.discover("a")).isEqualTo(rows);
+        verify(mikrotik).query(eq(hosts.target("a")), eq("discover"), isNull(),
+            eq(new EquipmentProvider.Connection("map-reader", "test-a", 8729, true)));
+        when(hosts.credentials("a")).thenReturn(null);
+        assertThatThrownBy(() -> controller.discover("a")).isInstanceOf(ResponseStatusException.class);
+        verify(mikrotik, times(1)).query(any(), eq("discover"), isNull(), any(EquipmentProvider.Connection.class));
+    }
     @Test void savesIndependentEntityAndRejectsVirtualOrMissingInterfaces() {
         equipment();
         var saved = controller.save(new MappedConnectionController.Connection(null, "Cabo A-B", "a", "ether1", "b", "ether1"));

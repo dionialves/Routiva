@@ -71,6 +71,19 @@ public class MappedConnectionController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conexões mapeadas exigem um host MikroTik com autenticação configurada.");
         return connections.require(host(id));
     }
+    @ExceptionHandler(ResponseStatusException.class) @ResponseBody
+    public org.springframework.http.ResponseEntity<Map<String, String>> error(ResponseStatusException ex) {
+        return org.springframework.http.ResponseEntity.status(ex.getStatusCode())
+            .body(Map.of("message", ex.getReason() == null ? "Consulta indisponível." : ex.getReason()));
+    }
+    @GetMapping("/api/connections/discover/{hostId}") @ResponseBody
+    public List<Map<String, String>> discover(@PathVariable String hostId) {
+        var target = hosts.target(hostId);
+        var credentials = hosts.credentials(hostId);
+        if (credentials == null || !"MikroTik".equals(credentials.manufacturer()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Carregar interfaces exige um host MikroTik com autenticação configurada.");
+        return mikrotik.query(target, "discover", null, connections.require(target)).rows();
+    }
     @GetMapping("/api/connections/interfaces/{hostId}") @ResponseBody
     public List<Map<String, String>> interfaces(@PathVariable String hostId) {
         return mikrotik.query(host(hostId), "interfaces", null, apiConnection(hostId)).rows().stream()

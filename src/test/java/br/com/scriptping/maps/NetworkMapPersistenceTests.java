@@ -33,6 +33,38 @@ class NetworkMapPersistenceTests {
     @Autowired JdbcTemplate jdbc;
 
     @Test
+    void connectorAndPortCapacityPersistIndependently() throws Exception {
+        var slot = new Slot("slot", "sfp28-", "25g", 1, List.of("uplink"), "sfp28");
+        var port = new Port("linked-port", "sfp", "slot", "uplink", "25g", "Core", "ether", "10Gbps", true, "sfp28");
+        var node = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(port), List.of(slot));
+        var saved = service.save(new Saved(null, 0, new Layout(null, "Conectores", null, 0, List.of(node), List.of()), null));
+        var restored = service.maps().getFirst();
+        assertThat(restored).isEqualTo(saved);
+        assertThat(restored.layout().nodes().getFirst().ports()).containsExactly(port);
+        assertThat(restored.layout().nodes().getFirst().slots()).containsExactly(slot);
+        var wrongConnector = new Port("linked-port", "sfp", "slot", "uplink", "25g", null, null, null, null, "sfpplus");
+        var invalid = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(wrongConnector), List.of(slot));
+        assertThatThrownBy(() -> service.save(new Saved(null, 0,
+            new Layout(null, "Inválido", null, 0, List.of(invalid), List.of()), null)))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void discoveredInterfacesKeepExactNamesAndMetadataAfterReload() throws Exception {
+        var slots = List.of(new Slot("optical", "SFP10G", "sfp10g", 1, List.of("uplink-core")));
+        var port = new Port("connected", "sfp", "optical", "uplink-core", "sfp10g", "Core", "ether", "10Gbps", true);
+        var node = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(port), slots);
+        var saved = service.save(new Saved(null, 0, new Layout(null, "Descoberta", null, 0, List.of(node), List.of()), null));
+        assertThat(service.maps()).contains(saved);
+        assertThat(service.maps().getFirst().layout().nodes().getFirst().ports()).containsExactly(port);
+        var invalid = new Node("sw", null, null, null, "Switch", 0, 0, null, "switch", List.of(port),
+            List.of(new Slot("optical", "SFP10G", "sfp10g", 1, List.of("different"))));
+        assertThatThrownBy(() -> service.save(new Saved(null, 0,
+            new Layout(null, "Inválido", null, 0, List.of(invalid), List.of()), null)))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
     void mappedReferencesPersistAndMustMatchEndpointHosts() throws Exception {
         jdbc.update("INSERT INTO mapped_connection(id,name,host_a,interface_a,host_b,interface_b) VALUES ('c1','Cabo','h1','ether1','h2','ether2')");
         var nodes = List.of(new Node("a", null, "h1", null, "A", 0, 0, null), new Node("b", null, "h2", null, "B", 200, 0, null));

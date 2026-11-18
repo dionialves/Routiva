@@ -5,7 +5,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261109-2">
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261118-pulse-motion"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261117-connected-ports" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261118-pulse-motion" defer></script><script src="/maps.js?v=20261118-traffic" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261118-connectors"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261118-electrical-advertising" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261118-pulse-motion" defer></script><script src="/maps.js?v=20261118-connectors" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
@@ -203,12 +203,13 @@
         <fieldset id="switch-config" hidden>
           <legend class="sr-only">Interfaces</legend>
           <div class="element-section-heading"><div><h3>Interfaces</h3><p>Configure os grupos de portas do equipamento.</p></div>
-            <button type="button" id="add-switch-slot" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>Adicionar slot</button>
+            <div class="element-interface-actions"><button type="button" id="load-switch-interfaces" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#refresh"/></svg>Carregar interfaces</button>
+            <button type="button" id="add-switch-slot" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>Adicionar slot</button></div>
           </div>
           <div class="element-slot-table-scroll" role="region" aria-label="Slots de interfaces" tabindex="0">
-            <table class="element-slot-table"><thead><tr><th scope="col">Slot</th><th scope="col">Nome</th><th scope="col">Capacidade</th><th scope="col">Portas</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="switch-slots"></tbody></table>
+            <table class="element-slot-table"><thead><tr><th scope="col">Slot</th><th scope="col">Nome</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col">Portas</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="switch-slots"></tbody></table>
           </div>
-          <small>O nome é seguido pelo número da porta: ether1, 1/1/1, sfp-sfpplus1. Até 96 portas por slot.</small>
+          <p id="interface-load-status" role="status" aria-live="polite"></p>
         </fieldset>
         <p id="port-error" role="alert"></p>
         <section class="element-preview" aria-labelledby="preview-heading">

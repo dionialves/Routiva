@@ -9,6 +9,44 @@ import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 
 class RouterOsConnectionTests {
+    @Test void discoversPhysicalInterfacesAndMonitorsEachPortInOneSession() throws Exception {
+        try (var server = new ServerSocket(0); var executor = Executors.newSingleThreadExecutor()) {
+            var router = executor.submit(() -> {
+                try (var socket = server.accept()) {
+                    socket.setSoTimeout(5000);
+                    var in = socket.getInputStream(); var out = socket.getOutputStream();
+                    assertEquals("/login", read(in).getFirst()); send(out, "!done");
+                    assertEquals("/interface/ethernet/print", read(in).getFirst());
+                    send(out, "!re", "=.id=*1", "=name=uplink", "=default-name=sfp-sfpplus1", "=comment=Core", "=type=ether", "=running=true");
+                    send(out, "!re", "=.id=*2", "=name=ether7", "=default-name=ether7", "=type=ether", "=running=false");
+                    send(out, "!done");
+                    for (int i = 1; i <= 2; i++) {
+                        var monitor = read(in);
+                        assertEquals("/interface/ethernet/monitor", monitor.getFirst());
+                        assertTrue(monitor.contains("=numbers=*" + i));
+                        assertTrue(monitor.contains("=once="));
+                        send(out, "!re", "=status=" + (i == 1 ? "link-ok" : "no-link"), "=rate=" + (i == 1 ? "10Gbps" : ""),
+                            "=supported=" + (i == 1 ? "1G-full,10G-full,25G-full" : "10M-half,100M-full,1G-full"));
+                        send(out, "!done");
+                    }
+                } catch (IOException ex) { throw new UncheckedIOException(ex); }
+            });
+            var service = new MikrotikService(null);
+            var host = new br.com.scriptping.zabbix.Host("1", "Router", "127.0.0.1", List.of());
+            var rows = service.query(host, "discover", null,
+                new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "test-only", server.getLocalPort()), false).rows();
+            assertEquals(2, rows.size());
+            assertEquals("uplink", rows.getFirst().get("name"));
+            assertEquals("Core", rows.getFirst().get("comment"));
+            assertEquals("10Gbps", rows.getFirst().get("rate"));
+            assertEquals("1G-full,10G-full,25G-full", rows.getFirst().get("supported"));
+            assertEquals("10M-half,100M-full,1G-full", rows.getLast().get("supported"));
+            assertEquals("link-ok", rows.getFirst().get("status"));
+            assertEquals("no-link", rows.getLast().get("status"));
+            router.get(5, TimeUnit.SECONDS);
+        }
+    }
+
     @Test void interfacesReadStatisticsAlongsideInventory() throws Exception {
         try (var server = new ServerSocket(0); var executor = Executors.newSingleThreadExecutor()) {
             var router = executor.submit(() -> {

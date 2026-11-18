@@ -18,7 +18,7 @@ function setup() {
   $('element-name').value='Switch';$('element-icon').value='switch';$('label-position').value='BELOW';
   $('interfaces-enabled').checked=true;
   const context=vm.createContext({$,MapSwitch,current:{layout:{nodes:[node],links:[{from:'node',to:'other',fromPort:ports[0].id}]}},
-    configuredSlots:slots.map(s=>({...s})),configuredPorts:ports,configuredSwitchColor:null,pendingNode:null,selected:'node',selectedLink:null,
+    interfaceLoadGeneration:0,loadingInterfaces:false,configuredSlots:slots.map(s=>({...s})),configuredPorts:ports,configuredSwitchColor:null,pendingNode:null,selected:'node',selectedLink:null,
     selection:new Set(),tool:'select',timer:null,generation:0,checkpoint(){},refresh(){},clearTimeout(){},
     draw(){},drawPreview(){},populateBinding(){},renderSwitchSlots(){},window:{elementIconPicker:{sync(){}}},
     confirm(){throw Error('No connections should be removed');}});
@@ -73,4 +73,27 @@ test('icon categories restrict groups to circle and hosts to switch while free e
   assert.ok($('element-icon').options.every(option=>!option.disabled&&!option.hidden));
   assert.equal(context.configuredSlots[0].id,slotId);
   assert.equal(context.configuredSwitchColor,'#2288cc');
+});
+
+test('loading interfaces shows the table loading state and restores slots after a generic connection error', async () => {
+  const {$,context}=setup();
+  $('type').value='host'; $('group').value='42'; $('element-dialog').open=true;
+  const states=[];
+  context.renderSwitchSlots=()=>states.push(context.loadingInterfaces);
+  $('interface-load-status').setAttribute=function(name,value){this[name]=value;};
+  let respond;
+  context.fetch=()=>new Promise(resolve=>{respond=resolve;});
+  vm.runInContext(source.slice(source.indexOf("$('load-switch-interfaces').onclick ="),
+    source.indexOf("$('add-switch-slot').onclick =")),context);
+  const pending=$('load-switch-interfaces').onclick();
+  assert.equal(context.loadingInterfaces,true);
+  assert.equal($('load-switch-interfaces').disabled,true);
+  assert.deepEqual(states,[true]);
+  respond({ok:false,status:502,json:async()=>({message:'MikroTik recusou a consulta.'})});
+  await pending;
+  assert.deepEqual(states,[true,false]);
+  assert.equal(context.configuredSlots.length,1);
+  assert.equal($('interface-load-status').role,'alert');
+  assert.match($('interface-load-status').textContent,/conectar ao equipamento/);
+  assert.doesNotMatch($('interface-load-status').textContent,/MikroTik/);
 });

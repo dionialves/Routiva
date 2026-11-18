@@ -14,6 +14,61 @@ const MapSwitch = (() => {
   };
   const capacities = {electrical: {label: 'Elétrica', type: 'rj45'}, sfp1g: {label: 'SFP1G', type: 'sfp'},
     sfp10g: {label: 'SFP10G', type: 'sfp'}, sfp40g: {label: 'SFP40G', type: 'qsfp'}, sfp100g: {label: 'SFP100G', type: 'qsfp'}};
+  const connectors = {
+    electrical: {label: 'Elétrico', type: 'rj45'}, sfp: {label: 'SFP', type: 'sfp'},
+    sfpplus: {label: 'SFP+', type: 'sfp'}, sfp28: {label: 'SFP28', type: 'sfp'},
+    qsfpplus: {label: 'QSFP+', type: 'qsfp'}, sfp56: {label: 'SFP56', type: 'sfp'},
+    qsfp28: {label: 'QSFP28', type: 'qsfp'}, qsfp56: {label: 'QSFP56', type: 'qsfp'},
+    qsfpdd: {label: 'QSFP-DD', type: 'qsfp'}, qsfpdd800: {label: 'QSFP-DD800', type: 'qsfp'}
+  };
+  const portCapacities = {'10m': '10 Mbps', '100m': '100 Mbps', '1g': '1 Gbps',
+    '10g': '10 Gbps', '25g': '25 Gbps', '40g': '40 Gbps', '50g': '50 Gbps',
+    '100g': '100 Gbps', '200g': '200 Gbps', '400g': '400 Gbps', '800g': '800 Gbps'};
+  const legacyConnectors = {electrical: 'electrical', sfp1g: 'sfp', sfp10g: 'sfpplus', sfp40g: 'qsfpplus', sfp100g: 'qsfp28'};
+  const legacySpeeds = {electrical: 'unknown', sfp1g: '1g', sfp10g: '10g', sfp40g: '40g', sfp100g: '100g'};
+  function normalizeSlot(slot) {
+    return {...slot, connector: slot.connector || legacyConnectors[slot.capacity] || 'electrical',
+      capacity: legacySpeeds[slot.capacity] || slot.capacity};
+  }
+  function slotType(slot) { return slot.connector ? connectors[slot.connector]?.type : capacities[slot.capacity]?.type; }
+  function capacityValid(slot) {
+    return slot.connector ? !!connectors[slot.connector] && (slot.capacity === 'unknown' || !!portCapacities[slot.capacity])
+      : !!capacities[slot.capacity];
+  }
+  function maximumSpeed(value) {
+    const rates = [...String(value || '').matchAll(/(\d+(?:\.\d+)?)\s*([mg])(?:bps|bit|base|[-_])/gi)]
+      .map(match => Number(match[1]) * (match[2].toLowerCase() === 'g' ? 1000 : 1));
+    return rates.length ? Math.max(...rates) : 0;
+  }
+  function capacityFromInterfaceName(name) {
+    // Match native interface families, not arbitrary descriptions containing SFP.
+    // QSFP values describe the physical cage, not an individual breakout lane.
+    const families = [
+      [/^qsfp56-dd-\d+(?:-\d+)*$/, '400g'],
+      [/^qsfp56-\d+(?:-\d+)*$/, '200g'],
+      [/^qsfp28-\d+(?:-\d+)*$/, '100g'],
+      [/^qsfpplus-?\d+(?:-\d+)*$/, '40g'],
+      [/^sfp56-\d+$/, '50g'],
+      [/^sfp28-\d+$/, '25g'],
+      [/^(?:sfp-sfpplus|sfpplus)\d+$/, '10g'],
+      [/^sfp\d+$/, '1g']
+    ];
+    return families.find(([pattern]) => pattern.test(name))?.[1];
+  }
+  function discoveredConnector(hardware, optical, rate) {
+    if (!optical) return 'electrical';
+    if (/qsfp[-_]?dd[-_]?800/.test(hardware)) return 'qsfpdd800';
+    if (/qsfp56-dd|qsfp[-_]?dd/.test(hardware)) return 'qsfpdd';
+    if (/qsfp56/.test(hardware)) return 'qsfp56';
+    if (/qsfp28/.test(hardware)) return 'qsfp28';
+    if (/qsfp/.test(hardware)) return 'qsfpplus';
+    if (/sfp56/.test(hardware)) return 'sfp56';
+    if (/sfp28/.test(hardware)) return 'sfp28';
+    if (/sfpplus|sfp\+/.test(hardware)) return 'sfpplus';
+    return rate >= 800000 ? 'qsfpdd800' : rate >= 400000 ? 'qsfpdd' : rate >= 200000 ? 'qsfp56'
+      : rate >= 100000 ? 'qsfp28' : rate >= 50000 ? 'sfp56' : rate >= 40000 ? 'qsfpplus'
+      : rate >= 25000 ? 'sfp28' : rate >= 10000 ? 'sfpplus' : 'sfp';
+  }
   const names = {rj45: 'RJ45', sfp: 'SFP', qsfp: 'QSFP+ 40G'};
   function portsFor(previous, counts) {
     return types.flatMap(type => Array.from({length: counts[type]}, (_, index) =>
@@ -28,17 +83,48 @@ const MapSwitch = (() => {
     });
   }
   function portsForSlots(previous, slots) {
-    if (slots.some(slot => !slot.id || !slot.name.trim() || slot.name.length > 80 || !capacities[slot.capacity]
+    if (slots.some(slot => !slot.id || !slot.name.trim() || slot.name.length > 80 || !capacityValid(slot)
         || !Number.isInteger(slot.count) || slot.count < 1 || slot.count > 96)) return null;
     return slots.flatMap(slot => {
-      const type = capacities[slot.capacity].type;
+      const type = slotType(slot);
       const existing = previous.filter(port => port.slotId === slot.id ||
         (!port.slotId && slot.id === 'legacy-' + port.type));
       return Array.from({length: slot.count}, (_, index) => ({
-        id: existing[index]?.id || crypto.randomUUID(), type, slotId: slot.id,
-        name: slot.name.trim() + (index + 1), capacity: slot.capacity
+        ...existing[index], id: existing[index]?.id || crypto.randomUUID(), type, slotId: slot.id,
+        name: slot.interfaceNames?.[index] || slot.name.trim() + (index + 1), capacity: slot.capacity,
+        ...(slot.connector ? {connector: slot.connector} : {})
       }));
     });
+  }
+  function importInterfaces(rows, previous) {
+    const slots = [], ports = [];
+    for (const row of rows) {
+      const name = row.name;
+      if (!name || ports.some(port => port.name === name)) continue;
+      const hardware = (row['default-name'] || name).toLowerCase();
+      const optical = /sfp|qsfp/.test(hardware) || row['sfp-supported'] === 'true' || 'sfp-module-present' in row;
+      const speed = row.rate || row.speed || '';
+      // Native SFP names identify cage capacity even without a transceiver.
+      // Negotiated rate and configured speed never define physical capacity.
+      const maximum = maximumSpeed(row.supported) || maximumSpeed(row['supported-rates'])
+        || (!optical ? maximumSpeed(row.advertising) : 0);
+      const connector = discoveredConnector(hardware, optical, maximum);
+      const capacity = capacityFromInterfaceName(hardware)
+        || Object.keys(portCapacities).find(key => maximumSpeed(portCapacities[key]) === maximum) || 'unknown';
+      const interfaceName = row['default-name'] || name;
+      const slotName = (interfaceName.replace(/\d+$/, '') || interfaceName).slice(0, 80);
+      let slot = slots.find(slot => slot.name === slotName && slot.connector === connector && slot.capacity === capacity && slot.count < 96);
+      if (!slot) {
+        slot = {id: crypto.randomUUID(), name: slotName, connector, capacity, count: 0, interfaceNames: []};
+        slots.push(slot);
+      }
+      slot.count++; slot.interfaceNames.push(name);
+      const old = previous.find(port => port.name === name);
+      ports.push({id: old?.id || crypto.randomUUID(), slotId: slot.id, name, capacity,
+        connector, type: connectors[connector].type, comment: row.comment || '', interfaceType: row.type || 'ether',
+        speed, running: row.disabled === 'true' ? false : row.status ? row.status === 'link-ok' : row.running == null ? null : row.running === 'true'});
+    }
+    return {slots, ports};
   }
   function geometry(node) {
     const ports = node.ports || [];
@@ -63,7 +149,7 @@ const MapSwitch = (() => {
         const column = singleRow ? index : Math.floor(index / 2);
         const row = index % 2;
         const rowGap = 25;
-        positioned.push({...port, label: port.name ? port.name + ' · ' + (capacities[port.capacity]?.label || names[port.type]) : names[port.type] + ' ' + (index + 1),
+        positioned.push({...port, label: port.name ? port.name + ' · ' + (port.connector ? connectors[port.connector]?.label + (portCapacities[port.capacity] ? ' · ' + portCapacities[port.capacity] : '') : capacities[port.capacity]?.label || names[port.type]) + (port.comment ? ' · ' + port.comment : '') + (port.speed ? ' · Link: ' + port.speed : '') + (typeof port.running === 'boolean' ? (port.running ? ' · Link ativo' : ' · Sem link') : '') : names[port.type] + ' ' + (index + 1),
           x: left + 12 + column * group.pitch,
           y: centerY + (singleRow || row === 0 ? rowGap / 2 : -rowGap / 2),
           cableDirection: singleRow || row === 0 ? 1 : -1});
@@ -75,6 +161,11 @@ const MapSwitch = (() => {
 
   function portVisual(port) {
     if (!port) return null;
+    if (port.connector) {
+      const artwork = port.connector === 'electrical' ? 'electrical' : connectors[port.connector]?.type === 'sfp'
+        ? 'sfp10g' : port.connector === 'qsfpplus' ? 'sfp40g' : 'sfp100g';
+      return portArtwork[artwork] || null;
+    }
     return portArtwork[port.capacity || {rj45: 'electrical', sfp: 'sfp10g', qsfp: 'sfp40g'}[port.type]] || null;
   }
   function connectedPorts(node, links) {
@@ -166,6 +257,6 @@ const MapSwitch = (() => {
     label.textContent = node.name;
     group.append(label);
   }
-  return {types, capacities, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
+  return {importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
 })();
 if (typeof module !== 'undefined') module.exports = MapSwitch;

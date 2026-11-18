@@ -226,3 +226,117 @@ test('electrical and SFP 1G/10G plugs stay upright in both rows and their cables
     assert.deepEqual(switchMap.endpoint(node,'p1'),{x:100+upper.x,y:200+upper.y+socketY});
   }
 });
+
+
+test('discovery preserves exact names, metadata and existing connection identities', () => {
+  const result = switchMap.importInterfaces([
+    {name:'uplink-core', 'default-name':'sfp-sfpplus1', comment:'Core', supported:'1G-full,10G-full', rate:'10Gbps', running:'true'},
+    {name:'ether7', 'default-name':'ether7', supported:'10M-half,100M-full,1G-full', speed:'1Gbps', running:'false'},
+    {name:'ether9', 'default-name':'ether9', supported:'10M-half,100M-full,1G-full', speed:'1Gbps', running:'true', disabled:'true'},
+    {name:'uplink-core'}
+  ], [{id:'connected-port',name:'uplink-core'}]);
+  const ports = switchMap.portsForSlots(result.ports, result.slots);
+  assert.deepEqual(result.slots.map(slot => [slot.name, slot.count]), [['sfp-sfpplus', 1], ['ether', 2]]);
+  assert.equal(ports.length, 3);
+  assert.equal(ports[0].id, 'connected-port');
+  assert.equal(ports[0].name, 'uplink-core');
+  assert.equal(ports[0].comment, 'Core');
+  assert.equal(ports[0].capacity, '10g');
+  assert.equal(ports[0].connector, 'sfpplus');
+  assert.equal(ports[0].speed, '10Gbps');
+  assert.equal(ports[0].running, true);
+  assert.deepEqual(ports.slice(1).map(p => [p.name,p.running]), [['ether7',false],['ether9',false]]);
+  const again = switchMap.importInterfaces([{name:'ether7','default-name':'ether7'},
+    {name:'uplink-core','default-name':'sfp-sfpplus1'}], ports);
+  assert.equal(again.ports[1].id, 'connected-port');
+  assert.equal(again.ports[0].running, null);
+});
+
+
+test('slot prefixes come from equipment interface names and separate families of equal capacity', () => {
+  const result = switchMap.importInterfaces([
+    {name:'LAN1', 'default-name':'ether1'},
+    {name:'LAN2', 'default-name':'ether2'},
+    {name:'ge-0/0/7'},
+    {name:'ge-0/0/9'},
+    {name:'management'}
+  ], []);
+  assert.deepEqual(result.slots.map(slot => [slot.name, slot.count]),
+    [['ether',2], ['ge-0/0/',2], ['management',1]]);
+  assert.deepEqual(switchMap.portsForSlots(result.ports, result.slots).map(port => port.name),
+    ['LAN1','LAN2','ge-0/0/7','ge-0/0/9','management']);
+});
+
+
+test('connectors and capacities are independent and legacy migration keeps linked port identities', () => {
+  const legacy = {id:'slot',name:'ether',capacity:'electrical',count:1};
+  const previous = switchMap.portsForSlots([], [legacy]);
+  const migrated = switchMap.normalizeSlot(legacy);
+  assert.equal(migrated.connector,'electrical');
+  assert.equal(migrated.capacity,'unknown');
+  for (const [connector,info] of Object.entries(switchMap.connectors)) {
+    for (const capacity of Object.keys(switchMap.portCapacities)) {
+      const ports = switchMap.portsForSlots(previous,[{...migrated,connector,capacity}]);
+      assert.equal(ports[0].id,previous[0].id);
+      assert.equal(ports[0].connector,connector);
+      assert.equal(ports[0].capacity,capacity);
+      assert.equal(ports[0].type,info.type);
+      assert.ok(switchMap.portVisual(ports[0]));
+    }
+  }
+  assert.equal(switchMap.portsForSlots([], [{...migrated,connector:'invalid'}]),null);
+  assert.equal(switchMap.portsForSlots([], [{...migrated,capacity:'invalid'}]),null);
+});
+
+test('discovery uses supported port speed independently from negotiated link speed', () => {
+  const result=switchMap.importInterfaces([
+    {name:'ether1',supported:'10M-baseT-half,100M-baseT-full,1G-baseT-full',rate:'100Mbps'},
+    {name:'sfp28-1',supported:'1G-baseX,10G-baseSR-LR,25G-baseSR-LR',rate:'10Gbps'},
+    {name:'qsfp-dd800-1',rate:'800Gbps'},
+    {name:'ether2'}
+  ],[]);
+  assert.deepEqual(result.ports.map(p=>[p.connector,p.capacity]),
+    [['electrical','1g'],['sfp28','25g'],['qsfpdd800','unknown'],['electrical','unknown']]);
+  assert.equal(result.ports[0].speed,'100Mbps');
+});
+
+
+test('physical maximum never falls back to negotiated rate or configured speed', () => {
+  const result=switchMap.importInterfaces([
+    {name:'ether1',supported:'10M-half,100M-full,1G-full',rate:'10Mbps',speed:'100Mbps'},
+    {name:'ether2',supported:'10M-half,100M-full,1G-full',status:'no-link'},
+    {name:'sfp-sfpplus1',supported:'1G-baseX',rate:'1Gbps'},
+    {name:'ether3',rate:'1Gbps',speed:'1Gbps'},
+    {name:'sfp28-1','supported-rates':'1G-full,10G-full,25G-full',rate:'1Gbps'},
+    {name:'ether4',supported:'unavailable',rate:'100Mbps'}
+  ],[]);
+  assert.deepEqual(result.ports.map(port=>port.capacity), ['1g','1g','10g','unknown','25g','unknown']);
+});
+
+
+test('native optical interface names identify physical capacity without a module', () => {
+  const result=switchMap.importInterfaces([
+    {name:'sfp1'}, {name:'sfp-sfpplus2'}, {name:'sfp28-1'}, {name:'sfp56-1'},
+    {name:'qsfpplus1-1'}, {name:'qsfp28-1-1'}, {name:'qsfp56-1-1'}, {name:'qsfp56-dd-1-1'},
+    {name:'Core', 'default-name':'sfp-sfpplus1', supported:'1G-baseX', rate:'1Gbps'},
+    {name:'uplink-sfp28-1'}, {name:'sfp999-custom'}, {name:'qsfp-dd800-1'}, {name:'ether1',rate:'1Gbps'}
+  ],[]);
+  assert.deepEqual(result.ports.map(p=>p.capacity),
+    ['1g','10g','25g','50g','40g','100g','200g','400g','10g','unknown','unknown','unknown','unknown']);
+  assert.equal(result.ports[7].connector,'qsfpdd');
+  assert.equal(result.ports[8].name,'Core');
+});
+
+
+test('electrical ports use their own advertised maximum when physical supported modes are absent', () => {
+  const result=switchMap.importInterfaces([
+    {name:'ether1',rate:'100Mbps',advertising:'10M-half,10M-full,100M-half,100M-full,1000M-full',
+      'link-partner-advertising':'10M-full,100M-full'},
+    {name:'ether2',status:'no-link',advertising:'10M-half,100M-full,1000M-full'},
+    {name:'ether3',supported:'10M-half,100M-full,1000M-full',advertising:'100M-full'},
+    {name:'ether4',rate:'1Gbps','link-partner-advertising':'1000M-full'},
+    {name:'ether5',advertising:'100M-full,10000M-full'}
+  ],[]);
+  assert.deepEqual(result.ports.map(port=>port.capacity), ['1g','1g','1g','unknown','10g']);
+  assert.equal(result.ports[0].speed,'100Mbps');
+});

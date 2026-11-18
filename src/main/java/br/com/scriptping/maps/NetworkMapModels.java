@@ -33,8 +33,13 @@ public final class NetworkMapModels {
             if (labelPosition == null) labelPosition = LabelPosition.BELOW;
         }
     }
-    public record Slot(String id, String name, String capacity, int count) {}
-    public record Port(String id, String type, String slotId, String name, String capacity) {
+    public record Slot(String id, String name, String capacity, int count, List<String> interfaceNames, String connector) {
+        public Slot(String id, String name, String capacity, int count, List<String> interfaceNames) { this(id, name, capacity, count, interfaceNames, null); }
+        public Slot(String id, String name, String capacity, int count) { this(id, name, capacity, count, null); }
+    }
+    public record Port(String id, String type, String slotId, String name, String capacity, String comment, String interfaceType, String speed, Boolean running, String connector) {
+        public Port(String id, String type, String slotId, String name, String capacity, String comment, String interfaceType, String speed, Boolean running) { this(id, type, slotId, name, capacity, comment, interfaceType, speed, running, null); }
+        public Port(String id, String type, String slotId, String name, String capacity) { this(id, type, slotId, name, capacity, null, null, null, null); }
         public Port(String id, String type) { this(id, type, null, null, null); }
     }
     public record Bend(double x, double y) {}

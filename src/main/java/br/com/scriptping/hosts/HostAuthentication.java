@@ -36,7 +36,7 @@ public class HostAuthentication {
     }
     private EquipmentProvider provider(String name) {
         if (!Set.of("MikroTik", "Ubiquiti").contains(Objects.toString(name, "")))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione MikroTik ou Ubiquiti.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione um Fabricante");
         return providers.stream().filter(p -> p.manufacturer().equals(name)).findFirst().orElseThrow(() ->
             new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fabricante não suportado."));
     }

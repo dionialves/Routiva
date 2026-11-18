@@ -108,14 +108,24 @@ public class NetworkMapService {
         for (var node : layout.nodes()) {
             if (!Set.of("circle", "switch").contains(node.icon())) throw invalid();
             var capacities = Map.of("electrical", "rj45", "sfp1g", "sfp", "sfp10g", "sfp", "sfp40g", "qsfp", "sfp100g", "qsfp");
+            var connectors = Map.of("electrical", "rj45", "sfp", "sfp", "sfpplus", "sfp", "sfp28", "sfp", "qsfpplus", "qsfp",
+                "sfp56", "sfp", "qsfp28", "qsfp", "qsfp56", "qsfp", "qsfpdd", "qsfp", "qsfpdd800", "qsfp");
+            var speeds = Set.of("unknown", "10m", "100m", "1g", "10g", "25g", "40g", "50g", "100g", "200g", "400g", "800g");
             var slots = new HashMap<String, Slot>();
             for (var slot : node.slots()) {
                 if (slot == null || slot.id() == null || slot.id().isBlank() || slot.id().length() > 80
                     || slots.putIfAbsent(slot.id(), slot) != null || slot.name() == null || slot.name().isBlank()
-                    || slot.name().length() > 80 || slot.capacity() == null || !capacities.containsKey(slot.capacity())
+                    || slot.name().length() > 80 || slot.capacity() == null
+                    || (slot.connector() == null ? !capacities.containsKey(slot.capacity())
+                        : !connectors.containsKey(slot.connector()) || !speeds.contains(slot.capacity()))
                     || slot.count() < 1 || slot.count() > 96) throw invalid();
             }
             if (!slots.isEmpty() && node.slots().stream().mapToLong(Slot::count).sum() != node.ports().size()) throw invalid();
+            for (var slot : node.slots()) {
+                if (slot.interfaceNames() != null && (slot.interfaceNames().size() != slot.count()
+                    || slot.interfaceNames().stream().anyMatch(n -> n == null || n.isBlank() || n.length() > 128)
+                    || new HashSet<>(slot.interfaceNames()).size() != slot.count())) throw invalid();
+            }
             var slotCounts = new HashMap<String, Integer>();
             var portIds = new HashSet<String>();
             for (var port : node.ports()) {
@@ -127,8 +137,9 @@ public class NetworkMapService {
                     if (slot == null) throw invalid();
                     int index = slotCounts.merge(slot.id(), 1, Integer::sum);
                     if (index > slot.count() || !slot.capacity().equals(port.capacity())
-                        || !capacities.get(slot.capacity()).equals(port.type())
-                        || !(slot.name() + index).equals(port.name())) throw invalid();
+                        || !java.util.Objects.equals(slot.connector(), port.connector())
+                        || !(slot.connector() == null ? capacities.get(slot.capacity()) : connectors.get(slot.connector())).equals(port.type())
+                        || !(slot.interfaceNames() == null ? slot.name() + index : slot.interfaceNames().get(index - 1)).equals(port.name())) throw invalid();
                 }
             }
         }

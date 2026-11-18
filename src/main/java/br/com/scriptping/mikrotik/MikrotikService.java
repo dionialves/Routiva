@@ -91,6 +91,14 @@ public class MikrotikService {
                         if (!channels.isEmpty()) rows.getFirst().put("channel", String.join(" · ", channels));
                     }
                 }
+                case "discover" -> {
+                    rows = api.command("/interface/ethernet/print",
+                        "=.proplist=.id,name,default-name,comment,type,running,disabled,speed,sfp-supported");
+                    for (var row : rows) {
+                        var status = api.command("/interface/ethernet/monitor", "=numbers=" + row.get(".id"), "=once=");
+                        if (!status.isEmpty()) row.putAll(status.getFirst());
+                    }
+                }
                 case "interfaces" -> {
                     rows = api.command("/interface/print", "=.proplist=.id,name,comment,type,running,disabled,mtu,actual-mtu,mac-address,uptime,link-downs");
                     var stats = api.command("/interface/print", "=stats-detail=",
