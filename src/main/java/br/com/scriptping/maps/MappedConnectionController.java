@@ -26,11 +26,15 @@ public class MappedConnectionController {
     public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Endpoint(long measuredAt, String name, boolean up, String rxBps, String txBps, String error, Long capacityBps) {}
     public record Reading(String id, Endpoint a, Endpoint b, String hostA, String hostB) {}
-    private final Map<String, Endpoint> cache = new HashMap<>();
     private record Source(String address, br.com.scriptping.hosts.HostRepository.Credentials credentials) {}
-    private final Map<String, Source> cacheSources = new HashMap<>();
     private record Counters(long at, java.math.BigInteger rx, java.math.BigInteger tx, String generation) {}
-    private final Map<String, Counters> counters = new HashMap<>();
+    private static final class InterfaceState {
+        final java.util.concurrent.locks.ReentrantLock lock = new java.util.concurrent.locks.ReentrantLock();
+        Endpoint endpoint;
+        Source source;
+        Counters counters;
+    }
+    private final Map<String, InterfaceState> readingsByInterface = new java.util.concurrent.ConcurrentHashMap<>();
 
     static java.math.BigInteger counter(String value) {
         try {
@@ -113,30 +117,53 @@ public class MappedConnectionController {
         var c = new Connection(UUID.randomUUID().toString(), input.name().trim(), input.hostA(), input.interfaceA(), input.hostB(), input.interfaceB());
         return c;
     }
-    private synchronized Endpoint read(String hostId, String name) {
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
+    public void expireReadings() {
+        readingsByInterface.forEach((key, state) -> {
+            if (!state.lock.tryLock()) return;
+            try {
+                if (state.endpoint != null && System.currentTimeMillis() - state.endpoint.measuredAt() > 60000)
+                    readingsByInterface.remove(key, state);
+            } finally { state.lock.unlock(); }
+        });
+    }
+    private Endpoint read(String hostId, String name) {
         String key = hostId + ":" + name;
-        var previous = cache.get(key);
+        while (true) {
+            var state = readingsByInterface.computeIfAbsent(key, ignored -> new InterfaceState());
+            // Network I/O holds only this interface's lock, outside the shared map.
+            state.lock.lock();
+            try {
+                if (readingsByInterface.get(key) != state) continue;
+                state.endpoint = readInterface(hostId, name, state);
+                return state.endpoint;
+            } finally { state.lock.unlock(); }
+        }
+    }
+    private Endpoint readInterface(String hostId, String name, InterfaceState state) {
+        var previous = state.endpoint;
         Endpoint result;
         try {
             var h = host(hostId);
             var credentials = apiConnection(hostId);
             var source = new Source(h.ip(), hosts.credentials(hostId));
             // A first counter sample has no rate yet: allow the startup follow-up after 1s.
-            var baseline = counters.get(key);
+            var baseline = state.counters;
             boolean warmingUp = previous != null && previous.error() == null && previous.up()
                 && (previous.rxBps() == null || previous.txBps() == null) && baseline != null
                 && baseline.rx() != null && baseline.tx() != null;
             long cacheMillis = warmingUp ? 1000 : 9500;
-            if (previous != null && Objects.equals(cacheSources.get(key), source)
+            if (previous != null && Objects.equals(state.source, source)
                     && System.currentTimeMillis() - previous.measuredAt() < cacheMillis) return previous;
-            if (!Objects.equals(cacheSources.get(key), source)) counters.remove(key);
-            cacheSources.put(key, source);
+            if (!Objects.equals(state.source, source)) state.counters = null;
+            state.source = source;
             var snapshot = query(h, "connection", name, credentials);
             var row = snapshot.rows().getFirst();
             if (!Set.of("true", "false").contains(Objects.toString(row.get("running"), "")))
                 throw new IllegalArgumentException("Unknown operational status");
             var sample = new Counters(snapshot.measuredAt(), counter(row.get("rx-byte")), counter(row.get("tx-byte")), row.get("counter-generation"));
-            var before = counters.put(key, sample);
+            var before = state.counters;
+            state.counters = sample;
             if (before != null && !Objects.equals(before.generation(), sample.generation())) before = null;
             String rx = before == null ? null : rate(sample.rx(), before.rx(), sample.at() - before.at());
             String tx = before == null ? null : rate(sample.tx(), before.tx(), sample.at() - before.at());
@@ -146,12 +173,8 @@ public class MappedConnectionController {
             result = new Endpoint(snapshot.measuredAt(), name, "true".equals(row.get("running")) && !"true".equals(row.get("disabled")), rx, tx, null, capacity(row.get("rate")));
         } catch (RuntimeException ex) {
             result = new Endpoint(System.currentTimeMillis(), name, false, null, null, "Consulta indisponível. Verifique a conexão e a interface do equipamento.", previous == null ? null : previous.capacityBps());
-            counters.remove(key);
+            state.counters = null;
         }
-        if (cache.size() > 2000) cache.entrySet().removeIf(e -> System.currentTimeMillis() - e.getValue().measuredAt() > 30000);
-        cache.put(key, result);
-        counters.keySet().retainAll(cache.keySet());
-        cacheSources.keySet().retainAll(cache.keySet());
         return result;
     }
     @PostMapping("/api/maps/{mapId}/connections/readings") @ResponseBody

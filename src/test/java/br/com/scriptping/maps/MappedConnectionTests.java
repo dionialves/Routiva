@@ -171,6 +171,41 @@ class MappedConnectionTests {
         assertThat(endpoint.txBps()).isEqualTo("100");
         assertThat(endpoint.capacityBps()).isNull();
     }
+    @Test void slowInterfaceDoesNotBlockAnotherConnection() throws Exception {
+        equipment();
+        var database = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        var reader = new MappedConnectionController(database, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        var slow = new MappedConnectionController.Connection("slow", "Slow", "a", "slow", "b", "slow");
+        var fast = new MappedConnectionController.Connection("fast", "Fast", "a", "fast", "b", "fast");
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var links = List.of(slow, fast).stream().map(c -> Map.of("from", "a", "to", "b", "connection", c)).toList();
+        when(database.queryForList(anyString(), eq(String.class), eq("map")))
+            .thenReturn(List.of(json.writeValueAsString(Map.of("nodes", List.of(), "links", links))));
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        when(mikrotik.query(any(), eq("connection"), anyString(), any(EquipmentProvider.Connection.class)))
+            .thenAnswer(call -> {
+                if ("slow".equals(call.getArgument(2))) {
+                    entered.countDown();
+                    if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("Timed out");
+                }
+                return new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "true",
+                    "rx-bits-per-second", "1000", "tx-bits-per-second", "2000")), "");
+            });
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            var pending = executor.submit(() -> reader.readings("map", Set.of("slow")));
+            try {
+                assertThat(entered.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                var independent = executor.submit(() -> reader.readings("map", Set.of("fast")));
+                var reading = independent.get(2, java.util.concurrent.TimeUnit.SECONDS).getFirst();
+                assertThat(reading.id()).isEqualTo("fast");
+                assertThat(reading.a().rxBps()).isEqualTo("1000");
+                assertThat(pending.isDone()).isFalse();
+            } finally { release.countDown(); }
+            assertThat(pending.get(2, java.util.concurrent.TimeUnit.SECONDS)).hasSize(1);
+        }
+    }
+
     void persist(MappedConnectionController.Connection connection) {
         try {
             var json = new com.fasterxml.jackson.databind.ObjectMapper();

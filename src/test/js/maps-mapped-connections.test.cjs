@@ -77,3 +77,58 @@ test('opening a map with measured rates does not schedule an early follow-up', a
   context.fetch = async () => ({ok:true,json:async()=>[{id:'c1',a:{up:true,txBps:'0',rxBps:'0'}}]});
   await run('refreshMappedConnections(true)');
 });
+
+test('connections receive independent results and keep polling while a different link is pending', async () => {
+  const {context, run} = setup();
+  run("current = {id:'map1',layout:{links:[{mappedConnectionId:'slow'},{mappedConnectionId:'fast'}]}};");
+  let finishSlow;
+  const calls = [];
+  context.fetch = (url, options) => {
+    const [id] = JSON.parse(options.body);
+    calls.push(id);
+    if (id === 'slow') return new Promise(resolve => { finishSlow = resolve; });
+    return Promise.resolve({ok:true, json:async()=>[{id, a:{up:true, measuredAt:Date.now()}}]});
+  };
+  const first = run('refreshMappedConnections()');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, ['slow', 'fast']);
+  assert.equal(run("connectionReadings.has('fast')"), true);
+  assert.equal(run("connectionReadings.has('slow')"), false);
+  await run('refreshMappedConnections()');
+  assert.deepEqual(calls, ['slow', 'fast', 'fast']);
+  finishSlow({ok:false,json:async()=>({message:'offline'})});
+  await first;
+  assert.equal(run("connectionReadings.has('fast')"), true);
+  assert.equal(run("connectionFailures.has('fast')"), false);
+  assert.equal(run("connectionFailures.has('slow')"), true);
+});
+
+test('a response from a previous map cannot overwrite the current map', async () => {
+  const {context, run} = setup();
+  run("current = {id:'old',layout:{links:[{mappedConnectionId:'c1'}]}};");
+  let finishOld;
+  context.fetch = () => new Promise(resolve => { finishOld = resolve; });
+  const old = run('refreshMappedConnections()');
+  run("current = {id:'new',layout:{links:[{mappedConnectionId:'c1'}]}};");
+  context.fetch = async () => ({ok:true,json:async()=>[{id:'c1', marker:'new'}]});
+  await run('refreshMappedConnections()');
+  finishOld({ok:true,json:async()=>[{id:'c1',marker:'old'}]});
+  await old;
+  assert.equal(run("connectionReadings.get('c1').marker"), 'new');
+});
+
+test('all connections get their own request without a five-link or batch limit', async () => {
+  const {context, run} = setup();
+  const ids = Array.from({length:125}, (_, i) => `c${i}`);
+  context.current = {id:'large',layout:{links:ids.map(mappedConnectionId => ({mappedConnectionId}))}};
+  const requested = [];
+  context.fetch = async (url, options) => {
+    const body = JSON.parse(options.body);
+    assert.equal(body.length, 1);
+    requested.push(body[0]);
+    return {ok:true,json:async()=>[{id:body[0]}]};
+  };
+  await run('refreshMappedConnections()');
+  assert.deepEqual(requested, ids);
+  assert.equal(run('connectionReadings.size'), 125);
+});

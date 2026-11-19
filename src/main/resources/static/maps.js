@@ -247,7 +247,7 @@ function draw() {
     for (const handler of ['onpointerdown', 'onclick', 'ondblclick']) hit[handler] = line[handler];
     if (link.mappedConnectionId && !editing) {
       const tooltipData = () => MapConnectionTooltip.details(connectionReadings.get(link.mappedConnectionId),
-        connectionDefinitions.find(c => c.id === link.mappedConnectionId), inventory, connectionFailed);
+        connectionDefinitions.find(c => c.id === link.mappedConnectionId), inventory, connectionFailures.has(link.mappedConnectionId));
       for (const path of [line, hit]) {
         path.dataset.connectionTooltip = link.mappedConnectionId;
         path.onpointermove = event => MapConnectionTooltip.show(link.mappedConnectionId, path,
@@ -1504,7 +1504,7 @@ $('save').onclick = async () => {
 })();
 
 
-let connectionDefinitions = [], connectionReadings = new Map(), connectionBusy = false, connectionFailed = false;
+let connectionDefinitions = [], connectionReadings = new Map(), connectionPending = new Map(), connectionFailures = new Set();
 async function connectionRequest(url, body) {
   const response = await fetch(url, body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || error.detail || 'Não foi possível consultar a conexão. Verifique a configuração da API.'); }
@@ -1569,7 +1569,7 @@ $('traffic-animation').onchange = () => {
 document.addEventListener('visibilitychange', () => document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer));
 function mappedConnectionTitle(id) {
   const reading = connectionReadings.get(id);
-  if (!reading) return connectionFailed ? 'Conexão mapeada · Consulta indisponível' : 'Conexão mapeada · Aguardando coleta';
+  if (!reading) return connectionFailures.has(id) ? 'Conexão mapeada · Consulta indisponível' : 'Conexão mapeada · Aguardando coleta';
   const definition = connectionDefinitions.find(c => c.id === id);
   const data = MapTraffic.state(reading);
   const utilization = value => value == null || !data.capacity ? 'Sem dados' : (value / data.capacity * 100).toLocaleString('pt-BR', {maximumFractionDigits: 2}) + '%';
@@ -1582,35 +1582,45 @@ function mappedConnectionTitle(id) {
     `Capacidade: ${connectionRate(data.capacity)}`,
     `Última coleta: ${new Date(reading.a.measuredAt).toLocaleString('pt-BR')}`]).join('\n');
 }
-async function refreshMappedConnections(warmup = false) {
-  document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
-  if (connectionBusy || editing || !current || document.hidden) return;
-  const ids = [...new Set(current.layout.links.map(l => l.mappedConnectionId).filter(Boolean))];
-  if (!ids.length) return;
-  connectionBusy = true;
-  const requestedMap = current;
+async function refreshMappedConnection(id, requestedMap, warmup = false) {
+  if (current !== requestedMap || editing || document.hidden) return;
+  if (connectionPending.get(id)?.map === requestedMap) return;
+  const request = {map: requestedMap};
+  connectionPending.set(id, request);
   try {
-    const rows = [];
-    for (let offset = 0; offset < ids.length; offset += 100)
-      rows.push(...await connectionRequest('/api/maps/' + encodeURIComponent(requestedMap.id) + '/connections/readings', ids.slice(offset, offset + 100)));
+    const rows = await connectionRequest('/api/maps/' + encodeURIComponent(requestedMap.id) + '/connections/readings', [id]);
     if (current !== requestedMap || editing) return;
-    connectionFailed = false;
-    connectionReadings = new Map(rows.map(r => [r.id, r]));
+    connectionFailures.delete(id);
+    const reading = rows.find(row => row.id === id);
+    if (reading) connectionReadings.set(id, reading);
+    else connectionReadings.delete(id);
     if (warmup && rows.some(row => [row.a, row.b].some(endpoint => endpoint && !endpoint.error
       && endpoint.up && (endpoint.txBps == null || endpoint.rxBps == null)))) {
-      setTimeout(() => {
-        if (current === requestedMap && !editing) return refreshMappedConnections();
-      }, 1200);
+      setTimeout(() => refreshMappedConnection(id, requestedMap), 1200);
+    }
+  } catch {
+    if (current === requestedMap && !editing) {
+      connectionReadings.delete(id);
+      connectionFailures.add(id);
+    }
+  } finally {
+    if (connectionPending.get(id) === request) connectionPending.delete(id);
+    if (current === requestedMap && !editing) {
+      document.querySelectorAll('.map-traffic').forEach(layer => {
+        if (layer.trafficContext.link.mappedConnectionId === id) updateTrafficLayer(layer);
+      });
+      if (typeof MapConnectionTooltip !== 'undefined') {
+        MapConnectionTooltip.refresh(id, MapConnectionTooltip.details(connectionReadings.get(id),
+          connectionDefinitions.find(c => c.id === id), inventory, connectionFailures.has(id)));
+      }
     }
   }
-  catch { if (current === requestedMap) { connectionReadings.clear(); connectionFailed = true; } }
-  finally {
-    connectionBusy = false;
-    document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
-    if (typeof MapConnectionTooltip !== 'undefined') ids.forEach(id => {
-      MapConnectionTooltip.refresh(id, MapConnectionTooltip.details(connectionReadings.get(id), connectionDefinitions.find(c => c.id === id), inventory, connectionFailed));
-    });
-  }
+}
+async function refreshMappedConnections(warmup = false) {
+  document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
+  if (editing || !current || document.hidden) return;
+  const ids = [...new Set(current.layout.links.map(l => l.mappedConnectionId).filter(Boolean))];
+  return Promise.all(ids.map(id => refreshMappedConnection(id, current, warmup)));
 }
 setInterval(refreshMappedConnections, 10000);
 refreshMappedConnections();

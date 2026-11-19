@@ -165,7 +165,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - `Link.connection` mantém nome, hosts e interfaces dentro do próprio mapa; `Link.mappedConnectionId` identifica essa ligação local. Não há cadastro ou menu separado de conexões. Alterações são persistidas ao salvar o mapa e devem corresponder aos hosts A/B da ligação. Conexões simples preservam o comportamento anterior.
 - Interfaces Ethernet MikroTik usam autenticação por host (`hosts.HostAuthentication` / `HostConnections`), sem exigir cadastro em Access Points. Credenciais gerais do `.env` não são usadas nas conexões mapeadas. Nomes de interface persistidos; IDs RouterOS resolvidos novamente a cada coleta.
-- `/api/maps/{mapId}/connections/readings` consulta sob demanda, com cache por host/interface de 9,5s; mapas consultam a cada 10s enquanto visíveis, sem sobrepor consultas. Erro de API e leitura antiga não significam porta DOWN.
+- `/api/maps/{mapId}/connections/readings` consulta sob demanda, com cache por host/interface de 9,5s; cada conexão do mapa faz sua própria solicitação e atualização a cada 10s enquanto visível, sem sobrepor consultas da mesma conexão. Leituras lentas ou falhas de uma conexão não bloqueiam as demais; o cache serializa apenas a mesma interface. Erro de API e leitura antiga não significam porta DOWN.
 - Leituras de interfaces mapeadas reutilizam uma sessão RouterOS por host em `MappedRouterSessions`, com consultas serializadas, reconexão única após queda e encerramento após 45s ociosos (verificação a cada 10s). IP ou credenciais alterados substituem a sessão; demais consultas mantêm conexões temporárias. Não há coleta autônoma após fechar o mapa.
 
 ## Cadastro local de hosts
