@@ -22,6 +22,7 @@ function setup() {
     selection:new Set(),tool:'select',timer:null,generation:0,checkpoint(){},refresh(){},clearTimeout(){},
     draw(){},drawPreview(){},populateBinding(){},renderSwitchSlots(){},window:{elementIconPicker:{sync(){}}},
     confirm(){throw Error('No connections should be removed');}});
+  vm.runInContext(source.slice(source.indexOf('function ensureElementOrigin('), source.indexOf('function applyElementAction(')), context);
   vm.runInContext('function switchDraft(){return MapSwitch.portsForSlots(configuredPorts,configuredSlots);}',context);
   vm.runInContext(source.slice(source.indexOf("$('element-form').onsubmit ="),source.indexOf('function deleteSelection(')),context);
   vm.runInContext(source.slice(source.indexOf('function openElement('),source.indexOf('window.elementIconPicker =')),context);

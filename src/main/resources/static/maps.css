@@ -589,3 +589,15 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #parent-map[hidden] { display:none; }
 #canvas [role="link"] { cursor:pointer; }
 #canvas [role="link"]:focus-visible { outline:2px solid var(--focus); }
+
+
+.map-selection-border { fill:none; stroke:var(--cyan); stroke-width:1.5; pointer-events:none; filter:drop-shadow(0 0 2px color-mix(in srgb, var(--cyan) 20%, transparent)); }
+.map-transform-handle { color:var(--text); cursor:grab; outline:none; touch-action:none; }
+.map-transform-handle[data-transform="flipX"], .map-transform-handle[data-transform="reset"] { cursor:pointer; }
+.map-transform-handle circle { fill:var(--panel-bg); stroke:color-mix(in srgb, var(--cyan) 65%, var(--border)); stroke-width:1; transition:fill 150ms, stroke 150ms; }
+.map-transform-handle svg { pointer-events:none; }
+.map-transform-handle:hover circle, .map-transform-handle:focus-visible circle { fill:var(--hover-bg); stroke:var(--cyan); }
+.map-transform-handle.is-active circle { fill:var(--selected-bg); stroke:var(--cyan); stroke-width:1.5; }
+.map-transform-handle.is-active { cursor:grabbing; }
+.map-control-tooltip { position:fixed; z-index:1000; pointer-events:none; padding:5px 8px; border:1px solid var(--border-strong); border-radius:5px; background:var(--panel-bg); color:var(--text); font:12px var(--font-ui); box-shadow:0 2px 6px #0003; }
+@media (prefers-reduced-motion:reduce) { .map-transform-handle circle { transition:none; } }

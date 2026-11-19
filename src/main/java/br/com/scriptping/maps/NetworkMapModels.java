@@ -10,7 +10,13 @@ public final class NetworkMapModels {
 
     public enum LabelPosition { ABOVE, BELOW, LEFT, RIGHT }
 
-    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId) {
+    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId, Double rotation, Double scale, Boolean flipX, Origin origin) {
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId, Double rotation, Double scale, Boolean flipX) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, switchColor, subMapId, rotation, scale, flipX, null);
+        }
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, switchColor, subMapId, 0.0, 1.0, false);
+        }
         public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor) {
             this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, switchColor, null);
         }
@@ -27,6 +33,10 @@ public final class NetworkMapModels {
             this(id, groupId, hostId, color, name, x, y, labelPosition, "circle", List.of());
         }
         public Node {
+            if (rotation == null) rotation = 0.0;
+            if (scale == null) scale = 1.0;
+            if (flipX == null) flipX = false;
+            if (origin == null) origin = new Origin(x, y, scale);
             // Existing maps identify link endpoints by their host group.
             if (id == null) id = groupId;
             if (icon == null) icon = "circle";
@@ -36,6 +46,7 @@ public final class NetworkMapModels {
             if (labelPosition == null) labelPosition = LabelPosition.BELOW;
         }
     }
+    public record Origin(int x, int y, double scale) {}
     public record Slot(String id, String name, String capacity, int count, List<String> interfaceNames, String connector) {
         public Slot(String id, String name, String capacity, int count, List<String> interfaceNames) { this(id, name, capacity, count, interfaceNames, null); }
         public Slot(String id, String name, String capacity, int count) { this(id, name, capacity, count, null); }

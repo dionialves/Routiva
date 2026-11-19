@@ -452,3 +452,35 @@ test('wireless configuration rejects duplicate slots and quantities without trun
   assert.equal(switchMap.portsForSlots([],[{...slot,count:2}]),null);
   assert.equal(switchMap.portsForSlots([],[slot,{...slot,id:'w2'}]),null);
 });
+
+test('rotation scale and reflection transform socket anchors together without changing port IDs', () => {
+  const original = {icon: 'radio', x: 100, y: 200,
+    ports: [{id: 'w', type: 'wireless', connector: 'wireless'}]};
+  const local = switchMap.endpoint({...original, x: 0, y: 0}, 'w');
+  for (const rotation of [0, 45, 90, 180, 270]) {
+    const node = {...original, rotation, scale: 2, flipX: true};
+    const angle = rotation * Math.PI / 180;
+    const point = switchMap.endpoint(node, 'w');
+    assert.ok(Math.abs(point.x - (100 - local.x * 2 * Math.cos(angle) - local.y * 2 * Math.sin(angle))) < 1e-8);
+    assert.ok(Math.abs(point.y - (200 - local.x * 2 * Math.sin(angle) + local.y * 2 * Math.cos(angle))) < 1e-8);
+    const bounds = switchMap.bounds(node);
+    assert.ok(bounds.left < bounds.right && bounds.top < bounds.bottom);
+    assert.equal(node.ports[0].id, 'w');
+    assert.deepEqual(switchMap.endpoint({...node, interfacesEnabled: false}, 'w'), {x: 100, y: 200});
+  }
+});
+
+test('equipment art, LED and ports share transforms while the label remains readable', () => {
+  const svg = (tag, attributes) => ({tag, attributes, children: [],
+    append(...items) {this.children.push(...items);}});
+  const group = svg('g', {});
+  switchMap.draw(svg, group, {icon: 'radio', name: 'Antena', rotation: 90, scale: 1.5, flipX: true,
+    ports: [{id: 'w', type: 'wireless', connector: 'wireless'}]}, '#ffffff', true);
+  const art = group.children.find(child => child.attributes.transform);
+  assert.equal(art.attributes.transform, 'rotate(90) scale(-1.5 1.5)');
+  assert.ok(art.children.some(child => child.attributes.class === 'switch-status-led'));
+  assert.ok(art.children.some(child => child.attributes['data-port-id'] === 'w'));
+  const label = group.children.find(child => child.tag === 'text');
+  assert.equal(label.textContent, 'Antena');
+  assert.equal(label.attributes.transform, undefined);
+});

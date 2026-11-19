@@ -103,6 +103,9 @@ public class NetworkMapService {
                     || node.subMapId().equals(input.id()) || repository.findById(node.subMapId()).isEmpty()))
                 || (node.color() != null && !node.color().matches("#[0-9a-fA-F]{6}"))
                 || (node.switchColor() != null && !node.switchColor().matches("#[0-9a-fA-F]{6}"))
+                || !Double.isFinite(node.rotation()) || node.rotation() < 0 || node.rotation() >= 360
+                || !Double.isFinite(node.origin().scale()) || node.origin().scale() < .25 || node.origin().scale() > 3
+                || !Double.isFinite(node.scale()) || node.scale() < .25 || node.scale() > 3
                 || node.name() == null) throw invalid();
         }
         validateHierarchy(input, hierarchy);

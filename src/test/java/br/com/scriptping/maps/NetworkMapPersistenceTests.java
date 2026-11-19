@@ -40,6 +40,25 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
+    void persistsEquipmentTransformsAndDefaultsForOldMaps() throws Exception {
+        var node = new Node("rotated", null, "host-a", null, "Rádio", 20, 30, null,
+            "radio", List.of(), List.of(), false, null, null, 135.0, 1.5, true, new Origin(5, 10, 1.0));
+        var saved = service.save(new Saved(null, 0,
+            new Layout("Orientação", null, 0, List.of(node), List.of()), null));
+        var restored = service.maps().stream().filter(m -> m.id().equals(saved.id())).findFirst().orElseThrow()
+            .layout().nodes().getFirst();
+        assertThat(restored.rotation()).isEqualTo(135.0);
+        assertThat(restored.scale()).isEqualTo(1.5);
+        assertThat(restored.flipX()).isTrue();
+        assertThat(restored.origin()).isEqualTo(new Origin(5, 10, 1.0));
+        var legacy = new ObjectMapper().readValue("{\"id\":\"old\",\"name\":\"Old\",\"x\":0,\"y\":0}", Node.class);
+        assertThat(legacy.rotation()).isZero();
+        assertThat(legacy.scale()).isEqualTo(1.0);
+        assertThat(legacy.flipX()).isFalse();
+        assertThat(legacy.origin()).isEqualTo(new Origin(0, 0, 1.0));
+    }
+
+    @Test
     void persistsWirelessConnectorAndStableInterfaceName() throws Exception {
         var slot = new Slot("wireless-slot", "Wireless", "unknown", 1, List.of("Wireless"), "wireless");
         var port = new Port("wireless-port", "wireless", slot.id(), "Wireless", "unknown", "", "wireless", "", true, "wireless");

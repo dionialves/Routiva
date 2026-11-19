@@ -205,12 +205,28 @@ const MapSwitch = (() => {
     const port = geometry(node).ports.find(port => port.id === portId);
     return portVisual(port) ? plugDirection(port) : 0;
   }
+  function transformPoint(node, x, y) {
+    const scale = Math.max(.25, Math.min(3, Number(node.scale) || 1));
+    const angle = (Number(node.rotation) || 0) * Math.PI / 180;
+    x *= scale * (node.flipX ? -1 : 1); y *= scale;
+    return {x: x * Math.cos(angle) - y * Math.sin(angle),
+      y: x * Math.sin(angle) + y * Math.cos(angle)};
+  }
+  function bounds(node) {
+    const shape = geometry(node.interfacesEnabled === false ? {...node, ports: []} : node);
+    const top = node.icon === 'radio' ? -90 : -55;
+    const corners = [-shape.width / 2, shape.width / 2].flatMap(x =>
+      [top, top + shape.height].map(y => transformPoint(node, x, y)));
+    return {left: Math.min(...corners.map(p => p.x)), right: Math.max(...corners.map(p => p.x)),
+      top: Math.min(...corners.map(p => p.y)), bottom: Math.max(...corners.map(p => p.y))};
+  }
   function endpoint(node, portId) {
     const port = node.interfacesEnabled !== false && node.icon !== 'circle' && portId
       && geometry(node).ports.find(port => port.id === portId);
     const visual = isEquipment(node) && portVisual(port);
-    return {x: node.x + (port ? port.x : 0),
-      y: node.y + (port ? port.y : 0) + (visual ? plugDirection(port) * visual.socketY * (port.visualScale || 1) : 0)};
+    const point = transformPoint(node, port ? port.x : 0,
+      (port ? port.y : 0) + (visual ? plugDirection(port) * visual.socketY * (port.visualScale || 1) : 0));
+    return {x: node.x + point.x, y: node.y + point.y};
   }
   function image(svg, parent, file, x, y, width, height, filter) {
     parent.append(svg('image', {href: '/map-assets/' + file + '.svg' + (file === 'radio' ? '?v=20261119-wireless-tip' : file === 'switch' ? '?v=20261117-ping-led' : '?v=20261117-connected-ports'), x, y, width, height,
@@ -223,6 +239,11 @@ const MapSwitch = (() => {
   }
   function draw(svg, group, node, fill, selected, options = {}) {
     const shape = geometry(node.interfacesEnabled === false ? {...node, ports: []} : node);
+    const outer = group;
+    if (node.rotation || node.flipX || (node.scale && node.scale !== 1)) {
+      group = svg('g', {transform: `rotate(${Number(node.rotation) || 0}) scale(${(node.flipX ? -1 : 1) * (node.scale || 1)} ${node.scale || 1})`});
+      outer.append(group);
+    }
     let bodyFilter;
     if (node.icon !== 'radio' && /^#[0-9a-fA-F]{6}$/.test(node.switchColor || '')) {
       const id = 'switch-tint-' + (++tintSequence);
@@ -236,7 +257,8 @@ const MapSwitch = (() => {
     const top = radio ? -90 : -55;
     image(svg, group, radio ? 'radio' : 'switch', -shape.width / 2, top, shape.width, shape.height, bodyFilter);
     group.append(svg('rect', {x: -shape.width / 2, y: top, width: shape.width, height: shape.height,
-      rx: 10, fill: 'transparent', stroke: selected ? 'var(--focus)' : 'none', 'stroke-width': 3,
+      rx: 6, fill: 'transparent', stroke: selected && !options.selectionFrame ? 'var(--cyan)' : 'none',
+      'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke',
       'pointer-events': 'all'}));
     const status = pingIndicator(options.pingState);
     const led = svg('circle', {cx: radio ? -36.4 : -shape.width / 2 + shape.width * 0.0557, cy: radio ? 35.2 : 17, r: radio ? 1.6 : 3.5,
@@ -284,14 +306,15 @@ const MapSwitch = (() => {
       }
       group.append(g);
     }
-    const offsets = {ABOVE: {x: 0, y: node.icon === 'radio' ? -102 : -67, 'text-anchor': 'middle'},
-      BELOW: {x: 0, y: node.icon === 'radio' ? 108 : 74, 'text-anchor': 'middle'},
-      LEFT: {x: -shape.width / 2 - 12, y: 0, 'text-anchor': 'end'},
-      RIGHT: {x: shape.width / 2 + 12, y: 0, 'text-anchor': 'start'}};
-    const label = svg('text', offsets[node.labelPosition] || offsets.BELOW);
+    const box = bounds(node);
+    const positions = {ABOVE: {x: 0, y: box.top - 12, 'text-anchor': 'middle'},
+      BELOW: {x: 0, y: box.bottom + 19, 'text-anchor': 'middle'},
+      LEFT: {x: box.left - 12, y: 0, 'text-anchor': 'end'},
+      RIGHT: {x: box.right + 12, y: 0, 'text-anchor': 'start'}};
+    const label = svg('text', positions[node.labelPosition] || positions.BELOW);
     label.textContent = node.name;
-    group.append(label);
+    outer.append(label);
   }
-  return {isEquipment, newId, importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
+  return {isEquipment, newId, importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, transformPoint, bounds, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
 })();
 if (typeof module !== 'undefined') module.exports = MapSwitch;

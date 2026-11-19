@@ -121,6 +121,7 @@ function groupLevel(hosts, minimumSeverity = current?.layout.minimumSeverity ?? 
 }
 
 function checkpoint() {
+  current.layout.nodes.forEach(ensureElementOrigin);
   past.push(JSON.stringify(current.layout));
   if (past.length > 100) past.shift();
   future.length = 0;
@@ -133,6 +134,45 @@ function restore(source, destination) {
   selection.clear();
   selected = selectedLink = drag = null;
   draw();
+}
+function transformState(node) {
+  return {rotation: node.rotation || 0, scale: node.scale || 1, flipX: !!node.flipX};
+}
+function cancelTransform() {
+  if (drag?.kind !== 'transform') return false;
+  Object.assign(drag.node, drag.initial);
+  if (drag.moved) { past.pop(); future.splice(0, future.length, ...drag.future); }
+  drag = null; draw(); return true;
+}
+function ensureElementOrigin(node) {
+  node.origin ||= {x: node.x, y: node.y, scale: node.scale || 1};
+}
+function applyElementAction(node, action) {
+  ensureElementOrigin(node);
+  checkpoint();
+  if (action === 'flipX') node.flipX = !node.flipX;
+  if (action === 'reset') Object.assign(node, {scale: 1, rotation: 0, flipX: false});
+  draw();
+  $('canvas').querySelector(`[data-transform="${action}"]`)?.focus();
+}
+function drawTransformHandles(canvas, node) {
+  MapElementControls.draw({canvas, node, box: MapSwitch.bounds(node), scale: camera.scale,
+    active: drag?.kind === 'transform' ? drag.action : null, svg,
+    onAction: action => applyElementAction(node, action),
+    onStart: (action, event) => {
+      ensureElementOrigin(node);
+      drag = {kind: 'transform', action, node, pointer: event.pointerId,
+        initial: transformState(node), future: [...future], start: canvasPoint(event),
+        x: event.clientX, y: event.clientY, moved: false};
+      canvas.setPointerCapture(event.pointerId);
+    },
+    onAdjust: (action, direction, snap) => {
+      ensureElementOrigin(node); checkpoint();
+      if (action === 'rotation') node.rotation = ((node.rotation || 0) + direction * (snap ? 15 : 1) + 360) % 360;
+      if (action === 'scale') node.scale = Math.max(.25, Math.min(3, (node.scale || 1) + direction * .05));
+      draw(); canvas.querySelector(`[data-transform="${action}"]`)?.focus();
+    }
+  });
 }
 function nodeHosts(node) {
   return states.get(node.hostId ? 'host:' + node.hostId : node.groupId) || [];
@@ -180,6 +220,7 @@ function alignDraggedNode(node, x, y, nodes, scale) {
 }
 
 function draw() {
+  if (typeof MapElementControls !== 'undefined') MapElementControls.hideTooltip();
   if (typeof MapConnectionTooltip !== 'undefined') MapConnectionTooltip.hide();
   const canvas = $('canvas');
   const focusedPort = document.activeElement?.getAttribute('data-port-id');
@@ -289,6 +330,7 @@ function draw() {
     title.textContent = description;
     g.append(title);
     if (['switch', 'radio'].includes(n.icon)) MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
+      selectionFrame: editing && tool === 'select' && selection.size === 1,
       connectedPorts: MapSwitch.connectedPorts(n, links),
       pingState: editing ? 'unknown' : pingStateFor(n.hostId),
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
@@ -369,6 +411,10 @@ function draw() {
     });
   }
   if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
+  if (editing && tool === 'select' && selection.size === 1) {
+    const node = nodes.find(n => selection.has(n.id));
+    if (node && ['switch', 'radio'].includes(node.icon)) drawTransformHandles(canvas, node);
+  }
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
       y:Math.min(marquee.start.y, marquee.end.y),
@@ -425,6 +471,12 @@ function resizeCanvas() {
   canvas.setAttribute('viewBox', [x, y, width, height].join(' '));
   canvas.style.width = width * scale + 'px';
   canvas.style.height = height * scale + 'px';
+  if (editing && current && canvas.querySelector('.map-transform-handle')) {
+    MapElementControls.hideTooltip();
+    canvas.querySelectorAll('.map-transform-handle, .map-selection-border').forEach(handle => handle.remove());
+    const node = current.layout.nodes.find(n => selection.has(n.id));
+    if (node) drawTransformHandles(canvas, node);
+  }
 }
 
 function syncZoom() {
@@ -507,7 +559,7 @@ function setMapExpanded(expanded) {
 }
 $('maximize-map').onclick = () => setMapExpanded(!$('workspace').classList.contains('map-expanded'));
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !document.fullscreenElement) setMapExpanded(false);
+  if (event.key === 'Escape' && drag?.kind !== 'transform' && !document.fullscreenElement) setMapExpanded(false);
 });
 $('fullscreen-map').onclick = async () => {
   const target = $('map-stage');
@@ -563,6 +615,23 @@ $('canvas').onpointermove = event => {
     return;
   }
   if (!drag || drag.pointer !== event.pointerId) return;
+  if (drag.kind === 'transform') {
+    if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
+    if (!drag.moved) checkpoint();
+    drag.moved = true;
+    const point = canvasPoint(event), node = drag.node, initial = drag.initial;
+    if (drag.action === 'rotation') {
+      const delta = Math.atan2(point.y - node.y, point.x - node.x)
+        - Math.atan2(drag.start.y - node.y, drag.start.x - node.x);
+      let angle = initial.rotation + delta * 180 / Math.PI;
+      if (event.shiftKey) angle = Math.round(angle / 15) * 15;
+      node.rotation = (angle % 360 + 360) % 360;
+    } else if (drag.action === 'scale') {
+      const distance = Math.hypot(drag.start.x - node.x, drag.start.y - node.y);
+      node.scale = Math.max(.25, Math.min(3, initial.scale * Math.hypot(point.x - node.x, point.y - node.y) / Math.max(1, distance)));
+    }
+    draw(); return;
+  }
   if (drag.kind === 'new-bend') {
     if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 4) return;
     checkpoint();
@@ -611,6 +680,7 @@ $('canvas').onpointerup = event => {
     return;
   }
   if (drag?.pointer !== event.pointerId) return;
+  if (drag.kind === 'transform') { drag = null; draw(); return; }
   if (drag.kind === 'new-bend') { drag = null; return; }
   if (drag.kind === 'bend' && drag.moved) suppressConnectionUntil = Date.now() + 400;
   if (drag.kind === 'bend') { const redraw = drag.moved || drag.guides?.length; drag = null; if (redraw) draw(); return; }
@@ -620,6 +690,7 @@ $('canvas').onpointerup = event => {
   draw();
 };
 function endDrag() {
+  if (cancelTransform()) return;
   if (!drag && !marquee) return;
   drag = null;
   marquee = null;
@@ -952,7 +1023,7 @@ document.addEventListener('keydown', event => {
   if ((event.ctrlKey || event.metaKey) && (key === 'z' || key === 'y')) {
     event.preventDefault();
     if (key === 'y' || event.shiftKey) restore(future, past); else restore(past, future);
-  } else if (key === 'escape') setTool('select');
+  } else if (key === 'escape') { if (!cancelTransform()) setTool('select'); }
 });
 
 $('add').onclick = () => {
@@ -1303,7 +1374,7 @@ function drawPreview() {
     groupId: $('type').value === 'group' ? $('group').value : null};
   const monitored = !!(binding.hostId || binding.groupId);
   const color = monitored ? metricSummary(binding)?.color || colors[groupLevel(nodeHosts(binding)) + 2] : colors[0];
-  if (isSwitch) MapSwitch.draw(svg, group, {icon, name, labelPosition: $('label-position').value,
+  if (isSwitch) MapSwitch.draw(svg, group, {...transformState(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon, name, labelPosition: $('label-position').value,
     ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
     {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
   else drawNode(group, name, $('label-position').value, color);
@@ -1429,6 +1500,7 @@ $('element-form').onsubmit = event => {
   current.layout.links = current.layout.links.filter(link => !affected.includes(link));
   Object.assign(node, {icon, switchColor: configuredSwitchColor, interfacesEnabled, ports, slots: configuredSlots.map(slot => ({...slot, name: slot.name.trim()})), name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
     groupId:type === 'group' ? binding : null, subMapId:type === 'group' ? $('sub-map').value || null : null, color:node.color || null});
+  ensureElementOrigin(node);
   if (pendingNode) current.layout.nodes.push(node);
   pendingNode = null;
   selected = node.id;
