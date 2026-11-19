@@ -247,7 +247,7 @@ function draw() {
     for (const handler of ['onpointerdown', 'onclick', 'ondblclick']) hit[handler] = line[handler];
     if (link.mappedConnectionId && !editing) {
       const tooltipData = () => MapConnectionTooltip.details(connectionReadings.get(link.mappedConnectionId),
-        connectionDefinitions.find(c => c.id === link.mappedConnectionId), inventory, connectionFailures.has(link.mappedConnectionId));
+        connectionDefinitions.find(c => c.id === link.mappedConnectionId), inventory, connectionFailures.has(link.mappedConnectionId), connectionDisplayTime(link.mappedConnectionId));
       for (const path of [line, hit]) {
         path.dataset.connectionTooltip = link.mappedConnectionId;
         path.onpointermove = event => MapConnectionTooltip.show(link.mappedConnectionId, path,
@@ -1505,6 +1505,9 @@ $('save').onclick = async () => {
 
 
 let connectionDefinitions = [], connectionReadings = new Map(), connectionPending = new Map(), connectionFailures = new Set();
+// Keep the last visible snapshot until each connection receives its first resumed result.
+const connectionPausedAt = new Map();
+function connectionDisplayTime(id) { return connectionPausedAt.get(id) ?? Date.now(); }
 async function connectionRequest(url, body) {
   const response = await fetch(url, body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || error.detail || 'Não foi possível consultar a conexão. Verifique a configuração da API.'); }
@@ -1559,24 +1562,35 @@ function updateTrafficLayer(layer) {
   const from = nodes.find(n => n.id === link.from);
   const reference = connectionReadings.get(link.mappedConnectionId)?.hostA || definition?.hostA;
   MapTraffic.render(svg, layer, line, route, nodes, connectionReadings.get(link.mappedConnectionId),
-    $('traffic-animation').checked && !document.hidden, Boolean(reference && reference !== from?.hostId));
+    $('traffic-animation').checked, Boolean(reference && reference !== from?.hostId),
+    connectionDisplayTime(link.mappedConnectionId));
 }
 try { $('traffic-animation').checked = localStorage.getItem('map-traffic-animation') !== 'false'; } catch {}
 $('traffic-animation').onchange = () => {
   try { localStorage.setItem('map-traffic-animation', String($('traffic-animation').checked)); } catch {}
   document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
 };
-document.addEventListener('visibilitychange', () => document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    const now = Date.now();
+    connectionReadings.forEach((_, id) => {
+      if (!connectionPausedAt.has(id)) connectionPausedAt.set(id, now);
+    });
+  } else {
+    refreshMappedConnections(true);
+  }
+});
 function mappedConnectionTitle(id) {
   const reading = connectionReadings.get(id);
   if (!reading) return connectionFailures.has(id) ? 'Conexão mapeada · Consulta indisponível' : 'Conexão mapeada · Aguardando coleta';
   const definition = connectionDefinitions.find(c => c.id === id);
-  const data = MapTraffic.state(reading);
+  const now = connectionDisplayTime(id);
+  const data = MapTraffic.state(reading, now);
   const utilization = value => value == null || !data.capacity ? 'Sem dados' : (value / data.capacity * 100).toLocaleString('pt-BR', {maximumFractionDigits: 2}) + '%';
   return [reading.a, reading.b].map((e, i) => {
     const hostId = i ? reading.hostB || definition?.hostB : reading.hostA || definition?.hostA;
     const host = inventory.find(h => h.id === hostId);
-    return `${i ? 'B' : 'A'} · ${host?.name || hostId || ''} · ${e.name}: ${Date.now() - e.measuredAt > 30000 ? 'Leitura desatualizada' : e.error || (e.up ? 'UP' : 'DOWN')}`;
+    return `${i ? 'B' : 'A'} · ${host?.name || hostId || ''} · ${e.name}: ${now - e.measuredAt > 30000 ? 'Leitura desatualizada' : e.error || (e.up ? 'UP' : 'DOWN')}`;
   }).concat([`Download: ${connectionRate(data.tx)} · ${utilization(data.tx)}`,
     `Upload: ${connectionRate(data.rx)} · ${utilization(data.rx)}`,
     `Capacidade: ${connectionRate(data.capacity)}`,
@@ -1589,7 +1603,8 @@ async function refreshMappedConnection(id, requestedMap, warmup = false) {
   connectionPending.set(id, request);
   try {
     const rows = await connectionRequest('/api/maps/' + encodeURIComponent(requestedMap.id) + '/connections/readings', [id]);
-    if (current !== requestedMap || editing) return;
+    if (current !== requestedMap || editing || document.hidden) return;
+    connectionPausedAt.delete(id);
     connectionFailures.delete(id);
     const reading = rows.find(row => row.id === id);
     if (reading) connectionReadings.set(id, reading);
@@ -1599,7 +1614,8 @@ async function refreshMappedConnection(id, requestedMap, warmup = false) {
       setTimeout(() => refreshMappedConnection(id, requestedMap), 1200);
     }
   } catch {
-    if (current === requestedMap && !editing) {
+    if (current === requestedMap && !editing && !document.hidden) {
+      connectionPausedAt.delete(id);
       connectionReadings.delete(id);
       connectionFailures.add(id);
     }
@@ -1611,12 +1627,13 @@ async function refreshMappedConnection(id, requestedMap, warmup = false) {
       });
       if (typeof MapConnectionTooltip !== 'undefined') {
         MapConnectionTooltip.refresh(id, MapConnectionTooltip.details(connectionReadings.get(id),
-          connectionDefinitions.find(c => c.id === id), inventory, connectionFailures.has(id)));
+          connectionDefinitions.find(c => c.id === id), inventory, connectionFailures.has(id), connectionDisplayTime(id)));
       }
     }
   }
 }
 async function refreshMappedConnections(warmup = false) {
+  if (document.hidden) return;
   document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
   if (editing || !current || document.hidden) return;
   const ids = [...new Set(current.layout.links.map(l => l.mappedConnectionId).filter(Boolean))];

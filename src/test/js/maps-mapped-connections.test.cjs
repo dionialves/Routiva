@@ -5,14 +5,15 @@ const fs = require('node:fs');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/static/maps.js'), 'utf8');
 function setup() {
   const controls = new Map();
+  const listeners = {};
   const context = vm.createContext({
     $: id => { if (!controls.has(id)) controls.set(id, {}); return controls.get(id); },
-    current:null, editing:false, inventory:[], MapTraffic:require('../../main/resources/static/map-traffic.js'), document:{hidden:false, querySelectorAll:()=>[], addEventListener(){}},
+    current:null, editing:false, inventory:[], MapTraffic:require('../../main/resources/static/map-traffic.js'), document:{hidden:false, querySelectorAll:()=>[], addEventListener(name, handler){ listeners[name] = handler; }},
     setInterval(){}, setTimeout(){}, Date, Map, Set, Number, JSON, calls:0,
     fetch:async () => { context.calls++; return {ok:true,json:async()=>[]}; }
   });
   vm.runInContext(source.slice(source.indexOf('let connectionDefinitions =')), context);
-  return {context, run:code=>vm.runInContext(code,context)};
+  return {context, listeners, run:code=>vm.runInContext(code,context)};
 }
 test('mapped collection deduplicates links and pauses in editing or hidden tabs', async () => {
   const {context,run} = setup();
@@ -131,4 +132,41 @@ test('all connections get their own request without a five-link or batch limit',
   await run('refreshMappedConnections()');
   assert.deepEqual(requested, ids);
   assert.equal(run('connectionReadings.size'), 125);
+});
+
+
+test('hidden maps preserve their snapshot and resume immediately with updated readings', async () => {
+  const {context, listeners, run} = setup();
+  let now = 10000;
+  context.Date = {now: () => now};
+  run("current = {id:'map1',layout:{links:[{mappedConnectionId:'c1'}]}}; connectionReadings.set('c1', {a:{up:true,measuredAt:10000,txBps:500,rxBps:100}})");
+  context.document.hidden = true;
+  listeners.visibilitychange();
+  now = 100000;
+  await run('refreshMappedConnections()');
+  assert.equal(context.calls, 0);
+  assert.equal(run("MapTraffic.state(connectionReadings.get('c1'), connectionDisplayTime('c1')).tx"), 500);
+  let finish;
+  context.fetch = () => { context.calls++; return new Promise(resolve => { finish = resolve; }); };
+  context.document.hidden = false;
+  listeners.visibilitychange();
+  assert.equal(context.calls, 1);
+  assert.equal(run("connectionDisplayTime('c1')"), 10000);
+  finish({ok:true,json:async()=>[{id:'c1',a:{up:false,measuredAt:now,txBps:0,rxBps:0}}]});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(run("connectionDisplayTime('c1')"), now);
+  assert.equal(run("connectionReadings.get('c1').a.up"), false);
+});
+
+test('a request completing while hidden does not replace the visible snapshot', async () => {
+  const {context, listeners, run} = setup();
+  run("current = {id:'map1',layout:{links:[{mappedConnectionId:'c1'}]}}; connectionReadings.set('c1', {marker:'visible'})");
+  let finish;
+  context.fetch = () => new Promise(resolve => { finish = resolve; });
+  const pending = run('refreshMappedConnections()');
+  context.document.hidden = true;
+  listeners.visibilitychange();
+  finish({ok:true,json:async()=>[{id:'c1',marker:'hidden'}]});
+  await pending;
+  assert.equal(run("connectionReadings.get('c1').marker"), 'visible');
 });

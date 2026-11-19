@@ -30,12 +30,12 @@ const MapTraffic = (() => {
     return {down, tx: !down && fresh(a) ? number(a.txBps) : null,
       rx: !down && fresh(a) ? number(a.rxBps) : null, capacity: number(a?.capacityBps)};
   }
-  function render(svg, layer, path, route, nodes, reading, enabled, reverse = false) {
-    const data = state(reading);
+  function render(svg, layer, path, route, nodes, reading, enabled, reverse = false, now = Date.now()) {
+    const data = state(reading, now);
     const id = layer.trafficContext?.link.mappedConnectionId || reading?.id;
     const previous = operational.get(id) || [null, null];
     [reading?.a, reading?.b].forEach((endpoint, i) => {
-      if (endpoint && !endpoint.error && Date.now() >= endpoint.measuredAt && Date.now() - endpoint.measuredAt <= 30000)
+      if (endpoint && !endpoint.error && now >= endpoint.measuredAt && now - endpoint.measuredAt <= 30000)
         previous[i] = endpoint.up;
     });
     if (id) operational.set(id, previous);
