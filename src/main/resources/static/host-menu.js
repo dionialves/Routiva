@@ -1,12 +1,5 @@
 /* Shared host actions, using the native popover for dismissal and focus handling. */
 window.HostMenu = (() => {
-  let datacomHosts;
-  function datacomEquipment() {
-    if (!datacomHosts) datacomHosts = fetch('/api/equipment/datacom', { cache: 'no-store' })
-      .then(response => { if (!response.ok) throw new Error(); return response.json(); })
-      .then(ids => new Set(ids)).catch(() => { datacomHosts = null; return new Set(); });
-    return datacomHosts;
-  }
   function winboxUrl(ip) {
     const address = String(ip || '').trim();
     // Inventory values must remain an address, never URL credentials, paths or parameters.
@@ -79,11 +72,6 @@ window.HostMenu = (() => {
         latency.href = href + '#avaliacao-latencia';
         ap.hidden = false;
       });
-    }
-    if (hostId) {
-      const equipment = section('Equipamento'); equipment.hidden = true;
-      action(equipment, 'Abrir painel Datacom', '/equipamentos/' + encodeURIComponent(hostId), 'window');
-      datacomEquipment().then(ids => { if (ids.has(hostId)) { equipment.hidden = false; winbox.hidden = true; } });
     }
     const enabled = () => actions.filter(item => !item.disabled && !item.hidden && !item.actionGroup.hidden);
     menu.addEventListener('keydown', event => {

@@ -15,12 +15,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class MappedConnectionController {
     private final JdbcTemplate jdbc;
     private final br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
+    private final br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa;
     private final ZabbixService inventory;
     private final MikrotikService mikrotik;
     private final br.com.scriptping.hosts.HostConnections connections;
     private final br.com.scriptping.hosts.HostRepository hosts;
-    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, br.com.scriptping.hosts.HostConnections connections, br.com.scriptping.hosts.HostRepository hosts, br.com.scriptping.datacom.DatacomEquipmentProvider datacom) {
-        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.connections = connections; this.hosts = hosts; this.datacom = datacom;
+    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, br.com.scriptping.hosts.HostConnections connections, br.com.scriptping.hosts.HostRepository hosts, br.com.scriptping.datacom.DatacomEquipmentProvider datacom, br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa) {
+        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.connections = connections; this.hosts = hosts; this.datacom = datacom; this.mimosa = mimosa;
     }
     public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Endpoint(long measuredAt, String name, boolean up, String rxBps, String txBps, String error, Long capacityBps) {}
@@ -28,7 +29,7 @@ public class MappedConnectionController {
     private final Map<String, Endpoint> cache = new HashMap<>();
     private record Source(String address, br.com.scriptping.hosts.HostRepository.Credentials credentials) {}
     private final Map<String, Source> cacheSources = new HashMap<>();
-    private record Counters(long at, java.math.BigInteger rx, java.math.BigInteger tx) {}
+    private record Counters(long at, java.math.BigInteger rx, java.math.BigInteger tx, String generation) {}
     private final Map<String, Counters> counters = new HashMap<>();
 
     static java.math.BigInteger counter(String value) {
@@ -62,8 +63,8 @@ public class MappedConnectionController {
         return hosts.target(id);
     }
     private EquipmentProvider.Connection apiConnection(String id) {
-        if (!Set.of("MikroTik", "Datacom").contains(hosts.credentials(id) == null ? "" : hosts.credentials(id).manufacturer()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Conexões mapeadas exigem um host MikroTik ou Datacom com autenticação configurada.");
+        if (!Set.of("MikroTik", "Datacom", "Mimosa").contains(hosts.credentials(id) == null ? "" : hosts.credentials(id).manufacturer()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não foi possível consultar a conexão. Verifique a autenticação do host e a compatibilidade do equipamento.");
         return connections.require(host(id));
     }
     @ExceptionHandler(ResponseStatusException.class) @ResponseBody
@@ -79,11 +80,14 @@ public class MappedConnectionController {
     }
     private EquipmentProvider.Connection apiConnectionFor(String hostId) {
         var saved = hosts.credentials(hostId);
-        if (saved == null || !Set.of("MikroTik", "Datacom").contains(saved.manufacturer()))
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Carregar interfaces exige um host MikroTik ou Datacom com autenticação configurada.");
+        if (saved == null || !Set.of("MikroTik", "Datacom", "Mimosa").contains(saved.manufacturer()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não foi possível carregar as interfaces. Verifique a autenticação do host e a compatibilidade do equipamento.");
         return connections.require(hosts.target(hostId));
     }
     private EquipmentProvider.Snapshot query(Host host, String section, String name, EquipmentProvider.Connection credentials) {
+        if ("Mimosa".equals(hosts.credentials(host.id()).manufacturer())) {
+            return mimosa.query(host, section, name, credentials);
+        }
         if ("Datacom".equals(hosts.credentials(host.id()).manufacturer())) {
             return datacom.query(host, section.equals("interfaces") ? "discover" : section, name, credentials);
         }
@@ -95,7 +99,7 @@ public class MappedConnectionController {
         var credentials = apiConnectionFor(hostId);
         var target = host(hostId);
         return query(target, "interfaces", null, credentials).rows().stream()
-            .filter(row -> "ether".equals(row.get("type"))).toList();
+            .filter(row -> Set.of("ether", "wireless").contains(Objects.toString(row.get("type"), ""))).toList();
     }
     @PostMapping("/api/maps/connections/validate") @ResponseBody
     public Connection validate(@RequestBody Connection input) {
@@ -104,7 +108,7 @@ public class MappedConnectionController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe nome e dois equipamentos diferentes.");
         for (var endpoint : List.of(new String[]{input.hostA(), Objects.toString(input.interfaceA(), "")}, new String[]{input.hostB(), Objects.toString(input.interfaceB(), "")})) {
             if (interfaces(endpoint[0]).stream().noneMatch(i -> endpoint[1].equals(i.get("name"))))
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Interface Ethernet não encontrada.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Interface não encontrada.");
         }
         var c = new Connection(UUID.randomUUID().toString(), input.name().trim(), input.hostA(), input.interfaceA(), input.hostB(), input.interfaceB());
         return c;
@@ -129,8 +133,11 @@ public class MappedConnectionController {
             cacheSources.put(key, source);
             var snapshot = query(h, "connection", name, credentials);
             var row = snapshot.rows().getFirst();
-            var sample = new Counters(snapshot.measuredAt(), counter(row.get("rx-byte")), counter(row.get("tx-byte")));
+            if (!Set.of("true", "false").contains(Objects.toString(row.get("running"), "")))
+                throw new IllegalArgumentException("Unknown operational status");
+            var sample = new Counters(snapshot.measuredAt(), counter(row.get("rx-byte")), counter(row.get("tx-byte")), row.get("counter-generation"));
             var before = counters.put(key, sample);
+            if (before != null && !Objects.equals(before.generation(), sample.generation())) before = null;
             String rx = before == null ? null : rate(sample.rx(), before.rx(), sample.at() - before.at());
             String tx = before == null ? null : rate(sample.tx(), before.tx(), sample.at() - before.at());
             // Older collectors may already supply measured rates instead of counters.

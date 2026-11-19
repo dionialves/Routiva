@@ -188,6 +188,12 @@
     return Object.assign(input, { useIp: field('useIp').value === 'true', snmpVersion: Number(field('snmpVersion').value),
       active: field('active').checked, groupIds: selected('host-group'), templateIds: selected('host-template') });
   }
+  function updateAuthLogin() {
+    const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
+    $('host-auth-login').hidden = mimosa;
+    $('host-auth-login-label').hidden = mimosa;
+    if (mimosa) $('host-auth-login').value = 'configure';
+  }
   function authInput() {
     return { manufacturer: $('host-auth-manufacturer').value, login: $('host-auth-login').value,
       password: $('host-auth-password').value, port: Number($('host-auth-port').value),
@@ -223,17 +229,21 @@
       for (const name of ['manufacturer', 'login']) $(`host-auth-${name}`).value = c[name] || '';
       $('host-auth-password').value = ''; $('host-auth-port').value = c.port || 8728;
       $('host-auth-tls').checked = c.tls;
-      $('host-auth-tls-row').hidden = ['Ubiquiti', 'Datacom'].includes(c.manufacturer);
+      $('host-auth-tls-row').hidden = ['Ubiquiti', 'Datacom', 'Mimosa'].includes(c.manufacturer);
       $('host-auth-password-help').textContent = c.passwordConfigured ? 'Senha cadastrada. Deixe em branco para preservar.' : 'Informe a senha do equipamento.';
       $('host-auth-state').textContent = '';
+      updateAuthLogin();
       authBaseline = JSON.stringify(authInput()); authLoaded = true;
       $('host-auth-fields').disabled = false; $('host-auth-test').disabled = false; tab(activeTab);
     } catch (error) { if (current === host) $('host-auth-state').textContent = error.message; }
   }
   $('host-auth-manufacturer').addEventListener('change', () => {
     const ssh = ['Ubiquiti', 'Datacom'].includes($('host-auth-manufacturer').value);
-    $('host-auth-port').value = ssh ? 22 : $('host-auth-tls').checked ? 8729 : 8728;
-    $('host-auth-tls-row').hidden = ssh; if (ssh) $('host-auth-tls').checked = false;
+    const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
+    updateAuthLogin();
+    $('host-auth-port').value = mimosa ? 443 : ssh ? 22 : $('host-auth-tls').checked ? 8729 : 8728;
+    $('host-auth-tls-row').hidden = ssh || mimosa;
+    if (ssh || mimosa) $('host-auth-tls').checked = mimosa;
   });
   $('host-auth-tls').addEventListener('change', () => {
     if (['8728', '8729'].includes($('host-auth-port').value)) $('host-auth-port').value = $('host-auth-tls').checked ? 8729 : 8728;

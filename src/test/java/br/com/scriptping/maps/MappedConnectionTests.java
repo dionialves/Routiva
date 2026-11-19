@@ -21,6 +21,7 @@ class MappedConnectionTests {
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
     @MockitoBean br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
+    @MockitoBean br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
 
@@ -84,7 +85,7 @@ class MappedConnectionTests {
     }
     @Test void firstCounterSampleExpiresEarlyButMeasuredRatesKeepNormalCache() {
         equipment();
-        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom);
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
         var c = controller.validate(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
         persist(c);
         long now = System.currentTimeMillis();
@@ -104,7 +105,7 @@ class MappedConnectionTests {
     }
     @Test void supportsMixedDatacomAndMikrotikLinksWithoutClassifyingTheOltAsAnAp() {
         equipment();
-        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom);
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
         when(hosts.credentials("a")).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials(
             "Datacom", "reader", "encrypted", 22, true, "ACTIVE", "", "10.0.0.1", false, 1L));
         String port = "ten-gigabit-ethernet-1/1/1";
@@ -123,6 +124,52 @@ class MappedConnectionTests {
         assertThat(reading.b().up()).isFalse();
         assertThat(reading.b().error()).isNull();
         verify(datacom).query(any(), eq("discover"), isNull(), any());
+    }
+    @Test void discoversMimosaAndReadsMappedTrafficWithResetAndUnknownStatusProtection() {
+        equipment();
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        when(hosts.credentials("a")).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials(
+            "Mimosa", "configure", "encrypted", 443, true, "ACTIVE", "", "10.0.0.1", true, 1L));
+        String port = "Ethernet (RJ45)";
+        var ports = List.of(Map.of("name", port, "type", "ether", "connector", "electrical"));
+        when(mimosa.query(any(), eq("discover"), isNull(), any())).thenReturn(new EquipmentProvider.Snapshot(1, ports, ""));
+        when(mimosa.query(any(), eq("interfaces"), isNull(), any())).thenReturn(new EquipmentProvider.Snapshot(1, ports, ""));
+        assertThat(controller.discover("a")).isEqualTo(ports);
+        var c = controller.validate(new MappedConnectionController.Connection(null, "Radio-Core", "a", port, "b", "ether1"));
+        persist(c);
+        long now = System.currentTimeMillis();
+        when(mimosa.query(any(), eq("connection"), eq(port), any()))
+            .thenReturn(new EquipmentProvider.Snapshot(now - 1500, List.of(Map.of("running", "true", "rx-byte", "1000", "tx-byte", "2000", "counter-generation", "boot1")), ""))
+            .thenReturn(new EquipmentProvider.Snapshot(now - 1500, List.of(Map.of("running", "true", "rx-byte", "2000", "tx-byte", "4000", "counter-generation", "boot2")), ""))
+            .thenReturn(new EquipmentProvider.Snapshot(now, List.of(Map.of("running", "true", "rx-byte", "3000", "tx-byte", "6000", "counter-generation", "boot2")), ""));
+        assertThat(controller.readings("map", Set.of(c.id())).getFirst().a().rxBps()).isNull();
+        assertThat(controller.readings("map", Set.of(c.id())).getFirst().a().rxBps()).isNull();
+        var measured = controller.readings("map", Set.of(c.id())).getFirst().a();
+        assertThat(measured.rxBps()).isEqualTo("5333");
+        assertThat(measured.txBps()).isEqualTo("10666");
+        assertThat(measured.error()).isNull();
+        var fresh = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        when(mimosa.query(any(), eq("connection"), eq(port), any()))
+            .thenReturn(new EquipmentProvider.Snapshot(now, List.of(Map.of("rx-byte", "3000", "tx-byte", "6000")), ""));
+        var unknown = fresh.readings("map", Set.of(c.id())).getFirst().a();
+        assertThat(unknown.error()).isNotNull();
+        assertThat(unknown.rxBps()).isNull();
+    }
+    @Test void acceptsWirelessMapEndpointsAndMeasuredLinkRates() {
+        equipment();
+        when(hosts.credentials("a")).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials(
+            "Mimosa", "configure", "encrypted", 443, true, "ACTIVE", "", "10.0.0.1", true, 1L));
+        when(mimosa.query(any(), eq("interfaces"), isNull(), any())).thenReturn(new EquipmentProvider.Snapshot(1,
+            List.of(Map.of("name", "Wireless", "type", "wireless", "connector", "wireless")), ""));
+        var c = controller.validate(new MappedConnectionController.Connection(null, "PTP", "a", "Wireless", "b", "ether1"));
+        persist(c);
+        when(mimosa.query(any(), eq("connection"), eq("Wireless"), any())).thenReturn(new EquipmentProvider.Snapshot(System.currentTimeMillis(),
+            List.of(Map.of("running", "true", "rx-bits-per-second", "204", "tx-bits-per-second", "100")), ""));
+        var endpoint = controller.readings("map", Set.of(c.id())).getFirst().a();
+        assertThat(endpoint.up()).isTrue();
+        assertThat(endpoint.rxBps()).isEqualTo("204");
+        assertThat(endpoint.txBps()).isEqualTo("100");
+        assertThat(endpoint.capacityBps()).isNull();
     }
     void persist(MappedConnectionController.Connection connection) {
         try {

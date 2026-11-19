@@ -112,6 +112,18 @@ class HostCatalogTests {
         var changed = new Host("42", "Router", "192.0.2.99", List.of());
         assertThatThrownBy(() -> connections.require(changed)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
+    @Test void mimosaUsesFixedLoginEvenWhenClientOmitsOrMisspellsIt() {
+        catalog.reconcile();
+        var provider = mock(EquipmentProvider.class); when(provider.manufacturer()).thenReturn("Mimosa");
+        var auth = new HostAuthentication(hosts, secrets, List.of(provider));
+        for (String login : new String[]{null, "confihgure"}) {
+            var view = auth.save("42", new HostAuthentication.Input("Mimosa", login, "test-secret", 443, true, false));
+            assertThat(view.login()).isEqualTo("configure");
+            assertThat(view.tls()).isTrue();
+            assertThat(view.status()).isEqualTo("ACTIVE");
+        }
+        verify(provider, times(2)).testConnection(any(), argThat(connection -> connection.login().equals("configure") && connection.tls()));
+    }
     @Test void migratingApSecretsIsRepeatableAndDoesNotOverwriteHostCredentials() {
         jdbc.update("INSERT INTO access_point(host_id,host_name,created_at,updated_at,manufacturer,api_login,api_password,api_port) VALUES ('42','AP',1,1,'MikroTik','legacy',?,8728)", secrets.encrypt("legacy-secret"));
         var populator = new ResourceDatabasePopulator(new ClassPathResource("schema.sql"));

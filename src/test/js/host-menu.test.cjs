@@ -67,18 +67,12 @@ test('AP actions remain hidden until inventory confirms the host', () => {
   assert.equal(ap.children[2].href, '/ap/ap%2F1#avaliacao-latencia');
 });
 
-test('Datacom panel uses the host id and hides WinBox after manufacturer resolution', async () => {
+test('host menu does not offer equipment panels or query manufacturer lists', () => {
   const { link, container } = surface();
-  let requests = 0;
   const context = { document: { createElement: () => new link.constructor() },
-    fetch: async url => { assert.equal(url, '/api/equipment/datacom'); requests++; return { ok: true, json: async () => ['olt/42'] }; } };
+    fetch: () => { throw new Error('Unexpected panel lookup'); } };
   context.window = context;
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   context.HostMenu.attach(link, container, { ip: '192.0.2.42', hostId: 'olt/42' });
-  await new Promise(resolve => setImmediate(resolve));
-  const menu = container.children[0], equipment = menu.children[1];
-  assert.equal(equipment.hidden, false);
-  assert.equal(equipment.children[1].href, '/equipamentos/olt%2F42');
-  assert.equal(menu.children[0].children[2].hidden, true);
-  assert.equal(requests, 1);
+  assert.equal(container.children[0].children.length, 1);
 });

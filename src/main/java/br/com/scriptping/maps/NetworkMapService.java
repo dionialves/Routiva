@@ -113,8 +113,7 @@ public class NetworkMapService {
                 || node.ports().size() > 4 || node.slots().stream().anyMatch(java.util.Objects::isNull)
                 || node.slots().stream().mapToLong(Slot::count).sum() > 4)) throw invalid();
             var capacities = Map.of("electrical", "rj45", "sfp1g", "sfp", "sfp10g", "sfp", "sfp40g", "qsfp", "sfp100g", "qsfp");
-            var connectors = Map.of("electrical", "rj45", "sfp", "sfp", "sfpplus", "sfp", "sfp28", "sfp", "qsfpplus", "qsfp",
-                "sfp56", "sfp", "qsfp28", "qsfp", "qsfp56", "qsfp", "qsfpdd", "qsfp", "qsfpdd800", "qsfp");
+            var connectors = Map.ofEntries(Map.entry("electrical", "rj45"), Map.entry("sfp", "sfp"), Map.entry("sfpplus", "sfp"), Map.entry("sfp28", "sfp"), Map.entry("qsfpplus", "qsfp"), Map.entry("sfp56", "sfp"), Map.entry("qsfp28", "qsfp"), Map.entry("qsfp56", "qsfp"), Map.entry("qsfpdd", "qsfp"), Map.entry("qsfpdd800", "qsfp"), Map.entry("wireless", "wireless"));
             var speeds = Set.of("unknown", "10m", "100m", "1g", "10g", "25g", "40g", "50g", "100g", "200g", "400g", "800g");
             var slots = new HashMap<String, Slot>();
             for (var slot : node.slots()) {
@@ -131,12 +130,15 @@ public class NetworkMapService {
                     || slot.interfaceNames().stream().anyMatch(n -> n == null || n.isBlank() || n.length() > 128)
                     || new HashSet<>(slot.interfaceNames()).size() != slot.count())) throw invalid();
             }
+            if (node.slots().stream().filter(slot -> "wireless".equals(slot.connector())).mapToLong(Slot::count).sum() > 1
+                || node.ports().stream().filter(Objects::nonNull).filter(port -> "wireless".equals(port.connector()) || "wireless".equals(port.type())).count() > 1)
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "É permitida apenas uma interface Wireless por equipamento.");
             var slotCounts = new HashMap<String, Integer>();
             var portIds = new HashSet<String>();
             for (var port : node.ports()) {
                 if (port == null || port.id() == null || port.id().isBlank() || port.id().length() > 80
                     || !portIds.add(port.id()) || port.type() == null
-                    || !Set.of("rj45", "sfp", "qsfp").contains(port.type())) throw invalid();
+                    || !Set.of("rj45", "sfp", "qsfp", "wireless").contains(port.type())) throw invalid();
                 if (!slots.isEmpty() || port.slotId() != null) {
                     var slot = slots.get(port.slotId());
                     if (slot == null) throw invalid();

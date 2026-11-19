@@ -8,12 +8,12 @@ wireless e não classifica Datacom como Access Point.
 1. Em Configuração → Hosts, abra a aba Autenticação.
 2. Selecione Datacom, informe usuário, senha e porta SSH (padrão 22).
 3. Teste e salve a autenticação. Use um usuário com acesso às consultas operacionais.
-4. No menu do host nas telas de monitoramento, abra **Abrir painel Datacom**.
+4. No mapa, selecione o host e use **Carregar interfaces** para vincular as portas.
+   As leituras de tráfego são consultadas pelas conexões do mapa; não há painel separado.
 5. Nos mapas, use **Carregar interfaces** e selecione as interfaces Ethernet para
    as conexões. Uma ligação pode combinar Datacom e MikroTik.
 
-O painel também está em `/equipamentos/{hostId}`. Ele funciona com o cadastro local,
-sem importar o equipamento na lista de Access Points. PON é uma interface física;
+A integração funciona com o cadastro local, sem importar o equipamento na lista de Access Points. PON é uma interface física;
 ONUs e seus clientes não são consultados. Conexões mapeadas aceitam somente Ethernet.
 
 ## Coleta
@@ -41,7 +41,7 @@ Os únicos comandos permitidos são:
 Nomes de interface passam por uma lista de tipos permitidos e validação numérica.
 Comandos de ONUs e comandos de alteração são recusados. As sessões são encerradas
 após a consulta; no máximo oito consultas simultâneas, dez segundos por comando,
-sessenta segundos por sessão e 4 MiB por resposta. O painel consulta a cada dez
+sessenta segundos por sessão e 4 MiB por resposta. O mapa consulta a cada dez
 segundos, sem sobreposição e somente enquanto visível. Os mapas mantêm seu cache
 e ritmo de consulta existentes.
 
@@ -60,7 +60,7 @@ permanece desconhecida e pode ser configurada no elemento do mapa.
 ## Validação e limites
 
 Testes cobrem saídas representativas de DmOS, estados ausentes, contadores, a lista
-de comandos, prompt SSH, autenticação por host, painel sem wireless e mapas mistos.
+de comandos, prompt SSH, autenticação por host, ausência de rotas de painel e mapas mistos.
 Ainda é necessário validar o formato das saídas e os privilégios no DM4612 e em um
 switch reais: não foram fornecidos acesso nem capturas de uma versão instalada.
 Variações de firmware não reconhecidas aparecem como leitura parcial ou indisponível,

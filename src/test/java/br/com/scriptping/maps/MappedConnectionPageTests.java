@@ -21,9 +21,16 @@ class MappedConnectionPageTests {
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
     @MockitoBean br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
+    @MockitoBean br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
     @Test void standaloneConnectionPageHasBeenRemoved() throws Exception {
         mvc.perform(get("/conexoes")).andExpect(status().isNotFound());
+        mvc.perform(get("/equipamentos/42")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/equipment/datacom")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/hosts/42/datacom/interfaces")).andExpect(status().isNotFound());
+        mvc.perform(get("/equipamentos/mimosa/42")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/equipment/mimosa")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/hosts/42/mimosa/interfaces")).andExpect(status().isNotFound());
     }
 }

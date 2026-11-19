@@ -408,9 +408,47 @@ test('radio places at most four interfaces below the cabinet with shared cable a
   assert.equal(shape.ports.length, 4);
   assert.equal(new Set(shape.ports.map(port => port.x)).size, 4);
   for (const port of shape.ports) {
-    assert.equal(port.y, 65);
+    assert.equal(port.y, 55);
+    assert.equal(port.visualScale, .55);
     assert.equal(switchMap.cableDirection(node, port.id), 1);
-    assert.deepEqual(switchMap.endpoint(node, port.id), {x: node.x + port.x, y: 268.6});
+    assert.deepEqual(switchMap.endpoint(node, port.id), {x: node.x + port.x, y: 256.98});
   }
   assert.equal(switchMap.isEquipment(node), true);
+});
+
+test('wireless connector imports a separate logical port and preserves its binding', () => {
+  const rows = [{name:'Ethernet (RJ45)',type:'ether',connector:'electrical'},
+    {name:'Wireless',type:'wireless',connector:'wireless',running:'true'}];
+  const imported = switchMap.importInterfaces(rows, []);
+  const wireless = imported.ports.find(p => p.name === 'Wireless');
+  assert.equal(wireless.type, 'wireless');
+  assert.equal(wireless.connector, 'wireless');
+  assert.equal(wireless.capacity, 'unknown');
+  assert.equal(switchMap.portVisual(wireless).empty, 'wireless');
+  const restored = switchMap.portsForSlots(imported.ports, imported.slots);
+  assert.equal(restored.find(p => p.name === 'Wireless').id, wireless.id);
+});
+
+test('radio wireless marker sits on the antenna tip, appears only for its port and turns light blue when linked', () => {
+  const make = (tag,attributes) => ({tag,attributes,children:[],append(...children){this.children.push(...children);}});
+  const port = {id:'w',name:'Wireless',connector:'wireless',type:'wireless'};
+  const node = {icon:'radio',x:10,y:20,ports:[port]};
+  const render = (ports,connected) => {
+    const root = make('g',{});
+    switchMap.draw(make,root,{...node,ports},'gray',false,{connectedPorts:new Set(connected)});
+    return root.children.filter(child => child.attributes.class === 'switch-port');
+  };
+  assert.equal(render([],[]).length,0);
+  const empty = render([port],[])[0];
+  assert.equal(empty.attributes.transform,'translate(49.5 -10.5)');
+  assert.equal(empty.children.find(child => child.attributes.class === 'radio-wireless-indicator').attributes.stroke,'#55565a');
+  const linked = render([port],['w'])[0];
+  assert.equal(linked.children.find(child => child.attributes.class === 'radio-wireless-indicator').attributes.stroke,'#7dd3fc');
+  assert.deepEqual(switchMap.endpoint(node,'w'),{x:59.5,y:9.5});
+});
+test('wireless configuration rejects duplicate slots and quantities without truncating ports', () => {
+  const slot = {id:'w',name:'Wireless',connector:'wireless',capacity:'unknown',count:1};
+  assert.equal(switchMap.portsForSlots([],[slot]).length,1);
+  assert.equal(switchMap.portsForSlots([],[{...slot,count:2}]),null);
+  assert.equal(switchMap.portsForSlots([],[slot,{...slot,id:'w2'}]),null);
 });

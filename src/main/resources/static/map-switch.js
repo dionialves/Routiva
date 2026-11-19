@@ -11,10 +11,11 @@ const MapSwitch = (() => {
     const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
-  const types = ['rj45', 'sfp', 'qsfp'];
+  const types = ['rj45', 'sfp', 'qsfp', 'wireless'];
   let tintSequence = 0;
   // Socket centers in the shared 22×19 port drawing, independent of cabinet color.
   const portArtwork = {
+    wireless: {empty: 'wireless', occupied: 'wireless', socketY: 0, upright: true},
     electrical: {empty: 'rj45', occupied: 'rj45-plugged', socketY: 3.6, upright: true},
     sfp1g: {empty: 'sfp', occupied: 'sfp-plugged', socketY: 4.2, upright: true},
     sfp10g: {empty: 'sfp', occupied: 'sfp-plugged', socketY: 4.2, upright: true},
@@ -24,6 +25,7 @@ const MapSwitch = (() => {
   const capacities = {electrical: {label: 'Elétrica', type: 'rj45'}, sfp1g: {label: 'SFP1G', type: 'sfp'},
     sfp10g: {label: 'SFP10G', type: 'sfp'}, sfp40g: {label: 'SFP40G', type: 'qsfp'}, sfp100g: {label: 'SFP100G', type: 'qsfp'}};
   const connectors = {
+    wireless: {label: 'Wireless', type: 'wireless'},
     electrical: {label: 'Elétrico', type: 'rj45'}, sfp: {label: 'SFP', type: 'sfp'},
     sfpplus: {label: 'SFP+', type: 'sfp'}, sfp28: {label: 'SFP28', type: 'sfp'},
     qsfpplus: {label: 'QSFP+', type: 'qsfp'}, sfp56: {label: 'SFP56', type: 'sfp'},
@@ -78,20 +80,21 @@ const MapSwitch = (() => {
       : rate >= 100000 ? 'qsfp28' : rate >= 50000 ? 'sfp56' : rate >= 40000 ? 'qsfpplus'
       : rate >= 25000 ? 'sfp28' : rate >= 10000 ? 'sfpplus' : 'sfp';
   }
-  const names = {rj45: 'RJ45', sfp: 'SFP', qsfp: 'QSFP+ 40G'};
+  const names = {rj45: 'RJ45', sfp: 'SFP', qsfp: 'QSFP+ 40G', wireless: 'Wireless'};
   function portsFor(previous, counts) {
     return types.flatMap(type => Array.from({length: counts[type]}, (_, index) =>
       previous.filter(port => port.type === type)[index] || {id: newId(), type}));
   }
   function slotsFor(node) {
     if (node.slots?.length) return node.slots.map(slot => ({...slot}));
-    const defaults = {rj45: ['ether', 'electrical'], sfp: ['sfp-sfpplus', 'sfp10g'], qsfp: ['qsfp', 'sfp40g']};
+    const defaults = {wireless: ['wireless', 'unknown'], rj45: ['ether', 'electrical'], sfp: ['sfp-sfpplus', 'sfp10g'], qsfp: ['qsfp', 'sfp40g']};
     return types.flatMap(type => {
       const members = (node.ports || []).filter(port => port.type === type);
-      return members.length ? [{id: 'legacy-' + type, name: defaults[type][0], capacity: defaults[type][1], count: members.length}] : [];
+      return members.length ? [{id: 'legacy-' + type, name: defaults[type][0], capacity: defaults[type][1], count: members.length, ...(type === 'wireless' ? {connector: 'wireless'} : {})}] : [];
     });
   }
   function portsForSlots(previous, slots) {
+    if (slots.filter(slot => slot.connector === 'wireless').reduce((sum, slot) => sum + Number(slot.count), 0) > 1) return null;
     if (slots.some(slot => !slot.id || !slot.name.trim() || slot.name.length > 80 || !capacityValid(slot)
         || !Number.isInteger(slot.count) || slot.count < 1 || slot.count > 96)) return null;
     return slots.flatMap(slot => {
@@ -112,7 +115,7 @@ const MapSwitch = (() => {
       if (!name || ports.some(port => port.name === name)) continue;
       const hardware = (row['default-name'] || name).toLowerCase();
       const declaredConnector = Object.hasOwn(connectors, row.connector || '') ? row.connector : null;
-      const optical = (declaredConnector != null && declaredConnector !== 'electrical') || /sfp|qsfp/.test(hardware) || row['sfp-supported'] === 'true' || 'sfp-module-present' in row;
+      const optical = (declaredConnector != null && !['electrical', 'wireless'].includes(declaredConnector)) || /sfp|qsfp/.test(hardware) || row['sfp-supported'] === 'true' || 'sfp-module-present' in row;
       const speed = row.rate || row.speed || '';
       // Native SFP names identify cage capacity even without a transceiver.
       // Negotiated rate and configured speed never define physical capacity.
@@ -168,8 +171,11 @@ const MapSwitch = (() => {
       left += group.width + gap;
     }
     if (node.icon === 'radio') {
-      return {width: 180, height: 180, ports: positioned.slice(0, 4).map((port, index, all) =>
-        ({...port, x: (index - (all.length - 1) / 2) * 25 - 25, y: 65, cableDirection: 1}))};
+      const wired = positioned.filter(port => port.connector !== 'wireless' && port.type !== 'wireless');
+      return {width: 180, height: 180, ports: positioned.slice(0, 4).map(port =>
+        port.connector === 'wireless' || port.type === 'wireless'
+          ? {...port, x: 49.5, y: -10.5, cableDirection: 1}
+          : {...port, x: (wired.indexOf(port) - (wired.length - 1) / 2) * 13.5 - 36.4, y: 55, visualScale: .55, cableDirection: 1})};
     }
     return {width, height: 110, ports: positioned};
   }
@@ -177,7 +183,7 @@ const MapSwitch = (() => {
   function portVisual(port) {
     if (!port) return null;
     if (port.connector) {
-      const artwork = port.connector === 'electrical' ? 'electrical' : connectors[port.connector]?.type === 'sfp'
+      const artwork = port.connector === 'wireless' ? 'wireless' : port.connector === 'electrical' ? 'electrical' : connectors[port.connector]?.type === 'sfp'
         ? 'sfp10g' : port.connector === 'qsfpplus' ? 'sfp40g' : 'sfp100g';
       return portArtwork[artwork] || null;
     }
@@ -204,10 +210,10 @@ const MapSwitch = (() => {
       && geometry(node).ports.find(port => port.id === portId);
     const visual = isEquipment(node) && portVisual(port);
     return {x: node.x + (port ? port.x : 0),
-      y: node.y + (port ? port.y : 0) + (visual ? plugDirection(port) * visual.socketY : 0)};
+      y: node.y + (port ? port.y : 0) + (visual ? plugDirection(port) * visual.socketY * (port.visualScale || 1) : 0)};
   }
   function image(svg, parent, file, x, y, width, height, filter) {
-    parent.append(svg('image', {href: '/map-assets/' + file + '.svg' + (file === 'switch' ? '?v=20261117-ping-led' : '?v=20261117-connected-ports'), x, y, width, height,
+    parent.append(svg('image', {href: '/map-assets/' + file + '.svg' + (file === 'radio' ? '?v=20261119-wireless-tip' : file === 'switch' ? '?v=20261117-ping-led' : '?v=20261117-connected-ports'), x, y, width, height,
       preserveAspectRatio: 'none', 'aria-hidden': 'true', 'pointer-events': 'none', ...(filter ? {filter} : {})}));
   }
   function pingIndicator(state) {
@@ -233,7 +239,7 @@ const MapSwitch = (() => {
       rx: 10, fill: 'transparent', stroke: selected ? 'var(--focus)' : 'none', 'stroke-width': 3,
       'pointer-events': 'all'}));
     const status = pingIndicator(options.pingState);
-    const led = svg('circle', {cx: radio ? -25 : -shape.width / 2 + shape.width * 0.0557, cy: radio ? 40 : 17, r: 3.5,
+    const led = svg('circle', {cx: radio ? -36.4 : -shape.width / 2 + shape.width * 0.0557, cy: radio ? 35.2 : 17, r: radio ? 1.6 : 3.5,
       fill: status.color, class: 'switch-status-led', 'data-ping-host': node.hostId || '',
       role: 'img', 'aria-label': status.label});
     const statusTitle = svg('title', {}); statusTitle.textContent = status.label;
@@ -248,10 +254,22 @@ const MapSwitch = (() => {
       const title = svg('title', {});
       title.textContent = description;
       g.append(title);
-      if (plugged) {
+      if (radio && (port.connector === 'wireless' || port.type === 'wireless')) {
+        const mark = svg('g', {class: 'radio-wireless-indicator', fill: 'none', stroke: plugged ? '#7dd3fc' : '#55565a',
+          'stroke-width': 1.1, 'stroke-linecap': 'round', 'data-wireless-connected': String(!!plugged)});
+        mark.append(svg('circle', {cx: -2.7, cy: 0, r: .8, fill: plugged ? '#7dd3fc' : '#55565a', stroke: 'none'}));
+        mark.append(svg('path', {d: 'M-.7 -2a3 3 0 0 1 0 4M1.1 -3.6a5.2 5.2 0 0 1 0 7.2M2.9 -5.1a7.3 7.3 0 0 1 0 10.2'}));
+        g.append(mark);
+      } else if (plugged) {
+        const artwork = svg('g', {transform: `scale(${port.visualScale || 1})`});
         const module = svg('g', {class: 'switch-port-plug', transform: plugDirection(port) < 0 ? 'scale(1 -1)' : 'scale(1 1)'});
-        image(svg, module, visual.occupied, -11, -10, 22, 19); g.append(module);
-      } else image(svg, g, visual?.empty || port.type, -11, -10, 22, 19);
+        image(svg, module, visual.occupied, -11, -10, 22, 19);
+        if (port.visualScale) { artwork.append(module); g.append(artwork); } else g.append(module);
+      } else {
+        const artwork = port.visualScale ? svg('g', {transform: `scale(${port.visualScale})`}) : g;
+        image(svg, artwork, visual?.empty || port.type, -11, -10, 22, 19);
+        if (artwork !== g) g.append(artwork);
+      }
       g.append(svg('rect', {x: -11, y: -10, width: 22, height: 20, rx: 2,
         class: 'switch-port-hit' + (options.origin === port.id ? ' is-origin' : '')}));
       if (options.interactive) {

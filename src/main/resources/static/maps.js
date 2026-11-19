@@ -1165,7 +1165,8 @@ function renderSwitchSlots() {
     const connector = document.createElement('select');
     for (const [value, option] of Object.entries(MapSwitch.connectors)) connector.add(new Option(option.label, value));
     connector.value = slot.connector;
-    connector.onchange = () => { slot.connector = connector.value; drawPreview(); };
+    for (const option of connector.options) if (option.value === 'wireless') option.disabled = configuredSlots.some(other => other !== slot && other.connector === 'wireless');
+    connector.onchange = () => { slot.connector = connector.value; renderSwitchSlots(); drawPreview(); };
     field('Conector', connector);
     const capacity = document.createElement('select');
     capacity.add(new Option('Não identificada', 'unknown'));
@@ -1175,7 +1176,7 @@ function renderSwitchSlots() {
     field('Capacidade', capacity);
     const count = document.createElement('input');
     count.readOnly = !!slot.interfaceNames;
-    count.type = 'number'; count.min = 1; count.max = 96; count.required = true; count.value = slot.count;
+    count.type = 'number'; count.min = 1; count.max = slot.connector === 'wireless' ? 1 : 96; count.required = true; count.value = slot.count;
     count.oninput = () => { slot.count = Number(count.value); drawPreview(); };
     field('Portas', count);
     const remove = document.createElement('button');
@@ -1224,6 +1225,10 @@ $('load-switch-interfaces').onclick = async () => {
     const imported = MapSwitch.importInterfaces(data, previous);
     if (!imported.ports.length) {
       failureMessage = 'Nenhuma interface física encontrada. A configuração atual foi preservada.';
+      throw new Error();
+    }
+    if (imported.ports.filter(port => port.connector === 'wireless').length > 1) {
+      failureMessage = 'É permitida apenas uma interface Wireless por equipamento. A configuração atual foi preservada.';
       throw new Error();
     }
     if ($('element-icon').value === 'radio' && imported.ports.length > 4) {
@@ -1390,7 +1395,7 @@ $('element-form').onsubmit = event => {
   const ports = switchDraft();
   if (!ports) {
     drawPreview();
-    $('port-error').textContent = (icon === 'radio' ? 'O rádio permite no máximo 4 interfaces. Revise os nomes, capacidades e quantidades dos slots.' : 'Existem slots inválidos. Habilite as interfaces e preencha nome, capacidade e quantidade de 1 a 96 portas.');
+    $('port-error').textContent = (icon === 'radio' ? 'O rádio permite no máximo 4 interfaces, sendo apenas uma Wireless. Revise os nomes, capacidades e quantidades dos slots.' : 'Existem slots inválidos ou mais de uma interface Wireless. Habilite as interfaces e preencha nome, capacidade e quantidade de 1 a 96 portas.');
     $('port-error').scrollIntoView({block: 'nearest'});
     return;
   }

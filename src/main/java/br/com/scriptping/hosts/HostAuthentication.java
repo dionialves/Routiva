@@ -35,7 +35,7 @@ public class HostAuthentication {
         return "ACTIVE".equals(credentials.status()) && Objects.equals(credentials.verifiedIp(), address) ? "ACTIVE" : "ERROR";
     }
     private EquipmentProvider provider(String name) {
-        if (!Set.of("MikroTik", "Ubiquiti", "Datacom").contains(Objects.toString(name, "")))
+        if (!Set.of("MikroTik", "Ubiquiti", "Datacom", "Mimosa").contains(Objects.toString(name, "")))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione um Fabricante");
         return providers.stream().filter(p -> p.manufacturer().equals(name)).findFirst().orElseThrow(() ->
             new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fabricante não suportado."));
@@ -52,7 +52,8 @@ public class HostAuthentication {
     private EquipmentProvider.Connection connection(String id, Input input) {
         repository.require(id);
         provider(input.manufacturer());
-        if (input.login() == null || input.login().isBlank() || input.login().length() > 255 || input.port() == null
+        String login = "Mimosa".equals(input.manufacturer()) ? "configure" : input.login();
+        if (login == null || login.isBlank() || login.length() > 255 || input.port() == null
             || input.port() < 1 || input.port() > 65535 || (input.password() != null && input.password().length() > 4096))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe usuário e porta válida (1–65535).");
         String password = input.password();
@@ -62,13 +63,15 @@ public class HostAuthentication {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha do equipamento.");
             password = secrets.decrypt(saved.encryptedPassword());
         }
-        return new EquipmentProvider.Connection(input.login().trim(), password, input.port(), "MikroTik".equals(input.manufacturer()) && input.tls());
+        return new EquipmentProvider.Connection(login.trim(), password, input.port(), ("Mimosa".equals(input.manufacturer()) || "MikroTik".equals(input.manufacturer()) && input.tls()));
     }
     private Result attempt(String id, String manufacturer, EquipmentProvider.Connection connection) {
         try {
             provider(manufacturer).testConnection(repository.target(id), connection);
             return new Result(true, "Conexão validada com " + manufacturer + ".");
         } catch (RuntimeException ex) {
+            if ("Mimosa".equals(manufacturer) && ex instanceof ResponseStatusException response && response.getReason() != null)
+                return new Result(false, response.getReason());
             return new Result(false, "Falha na conexão. Confira endereço, credenciais e permissões do equipamento.");
         }
     }

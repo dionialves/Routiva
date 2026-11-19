@@ -40,6 +40,30 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
+    void persistsWirelessConnectorAndStableInterfaceName() throws Exception {
+        var slot = new Slot("wireless-slot", "Wireless", "unknown", 1, List.of("Wireless"), "wireless");
+        var port = new Port("wireless-port", "wireless", slot.id(), "Wireless", "unknown", "", "wireless", "", true, "wireless");
+        var radio = new Node("radio", null, "host-a", null, "Rádio", 0, 0, null,
+            "radio", List.of(port), List.of(slot), true);
+        var saved = service.save(new Saved(null, 0,
+            new Layout("Enlace", null, 0, List.of(radio), List.of()), null));
+        assertThat(saved.layout().nodes().getFirst().ports().getFirst().connector()).isEqualTo("wireless");
+        assertThat(saved.layout().nodes().getFirst().ports().getFirst().name()).isEqualTo("Wireless");
+    }
+
+    @Test
+    void rejectsMultipleWirelessInterfacesEvenWhenDisabled() {
+        var ports = List.of(new Port("w1", "wireless"), new Port("w2", "wireless"));
+        for (boolean enabled : List.of(true, false)) {
+            var radio = new Node("radio", null, "host-a", null, "Rádio", 0, 0, null,
+                "radio", ports, List.of(), enabled);
+            assertThatThrownBy(() -> service.save(new Saved(null, 0,
+                new Layout("Inválido", null, 0, List.of(radio), List.of()), null)))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("apenas uma interface Wireless");
+        }
+    }
+
+    @Test
     void radioRequiresHostAndLimitsTotalInterfacesEvenWhenDisabled() throws Exception {
         var ports = java.util.stream.IntStream.range(0, 4)
             .mapToObj(i -> new Port("p" + i, "rj45")).toList();
