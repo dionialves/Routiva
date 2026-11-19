@@ -41,6 +41,21 @@ button.system-button-primary:hover:not(:disabled) { background:#1473d9 !importan
 button.system-button:focus-visible { outline:2px solid #53cfee; outline-offset:3px; }
 button.system-button:disabled { opacity:.45 !important; cursor:default; }
 button.system-button[aria-busy=true] { cursor:progress; }
+button.system-button.system-button-loading > svg { display:none; }
+button.system-button-loading::before {
+  content:'';
+  width:16px;
+  height:16px;
+  flex:0 0 16px;
+  box-sizing:border-box;
+  border:2px solid currentColor;
+  border-right-color:transparent;
+  border-radius:50%;
+  animation:system-spin .8s linear infinite;
+}
+@media(prefers-reduced-motion:reduce) {
+  button.system-button-loading::before { animation:none; }
+}
 button.system-button[aria-pressed=true] { border-color:#53cfee !important; box-shadow:inset 0 0 0 1px #53cfee; }
 button.system-button > svg,
 button.system-button > [data-ap-icon] {

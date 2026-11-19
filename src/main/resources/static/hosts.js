@@ -190,6 +190,7 @@
   }
   function updateAuthLogin() {
     const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
+    document.querySelector('label[for="host-auth-port"]').textContent = mimosa ? 'Porta HTTPS' : 'Porta API / SSH';
     $('host-auth-login').hidden = mimosa;
     $('host-auth-login-label').hidden = mimosa;
     if (mimosa) $('host-auth-login').value = 'configure';
@@ -250,7 +251,7 @@
   });
   async function saveAuth(testOnly) {
     if (busy || !authLoaded || !current) return;
-    setBusy(true); $('host-auth-state').textContent = testOnly ? 'Testando conexão…' : 'Salvando e validando…';
+    setBusy(true, testOnly ? 'test' : 'save'); $('host-auth-state').textContent = testOnly ? 'Testando conexão…' : '';
     try {
       const result = await request('/' + current.id + '/authentication' + (testOnly ? '/test' : ''), testOnly ? 'POST' : 'PUT', authInput());
       if (!testOnly) {
@@ -349,6 +350,8 @@
     for (const details of form.querySelectorAll('details')) { details.inert = value; if (value) details.open = false; }
     for (const control of deleteDialog.querySelectorAll('button')) control.disabled = value;
     $('host-save-label').textContent = value && operation === 'save' ? 'Salvando…' : 'Salvar no Zabbix';
+    $('host-save').classList.toggle('system-button-loading', value && operation === 'save');
+    $('host-save').setAttribute('aria-busy', String(value && operation === 'save'));
     $('host-delete-label').textContent = value && operation === 'delete' ? 'Excluindo…' : 'Excluir no Zabbix';
     if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; tab(activeTab); }
   }

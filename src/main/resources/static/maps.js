@@ -16,6 +16,7 @@ let interfaceLoadGeneration = 0;
 let loadingInterfaces = false;
 let configuredSwitchColor = null;
 let configuredNodeId = null;
+let configuredHostId = null;
 let pendingLink = null, lastConnectionClick = null;
 let suppressConnectionUntil = 0;
 let savingConnection = false;
@@ -1317,6 +1318,7 @@ function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' 
   $('interface-load-status').textContent = '';
   configuredPorts = node.ports || [];
   configuredNodeId = node.id;
+  configuredHostId = node.hostId || null;
   configuredSwitchColor = node.switchColor || null;
   $('switch-color').value = configuredSwitchColor || '#e0e3e8';
   $('element-icon').value = node.icon || 'circle';
@@ -1371,13 +1373,27 @@ $('reset-switch-color').onclick = () => {
 };
 $('interfaces-enabled').onchange = drawPreview;
 $('element-name').oninput = $('label-position').onchange = drawPreview;
+function resetInterfacesForHostChange() {
+  const hostId = $('type').value === 'host' ? $('group').value || null : null;
+  if (hostId === configuredHostId) return;
+  configuredHostId = hostId;
+  interfaceLoadGeneration++;
+  loadingInterfaces = false;
+  configuredPorts = [];
+  configuredSlots = [];
+  $('interfaces-enabled').checked = false;
+  $('interface-load-status').textContent = '';
+  renderSwitchSlots();
+}
 $('type').onchange = () => {
   syncElementIcons();
   populateBinding($('type').value);
+  resetInterfacesForHostChange();
   syncSubMap();
   drawPreview();
 };
 $('group').addEventListener('change', () => {
+  resetInterfacesForHostChange();
   if (!$('element-name').value.trim()) $('element-name').value = ($('type').value === 'host' ? inventory : groups)
     .find(item => item.id === $('group').value)?.name || '';
   drawPreview();

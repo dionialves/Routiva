@@ -27,6 +27,22 @@ function setup() {
   vm.runInContext(source.slice(source.indexOf('function openElement('),source.indexOf('window.elementIconPicker =')),context);
   return {$,context,node,run:code=>vm.runInContext(code,context)};
 }
+test('changing host clears interface drafts and invalidates pending discovery without changing the saved node',()=>{
+  const {$,context,node,run}=setup();
+  context.configuredHostId='old';context.loadingInterfaces=true;
+  $('type').value='host';$('group').value='new';
+  vm.runInContext(source.slice(source.indexOf('function resetInterfacesForHostChange('),source.indexOf("$('type').onchange =")),context);
+  run('resetInterfacesForHostChange()');
+  assert.equal(context.configuredPorts.length,0);
+  assert.equal(context.configuredSlots.length,0);
+  assert.equal($('interfaces-enabled').checked,false);
+  assert.equal(context.loadingInterfaces,false);
+  assert.equal(context.interfaceLoadGeneration,1);
+  assert.equal(node.ports.length,2);
+  context.configuredSlots=[{id:'new-slot'}];
+  run('resetInterfacesForHostChange()');
+  assert.equal(context.configuredSlots.length,1);
+});
 test('saving a different icon and disabled interfaces retains slots, ports and their links',()=>{
   const {$,context,node}=setup();
   const portId=node.ports[0].id;
