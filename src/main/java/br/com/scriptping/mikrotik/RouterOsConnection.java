@@ -43,7 +43,7 @@ final class RouterOsConnection implements AutoCloseable {
         output.write(0);
         output.flush();
         var rows = new ArrayList<Map<String, String>>();
-        boolean trapped = false;
+        String rejection = null;
         int totalBytes = 0;
         for (int sentences = 0; sentences < 20000; sentences++) {
             var sentence = new ArrayList<String>();
@@ -66,10 +66,10 @@ final class RouterOsConnection implements AutoCloseable {
             }
             switch (sentence.getFirst()) {
                 case "!re" -> rows.add(row);
-                case "!trap" -> trapped = true;
+                case "!trap" -> rejection = row.getOrDefault("message", "");
                 case "!fatal" -> throw new IOException("API connection closed");
                 case "!done" -> {
-                    if (trapped) throw new CommandRejectedException();
+                    if (rejection != null) throw new CommandRejectedException(rejection);
                     return rows;
                 }
                 default -> { }
@@ -78,7 +78,15 @@ final class RouterOsConnection implements AutoCloseable {
         throw new IOException("Too many API sentences");
     }
 
-    static class CommandRejectedException extends IOException { }
+    static class CommandRejectedException extends IOException {
+        private final String reason;
+        CommandRejectedException() { this(""); }
+        CommandRejectedException(String reason) { this.reason = reason; }
+        boolean missingCommand() {
+            String text = reason.toLowerCase(Locale.ROOT);
+            return text.startsWith("no such command") || text.startsWith("bad command name");
+        }
+    }
 
     static void writeLength(OutputStream out, int length) throws IOException {
         if (length < 0x80) out.write(length);

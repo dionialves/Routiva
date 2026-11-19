@@ -36,13 +36,13 @@ class MikrotikControllerTests {
         assertFalse(error.getReason().contains("secret"));
     }
 
-    @Test void homologationAcceptsOnlyRouterOsSix() {
+    @Test void homologationAcceptsRouterOsSixAndSeven() {
         var real = spy(new MikrotikService(null));
         var connection = new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "secret", 8729);
-        for (String version : List.of("6.49.18 (long-term)", "7.20", "", "unknown")) {
+        for (String version : List.of("6.49.18 (long-term)", "7.20", "7.12.2 (stable)", "7.13 (stable)", "7.20rc1 (testing)", "", "unknown", "8.1", "7.invalid")) {
             doReturn(new MikrotikService.Snapshot(1, List.of(Map.of("version", version)), ""))
                 .when(real).query(host, "overview", null, connection);
-            if (version.startsWith("6.")) assertDoesNotThrow(() -> real.testConnection(host, connection));
+            if (version.startsWith("6.") || version.matches("7\\.\\d.*")) assertDoesNotThrow(() -> real.testConnection(host, connection));
             else assertThrows(ResponseStatusException.class, () -> real.testConnection(host, connection));
         }
     }

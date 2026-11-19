@@ -16,9 +16,11 @@ class RouterOsConnectionTests {
                     socket.setSoTimeout(5000);
                     var in = socket.getInputStream(); var out = socket.getOutputStream();
                     assertEquals("/login", read(in).getFirst()); send(out, "!done");
-                    assertEquals("/interface/ethernet/print", read(in).getFirst());
+                    var discovery = read(in);
+                    assertEquals("/interface/ethernet/print", discovery.getFirst());
+                    assertTrue(discovery.stream().anyMatch(word -> word.startsWith("=.proplist=") && word.contains("advertise")));
                     send(out, "!re", "=.id=*1", "=name=uplink", "=default-name=sfp-sfpplus1", "=comment=Core", "=type=ether", "=running=true");
-                    send(out, "!re", "=.id=*2", "=name=ether7", "=default-name=ether7", "=type=ether", "=running=false");
+                    send(out, "!re", "=.id=*2", "=name=ether7", "=default-name=ether7", "=type=ether", "=running=false", "=advertise=10M-baseT-half,100M-baseT-full,1G-baseT-full");
                     send(out, "!done");
                     for (int i = 1; i <= 2; i++) {
                         var monitor = read(in);
@@ -26,7 +28,7 @@ class RouterOsConnectionTests {
                         assertTrue(monitor.contains("=numbers=*" + i));
                         assertTrue(monitor.contains("=once="));
                         send(out, "!re", "=status=" + (i == 1 ? "link-ok" : "no-link"), "=rate=" + (i == 1 ? "10Gbps" : ""),
-                            "=supported=" + (i == 1 ? "1G-full,10G-full,25G-full" : "10M-half,100M-full,1G-full"));
+                            "=supported=" + (i == 1 ? "1G-full,10G-full,25G-full" : ""), "=advertising=");
                         send(out, "!done");
                     }
                 } catch (IOException ex) { throw new UncheckedIOException(ex); }
@@ -40,7 +42,7 @@ class RouterOsConnectionTests {
             assertEquals("Core", rows.getFirst().get("comment"));
             assertEquals("10Gbps", rows.getFirst().get("rate"));
             assertEquals("1G-full,10G-full,25G-full", rows.getFirst().get("supported"));
-            assertEquals("10M-half,100M-full,1G-full", rows.getLast().get("supported"));
+            assertEquals("10M-baseT-half,100M-baseT-full,1G-baseT-full", rows.getLast().get("advertising"));
             assertEquals("link-ok", rows.getFirst().get("status"));
             assertEquals("no-link", rows.getLast().get("status"));
             router.get(5, TimeUnit.SECONDS);
@@ -153,6 +155,110 @@ class RouterOsConnectionTests {
             }
             router.get(5, TimeUnit.SECONDS);
         }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        "6.49.18 (long-term),/interface/wireless",
+        "7.12.2 (stable),/interface/wifiwave2",
+        "7.13 (stable),/interface/wifi",
+        "7.20.1 (stable),/interface/wifi"
+    })
+    void selectsRadioCommandsFromDeviceVersion(String version, String menu) throws Exception {
+        try (var server = new ServerSocket(0); var executor = Executors.newSingleThreadExecutor()) {
+            var router = executor.submit(() -> {
+                try (var socket = server.accept()) {
+                    socket.setSoTimeout(5000);
+                    var in = socket.getInputStream(); var out = socket.getOutputStream();
+                    assertEquals("/login", read(in).getFirst()); send(out, "!done");
+                    assertEquals("/system/resource/print", read(in).getFirst());
+                    send(out, "!re", "=version=" + version); send(out, "!done");
+                    assertEquals("/interface/wireless/registration-table/print", read(in).getFirst());
+                    if (!menu.endsWith("/wireless")) {
+                        send(out, "!trap", "=message=no such command prefix"); send(out, "!done");
+                        assertEquals(menu + "/registration-table/print", read(in).getFirst());
+                    }
+                    send(out, "!re", "=interface=wlan1", "=mac-address=00:11:22:33:44:55",
+                        "=signal-strength=-65", "=tx-rate=866.6Mbps", "=rx-bytes=1234");
+                    send(out, "!done");
+                    assertEquals(-1, in.read());
+                } catch (IOException ex) { throw new UncheckedIOException(ex); }
+            });
+            var snapshot = new MikrotikService(null).query(
+                new br.com.scriptping.zabbix.Host("1", "Router", "127.0.0.1", List.of()), "wireless", null,
+                new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "secret", server.getLocalPort()), false);
+            assertEquals("", snapshot.warning());
+            assertEquals(1, snapshot.rows().size());
+            var row = snapshot.rows().getFirst();
+            assertEquals("-65", row.get("signal-strength"));
+            assertEquals("1234", row.get("rx-bytes"));
+            assertFalse(row.containsKey("tx-ccq"));
+            router.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        "no such command prefix,pacote ausente",
+        "not enough permissions (9),Verifique permissões"
+    })
+    void reportsUnavailableRadioWithoutInventingMeasurements(String rejection, String expected) throws Exception {
+        try (var server = new ServerSocket(0); var executor = Executors.newSingleThreadExecutor()) {
+            var router = executor.submit(() -> {
+                try (var socket = server.accept()) {
+                    socket.setSoTimeout(5000);
+                    var in = socket.getInputStream(); var out = socket.getOutputStream();
+                    read(in); send(out, "!done");
+                    assertEquals("/system/resource/print", read(in).getFirst());
+                    send(out, "!re", "=version=7.20 (stable)"); send(out, "!done");
+                    for (String menu : List.of("wireless", "wifi")) {
+                        assertEquals("/interface/" + menu + "/registration-table/print", read(in).getFirst());
+                        send(out, "!trap", "=message=" + rejection); send(out, "!done");
+                    }
+                } catch (IOException ex) { throw new UncheckedIOException(ex); }
+            });
+            var snapshot = new MikrotikService(null).query(
+                new br.com.scriptping.zabbix.Host("1", "Router", "127.0.0.1", List.of()), "wireless", null,
+                new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "secret", server.getLocalPort()), false);
+            assertTrue(snapshot.rows().isEmpty());
+            assertTrue(snapshot.warning().contains(expected));
+            router.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"6.49.18,wireless", "7.12.2,wifiwave2", "7.20,wifi"})
+    void bindsUsingDetectedVersionAndReadsRadioOverview(String version, String menu) throws Exception {
+        try (var server = new ServerSocket(0); var executor = Executors.newSingleThreadExecutor()) {
+            var router = executor.submit(() -> {
+                try (var socket = server.accept()) {
+                    socket.setSoTimeout(5000);
+                    var in = socket.getInputStream(); var out = socket.getOutputStream();
+                    read(in); send(out, "!done");
+                    assertEquals("/system/resource/print", read(in).getFirst());
+                    send(out, "!re", "=version=" + version); send(out, "!done");
+                    assertEquals("/system/identity/print", read(in).getFirst());
+                    send(out, "!re", "=name=Router"); send(out, "!done");
+                    var menus = version.startsWith("6.") ? List.of("wireless") : List.of("wireless", menu);
+                    for (String current : menus) {
+                        assertEquals("/interface/" + current + "/print", read(in).getFirst());
+                        if (current.equals(menu)) {
+                            send(out, "!re", "=configuration.ssid=Office", "=channel.frequency=5180", "=channel.width=20mhz");
+                        } else send(out, "!trap", "=message=no such command prefix");
+                        send(out, "!done");
+                    }
+                } catch (IOException ex) { throw new UncheckedIOException(ex); }
+            });
+            assertDoesNotThrow(() -> new MikrotikService(null).testConnection(
+                new br.com.scriptping.zabbix.Host("1", "Router", "127.0.0.1", List.of()),
+                new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "secret", server.getLocalPort())));
+            router.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test void distinguishesMissingPackagesFromPermissionErrors() {
+        assertTrue(new RouterOsConnection.CommandRejectedException("no such command prefix").missingCommand());
+        assertFalse(new RouterOsConnection.CommandRejectedException("not enough permissions (9)").missingCommand());
     }
 
     private static List<String> read(InputStream in) throws IOException {

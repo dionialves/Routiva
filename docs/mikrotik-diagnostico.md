@@ -21,6 +21,40 @@ O usuário precisa de permissões de leitura/API. O Routiva não envia comandos 
 As alterações de autenticação são aplicadas ao salvar, sem reiniciar o app.
 O servidor deve alcançar diretamente os equipamentos; esta integração não passa pelo coletor Go.
 
+## Compatibilidade automática RouterOS 6 e 7
+
+O fabricante continua sendo **MikroTik**. Ao validar a autenticação, o app lê
+`/system/resource/print` e reconhece a versão, sem um campo adicional no cadastro.
+Versões não identificadas ou fora das famílias 6/7 são rejeitadas. O transporte
+usa o login moderno (6.43+); não foi adicionado login legado.
+
+Os comandos de interfaces Ethernet, estatísticas e monitoramento permanecem
+compartilhados. A descoberta usa `supported`/`supported-rates` para capacidade;
+quando ausentes em portas elétricas, usa `advertising` do monitor ou `advertise`
+da própria interface, carregado por `/interface/ethernet/print`. Essa alternativa
+pode refletir limites configurados de anúncio. Não usa velocidade negociada nem
+anúncios do equipamento vizinho; sem evidência, a capacidade continua desconhecida. Para rádio, a versão define os menus candidatos e a consulta
+verifica a disponibilidade do pacote:
+
+- RouterOS 6: `/interface/wireless`.
+- RouterOS 7 anterior a 7.13: `/interface/wireless` e `/interface/wifiwave2`.
+- RouterOS 7.13 em diante: `/interface/wireless` e `/interface/wifi`.
+
+Ausência de pacote é distinta de comando recusado/permissão insuficiente. Uma
+tabela vazia consultada com sucesso representa ausência de clientes; métricas
+não fornecidas, como CCQ em alguns pacotes WiFi, permanecem ausentes.
+
+Testes automatizados usam um servidor API simulado, incluindo versões 6.49.18,
+7.12.2, 7.13 e 7.20.1. Isso valida o comportamento do app, mas **a homologação em
+equipamento real ainda está pendente**. Em bancada, registrar modelo, versão,
+pacotes e resultado de: autenticação API/API-SSL, painel, descoberta/capacidade
+de portas, interfaces/tráfego, clientes rádio/análise e conexões mapeadas A/B.
+Repetir os fluxos em RouterOS 6; confirmar que o destino B não consulta contadores
+nem monitoramento de tráfego, e que reconexão/expiração das sessões permanecem.
+
+Referências: [API](https://manual.mikrotik.com/docs/developer-guides/api/) e
+[menus WiFi e mudança em 7.13](https://help.mikrotik.com/docs/spaces/ROS/pages/224559120/WiFi:).
+
 ## Dados e funcionamento
 
 - Visão geral: identificação, modelo, RouterOS, uptime, CPU e memória.

@@ -494,3 +494,16 @@ test('telecom site control bounds follow scale rotation and flip without equipme
   assert.ok(Math.abs(bounds.top + 112) < 1e-9);
   assert.ok(Math.abs(bounds.bottom - 112) < 1e-9);
 });
+
+
+test('CRS326 groups 24 gigabit electrical ports and two ten gigabit SFP+ ports', () => {
+  const rows = Array.from({length: 24}, (_, i) => ({
+    name: `ether${i + 1}`,
+    ...(i < 3 ? {advertising: '10M-baseT-half,100M-baseT-full,1G-baseT-full', status: 'no-link'}
+      : {supported: '10M-baseT-half,100M-baseT-full,1G-baseT-full', rate: '100Mbps'})
+  }));
+  rows.push({name: 'sfp-sfpplus1'}, {name: 'sfp-sfpplus2'});
+  const result = switchMap.importInterfaces(rows, []);
+  assert.deepEqual(result.slots.map(s => [s.connector, s.capacity, s.count]),
+    [['electrical', '1g', 24], ['sfpplus', '10g', 2]]);
+});

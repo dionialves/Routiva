@@ -24,8 +24,7 @@ public class MikrotikService {
     public void testConnection(Host host, br.com.scriptping.equipment.EquipmentProvider.Connection connection) {
         var snapshot = query(host, "overview", null, connection);
         String version = snapshot.rows().isEmpty() ? "" : snapshot.rows().getFirst().getOrDefault("version", "");
-        if (!version.startsWith("6.")) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-            "Versão não homologada. Selecione um equipamento MikroTik com RouterOS 6.x.");
+        RouterOsProfile.from(version);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -68,11 +67,15 @@ public class MikrotikService {
                     if (!rows.isEmpty() && !identity.isEmpty()) rows.getFirst().put("identity", identity.getFirst().get("name"));
                     if (!rows.isEmpty()) {
                         var radios = new ArrayList<Map<String, String>>();
-                        for (String path : List.of("/interface/wireless/print", "/interface/wifi/print", "/interface/wifiwave2/print")) {
+                        var profile = RouterOsProfile.from(rows.getFirst().get("version"));
+                        for (String menu : profile.radioMenus()) {
+                            String path = menu + "/print";
                             try {
                                 radios.addAll(api.command(path,
                                     "=.proplist=name,frequency,channel-width,ssid,configuration.ssid,channel.frequency,channel.width"));
-                            } catch (RouterOsConnection.CommandRejectedException ex) { /* Optional radio package. */ }
+                            } catch (RouterOsConnection.CommandRejectedException ex) {
+                                if (!ex.missingCommand()) warning = "Não foi possível consultar todos os recursos de rádio. Verifique permissões.";
+                            }
                         }
                         for (String field : List.of("frequency", "ssid")) {
                             var values = new LinkedHashSet<String>();
@@ -93,10 +96,15 @@ public class MikrotikService {
                 }
                 case "discover" -> {
                     rows = api.command("/interface/ethernet/print",
-                        "=.proplist=.id,name,default-name,comment,type,running,disabled,speed,sfp-supported");
+                        "=.proplist=.id,name,default-name,comment,type,running,disabled,speed,sfp-supported,advertise");
                     for (var row : rows) {
                         var status = api.command("/interface/ethernet/monitor", "=numbers=" + row.get(".id"), "=once=");
                         if (!status.isEmpty()) row.putAll(status.getFirst());
+                        // Some ports omit advertising from monitor (for example without a link).
+                        // Preserve their own configured modes, never the link partner or current speed.
+                        if (row.getOrDefault("advertising", "").isBlank()
+                                && !row.getOrDefault("advertise", "").isBlank())
+                            row.put("advertising", row.get("advertise"));
                     }
                 }
                 case "interfaces" -> {
@@ -118,18 +126,25 @@ public class MikrotikService {
                 case "wireless" -> {
                     rows = new ArrayList<>();
                     int supported = 0;
-                    for (String path : List.of("/interface/wireless/registration-table/print", "/interface/wifi/registration-table/print", "/interface/wifiwave2/registration-table/print")) {
+                    var resources = api.command("/system/resource/print", "=.proplist=version");
+                    var profile = RouterOsProfile.from(resources.isEmpty() ? "" : resources.getFirst().get("version"));
+                    boolean denied = false;
+                    for (String menu : profile.radioMenus()) {
+                        String path = menu + "/registration-table/print";
                         try {
                             var clients = api.command(path);
                             for (var client : clients) client.put("source", path.contains("/wireless/") ? "Wireless" : "WiFi");
                             rows.addAll(clients);
                             supported++;
-                        } catch (RouterOsConnection.CommandRejectedException ex) { /* Optional RouterOS package. */ }
+                        } catch (RouterOsConnection.CommandRejectedException ex) {
+                            if (!ex.missingCommand()) denied = true;
+                        }
                     }
                     var unique = new LinkedHashMap<String, Map<String, String>>();
                     for (var client : rows) unique.putIfAbsent(client.get("interface") + ":" + client.get("mac-address"), client);
                     rows = new ArrayList<>(unique.values());
-                    if (supported == 0) warning = "Wireless indisponível: pacote ausente, recurso não suportado ou acesso negado.";
+                    if (denied) warning = "Consulta wireless incompleta: acesso negado ou comando recusado. Verifique permissões.";
+                    else if (supported == 0) warning = "Wireless indisponível: pacote ausente ou recurso não suportado.";
                 }
                 default -> throw new ResponseStatusException(HttpStatus.NOT_FOUND);
             }
