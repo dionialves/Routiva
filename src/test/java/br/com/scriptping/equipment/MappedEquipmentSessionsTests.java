@@ -10,6 +10,30 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class MappedEquipmentSessionsTests {
+    @Test void expiredSessionCanBeRecreatedAndShutdownRejectsReads() throws Exception {
+        var host = new Host("a", "A", "192.0.2.1", List.of());
+        var credentials = new EquipmentProvider.Connection("reader", "secret", 443, true);
+        var now = new java.util.concurrent.atomic.AtomicLong();
+        var opens = new AtomicInteger();
+        var closes = new AtomicInteger();
+        var pool = new MappedEquipmentSessions<AutoCloseable>((h, c) -> {
+            opens.incrementAndGet();
+            return () -> { closes.incrementAndGet(); };
+        }, now::get, ex -> ex instanceof IOException);
+        try (pool) {
+            pool.read(host, credentials, session -> "first");
+            now.set(MappedEquipmentSessions.IDLE_MS);
+            pool.expireIdle();
+            assertThat(closes.get()).isEqualTo(1);
+            assertThat(pool.<String>read(host, credentials, session -> "second")).isEqualTo("second");
+            assertThat(opens.get()).isEqualTo(2);
+        }
+        assertThat(closes.get()).isEqualTo(2);
+        assertThatThrownBy(() -> pool.read(host, credentials, session -> "closed"))
+            .isInstanceOf(IOException.class).hasMessage("Session manager closed");
+        assertThat(opens.get()).isEqualTo(2);
+    }
+
     @Test void tenConcurrentInterfacesShareOneSessionWhileAnotherHostRemainsIndependent() throws Exception {
         var a = new Host("a", "A", "192.0.2.1", List.of());
         var b = new Host("b", "B", "192.0.2.2", List.of());
