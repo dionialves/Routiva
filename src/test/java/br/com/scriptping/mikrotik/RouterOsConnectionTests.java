@@ -84,10 +84,11 @@ class RouterOsConnectionTests {
                     socket.setSoTimeout(5000);
                     var in = socket.getInputStream(); var out = socket.getOutputStream();
                     assertEquals("/login", read(in).getFirst()); send(out, "!done");
-                    for (int collection = 1; collection <= 2; collection++) {
+                    for (int collection = 1; collection <= 3; collection++) {
                         assertEquals("/interface/print", read(in).getFirst());
                         send(out, "!re", "=.id=*" + collection, "=name=ether" + collection, "=type=ether", "=running=true");
                         send(out, "!done");
+                        if (collection == 3) continue; // Status-only: no counters or monitor command.
                         var stats = read(in);
                         assertTrue(stats.contains("=stats-detail="));
                         assertTrue(stats.contains("?name=ether" + collection));
@@ -104,10 +105,16 @@ class RouterOsConnectionTests {
             var host = new br.com.scriptping.zabbix.Host("1", "Router", "127.0.0.1", List.of());
             var credentials = new br.com.scriptping.equipment.EquipmentProvider.Connection("viewer", "test-only", server.getLocalPort());
             try {
-                for (int i = 1; i <= 2; i++) {
-                    var row = service.query(host, "connection", "ether" + i, credentials, false).rows().getFirst();
-                    assertEquals("12000", row.get("rx-byte"));
-                    assertEquals("1Gbps", row.get("rate"));
+                for (int i = 1; i <= 3; i++) {
+                    var row = service.query(host, i == 3 ? "connection-status" : "connection", "ether" + i, credentials, false).rows().getFirst();
+                    if (i == 3) {
+                        assertEquals("true", row.get("running"));
+                        assertFalse(row.containsKey("rx-byte"));
+                        assertFalse(row.containsKey("tx-byte"));
+                    } else {
+                        assertEquals("12000", row.get("rx-byte"));
+                        assertEquals("1Gbps", row.get("rate"));
+                    }
                 }
             } finally { service.closeMappedSessions(); }
             router.get(5, TimeUnit.SECONDS);

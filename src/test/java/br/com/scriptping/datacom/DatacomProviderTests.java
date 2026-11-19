@@ -24,7 +24,7 @@ class DatacomProviderTests {
         var provider = new DatacomEquipmentProvider(settings, ssh);
         var reading = provider.read(host, "connection", "ten-gigabit-ethernet-1/1/1");
         assertThat(reading.rows().getFirst()).containsEntry("running", "true").containsEntry("rx-byte", "100");
-        verify(cli).close(); verify(link).close();
+        verify(cli, never()).close(); verify(link, never()).close();
         assertThat(provider.capabilities()).doesNotContain("wireless", "onu");
         assertThatThrownBy(() -> provider.read(host, "wireless", null)).isInstanceOf(ResponseStatusException.class);
         assertThatThrownBy(() -> provider.read(host, "connection", "x; reboot")).isInstanceOf(ResponseStatusException.class);
@@ -34,6 +34,55 @@ class DatacomProviderTests {
         assertThatThrownBy(() -> provider.read(host, "connection", "ten-gigabit-ethernet-1/1/1"))
             .isInstanceOf(ResponseStatusException.class).hasMessageContaining("Não foi possível");
     }
+    @Test void mappedDestinationUsesOnlyLinkStatusWithoutStatisticsCommands() throws Exception {
+        var ssh = mock(UbiquitiSsh.class); var link = mock(UbiquitiSsh.Link.class); var cli = mock(DatacomCli.class);
+        var host = new Host("42", "Switch", "192.0.2.42", List.of());
+        var credentials = new EquipmentProvider.Connection("reader", "secret", 22);
+        when(ssh.connect(host.ip(), credentials)).thenReturn(link);
+        when(link.datacomCli()).thenReturn(cli);
+        when(cli.command("show interface link")).thenReturn("Interface  Admin  Link\nten-gigabit-ethernet-1/1/1  Up  Down");
+        var provider = new DatacomEquipmentProvider(mock(HostConnections.class), ssh);
+        var row = provider.query(host, "connection-status", "ten-gigabit-ethernet-1/1/1", credentials).rows().getFirst();
+        assertThat(row).containsEntry("running", "false").containsEntry("disabled", "false");
+        assertThat(row).doesNotContainKeys("rx-byte", "tx-byte");
+        verify(cli).command("show interface link");
+        verify(cli, never()).close();
+        provider.closeMappedSessions();
+        verify(cli).close();
+        verifyNoMoreInteractions(cli);
+        verify(link).close();
+    }
+
+    @Test void tenMixedOriginAndDestinationInterfacesShareOneSshAndCli() throws Exception {
+        var ssh = mock(UbiquitiSsh.class); var link = mock(UbiquitiSsh.Link.class); var cli = mock(DatacomCli.class);
+        var host = new Host("42", "Switch", "192.0.2.42", List.of());
+        var credentials = new EquipmentProvider.Connection("reader", "secret", 22);
+        when(ssh.connect(host.ip(), credentials)).thenReturn(link);
+        when(link.datacomCli()).thenReturn(cli);
+        var listing = new StringBuilder("Interface  Admin  Link\n");
+        for (int i = 1; i <= 10; i++) listing.append("gigabit-ethernet-1/1/").append(i).append("  Up  Up\n");
+        when(cli.command("show interface link")).thenReturn(listing.toString());
+        when(cli.command(matches("show interface gigabit-ethernet 1/1/[0-9]+"))).thenReturn("Speed : 1G");
+        when(cli.command(endsWith(" statistics"))).thenReturn("In Octets : 100\nOut Octets : 200");
+        var provider = new DatacomEquipmentProvider(mock(HostConnections.class), ssh);
+        try {
+            for (int i = 1; i <= 10; i++) {
+                boolean origin = i % 2 == 0;
+                var row = provider.query(host, origin ? "connection" : "connection-status",
+                    "gigabit-ethernet-1/1/" + i, credentials).rows().getFirst();
+                assertThat(row).containsEntry("running", "true");
+                assertThat(row.containsKey("rx-byte")).isEqualTo(origin);
+                if (!origin) verify(cli, never()).command("show interface gigabit-ethernet 1/1/" + i + " statistics");
+            }
+            verify(ssh).connect(host.ip(), credentials);
+            verify(link).datacomCli();
+            verify(cli, times(5)).command(endsWith(" statistics"));
+            verify(link, never()).close();
+        } finally { provider.closeMappedSessions(); }
+        verify(cli).close();
+        verify(link).close();
+    }
+
     @Test void discoveryUsesOnlyTheInterfaceListEvenWhenPerPortCommandsAreUnavailable() throws Exception {
         var settings = mock(HostConnections.class); var ssh = mock(UbiquitiSsh.class);
         var link = mock(UbiquitiSsh.Link.class); var cli = mock(DatacomCli.class);

@@ -46,18 +46,18 @@ public class MikrotikService {
             br.com.scriptping.equipment.EquipmentProvider.Connection connection, boolean tls) {
         if (host.ip() == null || !host.ip().matches("[0-9a-fA-F:.]+"))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Host sem endereço IP válido.");
-        if (!connections.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Consultas ocupadas. Tente novamente.");
-        if (section.equals("connection")) {
+        if (section.equals("connection") || section.equals("connection-status")) {
             try {
                 var credentials = new br.com.scriptping.equipment.EquipmentProvider.Connection(
                     connection.login(), connection.password(), connection.port(), tls);
-                return mappedSessions.read(host, credentials, api -> mappedInterface(api, selectedInterface));
+                return mappedSessions.read(host, credentials, api -> mappedInterface(api, selectedInterface, section.equals("connection")));
             } catch (RouterOsConnection.CommandRejectedException ex) {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "MikroTik recusou a consulta. Verifique credenciais e permissões.");
             } catch (IOException ex) {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Não foi possível consultar o MikroTik. A sessão será refeita na próxima coleta.");
-            } finally { connections.release(); }
+            }
         }
+        if (!connections.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Consultas ocupadas. Tente novamente.");
         try (var api = new RouterOsConnection(host.ip(), connection.port(), tls, connection.login(), connection.password())) {
             List<Map<String, String>> rows;
             String warning = "";
@@ -143,13 +143,14 @@ public class MikrotikService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Não foi possível consultar o MikroTik. Verifique endereço, porta, API e certificado TLS.");
         } finally { connections.release(); }
     }
-    private Snapshot mappedInterface(RouterOsConnection api, String name) throws IOException {
+    private Snapshot mappedInterface(RouterOsConnection api, String name, boolean traffic) throws IOException {
         if (name == null || name.isBlank() || name.length() > 128)
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione uma interface.");
         var interfaces = api.command("/interface/print", "=.proplist=.id,name,type,running,disabled");
         var selected = interfaces.stream().filter(i -> name.equals(i.get("name")) && "ether".equals(i.get("type"))).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Interface Ethernet não encontrada."));
         var row = new HashMap<>(selected);
+        if (!traffic) return new Snapshot(System.currentTimeMillis(), List.of(row), "");
         var stats = api.command("/interface/print", "=stats-detail=", "?name=" + name, "=.proplist=rx-byte,tx-byte");
         if (!stats.isEmpty()) row.putAll(stats.getFirst());
         var status = api.command("/interface/ethernet/monitor", "=numbers=" + selected.get(".id"), "=once=");

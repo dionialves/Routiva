@@ -31,6 +31,37 @@ public class MimosaHttps {
         return dashboard(address, port, password, false);
     }
     public byte[] dashboard(String address, int port, String password, boolean wirelessTraffic) throws Exception {
+        try (var session = open(address, port, password)) {
+            return dashboard(session, wirelessTraffic);
+        }
+    }
+    static final class Session implements AutoCloseable {
+        final URI origin;
+        final SSLSocketFactory sockets;
+        final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER);
+        HttpsURLConnection lastRequest;
+        Session(URI origin, SSLContext context) {
+            this.origin = origin; this.sockets = context.getSocketFactory();
+        }
+        @Override public void close() {
+            cookies.getCookieStore().removeAll();
+            if (lastRequest != null) lastRequest.disconnect();
+        }
+    }
+    private final br.com.scriptping.equipment.MappedEquipmentSessions<Session> sessions =
+        new br.com.scriptping.equipment.MappedEquipmentSessions<>(
+            (host, credentials) -> open(host.ip(), credentials.port(), credentials.password()),
+            ex -> !(ex instanceof CertificateException));
+    public byte[] mappedDashboard(String hostId, String address, int port, String password, boolean wirelessTraffic) throws Exception {
+        var host = new br.com.scriptping.zabbix.Host(hostId, "", address, List.of());
+        var credentials = new br.com.scriptping.equipment.EquipmentProvider.Connection("configure", password, port, true);
+        return sessions.read(host, credentials, session -> dashboard(session, wirelessTraffic));
+    }
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 10000)
+    public void expireIdle() { sessions.expireIdle(); }
+    @jakarta.annotation.PreDestroy
+    public void close() { sessions.close(); }
+    private Session open(String address, int port, String password) throws Exception {
         var origin = new URI("https", null, address, port, "/", null, null);
         String authority = origin.getRawAuthority();
         var context = SSLContext.getInstance("TLS");
@@ -45,26 +76,40 @@ public class MimosaHttps {
                 } catch (Exception ex) { throw new CertificateException("Não foi possível verificar o certificado Mimosa.", ex); }
             }
         }}, null);
-        var cookies = new CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER);
+        var session = new Session(origin, context);
         byte[] form = ("username=configure&password=" + URLEncoder.encode(password, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
-        request(origin.resolve("/login.php"), context, cookies, form, address);
-        byte[] dashboard = request(origin.resolve("/cgi/dashboard.php"), context, cookies, null, address);
-        if (!wirelessTraffic) return dashboard;
+        try {
+            request(origin.resolve("/login.php"), session, form, address);
+            return session;
+        } catch (Exception ex) { session.close(); throw ex; }
+    }
+    private byte[] dashboard(Session session, boolean wirelessTraffic) throws Exception {
+        var origin = session.origin;
+        String address = origin.getHost();
+        byte[] dashboard = request(origin.resolve("/cgi/dashboard.php"), session, null, address);
         var json = new com.fasterxml.jackson.databind.ObjectMapper();
         var root = json.readTree(dashboard);
+        if (!root.path("realtime").path("device_info").hasNonNull("Model"))
+            throw new IllegalArgumentException("Invalid dashboard or expired session");
+        if (!wirelessTraffic) return dashboard;
         try {
-            var traffic = json.readTree(request(origin.resolve("/core/api/calls/TPutPer.php"), context, cookies, null, address));
+            var traffic = json.readTree(request(origin.resolve("/core/api/calls/TPutPer.php"), session, null, address));
             if (root instanceof com.fasterxml.jackson.databind.node.ObjectNode object) object.set("wirelessTraffic", traffic);
-        } catch (Exception unavailable) { /* Link status remains valid without traffic. */ }
+        } catch (Exception unavailable) {
+            if (root instanceof com.fasterxml.jackson.databind.node.ObjectNode object)
+                object.put("wirelessTrafficUnavailable", true);
+        }
         return json.writeValueAsBytes(root);
     }
-    private byte[] request(URI uri, SSLContext context, CookieManager cookies, byte[] form, String address) throws Exception {
+    byte[] request(URI uri, Session session, byte[] form, String address) throws Exception {
         var connection = (HttpsURLConnection) uri.toURL().openConnection();
-        connection.setSSLSocketFactory(context.getSocketFactory());
-        connection.setHostnameVerifier((hostname, session) -> {
+        session.lastRequest = connection;
+        var cookies = session.cookies;
+        connection.setSSLSocketFactory(session.sockets);
+        connection.setHostnameVerifier((hostname, tlsSession) -> {
             try {
                 if (!hostname.equalsIgnoreCase(address)) return false;
-                verify(uri.getRawAuthority(), (X509Certificate) session.getPeerCertificates()[0]);
+                verify(uri.getRawAuthority(), (X509Certificate) tlsSession.getPeerCertificates()[0]);
                 return true;
             } catch (Exception ex) { return false; }
         });
@@ -80,13 +125,12 @@ public class MimosaHttps {
             }
             int status = connection.getResponseCode();
             cookies.put(uri, connection.getHeaderFields());
-            if (form != null && (status == 302 || status == 303)) return new byte[0];
-            if (status != 200) throw new IllegalArgumentException("Mimosa HTTP " + status);
+            if (status != 200 && !(form != null && (status == 302 || status == 303))) throw new IllegalArgumentException("Mimosa HTTP " + status);
             try (var input = connection.getInputStream()) {
                 byte[] body = input.readNBytes(2 * 1024 * 1024 + 1);
                 if (body.length > 2 * 1024 * 1024) throw new IllegalArgumentException("Oversized dashboard");
                 return body;
             }
-        } finally { connection.disconnect(); }
+        } catch (Exception ex) { connection.disconnect(); throw ex; }
     }
 }

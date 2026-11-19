@@ -22,23 +22,27 @@ public class MimosaEquipmentProvider implements EquipmentProvider {
         this.settings = settings; this.json = json; this.https = https;
     }
     public String manufacturer() { return "Mimosa"; }
-    public Set<String> capabilities() { return Set.of("overview", "discover", "interfaces", "connection"); }
+    public Set<String> capabilities() { return Set.of("overview", "discover", "interfaces", "connection", "connection-status"); }
     public Snapshot read(Host host, String section, String selectedInterface) {
         return query(host, section, selectedInterface, settings.require(host));
     }
     public void testConnection(Host host, Connection connection) { query(host, "overview", null, connection); }
     public Snapshot query(Host host, String section, String selected, Connection credentials) {
         if (!capabilities().contains(section)) throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED);
-        if (!connections.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Consultas ocupadas. Tente novamente.");
+        boolean mapped = "connection".equals(section) || "connection-status".equals(section);
+        if (!mapped && !connections.tryAcquire()) throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Consultas ocupadas. Tente novamente.");
         try {
-            byte[] bytes = https.dashboard(host.ip(), credentials.port(), credentials.password(), "connection".equals(section) && ("Wireless".equals(selected) || "wireless".equals(selected)));
+            boolean wireless = "connection".equals(section) && "wireless".equalsIgnoreCase(selected);
+            byte[] bytes = mapped
+                ? https.mappedDashboard(host.id(), host.ip(), credentials.port(), credentials.password(), wireless)
+                : https.dashboard(host.ip(), credentials.port(), credentials.password(), false);
             var result = snapshot(json.readTree(bytes), section, selected, System.currentTimeMillis());
             return result;
         } catch (ResponseStatusException ex) { throw ex;
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                 "Não foi possível consultar o equipamento. Confira HTTPS, porta e senha. Se o certificado mudou, revise a confiança do equipamento.");
-        } finally { connections.release(); }
+        } finally { if (!mapped) connections.release(); }
     }
 
     static Snapshot snapshot(JsonNode root, String section, String selected, long at) {
@@ -93,30 +97,43 @@ public class MimosaEquipmentProvider implements EquipmentProvider {
             wirelessRates(row, root.path("wirelessTraffic").path("tput1min").asText(""), at);
             rows.add(row);
         }
-        if (section.equals("connection")) {
+        if (section.equals("connection") || section.equals("connection-status")) {
             rows.removeIf(row -> !Objects.equals(selected, row.get(".id")) && !Objects.equals(selected, row.get("name")));
             if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione uma interface válida.");
         }
-        boolean partial = rows.isEmpty() || rows.stream().anyMatch(row -> !"wireless".equals(row.get("type")) && (!row.containsKey("rx-byte") || !row.containsKey("tx-byte")));
+        if (section.equals("connection-status")) {
+            rows.forEach(row -> row.keySet().retainAll(Set.of(".id", "name", "type", "running", "disabled")));
+            return new Snapshot(at, rows, "");
+        }
+        boolean partial = rows.isEmpty() || rows.stream().anyMatch(row -> "wireless".equals(row.get("type"))
+            ? section.equals("connection") && (!row.containsKey("rx-bits-per-second") || !row.containsKey("tx-bits-per-second"))
+            : (!row.containsKey("rx-byte") || !row.containsKey("tx-byte")));
         return new Snapshot(at, rows, partial ? "Contadores indisponíveis nesta leitura." : "");
     }
     static void wirelessRates(Map<String, String> row, String series, long at) {
         // B5c updateTput: first value TX, second RX, bytes/s multiplied by eight.
         String[] points = series.split(";");
-        if (points.length == 0) return;
-        try {
-            String[] point = points[points.length - 1].split(":");
-            long sampledAt = Math.multiplyExact(Long.parseLong(point[0]), 1000);
-            if (at - sampledAt > 30000 || sampledAt - at > 5000) return;
-            String[] rates = point[1].split(",");
-            var tx = new java.math.BigDecimal(rates[0]); var rx = new java.math.BigDecimal(rates[1]);
-            if (tx.signum() < 0 || rx.signum() < 0
-                    || tx.compareTo(new java.math.BigDecimal("1000000000000")) > 0
-                    || rx.compareTo(new java.math.BigDecimal("1000000000000")) > 0) return;
-            row.put("tx-bits-per-second", tx.multiply(java.math.BigDecimal.valueOf(8)).toBigInteger().toString());
-            row.put("rx-bits-per-second", rx.multiply(java.math.BigDecimal.valueOf(8)).toBigInteger().toString());
-        } catch (RuntimeException invalid) { /* Missing/stale/invalid is never zero. */ }
+        long newest = Long.MIN_VALUE;
+        for (String value : points) {
+            try {
+                String[] point = value.trim().split(":", -1);
+                if (point.length != 2) continue;
+                long sampledAt = Math.multiplyExact(Long.parseLong(point[0]), 1000);
+                if (sampledAt < at - 30000 || sampledAt > at + 5000 || sampledAt <= newest) continue;
+                String[] rates = point[1].split(",", -1);
+                if (rates.length != 2) continue;
+                var tx = new java.math.BigDecimal(rates[0].trim());
+                var rx = new java.math.BigDecimal(rates[1].trim());
+                if (tx.signum() < 0 || rx.signum() < 0
+                        || tx.compareTo(new java.math.BigDecimal("1000000000000")) > 0
+                        || rx.compareTo(new java.math.BigDecimal("1000000000000")) > 0) continue;
+                row.put("tx-bits-per-second", tx.multiply(java.math.BigDecimal.valueOf(8)).toBigInteger().toString());
+                row.put("rx-bits-per-second", rx.multiply(java.math.BigDecimal.valueOf(8)).toBigInteger().toString());
+                newest = sampledAt;
+            } catch (RuntimeException invalid) { /* Skip gaps (including nan), never turn them into zero. */ }
+        }
     }
+
     private static java.math.BigInteger unsigned(String value) {
         try {
             var number = new java.math.BigInteger(value);

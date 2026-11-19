@@ -26,8 +26,10 @@ class DatacomCliTests {
                 input.feed(command + "\r\n" + (command.startsWith("show platform") ? "DM4612" : "syntax error: unknown element") + "\r\nOLT-42# ");
             }
         });
-        try (var cli = new DatacomCli(session)) {
+        var clock = new java.util.concurrent.atomic.AtomicLong();
+        try (var cli = new DatacomCli(session, clock::get)) {
             assertThat(cli.command("show platform")).isEqualTo("DM4612");
+            clock.set(120_000_000_000L); // A persistent shell remains usable after its first minute.
             assertThatThrownBy(() -> cli.command("show firmware")).isInstanceOf(DatacomCli.CommandRejectedException.class);
             assertThat(cli.command("show platform")).isEqualTo("DM4612");
             assertThatThrownBy(() -> cli.command("reboot")).isInstanceOf(IllegalArgumentException.class);

@@ -61,6 +61,39 @@ class MimosaEquipmentProviderTests {
         MimosaEquipmentProvider.wirelessRates(row, "100:0,0;", 101000);
         assertEquals("0", row.get("rx-bits-per-second"));
     }
+    @Test void usesNewestValidWirelessSampleBeforeFirmwareNanTail() {
+        var row = new java.util.HashMap<String, String>();
+        MimosaEquipmentProvider.wirelessRates(row,
+            "1795097540:13343049.65,1546668.60;1795097550:12619937.02,1209028.92;1795097560:nan,nan", 1795097570300L);
+        assertEquals("100959496", row.get("tx-bits-per-second"));
+        assertEquals("9672231", row.get("rx-bits-per-second"));
+    }
+    @Test void rejectsStaleFutureAndMalformedWirelessSamplesWithoutHidingFreshZero() {
+        var row = new java.util.HashMap<String, String>();
+        MimosaEquipmentProvider.wirelessRates(row, "100:12,34;131:nan,nan;broken;", 140000);
+        assertTrue(row.isEmpty());
+        MimosaEquipmentProvider.wirelessRates(row, "140:0,0;139:12,34;146:50,60;141:nan,1;", 140000);
+        assertEquals("0", row.get("tx-bits-per-second"));
+        assertEquals("0", row.get("rx-bits-per-second"));
+    }
+    @Test void mappedDestinationReusesSessionWithoutRequestingWirelessTraffic() throws Exception {
+        var https = org.mockito.Mockito.mock(MimosaHttps.class);
+        var host = new br.com.scriptping.zabbix.Host("radio", "Radio", "192.0.2.1", java.util.List.of());
+        var credentials = new br.com.scriptping.equipment.EquipmentProvider.Connection("configure", "secret", 443, true);
+        var data = dashboard();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) data.path("realtime")).putObject("connection").put("connected", "1");
+        org.mockito.Mockito.when(https.mappedDashboard("radio", "192.0.2.1", 443, "secret", false))
+            .thenReturn(json.writeValueAsBytes(data));
+        var provider = new MimosaEquipmentProvider(null, json, https);
+        var snapshot = provider.query(host, "connection-status", "Wireless", credentials);
+        assertEquals("true", snapshot.rows().getFirst().get("running"));
+        assertFalse(snapshot.rows().getFirst().containsKey("rx-bits-per-second"));
+        assertFalse(snapshot.rows().getFirst().containsKey("rx-byte"));
+        assertTrue(snapshot.warning().isBlank());
+        org.mockito.Mockito.verify(https).mappedDashboard("radio", "192.0.2.1", 443, "secret", false);
+        org.mockito.Mockito.verifyNoMoreInteractions(https);
+    }
+
     @Test void missingCountersStayUnavailable() throws Exception {
         var data = dashboard();
         ((com.fasterxml.jackson.databind.node.ObjectNode) data.path("realtime")).remove("wan_stats");

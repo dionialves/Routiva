@@ -17,9 +17,11 @@ public class DatacomCli implements AutoCloseable {
     private final InputStream input;
     private final OutputStream output;
     private final String prompt;
-    private final long deadline = System.nanoTime() + 60_000_000_000L;
+    private final java.util.function.LongSupplier clock;
 
-    public DatacomCli(Session session) throws Exception {
+    public DatacomCli(Session session) throws Exception { this(session, System::nanoTime); }
+    DatacomCli(Session session, java.util.function.LongSupplier clock) throws Exception {
+        this.clock = clock;
         channel = (ChannelShell) session.openChannel("shell");
         channel.setPtyType("vt100", 240, 48, 0, 0);
         input = channel.getInputStream(); output = channel.getOutputStream();
@@ -46,8 +48,8 @@ public class DatacomCli implements AutoCloseable {
     }
     private String receive(String expected) throws Exception {
         var bytes = new ByteArrayOutputStream();
-        long commandDeadline = Math.min(deadline, System.nanoTime() + 10_000_000_000L);
-        while (System.nanoTime() < commandDeadline) {
+        long commandDeadline = clock.getAsLong() + 10_000_000_000L;
+        while (clock.getAsLong() < commandDeadline) {
             while (input.available() > 0) {
                 byte[] buffer = new byte[Math.min(8192, input.available())];
                 int n = input.read(buffer);

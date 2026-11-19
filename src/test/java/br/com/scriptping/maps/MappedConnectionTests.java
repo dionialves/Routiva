@@ -25,11 +25,18 @@ class MappedConnectionTests {
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
 
+    @org.junit.jupiter.api.BeforeEach
+    void freshReadingCache() {
+        controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+    }
+
     void equipment() {
         when(hosts.target(anyString())).thenAnswer(call -> new Host(call.getArgument(0), "Equipment", "10.0.0.1", List.of()));
         when(hosts.credentials(anyString())).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials("MikroTik", "map-reader", "encrypted", 8729, true, "ACTIVE", "", "10.0.0.1", true, 1L));
         when(connections.require(any())).thenAnswer(call -> new EquipmentProvider.Connection("map-reader", ((Host)call.getArgument(0)).id().equals("a") ? "test-a" : "test-b", 8729, true));
         when(inventory.hosts()).thenReturn(List.of(new Host("a", "A", "10.0.0.1", List.of()), new Host("b", "B", "10.0.0.2", List.of())));
+        when(mikrotik.query(any(), eq("connection-status"), anyString(), any(EquipmentProvider.Connection.class)))
+            .thenAnswer(call -> new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "true")), ""));
         when(mikrotik.query(any(), eq("interfaces"), isNull(), any(EquipmentProvider.Connection.class))).thenReturn(new MikrotikService.Snapshot(1, List.of(Map.of(".id", "*1", "name", "ether1", "type", "ether"), Map.of("name", "bridge", "type", "bridge")), ""));
     }
     @Test void discoversWithLocalHostAuthenticationWithoutRequiringMonitoredInventory() {
@@ -70,17 +77,17 @@ class MappedConnectionTests {
         equipment();
         var c = controller.validate(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
         persist(c);
-        when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class))).thenAnswer(call -> {
-            Host host = call.getArgument(0);
-            if (host.id().equals("b")) throw new IllegalStateException("API indisponível");
-            return new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "true", "rx-bits-per-second", "1000", "tx-bits-per-second", "2000")), "");
-        });
+        when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class)))
+            .thenAnswer(call -> new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "true", "rx-bits-per-second", "1000", "tx-bits-per-second", "2000")), ""));
+        when(mikrotik.query(any(), eq("connection-status"), eq("ether1"), any(EquipmentProvider.Connection.class)))
+            .thenThrow(new IllegalStateException("API indisponível"));
         var first = controller.readings("map", Set.of(c.id())).getFirst();
         assertThat(first.a().up()).isTrue();
         assertThat(first.a().rxBps()).isEqualTo("1000");
         assertThat(first.b().error()).isNotNull();
         assertThat(controller.readings("map", Set.of(c.id()))).containsExactly(first);
-        verify(mikrotik, times(2)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
+        verify(mikrotik).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
+        verify(mikrotik).query(any(), eq("connection-status"), eq("ether1"), any(EquipmentProvider.Connection.class));
         assertThat(controller.readings("map", Set.of("missing"))).isEmpty();
     }
     @Test void firstCounterSampleExpiresEarlyButMeasuredRatesKeepNormalCache() {
@@ -93,7 +100,6 @@ class MappedConnectionTests {
         var nextRows = List.of(Map.of("running", "true", "rx-byte", "2000", "tx-byte", "4000"));
         when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class)))
             .thenReturn(new MikrotikService.Snapshot(now - 1500, firstRows, ""))
-            .thenReturn(new MikrotikService.Snapshot(now - 1500, firstRows, ""))
             .thenReturn(new MikrotikService.Snapshot(now, nextRows, ""));
         var first = controller.readings("map", Set.of(c.id())).getFirst();
         assertThat(first.a().txBps()).isNull();
@@ -101,7 +107,7 @@ class MappedConnectionTests {
         assertThat(second.a().txBps()).isEqualTo("10666");
         assertThat(second.a().rxBps()).isEqualTo("5333");
         assertThat(controller.readings("map", Set.of(c.id()))).containsExactly(second);
-        verify(mikrotik, times(4)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
+        verify(mikrotik, times(2)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
     }
     @Test void supportsMixedDatacomAndMikrotikLinksWithoutClassifyingTheOltAsAnAp() {
         equipment();
@@ -115,7 +121,7 @@ class MappedConnectionTests {
         persist(c);
         when(datacom.query(any(), eq("connection"), eq(port), any())).thenReturn(new EquipmentProvider.Snapshot(System.currentTimeMillis(),
             List.of(Map.of("running", "true", "disabled", "false", "rx-byte", "18446744073709551600", "tx-byte", "100", "rate", "10Gbps")), ""));
-        when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class)))
+        when(mikrotik.query(any(), eq("connection-status"), eq("ether1"), any(EquipmentProvider.Connection.class)))
             .thenReturn(new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "false")), ""));
         var reading = controller.readings("map", Set.of(c.id())).getFirst();
         assertThat(reading.a().up()).isTrue();
@@ -204,6 +210,62 @@ class MappedConnectionTests {
             } finally { release.countDown(); }
             assertThat(pending.get(2, java.util.concurrent.TimeUnit.SECONDS)).hasSize(1);
         }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"MikroTik", "Datacom", "Mimosa"})
+    void destinationReadsOnlyStatusForEveryManufacturer(String manufacturer) {
+        equipment();
+        when(hosts.credentials("b")).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials(
+            manufacturer, "reader", "encrypted", 443, true, "ACTIVE", "", "10.0.0.2", true, 1L));
+        var c = new MappedConnectionController.Connection("link", "Link", "a", "ether1", "b", "port");
+        persist(c);
+        var destinationRows = List.of(Map.of("running", "false", "rx-bits-per-second", "999", "tx-bits-per-second", "999"));
+        when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class)))
+            .thenAnswer(call -> new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "true", "rx-bits-per-second", "1000", "tx-bits-per-second", "2000")), ""));
+        when(mikrotik.query(any(), eq("connection-status"), eq("port"), any(EquipmentProvider.Connection.class)))
+            .thenAnswer(call -> new MikrotikService.Snapshot(System.currentTimeMillis(), destinationRows, ""));
+        when(datacom.query(any(), eq("connection-status"), eq("port"), any()))
+            .thenAnswer(call -> new EquipmentProvider.Snapshot(System.currentTimeMillis(), destinationRows, ""));
+        when(mimosa.query(any(), eq("connection-status"), eq("port"), any()))
+            .thenAnswer(call -> new EquipmentProvider.Snapshot(System.currentTimeMillis(), destinationRows, ""));
+        var reading = controller.readings("map", Set.of(c.id())).getFirst();
+        assertThat(reading.a().txBps()).isEqualTo("2000");
+        assertThat(reading.b().up()).isFalse();
+        assertThat(reading.b().error()).isNull();
+        assertThat(reading.b().rxBps()).isNull();
+        assertThat(reading.b().txBps()).isNull();
+        verify(mikrotik, never()).query(eq(hosts.target("b")), eq("connection"), anyString(), any(EquipmentProvider.Connection.class));
+        verify(datacom, never()).query(any(), eq("connection"), anyString(), any());
+        verify(mimosa, never()).query(any(), eq("connection"), anyString(), any());
+    }
+
+    @Test void statusCacheDoesNotReplaceTrafficWhenTheSameInterfaceIsAlsoAnOrigin() throws Exception {
+        equipment();
+        var forward = new MappedConnectionController.Connection("forward", "Forward", "a", "ether1", "b", "ether1");
+        var reverse = new MappedConnectionController.Connection("reverse", "Reverse", "b", "ether1", "a", "ether1");
+        persist(forward);
+        var links = List.of(forward, reverse).stream().map(c -> Map.of("from", "a", "to", "b", "connection", c)).toList();
+        jdbc.update("UPDATE network_map SET layout=? WHERE id='map'", new com.fasterxml.jackson.databind.ObjectMapper()
+            .writeValueAsString(Map.of("nodes", List.of(), "links", links)));
+        when(mikrotik.query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class)))
+            .thenAnswer(call -> new MikrotikService.Snapshot(System.currentTimeMillis(), List.of(Map.of("running", "true", "rx-bits-per-second", "1000", "tx-bits-per-second", "2000")), ""));
+        var readings = controller.readings("map", Set.of("forward", "reverse"));
+        assertThat(readings).hasSize(2).allSatisfy(reading -> {
+            assertThat(reading.a().txBps()).isEqualTo("2000");
+            assertThat(reading.b().up()).isTrue();
+            assertThat(reading.b().txBps()).isNull();
+        });
+        var cached = controller.readings("map", Set.of("forward", "reverse"));
+        assertThat(cached).extracting(MappedConnectionController.Reading::a)
+            .containsExactlyElementsOf(readings.stream().map(MappedConnectionController.Reading::a).toList());
+        assertThat(cached.getFirst().b().measuredAt()).isEqualTo(readings.get(1).a().measuredAt());
+        assertThat(cached).allSatisfy(reading -> {
+            assertThat(reading.b().up()).isTrue();
+            assertThat(reading.b().txBps()).isNull();
+        });
+        verify(mikrotik, times(2)).query(any(), eq("connection"), eq("ether1"), any(EquipmentProvider.Connection.class));
+        verify(mikrotik).query(any(), eq("connection-status"), eq("ether1"), any(EquipmentProvider.Connection.class));
     }
 
     void persist(MappedConnectionController.Connection connection) {
