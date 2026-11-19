@@ -176,3 +176,5 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 - Autenticação fica na aba do host. Importar um AP testa a configuração do host; excluir a classificação AP preserva as credenciais do host.
 - A migração reutiliza a chave `ap.secrets-key-file` (padrão `./data/ap-secrets.key`); preserve esse arquivo junto aos backups. Senhas e snapshots de configuração Zabbix são protegidos com a mesma chave.
 - Abas em formulários também reutilizam `.analysis-tabs` de `analysis-dialog.css`, com `role=tablist`, `tab`, `tabpanel`, foco e navegação por setas.
+
+- O ícone `radio` é exclusivo de hosts e reutiliza `MapSwitch` para LED de ping, portas, prévia e conexões. Sua arte fica em `map-assets/radio.svg`; interfaces ficam na base, em uma fileira de até quatro. O limite total é validado no editor e no servidor, inclusive com interfaces desativadas; trocar o ícone preserva os slots para revisão, sem truncar portas ou remover vínculos silenciosamente.

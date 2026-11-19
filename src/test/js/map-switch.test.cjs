@@ -400,3 +400,17 @@ test('HTTP deployments without randomUUID can import ports, add slots and preser
   assert.equal(ports.length, 27);
   assert.deepEqual(Array.from(ports.slice(0, 26), port => port.id), Array.from(imported.ports, port => port.id));
 });
+
+test('radio places at most four interfaces below the cabinet with shared cable anchors', () => {
+  const node = {icon: 'radio', x: 100, y: 200, ports: Array.from({length: 4}, (_, i) =>
+    ({id: 'radio-' + i, type: 'rj45', connector: 'electrical', name: 'ether' + (i + 1)}))};
+  const shape = switchMap.geometry(node);
+  assert.equal(shape.ports.length, 4);
+  assert.equal(new Set(shape.ports.map(port => port.x)).size, 4);
+  for (const port of shape.ports) {
+    assert.equal(port.y, 65);
+    assert.equal(switchMap.cableDirection(node, port.id), 1);
+    assert.deepEqual(switchMap.endpoint(node, port.id), {x: node.x + port.x, y: 268.6});
+  }
+  assert.equal(switchMap.isEquipment(node), true);
+});

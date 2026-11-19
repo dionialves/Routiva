@@ -136,6 +136,7 @@ const MapSwitch = (() => {
     }
     return {slots, ports};
   }
+  function isEquipment(node) { return node.icon === 'switch' || node.icon === 'radio'; }
   function geometry(node) {
     const ports = node.ports || [];
     const keys = [...new Set(ports.map(port => port.slotId || port.type))];
@@ -166,6 +167,10 @@ const MapSwitch = (() => {
       });
       left += group.width + gap;
     }
+    if (node.icon === 'radio') {
+      return {width: 180, height: 180, ports: positioned.slice(0, 4).map((port, index, all) =>
+        ({...port, x: (index - (all.length - 1) / 2) * 25 - 25, y: 65, cableDirection: 1}))};
+    }
     return {width, height: 110, ports: positioned};
   }
 
@@ -190,14 +195,14 @@ const MapSwitch = (() => {
     return portVisual(port)?.upright ? 1 : port.cableDirection;
   }
   function cableDirection(node, portId) {
-    if (node.icon !== 'switch' || node.interfacesEnabled === false) return 0;
+    if (!isEquipment(node) || node.interfacesEnabled === false) return 0;
     const port = geometry(node).ports.find(port => port.id === portId);
     return portVisual(port) ? plugDirection(port) : 0;
   }
   function endpoint(node, portId) {
     const port = node.interfacesEnabled !== false && node.icon !== 'circle' && portId
       && geometry(node).ports.find(port => port.id === portId);
-    const visual = node.icon === 'switch' && portVisual(port);
+    const visual = isEquipment(node) && portVisual(port);
     return {x: node.x + (port ? port.x : 0),
       y: node.y + (port ? port.y : 0) + (visual ? plugDirection(port) * visual.socketY : 0)};
   }
@@ -213,7 +218,7 @@ const MapSwitch = (() => {
   function draw(svg, group, node, fill, selected, options = {}) {
     const shape = geometry(node.interfacesEnabled === false ? {...node, ports: []} : node);
     let bodyFilter;
-    if (/^#[0-9a-fA-F]{6}$/.test(node.switchColor || '')) {
+    if (node.icon !== 'radio' && /^#[0-9a-fA-F]{6}$/.test(node.switchColor || '')) {
       const id = 'switch-tint-' + (++tintSequence);
       const channels = [1, 3, 5].map(offset => parseInt(node.switchColor.slice(offset, offset + 2), 16) / 255);
       const matrix = channels.flatMap(channel => [channel * 0.2126, channel * 0.7152, channel * 0.0722, 0, 0]);
@@ -221,12 +226,14 @@ const MapSwitch = (() => {
       filter.append(svg('feColorMatrix', {type: 'matrix', values: [...matrix, 0, 0, 0, 1, 0].join(' ')}));
       defs.append(filter); group.append(defs); bodyFilter = 'url(#' + id + ')';
     }
-    image(svg, group, 'switch', -shape.width / 2, -55, shape.width, 110, bodyFilter);
-    group.append(svg('rect', {x: -shape.width / 2, y: -55, width: shape.width, height: 110,
+    const radio = node.icon === 'radio';
+    const top = radio ? -90 : -55;
+    image(svg, group, radio ? 'radio' : 'switch', -shape.width / 2, top, shape.width, shape.height, bodyFilter);
+    group.append(svg('rect', {x: -shape.width / 2, y: top, width: shape.width, height: shape.height,
       rx: 10, fill: 'transparent', stroke: selected ? 'var(--focus)' : 'none', 'stroke-width': 3,
       'pointer-events': 'all'}));
     const status = pingIndicator(options.pingState);
-    const led = svg('circle', {cx: -shape.width / 2 + shape.width * 0.0557, cy: 17, r: 3.5,
+    const led = svg('circle', {cx: radio ? -25 : -shape.width / 2 + shape.width * 0.0557, cy: radio ? 40 : 17, r: 3.5,
       fill: status.color, class: 'switch-status-led', 'data-ping-host': node.hostId || '',
       role: 'img', 'aria-label': status.label});
     const statusTitle = svg('title', {}); statusTitle.textContent = status.label;
@@ -259,14 +266,14 @@ const MapSwitch = (() => {
       }
       group.append(g);
     }
-    const offsets = {ABOVE: {x: 0, y: -67, 'text-anchor': 'middle'},
-      BELOW: {x: 0, y: 74, 'text-anchor': 'middle'},
+    const offsets = {ABOVE: {x: 0, y: node.icon === 'radio' ? -102 : -67, 'text-anchor': 'middle'},
+      BELOW: {x: 0, y: node.icon === 'radio' ? 108 : 74, 'text-anchor': 'middle'},
       LEFT: {x: -shape.width / 2 - 12, y: 0, 'text-anchor': 'end'},
       RIGHT: {x: shape.width / 2 + 12, y: 0, 'text-anchor': 'start'}};
     const label = svg('text', offsets[node.labelPosition] || offsets.BELOW);
     label.textContent = node.name;
     group.append(label);
   }
-  return {newId, importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
+  return {isEquipment, newId, importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
 })();
 if (typeof module !== 'undefined') module.exports = MapSwitch;

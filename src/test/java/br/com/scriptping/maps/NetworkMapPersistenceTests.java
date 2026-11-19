@@ -40,6 +40,26 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
+    void radioRequiresHostAndLimitsTotalInterfacesEvenWhenDisabled() throws Exception {
+        var ports = java.util.stream.IntStream.range(0, 4)
+            .mapToObj(i -> new Port("p" + i, "rj45")).toList();
+        var radio = new Node("radio", null, "host-a", null, "Rádio", 0, 0, null,
+            "radio", ports, List.of(), true);
+        var saved = service.save(new Saved(null, 0,
+            new Layout("Rádio", null, 0, List.of(radio), List.of()), null));
+        assertThat(saved.layout().nodes().getFirst().icon()).isEqualTo("radio");
+        var excess = new java.util.ArrayList<>(ports);
+        excess.add(new Port("p4", "rj45"));
+        for (var invalid : List.of(
+            new Node("radio", null, "host-a", null, "Rádio", 0, 0, null, "radio", excess, List.of(), false),
+            new Node("radio", null, null, null, "Rádio", 0, 0, null, "radio", ports))) {
+            assertThatThrownBy(() -> service.save(new Saved(null, 0,
+                new Layout("Inválido", null, 0, List.of(invalid), List.of()), null)))
+                .isInstanceOf(ResponseStatusException.class);
+        }
+    }
+
+    @Test
     void hierarchyAllowsNestedSubMapsAndRejectsMultipleParentsAndCycles() throws Exception {
         var leaf = service.save(new Saved(null, 0, new Layout("Folha", null, 0, List.of(), List.of()), null));
         var middle = mapWithSubMap("Intermediário", null, leaf.id());

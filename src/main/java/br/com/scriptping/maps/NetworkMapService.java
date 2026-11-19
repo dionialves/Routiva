@@ -108,7 +108,10 @@ public class NetworkMapService {
         validateHierarchy(input, hierarchy);
         var nodes = layout.nodes().stream().collect(java.util.stream.Collectors.toMap(Node::id, n -> n));
         for (var node : layout.nodes()) {
-            if (!Set.of("circle", "switch").contains(node.icon())) throw invalid();
+            if (!Set.of("circle", "switch", "radio").contains(node.icon())) throw invalid();
+            if ("radio".equals(node.icon()) && (node.hostId() == null || node.hostId().isBlank()
+                || node.ports().size() > 4 || node.slots().stream().anyMatch(java.util.Objects::isNull)
+                || node.slots().stream().mapToLong(Slot::count).sum() > 4)) throw invalid();
             var capacities = Map.of("electrical", "rj45", "sfp1g", "sfp", "sfp10g", "sfp", "sfp40g", "qsfp", "sfp100g", "qsfp");
             var connectors = Map.of("electrical", "rj45", "sfp", "sfp", "sfpplus", "sfp", "sfp28", "sfp", "qsfpplus", "qsfp",
                 "sfp56", "sfp", "qsfp28", "qsfp", "qsfp56", "qsfp", "qsfpdd", "qsfp", "qsfpdd800", "qsfp");

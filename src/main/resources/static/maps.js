@@ -287,7 +287,7 @@ function draw() {
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
-    if (n.icon === 'switch') MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
+    if (['switch', 'radio'].includes(n.icon)) MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
       connectedPorts: MapSwitch.connectedPorts(n, links),
       pingState: editing ? 'unknown' : pingStateFor(n.hostId),
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
@@ -325,7 +325,7 @@ function draw() {
     };
     if (!editing && n.groupId && n.subMapId) g.onclick = event => { event.stopPropagation(); choose(n); };
     if (monitored) popSummary.bind(g, n);
-    if (n.groupId && n.icon !== 'switch') groupCircles.push(g);
+    if (n.groupId && !['switch', 'radio'].includes(n.icon)) groupCircles.push(g);
     else canvas.append(g);
   }
   canvas.append(connectors);
@@ -387,7 +387,7 @@ function choose(node, additive = false) {
   }
   if (!editing || tool === 'pan') return;
   if (tool === 'connect') {
-    if (node.icon !== 'switch' || node.interfacesEnabled === false || !node.ports?.length) connectEndpoint(node, null);
+    if (!['switch', 'radio'].includes(node.icon) || node.interfacesEnabled === false || !node.ports?.length) connectEndpoint(node, null);
     return;
   }
   const origin = selected;
@@ -700,7 +700,7 @@ function updatePingIndicators() {
 async function refreshPingState(token) {
   if (!current || editing || token !== pingGeneration) return;
   clearTimeout(pingTimer);
-  const hosts = [...new Set(current.layout.nodes.filter(n => n.icon === 'switch').map(n => n.hostId).filter(Boolean))];
+  const hosts = [...new Set(current.layout.nodes.filter(n => ['switch', 'radio'].includes(n.icon)).map(n => n.hostId).filter(Boolean))];
   if (!hosts.length) return;
   try {
     const readings = await api('/ping-status', {hosts, groups: []});
@@ -1124,7 +1124,8 @@ $('link-form').onsubmit = async event => {
   $('link-dialog').close(); draw();
 };
 function switchDraft() {
-  return MapSwitch.portsForSlots(configuredPorts, configuredSlots);
+  const ports = MapSwitch.portsForSlots(configuredPorts, configuredSlots);
+  return $('element-icon').value === 'radio' && ports?.length > 4 ? null : ports;
 }
 function renderSwitchSlots() {
   const panel = $('switch-slots');
@@ -1225,6 +1226,10 @@ $('load-switch-interfaces').onclick = async () => {
       failureMessage = 'Nenhuma interface física encontrada. A configuração atual foi preservada.';
       throw new Error();
     }
+    if ($('element-icon').value === 'radio' && imported.ports.length > 4) {
+      failureMessage = 'O host possui mais de 4 interfaces. Configure manualmente até 4 interfaces para este rádio. A configuração atual foi preservada.';
+      throw new Error();
+    }
     configuredSlots = imported.slots;
     configuredPorts = imported.ports;
     renderSwitchSlots(); drawPreview();
@@ -1240,6 +1245,7 @@ $('load-switch-interfaces').onclick = async () => {
   }
 };
 $('add-switch-slot').onclick = () => {
+  if ($('element-icon').value === 'radio' && configuredSlots.reduce((sum, slot) => sum + slot.count, 0) >= 4) return;
   configuredSlots.push({id: MapSwitch.newId(), name: '', connector: 'electrical', capacity: '1g', count: 1});
   renderSwitchSlots(); drawPreview();
   $('switch-slots').lastElementChild.querySelector('input').focus();
@@ -1273,29 +1279,32 @@ function drawPreview() {
   const group = svg('g', {});
   preview.replaceChildren(group);
   const name = $('element-name').value.trim() || 'Nome do elemento';
-  const isSwitch = $('element-icon').value === 'switch';
+  const icon = $('element-icon').value;
+  const isRadio = icon === 'radio';
+  const isSwitch = ['switch', 'radio'].includes(icon);
   $('element-color-note').hidden = isSwitch;
-  $('switch-color-field').hidden = !isSwitch;
+  $('switch-color-field').hidden = !isSwitch || isRadio;
   $('reset-switch-color').disabled = !configuredSwitchColor;
   const interfacesEnabled = $('interfaces-enabled').checked;
   $('load-switch-interfaces').hidden = !isSwitch || $('type').value !== 'host';
   $('load-switch-interfaces').disabled = loadingInterfaces || !$('group').value;
   $('switch-config').hidden = !interfacesEnabled;
   $('switch-config').disabled = !interfacesEnabled;
+  $('add-switch-slot').disabled = isRadio && configuredSlots.reduce((sum, slot) => sum + slot.count, 0) >= 4;
   const ports = switchDraft();
-  $('port-error').textContent = interfacesEnabled && !ports ? 'Preencha o nome e a capacidade de cada slot e informe de 1 a 96 portas por slot.' : '';
+  $('port-error').textContent = interfacesEnabled && !ports ? (isRadio ? 'O rádio permite no máximo 4 interfaces. Remova ou ajuste os slots excedentes.' : 'Preencha o nome e a capacidade de cada slot e informe de 1 a 96 portas por slot.') : '';
   const binding = {hostId: $('type').value === 'host' ? $('group').value : null,
     groupId: $('type').value === 'group' ? $('group').value : null};
   const monitored = !!(binding.hostId || binding.groupId);
   const color = monitored ? metricSummary(binding)?.color || colors[groupLevel(nodeHosts(binding)) + 2] : colors[0];
-  if (isSwitch) MapSwitch.draw(svg, group, {name, labelPosition: $('label-position').value,
+  if (isSwitch) MapSwitch.draw(svg, group, {icon, name, labelPosition: $('label-position').value,
     ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
     {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
   else drawNode(group, name, $('label-position').value, color);
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
   preview.setAttribute('viewBox', [box.x + (box.width-w)/2, box.y + (box.height-h)/2, w, h].join(' '));
-  preview.setAttribute('aria-label', (isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
+  preview.setAttribute('aria-label', (isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
 }
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {
@@ -1381,7 +1390,7 @@ $('element-form').onsubmit = event => {
   const ports = switchDraft();
   if (!ports) {
     drawPreview();
-    $('port-error').textContent = 'Existem slots inválidos. Habilite as interfaces e preencha nome, capacidade e quantidade de 1 a 96 portas.';
+    $('port-error').textContent = (icon === 'radio' ? 'O rádio permite no máximo 4 interfaces. Revise os nomes, capacidades e quantidades dos slots.' : 'Existem slots inválidos. Habilite as interfaces e preencha nome, capacidade e quantidade de 1 a 96 portas.');
     $('port-error').scrollIntoView({block: 'nearest'});
     return;
   }
