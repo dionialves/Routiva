@@ -379,7 +379,8 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .switch-port:focus { outline: none; }
 #canvas[data-tool="connect"] .switch-port { cursor: crosshair; }
 
-#canvas .map-connector { fill: none; stroke: #22C55E; stroke-width: 3; pointer-events: stroke; }
+#canvas .map-connector { fill: none; stroke: var(--muted); stroke-width: 3; pointer-events: stroke; }
+#canvas .map-connector.map-connector-mapped { stroke: #22C55E; }
 #canvas .map-connector.selected-link { stroke: var(--focus); }
 #canvas .map-connector[role=button] { cursor: pointer; }
 #canvas[data-tool="connect"] .map-connector { pointer-events: none; }

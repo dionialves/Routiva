@@ -271,7 +271,9 @@ function draw() {
     const start = MapSwitch.endpoint(a, link.fromPort), end = MapSwitch.endpoint(b, link.toPort);
     const d = MapLinks.path(link, start, end);
     const wireless = MapTraffic.isWireless(link, nodes);
-    const line = svg('path', {d, class: 'map-connector' + (wireless ? ' map-connector-wireless' : '')});
+    const line = svg('path', {d, class: 'map-connector' +
+      (link.mappedConnectionId ? ' map-connector-mapped' : '') +
+      (wireless ? ' map-connector-wireless' : '')});
     if (editing && tool === 'select') {
       line.onpointerdown = event => {
         if (event.button !== 0) return;
