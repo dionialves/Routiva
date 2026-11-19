@@ -6,13 +6,13 @@ const source = fs.readFileSync(require('node:path').join(__dirname, '../../main/
 function setup() {
   const elements = new Map();
   const $ = id => {
-    if (!elements.has(id)) elements.set(id, {value:'',open:false,options:[],focus(){},replaceChildren(...options){this.options=options;},
+    if (!elements.has(id)) elements.set(id, {value:'',open:false,options:[],append(option){this.options.push(option);},setAttribute(){},removeAttribute(){},focus(){},replaceChildren(...options){this.options=options;},
       showModal(){this.open=true;},close(){this.open=false;this.onclose?.();}});
     return elements.get(id);
   };
   const link = {from:'a',to:'b',fromPort:'r1',style:'corners',points:[{x:10,y:80}]};
   const context = vm.createContext({$, link, editing:true, pendingLink:null, selectedLink:null, selected:null,
-    savingConnection:false, loadConnectionInterfaces(){}, lastConnectionClick:null,selection:new Set(),checkpoints:0,draw(){},svg:()=>({}),
+    window:{}, Option:function(text,value){this.textContent=text;this.value=value;}, savingConnection:false, loadConnectionInterfaces(){}, lastConnectionClick:null,selection:new Set(),checkpoints:0,draw(){},svg:()=>({}),
     current:{layout:{nodes:[{id:'a',hostId:'h1',name:'SW',ports:[{id:'r1',type:'rj45'}]},
       {id:'b',groupId:'g1',name:'Grupo'}],links:[link]}},
     inventory:[{id:'h1',name:'Switch Core'}],groups:[{id:'g1',name:'Datacenter'}],
@@ -176,4 +176,98 @@ test('cancel after swapping preserves saved endpoints and port bindings', () => 
   assert.equal(context.checkpoints, 0);
   run('openLinkDialog(link)');
   assert.equal($('link-from').value, 'Switch Core');
+});
+
+
+function groupedConnectionSetup() {
+  const ui = setup();
+  ui.context.inventory = [
+    {id:'h1', name:'Core', groups:[{id:'g1'}]},
+    {id:'h2', name:'Radio', groups:[{id:'g2'}]},
+    {id:'outside', name:'Outside', groups:[{id:'other'}]}
+  ];
+  ui.context.connectionDefinitions = [];
+  ui.run("current.layout.nodes=[{id:'a',groupId:'g1',name:'Site A'},{id:'b',groupId:'g2',name:'Site B'}]; openLinkDialog(link)");
+  vm.runInContext(source.slice(source.indexOf('function connectionNodes('), source.indexOf("$('link-category').onchange")), ui.context);
+  return ui;
+}
+
+test('mapped group endpoints list only member hosts and load interfaces from the selected hosts', async () => {
+  const {$, context, run} = groupedConnectionSetup();
+  assert.deepEqual($('connection-host-select-a').options.map(o => o.value), ['', 'h1']);
+  assert.deepEqual($('connection-host-select-b').options.map(o => o.value), ['', 'h2']);
+  $('link-category').value='mapped';
+  const requests=[];
+  context.connectionRequest=async url => {requests.push(url);return [{name:'ether1'}];};
+  await run('loadConnectionInterfaces()');
+  assert.equal(requests.length, 0);
+  $('connection-host-select-a').value='h1';
+  $('connection-host-select-b').value='h2';
+  await run('loadConnectionInterfaces()');
+  assert.deepEqual(requests, ['/api/maps/connections/interfaces/h1','/api/maps/connections/interfaces/h2']);
+  assert.equal($('connection-interface-a').disabled,false);
+  $('connection-interface-a').value='ether1';
+  $('connection-interface-b').value='ether1';
+  let saved;
+  context.connectionRequest=async (url, body) => {saved=body;return {...body,id:'mapped'};};
+  await $('link-form').onsubmit({preventDefault(){}});
+  assert.equal(saved.hostA,'h1');
+  assert.equal(saved.hostB,'h2');
+  assert.equal(context.link.connection.interfaceA,'ether1');
+});
+
+test('changing group host invalidates interfaces and discards an in-flight interface response', async () => {
+  const {$,context,run}=groupedConnectionSetup();
+  $('link-category').value='mapped';
+  $('connection-host-select-a').value='h1';
+  $('connection-host-select-b').value='h2';
+  // One deferred request per side, released together.
+  const pending=[];
+  context.connectionRequest=()=>new Promise(resolve=>pending.push(resolve));
+  const loading=run('loadConnectionInterfaces()');
+  $('connection-host-select-a').value='';
+  $('connection-host-select-a').onchange();
+  pending.forEach(resolve=>resolve([{name:'stale'}]));
+  await loading;
+  assert.equal($('connection-interface-a').options.length,0);
+  assert.equal($('connection-interface-a').disabled,true);
+  assert.equal($('connection-host-select-a').value,'');
+});
+
+test('swapping grouped endpoints preserves the chosen hosts in the draft', () => {
+  const {$,run}=groupedConnectionSetup();
+  $('connection-host-select-a').value='h1';
+  $('connection-host-select-b').value='h2';
+  $('connection-interface-a').value='ether1';
+  $('connection-interface-b').value='ether2';
+  $('swap-connection-endpoints').onclick();
+  assert.equal($('connection-host-select-a').value,'h2');
+  assert.equal($('connection-host-select-b').value,'h1');
+  assert.equal(run('connectionHostId(current.layout.nodes[1],0)'), 'h2');
+  assert.equal($('connection-interface-a').value,'ether2');
+});
+
+
+test('reopening a mapped group connection restores both saved hosts and their interfaces', async () => {
+  const {$,context,run}=groupedConnectionSetup();
+  run("link.connection={id:'saved',name:'Enlace',hostA:'h1',hostB:'h2',interfaceA:'ether1',interfaceB:'ether2'}; link.mappedConnectionId='saved'; prepareConnectionHosts(true)");
+  assert.equal($('connection-host-select-a').value,'h1');
+  assert.equal($('connection-host-select-b').value,'h2');
+  $('link-category').value='mapped';
+  context.connectionRequest=async()=>[{name:'ether1'},{name:'ether2'}];
+  await run('loadConnectionInterfaces()');
+  assert.equal($('connection-interface-a').value,'ether1');
+  assert.equal($('connection-interface-b').value,'ether2');
+  $('connection-host-select-a').value='outside';
+  assert.equal(run('connectionHostId(current.layout.nodes[0],0)'),null);
+});
+
+test('map dialog loads shared picker positioning for viewport-based popovers', () => {
+  const path = require('node:path');
+  const template = fs.readFileSync(path.join(__dirname, '../../main/resources/templates/maps.html'), 'utf8');
+  const shared = fs.readFileSync(path.join(__dirname, '../../main/resources/templates/design-system.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../../main/resources/static/multi-picker.css'), 'utf8');
+  assert.match(template, /th:replace="~\{design-system :: picker\}"/);
+  assert.match(shared, /th:fragment="picker"[^>]+href="\/multi-picker\.css\?/);
+  assert.match(css, /\.group-picker-panel\[popover\]\s*\{[^}]*position:\s*fixed;[^}]*margin:\s*0;/);
 });

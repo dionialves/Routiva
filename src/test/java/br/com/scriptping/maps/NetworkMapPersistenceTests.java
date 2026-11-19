@@ -40,6 +40,51 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
+    void mappedGroupsRequireHostsThatBelongToEachEndpointGroup(
+            @Autowired br.com.scriptping.zabbix.ZabbixService inventory) throws Exception {
+        var hostA = new br.com.scriptping.zabbix.Host("ha", "Host A", "10.0.0.1",
+            List.of(new br.com.scriptping.zabbix.Host.Group("ga", "Grupo A")));
+        var hostB = new br.com.scriptping.zabbix.Host("hb", "Host B", "10.0.0.2",
+            List.of(new br.com.scriptping.zabbix.Host.Group("gb", "Grupo B")));
+        org.mockito.Mockito.when(inventory.hosts()).thenReturn(List.of(hostA, hostB));
+        try {
+            var a = new Node("a", "ga", null, null, "A", 0, 0, null, "telecom-site", List.of());
+            var b = new Node("b", "gb", null, null, "B", 100, 0, null, "circle", List.of());
+            var connection = new Connection("c", "Enlace", "ha", "ether1", "hb", "ether2");
+            var link = new Link("a", "b", null, null, "straight", List.of(), "straight", "c", connection);
+            var saved = service.save(new Saved(null, 0,
+                new Layout("Grupos", null, 0, List.of(a, b), List.of(link)), null));
+            assertThat(service.maps().stream().filter(map -> map.id().equals(saved.id())).findFirst().orElseThrow()
+                .layout().links().getFirst().connection()).isEqualTo(connection);
+            var directHost = new Node("b", null, "hb", null, "B", 100, 0, null);
+            service.save(new Saved(null, 0,
+                new Layout("Grupo e host", null, 0, List.of(a, directHost), List.of(link)), null));
+            var wrongGroup = new Node("b", "ga", null, null, "B", 100, 0, null);
+            assertThatThrownBy(() -> service.save(new Saved(null, 0,
+                new Layout("Inválido", null, 0, List.of(a, wrongGroup), List.of(link)), null)))
+                .isInstanceOf(ResponseStatusException.class);
+        } finally {
+            org.mockito.Mockito.reset(inventory);
+        }
+    }
+
+    @Test
+    void telecomSiteRequiresGroupBindingAndPersistsItsIcon() throws Exception {
+        var node = new Node("site", "g1", null, null, "POP", 10, 20, null, "telecom-site", List.of());
+        var saved = service.save(new Saved(null, 0,
+            new Layout("Estação", null, 0, List.of(node), List.of()), null));
+        assertThat(service.maps().stream().filter(map -> map.id().equals(saved.id())).findFirst().orElseThrow()
+            .layout().nodes().getFirst().icon()).isEqualTo("telecom-site");
+        for (var invalid : List.of(
+            new Node("site", null, null, null, "POP", 0, 0, null, "telecom-site", List.of()),
+            new Node("site", null, "host-a", null, "POP", 0, 0, null, "telecom-site", List.of()))) {
+            assertThatThrownBy(() -> service.save(new Saved(null, 0,
+                new Layout("Inválido", null, 0, List.of(invalid), List.of()), null)))
+                .isInstanceOf(ResponseStatusException.class);
+        }
+    }
+
+    @Test
     void persistsEquipmentTransformsAndDefaultsForOldMaps() throws Exception {
         var node = new Node("rotated", null, "host-a", null, "Rádio", 20, 30, null,
             "radio", List.of(), List.of(), false, null, null, 135.0, 1.5, true, new Origin(5, 10, 1.0));

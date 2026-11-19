@@ -213,8 +213,9 @@ const MapSwitch = (() => {
       y: x * Math.sin(angle) + y * Math.cos(angle)};
   }
   function bounds(node) {
-    const shape = geometry(node.interfacesEnabled === false ? {...node, ports: []} : node);
-    const top = node.icon === 'radio' ? -90 : -55;
+    const shape = node.icon === 'telecom-site' ? {width: 112, height: 106}
+      : geometry(node.interfacesEnabled === false ? {...node, ports: []} : node);
+    const top = node.icon === 'telecom-site' ? -53 : node.icon === 'radio' ? -90 : -55;
     const corners = [-shape.width / 2, shape.width / 2].flatMap(x =>
       [top, top + shape.height].map(y => transformPoint(node, x, y)));
     return {left: Math.min(...corners.map(p => p.x)), right: Math.max(...corners.map(p => p.x)),

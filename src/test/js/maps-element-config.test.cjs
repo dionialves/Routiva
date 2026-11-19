@@ -173,3 +173,69 @@ test('discovery distinguishes a browser port assembly error from an SSH failure'
   assert.match($('interface-load-status').textContent, /recebidas.*navegador/);
   assert.equal(context.configuredSlots.length, 1);
 });
+
+test('telecom site is available exclusively for host groups and resets when the binding changes', () => {
+  const {$, run} = setup();
+  const template = fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/templates/maps.html'), 'utf8');
+  const option = template.match(/<option value="telecom-site" data-bindings="([^"]+)"/);
+  assert.ok(option);
+  $('element-icon').options.push({value: 'telecom-site', dataset: {bindings: option[1]}});
+  $('type').value = 'group';
+  $('element-icon').value = 'telecom-site';
+  run('syncElementIcons()');
+  assert.equal($('element-icon').value, 'telecom-site');
+  assert.equal($('element-icon').options.at(-1).hidden, false);
+  for (const binding of ['host', '']) {
+    $('type').value = binding;
+    $('element-icon').value = 'telecom-site';
+    run('syncElementIcons()');
+    assert.equal($('element-icon').options.at(-1).disabled, true);
+    assert.notEqual($('element-icon').value, 'telecom-site');
+  }
+});
+
+test('telecom site transforms artwork while keeping its label horizontal', () => {
+  const svg = (tag, attributes) => ({tag, attributes, children: [], append(...items) {this.children.push(...items);}});
+  const group = svg('g', {});
+  const context = vm.createContext({svg, MapSwitch, group, editing: false});
+  vm.runInContext(source.slice(source.indexOf('function drawTelecomSite('), source.indexOf('function alignDraggedNode(')), context);
+  vm.runInContext("drawTelecomSite(group, 'POP', 'BELOW', 'green', false, {scale: 2, rotation: 90, flipX: true})", context);
+  assert.equal(group.children[0].attributes.transform, 'rotate(90) scale(-2 2)');
+  assert.equal(group.children[0].children[0].tag, 'image');
+  assert.equal(group.children[1].tag, 'text');
+  assert.equal(group.children[1].textContent, 'POP');
+  assert.ok(Math.abs(group.children[1].attributes.y - 129) < 1e-9);
+});
+
+
+test('telecom site hides the status dot during editing and preserves it in viewing mode', () => {
+  const svg = (tag, attributes) => ({tag, attributes, children: [], append(...items) {this.children.push(...items);}});
+  const context = vm.createContext({svg, MapSwitch, editing: true});
+  vm.runInContext(source.slice(source.indexOf('function drawTelecomSite('), source.indexOf('function alignDraggedNode(')), context);
+  for (const editing of [true, false]) {
+    context.editing = editing;
+    context.group = svg('g', {});
+    vm.runInContext("drawTelecomSite(group, 'POP', 'BELOW', 'green')", context);
+    assert.equal(context.group.children[0].children.some(child => child.tag === 'circle'), !editing);
+  }
+});
+
+
+test('group binding hides and disables interface controls without discarding the draft', () => {
+  const {$, context, run} = setup();
+  vm.runInContext(source.slice(source.indexOf('function syncInterfaceControls('), source.indexOf('function drawPreview(')), context);
+  $('interfaces-enabled').checked = true;
+  $('type').value = 'group';
+  assert.equal(run('syncInterfaceControls()'), false);
+  assert.equal($('element-interface-toggle').hidden, true);
+  assert.equal($('interfaces-enabled').disabled, true);
+  assert.equal($('switch-config').hidden, true);
+  assert.equal($('switch-config').disabled, true);
+  for (const binding of ['host', '']) {
+    $('type').value = binding;
+    assert.equal(run('syncInterfaceControls()'), true);
+    assert.equal($('element-interface-toggle').hidden, false);
+    assert.equal($('interfaces-enabled').disabled, false);
+    assert.equal($('switch-config').hidden, false);
+  }
+});

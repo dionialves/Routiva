@@ -35,3 +35,9 @@
 
 /* Keep checklist rows horizontal inside shared settings/form dialogs. */
 .form-dialog .incident-picker .incident-picker-options label { display:flex; flex-direction:row; }
+
+/* Dialog pickers use viewport coordinates in the browser top layer. */
+.group-picker-panel[popover] {
+  position:fixed; inset:auto; margin:0; min-width:0; box-sizing:border-box;
+  overflow:auto; color:var(--text);
+}

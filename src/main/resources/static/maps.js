@@ -192,6 +192,25 @@ function drawNode(group, name, position, fill, isSelected = false) {
     'stroke-width':3}), label);
 }
 
+function drawTelecomSite(group, name, position, fill, isSelected = false, node = {}) {
+  const outer = group;
+  group = svg('g', {transform: `rotate(${node.rotation || 0}) scale(${(node.flipX ? -1 : 1) * (node.scale || 1)} ${node.scale || 1})`});
+  outer.append(group);
+  group.append(svg('image', {href: '/map-assets/telecom-site.png',
+    x: -96, y: -64, width: 192, height: 128}));
+  if (isSelected) group.append(svg('rect', {x: -56, y: -53, width: 110, height: 104,
+    rx: 6, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2}));
+  if (!editing) group.append(svg('circle', {cx: 0, cy: 48, r: 5, fill, stroke: 'var(--panel-bg)', 'stroke-width': 2}));
+  const box = MapSwitch.bounds({...node, icon: 'telecom-site'});
+  const positions = {ABOVE: {x: 0, y: box.top - 8, 'text-anchor': 'middle'},
+    BELOW: {x: 0, y: box.bottom + 17, 'text-anchor': 'middle'},
+    LEFT: {x: box.left - 9, y: 0, 'text-anchor': 'end'},
+    RIGHT: {x: box.right + 9, y: 0, 'text-anchor': 'start'}};
+  const label = svg('text', positions[position] || positions.BELOW);
+  label.textContent = name;
+  outer.append(label);
+}
+
 function alignDraggedNode(node, x, y, nodes, scale) {
   const peers = nodes.filter(other => other.id !== node.id);
   const tolerance = 6 / scale;
@@ -251,7 +270,8 @@ function draw() {
     if (!a || !b) continue;
     const start = MapSwitch.endpoint(a, link.fromPort), end = MapSwitch.endpoint(b, link.toPort);
     const d = MapLinks.path(link, start, end);
-    const line = svg('path', {d, class: 'map-connector'});
+    const wireless = MapTraffic.isWireless(link, nodes);
+    const line = svg('path', {d, class: 'map-connector' + (wireless ? ' map-connector-wireless' : '')});
     if (editing && tool === 'select') {
       line.onpointerdown = event => {
         if (event.button !== 0) return;
@@ -314,7 +334,7 @@ function draw() {
     if (link.mappedConnectionId && !editing) {
       const layer = svg('g', {class: 'map-traffic', 'aria-hidden': 'true'});
       connectors.append(layer);
-      layer.trafficContext = {line, link, route: MapLinks.points(link, start, end), nodes};
+      layer.trafficContext = {line, link, wireless, route: MapLinks.points(link, start, end), nodes};
       updateTrafficLayer(layer);
     }
   }
@@ -336,7 +356,7 @@ function draw() {
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
       onPort: portId => connectEndpoint(n, portId)
     });
-    else drawNode(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id);
+    else (n.icon === 'telecom-site' ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n, event.shiftKey || event.ctrlKey || event.metaKey); }
     };
@@ -413,7 +433,7 @@ function draw() {
   if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
   if (editing && tool === 'select' && selection.size === 1) {
     const node = nodes.find(n => selection.has(n.id));
-    if (node && ['switch', 'radio'].includes(node.icon)) drawTransformHandles(canvas, node);
+    if (node && ['switch', 'radio', 'telecom-site'].includes(node.icon)) drawTransformHandles(canvas, node);
   }
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
@@ -1077,6 +1097,44 @@ function connectionEndpointLabel(link, from) {
   return `${type}: ${binding?.name || node.name}${id ? ' (ID: ' + id + ')' : ''}`
     + (port ? ' · ' + port.label : '');
 }
+function connectionHostId(node, index) {
+  if (node?.hostId) return node.hostId;
+  const id = $('connection-host-select-' + (index ? 'b' : 'a')).value;
+  return node?.groupId && inventory.some(host => host.id === id && host.groups?.some(group => group.id === node.groupId)) ? id : null;
+}
+function prepareConnectionHosts(reset = false) {
+  const draft = linkEndpointDraft();
+  if (!draft) return;
+  const existing = pendingLink.connection;
+  ['from', 'to'].forEach((side, index) => {
+    const suffix = index ? 'b' : 'a';
+    const node = current.layout.nodes.find(n => n.id === draft[side]);
+    const select = $('connection-host-select-' + suffix);
+    $('connection-host-field-' + suffix).hidden = !node?.groupId;
+    const candidates = inventory.filter(host => host.groups?.some(group => group.id === node?.groupId));
+    const savedHost = existing && (draft[side] === pendingLink.from ? existing.hostA : existing.hostB);
+    const previous = reset ? savedHost : select.value;
+    select.replaceChildren(new Option('Selecione o host do grupo', ''), ...candidates.map(host => new Option(host.name + (host.ip ? ' · ' + host.ip : ''), host.id)));
+    select.value = candidates.some(host => host.id === previous) ? previous : '';
+    connectionHostPickers[suffix]?.sync();
+  });
+}
+const connectionHostPickers = {};
+for (const suffix of ['a', 'b']) {
+  const select = $('connection-host-select-' + suffix);
+  connectionHostPickers[suffix] = window.setupGroupPicker?.(select, 'connection-host-label-' + suffix, 'Pesquisar host do grupo', {listLabel: 'Hosts do grupo', emptyText: 'Nenhum host encontrado.'});
+  select.onchange = () => {
+    ++interfaceLoad;
+    $('connection-retry').removeAttribute('aria-busy');
+    for (const side of ['a', 'b']) {
+      $('connection-interface-' + side).replaceChildren();
+      $('connection-interface-' + side).disabled = true;
+    }
+    $('connection-message').textContent = 'Clique em Carregar interfaces para consultar os hosts selecionados.';
+    updateLinkEndpoints();
+  };
+}
+
 let linkEndpointsReversed = false;
 function linkEndpointDraft() {
   if (!linkEndpointsReversed || !pendingLink) return pendingLink;
@@ -1090,7 +1148,13 @@ function swapLinkEndpoints() {
   const valueA = a.value, valueB = b.value;
   a.replaceChildren(...optionsB); b.replaceChildren(...optionsA);
   a.value = valueB; b.value = valueA;
+  const hostA = $('connection-host-select-a'), hostB = $('connection-host-select-b');
+  const hostOptionsA = [...hostA.options], hostOptionsB = [...hostB.options];
+  const selectedHostA = hostA.value, selectedHostB = hostB.value;
+  hostA.replaceChildren(...hostOptionsB); hostB.replaceChildren(...hostOptionsA);
+  hostA.value = selectedHostB; hostB.value = selectedHostA;
   linkEndpointsReversed = !linkEndpointsReversed;
+  prepareConnectionHosts();
   updateLinkEndpoints();
 }
 $('swap-connection-endpoints').onclick = swapLinkEndpoints;
@@ -1107,7 +1171,8 @@ function updateLinkEndpoints() {
       : node?.groupId ? groups.find(group => group.id === node.groupId) : null;
     const name = binding?.name || node?.name || 'Equipamento indisponível';
     const id = node?.hostId || node?.groupId;
-    const identity = name + (id ? ' · ID ' + id : '');
+    const selectedHost = node?.groupId && inventory.find(host => host.id === connectionHostId(node, index));
+    const identity = name + (id ? ' · ID ' + id : '') + (selectedHost ? ' · Host: ' + selectedHost.name : '');
     $('link-' + side).value = name;
     $('link-' + side).title = name;
     const interfaceName = (mapped ? selectedInterface : port?.name) || 'Interface não selecionada';
@@ -1137,6 +1202,8 @@ function openLinkDialog(link) {
   draw(); drawLinkPreview();
   $('link-dialog').showModal();
   $('link-category').value = link.mappedConnectionId ? 'mapped' : 'simple';
+  prepareConnectionHosts(true);
+  $('connection-name').value = link.connection?.name || [link.from, link.to].map(id => current.layout.nodes.find(node => node.id === id)?.name || '').join(' ↔ ');
   loadConnectionInterfaces();
   updateLinkEndpoints();
   $('delete-link').hidden = !current.layout.links.includes(link);
@@ -1162,14 +1229,16 @@ $('link-form').onsubmit = async event => {
   if ($('link-category').value === 'mapped') {
     try {
       const [a, b] = connectionNodes(linkEndpointDraft());
-      if (!a?.hostId || !b?.hostId) throw new Error('Selecione dois elementos vinculados a hosts.');
+      const hostA = connectionHostId(a, 0), hostB = connectionHostId(b, 1);
+      if (!hostA || !hostB) throw new Error('Selecione um host em cada lado da conexão.');
+      if (hostA === hostB) throw new Error('Selecione hosts diferentes para os lados A e B.');
       const name = $('connection-name').value.trim();
       const interfaceA = $('connection-interface-a').value, interfaceB = $('connection-interface-b').value;
       if (!name || !interfaceA || !interfaceB) throw new Error('Preencha o nome e as duas interfaces.');
       const existing = connectionDefinitions.find(c => c.id === target.mappedConnectionId);
-      if (!existing || existing.name !== name || existing.interfaceA !== interfaceA || existing.interfaceB !== interfaceB || existing.hostA !== a.hostId || existing.hostB !== b.hostId) {
+      if (!existing || existing.name !== name || existing.interfaceA !== interfaceA || existing.interfaceB !== interfaceB || existing.hostA !== hostA || existing.hostB !== hostB) {
         savingConnection = true;
-        const saved = await connectionRequest('/api/maps/connections/validate', {name, hostA:a.hostId, hostB:b.hostId, interfaceA, interfaceB});
+        const saved = await connectionRequest('/api/maps/connections/validate', {name, hostA, hostB, interfaceA, interfaceB});
         if (pendingLink !== target || !current.layout.links.includes(target)) return;
         mappedConnectionId = saved.id; connection = saved;
       }
@@ -1351,6 +1420,15 @@ function connectEndpoint(node, portId) {
   setTool('select');
   draw();
 }
+function syncInterfaceControls() {
+  const isGroup = $('type').value === 'group';
+  $('element-interface-toggle').hidden = isGroup;
+  $('interfaces-enabled').disabled = isGroup;
+  const enabled = !isGroup && $('interfaces-enabled').checked;
+  $('switch-config').hidden = !enabled;
+  $('switch-config').disabled = !enabled;
+  return enabled;
+}
 function drawPreview() {
   const preview = $('node-preview');
   const group = svg('g', {});
@@ -1362,11 +1440,9 @@ function drawPreview() {
   $('element-color-note').hidden = isSwitch;
   $('switch-color-field').hidden = !isSwitch || isRadio;
   $('reset-switch-color').disabled = !configuredSwitchColor;
-  const interfacesEnabled = $('interfaces-enabled').checked;
+  const interfacesEnabled = syncInterfaceControls();
   $('load-switch-interfaces').hidden = !isSwitch || $('type').value !== 'host';
   $('load-switch-interfaces').disabled = loadingInterfaces || !$('group').value;
-  $('switch-config').hidden = !interfacesEnabled;
-  $('switch-config').disabled = !interfacesEnabled;
   $('add-switch-slot').disabled = isRadio && configuredSlots.reduce((sum, slot) => sum + slot.count, 0) >= 4;
   const ports = switchDraft();
   $('port-error').textContent = interfacesEnabled && !ports ? (isRadio ? 'O rádio permite no máximo 4 interfaces. Remova ou ajuste os slots excedentes.' : 'Preencha o nome e a capacidade de cada slot e informe de 1 a 96 portas por slot.') : '';
@@ -1377,11 +1453,11 @@ function drawPreview() {
   if (isSwitch) MapSwitch.draw(svg, group, {...transformState(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon, name, labelPosition: $('label-position').value,
     ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
     {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
-  else drawNode(group, name, $('label-position').value, color);
+  else (icon === 'telecom-site' ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, current.layout.nodes.find(n => n.id === configuredNodeId) || {});
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
   preview.setAttribute('viewBox', [box.x + (box.width-w)/2, box.y + (box.height-h)/2, w, h].join(' '));
-  preview.setAttribute('aria-label', (isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
+  preview.setAttribute('aria-label', (icon === 'telecom-site' ? 'Estação de telecomunicações' : isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
 }
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {
@@ -1604,16 +1680,18 @@ async function loadConnectionInterfaces() {
   $('connection-message').textContent = '';
   try {
     const nodes = connectionNodes(draft);
-    if (nodes.some(n => !n?.hostId)) throw new Error('Conexões mapeadas exigem dois elementos vinculados a hosts.');
+    prepareConnectionHosts();
+    const hostIds = nodes.map(connectionHostId);
+    if (hostIds.some(id => !id)) throw new Error('Selecione o host de cada grupo e clique em Carregar interfaces.');
+    if (hostIds[0] === hostIds[1]) throw new Error('Selecione hosts diferentes para os lados A e B.');
     connectionDefinitions = current.layout.links.map(link => link.connection).filter(Boolean);
     const existing = connectionDefinitions.find(c => c.id === link.mappedConnectionId);
-    $('connection-name').value = existing?.name || nodes.map(n => n.name).join(' ↔ ');
-    const interfaces = await Promise.all(nodes.map(n => connectionRequest('/api/maps/connections/interfaces/' + encodeURIComponent(n.hostId))));
+    const interfaces = await Promise.all(hostIds.map(id => connectionRequest('/api/maps/connections/interfaces/' + encodeURIComponent(id))));
     if (sequence !== interfaceLoad || pendingLink !== link) return;
     interfaces.forEach((rows, i) => {
       controls[i].append(new Option('Selecione a interface', ''));
       rows.forEach(row => controls[i].append(new Option(row.comment?.trim() ? row.name + ' - ' + row.comment.trim() : row.name, row.name)));
-      controls[i].value = (existing && (nodes[i].hostId === existing.hostA ? existing.interfaceA : existing.interfaceB)) || '';
+      controls[i].value = (existing && (hostIds[i] === existing.hostA ? existing.interfaceA : hostIds[i] === existing.hostB ? existing.interfaceB : '')) || '';
       controls[i].disabled = false;
     });
     updateLinkEndpoints();
@@ -1634,7 +1712,7 @@ function updateTrafficLayer(layer) {
   const from = nodes.find(n => n.id === link.from);
   const reference = connectionReadings.get(link.mappedConnectionId)?.hostA || definition?.hostA;
   MapTraffic.render(svg, layer, line, route, nodes, connectionReadings.get(link.mappedConnectionId),
-    $('traffic-animation').checked, Boolean(reference && reference !== from?.hostId),
+    $('traffic-animation').checked, Boolean(reference && reference !== (from?.hostId || definition?.hostA)),
     connectionDisplayTime(link.mappedConnectionId));
 }
 try { $('traffic-animation').checked = localStorage.getItem('map-traffic-animation') !== 'false'; } catch {}

@@ -5,7 +5,8 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261119-selection-frame"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261119-selection-frame" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261118-pulse-motion" defer></script><script src="/map-connection-tooltip.js?v=20261118" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/maps.js?v=20261119-reset-orientation" defer></script>
+  <th:block th:replace="~{design-system :: picker}"></th:block>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261119-traffic-hover"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261119-standard-chevron" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261119-site-controls" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261119-traffic-hover" defer></script><script src="/map-connection-tooltip.js?v=20261118" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/maps.js?v=20261119-wireless" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
@@ -163,9 +164,13 @@
             <p class="link-section-description">Selecione as interfaces utilizadas nesta conexão. Direção principal do tráfego: A → B.</p>
             <div class="link-name-row"><label>Nome<input id="connection-name" maxlength="120"></label><button type="button" id="connection-retry" class="system-button"><svg th:replace="~{shell :: icon('refresh')}"></svg>Carregar interfaces</button></div>
             <div class="link-interface-grid">
-              <label class="link-interface-field">Interface A<small id="connection-host-a"></small><select id="connection-interface-a"></select></label>
+              <div class="link-interface-field"><span>Interface A</span><small id="connection-host-a"></small>
+                <div id="connection-host-field-a" hidden><label id="connection-host-label-a" for="connection-host-select-a">Host do grupo</label><select id="connection-host-select-a"></select></div>
+                <label class="sr-only" for="connection-interface-a">Interface A</label><select id="connection-interface-a"></select></div>
               <button type="button" id="swap-connection-endpoints" class="system-button system-button-icon-only" aria-label="Trocar lados A e B" title="Trocar lados A e B — direção principal A → B"><svg th:replace="~{shell :: icon('arrows-left-right')}"></svg></button>
-              <label class="link-interface-field">Interface B<small id="connection-host-b"></small><select id="connection-interface-b"></select></label>
+              <div class="link-interface-field"><span>Interface B</span><small id="connection-host-b"></small>
+                <div id="connection-host-field-b" hidden><label id="connection-host-label-b" for="connection-host-select-b">Host do grupo</label><select id="connection-host-select-b"></select></div>
+                <label class="sr-only" for="connection-interface-b">Interface B</label><select id="connection-interface-b"></select></div>
             </div>
             <p id="connection-message" role="status" aria-live="polite"></p>
           </div>
@@ -200,6 +205,7 @@
           <div class="element-icon-row">
           <label><span class="sr-only">Ícone</span><select id="element-icon" aria-label="Ícone do elemento">
             <option value="circle" data-bindings="group free" data-shape="circle" data-description="Representação simples.">Círculo</option>
+            <option value="telecom-site" data-bindings="group" data-image="/map-assets/telecom-site.png" data-description="Estação de telecomunicações exclusiva para Grupo de Hosts.">Estação de telecomunicações</option>
             <option value="switch" data-bindings="host free" data-image="/map-assets/switch.svg?v=20261117-ping-led" data-description="Equipamento com representação de interfaces.">Switch</option>
             <option value="radio" data-bindings="host" data-image="/map-assets/radio.svg?v=20261119-wireless-tip" data-description="Rádio com LED de ping e até 4 interfaces, sendo uma Wireless.">Rádio</option>
           </select></label>
@@ -211,7 +217,7 @@
             </div>
           </div>
           </div>
-          <div class="element-interface-toggle">
+          <div id="element-interface-toggle" class="element-interface-toggle">
             <div><label for="interfaces-enabled">Habilitar interfaces</label><p id="interfaces-enabled-description">Permite configurar slots e portas do elemento.</p></div>
             <input id="interfaces-enabled" type="checkbox" role="switch" class="system-switch" aria-describedby="interfaces-enabled-description" aria-controls="switch-config">
           </div>

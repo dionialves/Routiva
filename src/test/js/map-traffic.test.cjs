@@ -49,19 +49,14 @@ test('pulses follow real geometry, preserve phase across metrics and respect dir
   traffic.render(element, layer, path, route, [], {a:{...a, txBps:90}}, true);
   assert.equal(layer.trafficPulses, pulses);
   assert.equal(path.attrs['--traffic-color'], '#EF4444');
-  assert.equal(layer.trafficLabel.children[0].textContent, 'Download');
-  assert.equal(layer.trafficLabel.children[1].textContent, ': 0,00 Mbps');
-  assert.equal(layer.trafficLabel.children[2].textContent, 'Upload');
-  assert.equal(layer.trafficLabel.children[1].attrs.x, layer.trafficLabel.children[3].attrs.x);
-  assert.equal(layer.trafficLabel.children[0].attrs['text-anchor'], 'end');
-  assert.equal(layer.trafficLabel.children[2].attrs['text-anchor'], 'end');
+  assert.equal(layer.children.some(child => child.tag === 'text'), false);
   traffic.render(element, layer, path, route, [], {a}, false);
   assert.equal(layer.trafficPulses, pulses);
   assert.equal(pulses.attrs.visibility, 'hidden');
   traffic.render(element, layer, path, route, [], {a}, true, true);
   assert.ok(layer.trafficPulses.children.every(n => n.attrs.style.includes('animation-direction:reverse')));
   traffic.render(element, layer, path, route, [], {a:{...a, txBps:0, rxBps:80}}, true, true);
-  assert.equal(layer.trafficPulses.attrs.visibility, 'hidden');
+  assert.equal(layer.trafficPulses.attrs.visibility, 'visible');
 });
 
 test('a failed collection preserves DOWN and never animates presumed traffic', () => {
@@ -90,5 +85,74 @@ test('different lengths retain the same path speed without crowding short links'
     const duration = Number(style.match(/animation-duration:([^s]+)/)[1]);
     assert.ok(Math.abs(period / duration - 55) < 0.0001);
     assert.equal(Math.round(length / period), traffic.count(length));
+  }
+});
+
+
+test('wireless classification requires both connected ports, independent of the equipment icon', () => {
+  const nodes = [{id:'a', ports:[{id:'w', connector:'wireless'}, {id:'e', connector:'electrical'}]},
+    {id:'b', ports:[{id:'w', type:'wireless'}]}];
+  const link = {from:'a', to:'b', fromPort:'w', toPort:'w'};
+  assert.equal(traffic.isWireless(link, nodes), true);
+  assert.equal(traffic.isWireless({...link, fromPort:'e'}, nodes), false);
+  assert.equal(traffic.isWireless({...link, toPort:null}, nodes), false);
+});
+test('wireless uses masked capsules only from A to B and preserves phase on updates', () => {
+  const svg = (tag, attributes) => {
+    assert.doesNotThrow(() => Object.entries(attributes));
+    return element(tag, attributes);
+  };
+  const layer = element('g'); layer.parentNode = element('g');
+  layer.trafficContext = {wireless:true, link:{}};
+  const path = element('path', {d:'M 0 0 L 300 100'});
+  const route = [{x:0,y:0},{x:300,y:100}];
+  const a = {up:true, measuredAt:Date.now(), txBps:90, rxBps:10, capacityBps:100};
+  traffic.render(svg, layer, path, route, [], {a}, true);
+  const pulses = layer.trafficPulses;
+  assert.match(pulses.attrs.mask, /^url/);
+  assert.equal(pulses.children.length, 1);
+  assert.equal(pulses.children[0].children.length, 3);
+  assert.match(pulses.children[0].children[0].attrs.style, /animation-direction:normal/);
+  assert.equal(layer.attrs['--wireless-pulse-color'], '#EF4444');
+  traffic.render(svg, layer, path, route, [], {a:{...a, txBps:0}}, true);
+  assert.equal(layer.trafficPulses, pulses);
+  assert.equal(pulses.attrs.visibility, 'visible');
+  assert.equal(layer.children.some(child => child.tag === 'text'), false);
+  traffic.render(svg, layer, path, route, [], {a}, true, true);
+  assert.match(layer.trafficPulses.children[0].children[0].attrs.style, /animation-direction:reverse/);
+  traffic.render(svg, layer, path, route, [], {a}, false);
+  assert.equal(layer.trafficPulses.attrs.visibility, 'hidden');
+});
+
+
+test('radio links to host groups are wireless in either direction, preserving Ethernet links', () => {
+  const nodes = [{id:'radio', icon:'radio', ports:[
+    {id:'w', connector:'wireless'}, {id:'e', connector:'electrical'}]},
+    {id:'group', groupId:'42', icon:'telecom-site'}, {id:'host', hostId:'17'}];
+  const link = {from:'radio', to:'group', fromPort:'w'};
+  assert.equal(traffic.isWireless(link, nodes), true);
+  assert.equal(traffic.isWireless({from:'group', to:'radio', toPort:'w'}, nodes), true);
+  assert.equal(traffic.isWireless({...link, fromPort:null}, nodes), true);
+  assert.equal(traffic.isWireless({...link, fromPort:'e'}, nodes), false);
+  assert.equal(traffic.isWireless({...link, to:'missing'}, nodes), false);
+  assert.equal(traffic.isWireless({...link, to:'host'}, nodes), false);
+});
+
+
+test('links default to green and use the configured source port capacity for utilization', () => {
+  for (const wireless of [false, true]) {
+    const layer = element('g');
+    layer.trafficContext = {wireless, link:{from:'a', fromPort:'w'}};
+    const path = element('path', {d:'M 0 0 L 300 0'});
+    const route = [{x:0,y:0},{x:300,y:0}];
+    const nodes = [{id:'a', ports:[{id:'w', capacity:'1g'}]}];
+    traffic.render(element, layer, path, route, nodes, undefined, true);
+    assert.equal(path.attrs['--traffic-color'], '#22C55E');
+    for (const [txBps, color] of [[100e6, '#22C55E'], [700e6, '#EAB308'], [900e6, '#EF4444']]) {
+      traffic.render(element, layer, path, route, nodes,
+        {a:{up:true, measuredAt:Date.now(), txBps}}, true);
+      assert.equal(path.attrs['--traffic-color'], color);
+      assert.equal(layer.children.some(child => child.tag === 'text'), false);
+    }
   }
 });

@@ -170,3 +170,14 @@ test('a request completing while hidden does not replace the visible snapshot', 
   await pending;
   assert.equal(run("connectionReadings.get('c1').marker"), 'visible');
 });
+
+
+test('mapped traffic from a group keeps the persisted A to B direction', () => {
+  const {context,run}=setup();
+  let reversed;
+  context.svg=()=>({});
+  context.MapTraffic={render(...args){reversed=args[7];}};
+  context.layer={trafficContext:{link:{from:'group',mappedConnectionId:'c'},nodes:[{id:'group',groupId:'g'}]}};
+  run("connectionDefinitions=[{id:'c',hostA:'member',hostB:'other'}];connectionReadings.set('c',{hostA:'member'});updateTrafficLayer(layer)");
+  assert.equal(reversed,false);
+});

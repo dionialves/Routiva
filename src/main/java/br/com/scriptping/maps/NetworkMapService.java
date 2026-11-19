@@ -39,6 +39,14 @@ public class NetworkMapService {
         }).toList();
     }
 
+    private boolean connectionHostMatches(Node node, String hostId) {
+        if (hostId == null || hostId.isBlank()) return false;
+        if (node.hostId() != null) return Objects.equals(node.hostId(), hostId);
+        return node.groupId() != null && inventory.hosts().stream()
+            .anyMatch(host -> hostId.equals(host.id()) && host.groups().stream()
+                .anyMatch(group -> node.groupId().equals(group.id())));
+    }
+
     public List<Host> inventoryHosts() { return inventory.hosts(); }
 
     public List<Host.Group> groups() {
@@ -111,7 +119,9 @@ public class NetworkMapService {
         validateHierarchy(input, hierarchy);
         var nodes = layout.nodes().stream().collect(java.util.stream.Collectors.toMap(Node::id, n -> n));
         for (var node : layout.nodes()) {
-            if (!Set.of("circle", "switch", "radio").contains(node.icon())) throw invalid();
+            if (!Set.of("circle", "switch", "radio", "telecom-site").contains(node.icon())) throw invalid();
+            if ("telecom-site".equals(node.icon()) && (node.groupId() == null || node.groupId().isBlank()
+                || (node.hostId() != null && !node.hostId().isBlank()))) throw invalid();
             if ("radio".equals(node.icon()) && (node.hostId() == null || node.hostId().isBlank()
                 || node.ports().size() > 4 || node.slots().stream().anyMatch(java.util.Objects::isNull)
                 || node.slots().stream().mapToLong(Slot::count).sum() > 4)) throw invalid();
@@ -167,8 +177,8 @@ public class NetworkMapService {
                     || c.interfaceA() == null || c.interfaceA().isBlank() || c.interfaceA().length() > 128
                     || c.interfaceB() == null || c.interfaceB().isBlank() || c.interfaceB().length() > 128
                     || c.hostA() == null || c.hostA().equals(c.hostB())
-                    || !Objects.equals(nodes.get(link.from()).hostId(), c.hostA())
-                    || !Objects.equals(nodes.get(link.to()).hostId(), c.hostB())) throw invalid();
+                    || !connectionHostMatches(nodes.get(link.from()), c.hostA())
+                    || !connectionHostMatches(nodes.get(link.to()), c.hostB())) throw invalid();
             }
             for (var point : link.points()) {
                 if (point == null || !Double.isFinite(point.x()) || !Double.isFinite(point.y())) throw invalid();

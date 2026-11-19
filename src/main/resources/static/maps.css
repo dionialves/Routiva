@@ -14,9 +14,6 @@
 #canvas g { cursor:pointer; }
 #canvas text, #node-preview text { fill:white; font:inherit; }
 #element-title { cursor:move; touch-action:none; user-select:none; }
-#element-dialog .group-picker-panel {
-  position:fixed; inset:auto; margin:0; min-width:0; overflow:auto; color:var(--text);
-}
 #element-dialog .group-picker-results { max-height:22vh; }
 
 #create-dialog { width:min(560px, calc(100vw - 32px)); }
@@ -382,7 +379,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .switch-port:focus { outline: none; }
 #canvas[data-tool="connect"] .switch-port { cursor: crosshair; }
 
-#canvas .map-connector { fill: none; stroke: #8995aa; stroke-width: 3; pointer-events: stroke; }
+#canvas .map-connector { fill: none; stroke: #22C55E; stroke-width: 3; pointer-events: stroke; }
 #canvas .map-connector.selected-link { stroke: var(--focus); }
 #canvas .map-connector[role=button] { cursor: pointer; }
 #canvas[data-tool="connect"] .map-connector { pointer-events: none; }
@@ -411,6 +408,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .element-section-heading h3 { margin:0; font-size:14px; }
 .element-section-heading p { margin:4px 0 0; color:var(--muted); font-size:12px; }
 .element-interface-toggle { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.element-interface-toggle[hidden] { display:none; }
 .element-interface-toggle label { font-weight:600; font-size:13px; }
 .element-interface-toggle p { color:var(--muted); font-size:12px; margin:4px 0 0; }
 #switch-config { min-width:0; margin:0; padding:16px 0 0; border:0; border-top:1px solid var(--border); }
@@ -453,8 +451,6 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #canvas .map-connector.traffic-measured { stroke: var(--traffic-color); }
 #canvas .map-connector.traffic-down { stroke: #EF4444; }
 .map-traffic { pointer-events: none; }
-.traffic-label { font-family: var(--font-family, inherit); font-size: 10px; font-weight: 600; }
-.traffic-label { paint-order: stroke; stroke: var(--panel-bg); stroke-width: 4px; stroke-linejoin: round; }
 .traffic-pulse { animation: traffic-flow 2s linear infinite; }
 @keyframes traffic-flow {
   from { stroke-dashoffset: var(--pulse-from); }
@@ -492,7 +488,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .link-name-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:16px; }
 .link-interface-grid { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; align-items:center; }
 #swap-connection-endpoints { align-self:center; justify-self:center; }
-.link-interface-field { padding:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-bg); }
+.link-interface-field { display:grid; gap:8px; min-width:0; padding:12px; border:1px solid var(--border); border-radius:6px; background:var(--surface-bg); }
 .link-interface-field small { color:var(--muted); font-weight:400; overflow-wrap:anywhere; }
 .link-visual-layout { display:grid; grid-template-columns:minmax(240px, 1fr) minmax(0, 1.7fr); align-items:stretch; }
 .link-visual-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
@@ -601,3 +597,6 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .map-transform-handle.is-active { cursor:grabbing; }
 .map-control-tooltip { position:fixed; z-index:1000; pointer-events:none; padding:5px 8px; border:1px solid var(--border-strong); border-radius:5px; background:var(--panel-bg); color:var(--text); font:12px var(--font-ui); box-shadow:0 2px 6px #0003; }
 @media (prefers-reduced-motion:reduce) { .map-transform-handle circle { transition:none; } }
+
+/* Stationary round dots identify wireless independently of utilization. */
+#canvas .map-connector-wireless { stroke-dasharray: 0 10; stroke-linecap: round; }

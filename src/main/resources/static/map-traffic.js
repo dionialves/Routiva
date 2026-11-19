@@ -2,7 +2,19 @@
 
 const MapTraffic = (() => {
   const operational = new Map();
-  const colors = ['#E8F9FF', '#4DE2A7'];
+  let nextMask = 0;
+  function isWireless(link, nodes) {
+    const endpoints = [['from', 'fromPort'], ['to', 'toPort']].map(([nodeKey, portKey]) => {
+      const node = nodes.find(node => node.id === link[nodeKey]);
+      const port = node?.ports?.find(port => port.id === link[portKey]);
+      return {node, port, wireless: port?.connector === 'wireless' || port?.type === 'wireless',
+        portId: link[portKey]};
+    });
+    if (endpoints.every(endpoint => endpoint.wireless)) return true;
+    return endpoints.some((endpoint, i) => endpoint.node?.icon === 'radio'
+      && (endpoint.wireless || !endpoint.portId) && Boolean(endpoints[1 - i].node?.groupId));
+  }
+
   function number(value) {
     if (value == null || typeof value === 'string' && !value.trim()) return null;
     const n = Number(value);
@@ -31,8 +43,16 @@ const MapTraffic = (() => {
       rx: !down && fresh(a) ? number(a.rxBps) : null, capacity: number(a?.capacityBps)};
   }
   function render(svg, layer, path, route, nodes, reading, enabled, reverse = false, now = Date.now()) {
+    const wireless = Boolean(layer.trafficContext?.wireless);
     const data = state(reading, now);
-    const id = layer.trafficContext?.link.mappedConnectionId || reading?.id;
+    const link = layer.trafficContext?.link;
+    const capacities = { '10m': 1e7, '100m': 1e8, '1g': 1e9, '10g': 1e10,
+      '25g': 25e9, '40g': 40e9, '50g': 50e9, '100g': 100e9,
+      '200g': 200e9, '400g': 400e9, '800g': 800e9 };
+    const source = nodes.find(node => node.id === link?.[reverse ? 'to' : 'from']);
+    const port = source?.ports?.find(port => port.id === link?.[reverse ? 'toPort' : 'fromPort']);
+    data.capacity = capacities[port?.capacity] || data.capacity;
+    const id = link?.mappedConnectionId || reading?.id;
     const previous = operational.get(id) || [null, null];
     [reading?.a, reading?.b].forEach((endpoint, i) => {
       if (endpoint && !endpoint.error && now >= endpoint.measuredAt && now - endpoint.measuredAt <= 30000)
@@ -43,14 +63,13 @@ const MapTraffic = (() => {
     if (data.down) { data.tx = null; data.rx = null; }
     path.classList.toggle('traffic-down', data.down);
     const d = path.getAttribute('d');
-    const color = data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity);
-    path.style?.setProperty('--traffic-color', color || '#8995aa');
+    const color = data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity) || '#22C55E';
+    path.style?.setProperty('--traffic-color', color);
     path.classList.toggle('traffic-measured', Boolean(color));
-    // Geometry owns the animation. Metric updates only change visibility, color and text.
-    const signature = JSON.stringify([d, reverse]);
+    // Geometry owns the animation. Metric updates only change visibility and color.
+    const signature = JSON.stringify([d, reverse, wireless]);
     if (layer.trafficGeometry !== signature) {
       layer.trafficGeometry = signature;
-      layer.trafficLabelSignature = null;
       layer.replaceChildren();
       const length = path.getTotalLength();
       const period = Math.max(1, length / count(length));
@@ -58,7 +77,36 @@ const MapTraffic = (() => {
       const pulses = svg('g', {class: 'traffic-pulses'});
       // Concentric dash lengths form a longitudinal light gradient on the actual path,
       // including curves. All layers share a period and phase, with no moving objects.
-      for (let i = 0; i < 12; i++) {
+      if (wireless) {
+        const maskId = `wireless-pulse-mask-${++nextMask}`;
+        const gradientId = `${maskId}-fade`;
+        const first = route[0], last = route[route.length - 1];
+        const defs = svg('defs', {});
+        const gradient = svg('linearGradient', {id: gradientId, gradientUnits: 'userSpaceOnUse',
+          x1: first.x, y1: first.y, x2: last.x, y2: last.y});
+        for (const [offset, opacity] of [[0, 0], [Math.min(0.2, 12 / Math.max(length, 1)), 1],
+          [1 - Math.min(0.2, 12 / Math.max(length, 1)), 1], [1, 0]])
+          gradient.append(svg('stop', {offset, 'stop-color': 'white', 'stop-opacity': opacity}));
+        const mask = svg('mask', {id: maskId, maskUnits: 'userSpaceOnUse',
+          x: Math.min(...route.map(p => p.x)) - length, y: Math.min(...route.map(p => p.y)) - length,
+          width: length * 3, height: length * 3});
+        mask.append(svg('path', {d, fill: 'none', stroke: `url(#${gradientId})`, 'stroke-width': 24}));
+        defs.append(gradient, mask);
+        layer.append(defs);
+        pulses.setAttribute('mask', `url(#${maskId})`);
+        {
+          const group = svg('g', {});
+          const dash = Math.min(20, period * 0.38);
+          for (const [stroke, thickness, opacity, blur] of [
+            ['var(--wireless-pulse-color)', 10, 0.22, true],
+            ['var(--wireless-pulse-color)', 5, 0.9, false], ['#F0FFF9', 2.5, 1, false]]) {
+            group.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
+              'stroke-linecap': 'round', opacity, 'stroke-dasharray': `${dash} ${period - dash}`,
+              class: 'traffic-pulse', style: `${blur ? 'filter:blur(3px);' : ''}--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
+          }
+          pulses.append(group);
+        }
+      } else for (let i = 0; i < 12; i++) {
         const dash = width * (1 - i / 12);
         pulses.append(svg('path', {d, fill: 'none', stroke: '#F0FCFF',
           'stroke-width': 2.4, 'stroke-linecap': 'butt', opacity: 0.10 + i * 0.012,
@@ -67,56 +115,13 @@ const MapTraffic = (() => {
       }
       layer.append(pulses);
       layer.trafficPulses = pulses;
-      layer.trafficLabel = svg('text', {class: 'traffic-label'});
-      layer.append(layer.trafficLabel);
     }
-    layer.trafficPulses.setAttribute('visibility', enabled && data.tx > 0 ? 'visible' : 'hidden');
-    const labelSignature = JSON.stringify([data, route, nodes]);
-    if (layer.trafficLabelSignature === labelSignature) return;
-    layer.trafficLabelSignature = labelSignature;
-    // Try the longest segments first and avoid equipment and other link labels.
-    const candidates = route.slice(1).map((b, i) => ({a: route[i], b,
-      length: Math.hypot(b.x - route[i].x, b.y - route[i].y)})).sort((a, b) => b.length - a.length);
-    let position;
-    const occupied = [...layer.parentNode.querySelectorAll('.traffic-label')]
-      .filter(label => !layer.contains(label)).map(label => ({x: Number(label.getAttribute('x')), y: Number(label.getAttribute('y'))}));
-    for (const segment of candidates) {
-      for (const fraction of [0.5, 0.35, 0.65]) {
-        const center = {x: segment.a.x + (segment.b.x - segment.a.x) * fraction,
-          y: segment.a.y + (segment.b.y - segment.a.y) * fraction};
-        for (const side of [1, -1]) {
-          const vertical = Math.abs(segment.b.y - segment.a.y) > Math.abs(segment.b.x - segment.a.x);
-          const p = {x: center.x + (vertical ? side > 0 ? 12 : -202 : -95),
-            y: center.y + (vertical ? -7 : side > 0 ? 18 : -28)};
-          position = p;
-          if (!nodes.some(n => p.x < n.x + 75 && p.x + 190 > n.x - 75 && p.y < n.y + 50 && p.y + 25 > n.y - 50)
-            && !occupied.some(n => Math.abs(n.x - p.x) < 190 && Math.abs(n.y - p.y) < 28)) break;
-          position = null;
-        }
-        if (position) break;
-      }
-      if (position) break;
-    }
-    if (!position) position = {x: route[0].x + 12, y: route[0].y + 60};
-    const label = layer.trafficLabel;
-    label.replaceChildren();
-    label.setAttribute('x', position.x);
-    label.setAttribute('y', position.y);
-    if (data.down) {
-      const text = svg('tspan', {x: position.x, y: position.y, fill: 'var(--text)'});
-      text.textContent = 'Enlace indisponível';
-      label.append(text);
-    } else {
-      ['Download', 'Upload'].forEach((name, i) => {
-        const attributes = {x: position.x + 52, y: position.y + i * 13, fill: colors[i]};
-        const caption = svg('tspan', {...attributes, 'text-anchor': 'end'});
-        caption.textContent = name;
-        const value = svg('tspan', {...attributes, 'text-anchor': 'start'});
-        value.textContent = ': ' + rate(i ? data.rx : data.tx, true);
-        label.append(caption, value);
-      });
+    layer.trafficPulses.setAttribute('visibility', enabled && (data.tx > 0 || data.rx > 0) ? 'visible' : 'hidden');
+    if (wireless) {
+      layer.style?.setProperty('--wireless-pulse-color', color);
     }
   }
-  return {number, count, utilizationColor, rate, state, render};
+
+  return {isWireless, number, count, utilizationColor, rate, state, render};
 })();
 if (typeof module !== 'undefined') module.exports = MapTraffic;

@@ -484,3 +484,13 @@ test('equipment art, LED and ports share transforms while the label remains read
   assert.equal(label.textContent, 'Antena');
   assert.equal(label.attributes.transform, undefined);
 });
+
+test('telecom site control bounds follow scale rotation and flip without equipment ports', () => {
+  const node = {icon: 'telecom-site', ports: [{id: 'hidden', type: 'rj45'}]};
+  assert.deepEqual(switchMap.bounds(node), {left: -56, right: 56, top: -53, bottom: 53});
+  const bounds = switchMap.bounds({...node, scale: 2, rotation: 90, flipX: true});
+  assert.ok(Math.abs(bounds.left + 106) < 1e-9);
+  assert.ok(Math.abs(bounds.right - 106) < 1e-9);
+  assert.ok(Math.abs(bounds.top + 112) < 1e-9);
+  assert.ok(Math.abs(bounds.bottom - 112) < 1e-9);
+});
