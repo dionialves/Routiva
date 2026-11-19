@@ -1238,12 +1238,22 @@ $('link-form').onsubmit = async event => {
       const existing = connectionDefinitions.find(c => c.id === target.mappedConnectionId);
       if (!existing || existing.name !== name || existing.interfaceA !== interfaceA || existing.interfaceB !== interfaceB || existing.hostA !== hostA || existing.hostB !== hostB) {
         savingConnection = true;
+        $('save-link').disabled = true;
+        $('save-link').setAttribute('aria-busy', 'true');
+        $('save-link').setAttribute('class', 'system-button system-button-primary system-button-loading');
+        $('save-link-label').textContent = 'Salvando';
         const saved = await connectionRequest('/api/maps/connections/validate', {name, hostA, hostB, interfaceA, interfaceB});
         if (pendingLink !== target || !current.layout.links.includes(target)) return;
         mappedConnectionId = saved.id; connection = saved;
       }
     } catch (error) { $('connection-message').textContent = error.message; return; }
-    finally { savingConnection = false; }
+    finally {
+      savingConnection = false;
+      $('save-link').disabled = false;
+      $('save-link').removeAttribute('aria-busy');
+      $('save-link').setAttribute('class', 'system-button system-button-primary');
+      $('save-link-label').textContent = 'Salvar';
+    }
   } else { mappedConnectionId = undefined; }
   const style = $('link-dialog-type').value, lineStyle = $('link-dialog-style').value;
   const appearanceChanged = target.style !== style || (target.lineStyle || 'straight') !== lineStyle;
