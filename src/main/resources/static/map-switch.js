@@ -141,7 +141,7 @@ const MapSwitch = (() => {
     const keys = [...new Set(ports.map(port => port.slotId || port.type))];
     const groups = keys.map(key => {
       const members = ports.filter(port => (port.slotId || port.type) === key);
-      const singleRow = ports.length <= 10 || members.length <= 2;
+      const singleRow = members.length <= 12;
       const columns = singleRow ? members.length : Math.ceil(members.length / 2);
       const pitch = 23;
       return {members, columns, singleRow, pitch, width: Math.max(0, columns - 1) * pitch + 24};

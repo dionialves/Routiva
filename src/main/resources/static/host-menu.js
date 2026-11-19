@@ -62,12 +62,14 @@ window.HostMenu = (() => {
     const browser = action(access, 'Navegador', url?.replace(/^winbox:/, 'http:'), 'browser');
     if (url) { browser.target = '_blank'; browser.rel = 'noopener noreferrer'; }
     const winbox = action(access, 'WinBox', url, 'window');
-    const ssh = action(access, 'SSH', url?.replace(/^winbox:/, 'ssh:'), 'terminal');
+    const ssh = action(access, 'SSH', null, 'terminal');
+    ssh.disabled = true;
+    ssh.title = 'Acesso SSH ainda não implementado.';
     const copy = action(access, 'Copiar IP do equipamento', null, 'copy', async () => {
       try { await navigator.clipboard.writeText(String(ip).trim()); window.notify?.('IP copiado'); }
       catch { window.notify?.('Não foi possível copiar o IP. Verifique a permissão da área de transferência.', 'error'); }
     });
-    for (const item of [browser, winbox, ssh, copy]) item.disabled = !url;
+    for (const item of [browser, winbox, copy]) item.disabled = !url;
     if (hostId && window.AccessPointLinks) {
       const ap = section('Access Point');
       ap.hidden = true;

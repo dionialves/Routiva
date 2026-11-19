@@ -25,7 +25,11 @@ test('host menu offers access actions and launches WinBox only on explicit actio
   const access = menu.children[0];
   assert.equal(access.children[1].href, 'http://10.0.0.1');
   assert.equal(access.children[2].href, 'winbox://10.0.0.1');
-  assert.equal(access.children[3].href, 'ssh://10.0.0.1');
+  assert.equal(access.children[3].href, undefined);
+  assert.equal(access.children[3].type, 'button');
+  assert.equal(access.children[3].disabled, true);
+  assert.match(access.children[3].title, /não implementado/);
+  assert.equal(access.children[4].disabled, false);
   let prevented = false;
   link.listeners.click({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true);

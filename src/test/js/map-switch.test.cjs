@@ -41,14 +41,14 @@ test('all ports are compact and two optical ports remain side by side in a separ
   assert.equal(fiber[1].x - fiber[0].x,23);
   assert.ok(fiber[0].x - Math.max(...copper.map(p => p.x)) >= 46);
 });
-test('different port types share the same compact rows regardless of quantity', () => {
+test('small slots stay in one row beside larger slots', () => {
   const shape = switchMap.geometry({ports: switchMap.portsFor([], {rj45:4,sfp:24,qsfp:4})});
   const copper = shape.ports.filter(p => p.type === 'rj45');
   const fiber = shape.ports.filter(p => p.type === 'sfp');
-  assert.equal(new Set(copper.map(p => p.x)).size,2);
-  assert.equal(new Set(copper.map(p => p.y)).size,2);
-  assert.equal(copper[2].x - copper[0].x,23);
-  assert.equal(copper[1].y - copper[0].y,-25);
+  assert.equal(new Set(copper.map(p => p.x)).size,4);
+  assert.equal(new Set(copper.map(p => p.y)).size,1);
+  assert.equal(copper[1].x - copper[0].x,23);
+  assert.equal(copper[1].y,copper[0].y);
   assert.equal(fiber[2].x - fiber[0].x,23);
   assert.equal(fiber[1].y - fiber[0].y,-25);
 });
@@ -62,19 +62,19 @@ test('similar quantities use compact spacing regardless of port type', () => {
   }
 });
 
-test('up to ten ports use one row and larger switches retain two rows', () => {
+test('slots with up to twelve ports use one row and larger slots retain two rows', () => {
   for (const type of switchMap.types) {
-    for (const count of [1,2,3,4,5,9,10,11,12]) {
+    for (const count of [1,2,3,4,5,9,10,11,12,13,24]) {
       const counts = {rj45:0,sfp:0,qsfp:0,[type]:count};
       const shape = switchMap.geometry({ports:switchMap.portsFor([],counts)});
       const ports = shape.ports;
       assert.equal(ports[0].y,29.5);
-      if (count <= 10) {
+      if (count <= 12) {
         assert.equal(new Set(ports.map(port => port.y)).size,1);
         assert.equal(new Set(ports.map(port => port.x)).size,count);
         if (count > 1) assert.equal(ports[1].x - ports[0].x,23);
       }
-      if (count > 10) {
+      if (count > 12) {
         for (let i=0; i<count; i++) assert.equal(ports[i].y,i%2 ? 4.5 : 29.5);
         assert.equal(ports[0].x,ports[1].x);
         assert.ok(ports[2].x > ports[0].x);
@@ -178,7 +178,7 @@ test('wire anchors start inside each module front and follow the port row',()=>{
     {id:'upper',type:'qsfp',capacity:'sfp40g'},
     {id:'third',type:'qsfp',capacity:'sfp40g'},
     {id:'100',type:'qsfp',capacity:'sfp100g'},
-    ...Array.from({length:7},(_,i)=>({id:'extra'+i,type:'qsfp',capacity:'sfp40g'}))]};
+    ...Array.from({length:9},(_,i)=>({id:'extra'+i,type:'qsfp',capacity:'sfp40g'}))]};
   const geometry=switchMap.geometry(node);
   for(const [id,direction] of [['lower',1],['upper',-1]]) {
     const port=geometry.ports.find(p=>p.id===id);
@@ -217,7 +217,7 @@ test('every capacity uses the supplied connected art and its own socket, with ne
 test('electrical and SFP 1G/10G plugs stay upright in both rows and their cables follow the socket',()=>{
   const make=(tag,attributes)=>({tag,attributes,children:[],append(...children){this.children.push(...children);}});
   for(const [capacity,type,socketY] of [['electrical','rj45',3.6],['sfp1g','sfp',4.2],['sfp10g','sfp',4.2]]) {
-    const node={id:'sw',icon:'switch',x:100,y:200,ports:Array.from({length:11},(_,i)=>({id:'p'+i,type,capacity}))};
+    const node={id:'sw',icon:'switch',x:100,y:200,ports:Array.from({length:13},(_,i)=>({id:'p'+i,type,capacity}))};
     const root=make('g',{});
     switchMap.draw(make,root,node,'gray',false,{connectedPorts:new Set(node.ports.map(port=>port.id))});
     const ports=root.children.filter(child=>child.attributes.class==='switch-port');

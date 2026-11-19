@@ -4,9 +4,9 @@
 .incidents-filters label { display:grid; gap:6px; min-width:0; font-size:13px; font-weight:500; }
 .incidents-filters input,.incidents-filters select { box-sizing:border-box; width:100%; height:38px; min-width:0; margin:0; border:1px solid #486071; border-radius:5px; background:#20313f; color:#eef4fa; font-size:13px; padding:8px 12px; }
 .incidents-filters select option { background:#142a3a; }
-.incidents-page button { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
-.incidents-page button:disabled { opacity:.45; cursor:default; }
-.incidents-page button:focus-visible,.incidents-page select:focus-visible,.incidents-page input:focus-visible { outline:2px solid #00c9d8; outline-offset:3px; }
+.incidents-page button:not(:where(.equipment-action-menu *)) { display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+.incidents-page button:disabled:not(:where(.equipment-action-menu *)) { opacity:.45; cursor:default; }
+.incidents-page button:focus-visible:not(:where(.equipment-action-menu *)),.incidents-page select:focus-visible,.incidents-page input:focus-visible { outline:2px solid #00c9d8; outline-offset:3px; }
 .incidents-page .incidents-panel { padding:18px; }
 .incidents-heading,.incidents-heading > div { display:flex; align-items:center; gap:14px; }
 .incidents-heading { justify-content:space-between; flex-wrap:wrap; margin-bottom:18px; }
