@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class MimosaHttps {
     private final Path directory;
-    public MimosaHttps(@Value("${mimosa.known-certificates-directory:./data/mimosa-certificates}") String directory) {
+    public MimosaHttps(@Value("${mimosa.known-certificates-directory:${MIMOSA_KNOWN_CERTIFICATES_DIRECTORY:./data/mimosa-certificates}}") String directory) {
         this.directory = Path.of(directory);
     }
     synchronized void verify(String authority, X509Certificate certificate) throws Exception {

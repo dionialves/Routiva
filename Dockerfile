@@ -27,6 +27,7 @@ USER routiva
 ENV SERVER_ADDRESS=0.0.0.0 \
     PORT=8080 \
     AP_SECRETS_KEY_FILE=/var/lib/routiva/ap-secrets.key \
+    MIMOSA_KNOWN_CERTIFICATES_DIRECTORY=/var/lib/routiva/mimosa-certificates \
     INDICATORS_LOG_PATH=/var/log/routiva/indicators.log
 
 EXPOSE 8080
