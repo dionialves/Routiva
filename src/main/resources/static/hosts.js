@@ -230,7 +230,7 @@
       for (const name of ['manufacturer', 'login']) $(`host-auth-${name}`).value = c[name] || '';
       $('host-auth-password').value = ''; $('host-auth-port').value = c.port || 8728;
       $('host-auth-tls').checked = c.tls;
-      $('host-auth-tls-row').hidden = ['Ubiquiti', 'Datacom', 'Mimosa'].includes(c.manufacturer);
+      $('host-auth-tls-row').hidden = ['Ubiquiti', 'Datacom', 'Cisco', 'Mimosa'].includes(c.manufacturer);
       $('host-auth-password-help').textContent = c.passwordConfigured ? 'Senha cadastrada. Deixe em branco para preservar.' : 'Informe a senha do equipamento.';
       $('host-auth-state').textContent = '';
       updateAuthLogin();
@@ -239,7 +239,7 @@
     } catch (error) { if (current === host) $('host-auth-state').textContent = error.message; }
   }
   $('host-auth-manufacturer').addEventListener('change', () => {
-    const ssh = ['Ubiquiti', 'Datacom'].includes($('host-auth-manufacturer').value);
+    const ssh = ['Ubiquiti', 'Datacom', 'Cisco'].includes($('host-auth-manufacturer').value);
     const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
     updateAuthLogin();
     $('host-auth-port').value = mimosa ? 443 : ssh ? 22 : $('host-auth-tls').checked ? 8729 : 8728;

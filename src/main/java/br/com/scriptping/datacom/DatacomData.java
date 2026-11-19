@@ -170,7 +170,7 @@ public final class DatacomData {
         try { var n = new BigInteger(value); return n.signum() >= 0 && n.bitLength() <= 64 ? n : null; }
         catch (RuntimeException ex) { return null; }
     }
-    static String rate(String previous, String current, long elapsed) {
+    public static String rate(String previous, String current, long elapsed) {
         var a = unsigned(previous); var b = unsigned(current);
         if (a == null || b == null || elapsed <= 0 || elapsed > 30000 || b.compareTo(a) < 0) return null;
         return b.subtract(a).multiply(BigInteger.valueOf(8000)).divide(BigInteger.valueOf(elapsed)).toString();

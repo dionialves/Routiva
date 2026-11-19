@@ -22,6 +22,7 @@ class MappedConnectionPageTests {
     @MockitoBean MikrotikService mikrotik;
     @MockitoBean br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
     @MockitoBean br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa;
+    @MockitoBean br.com.scriptping.cisco.CiscoEquipmentProvider cisco;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
     @Test void standaloneConnectionPageHasBeenRemoved() throws Exception {

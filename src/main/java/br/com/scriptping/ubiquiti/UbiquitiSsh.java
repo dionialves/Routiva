@@ -38,11 +38,22 @@ public class UbiquitiSsh {
         });
     }
     public Link connect(String ip, Connection credentials) throws JSchException {
+        return connect(ip, credentials, false);
+    }
+    public Link connectCisco(String ip, Connection credentials) throws JSchException {
+        return connect(ip, credentials, true);
+    }
+    static void configureCisco(Session session) {
+        // IOS XE 16.9 offers only SHA-1 DH; append the verified group after modern choices.
+        session.setConfig("kex", session.getConfig("kex") + ",diffie-hellman-group14-sha1");
+    }
+    private Link connect(String ip, Connection credentials, boolean cisco) throws JSchException {
         var session = client.getSession(credentials.login(), ip, credentials.port());
         session.setPassword(credentials.password());
         session.setConfig("PreferredAuthentications", "password");
         session.setConfig("StrictHostKeyChecking", "yes");
         session.setConfig("server_host_key", session.getConfig("server_host_key") + ",ssh-rsa");
+        if (cisco) configureCisco(session);
         session.setTimeout(10000);
         try { session.connect(10000); return new Link(session); }
         catch (JSchException ex) { session.disconnect(); throw ex; }
@@ -53,6 +64,9 @@ public class UbiquitiSsh {
         /** A bounded interactive CLI, sharing the same pinned SSH host keys. */
         public br.com.scriptping.datacom.DatacomCli datacomCli() throws Exception {
             return new br.com.scriptping.datacom.DatacomCli(session);
+        }
+        public br.com.scriptping.cisco.CiscoCli ciscoCli() throws Exception {
+            return new br.com.scriptping.cisco.CiscoCli(session);
         }
         public String command(String command) throws Exception {
             if (!java.util.Set.of("mca-status", "wstalist", "cat /proc/net/dev", "ifconfig -a").contains(command))

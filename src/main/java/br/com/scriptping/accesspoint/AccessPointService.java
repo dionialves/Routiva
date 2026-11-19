@@ -42,7 +42,7 @@ public class AccessPointService {
         repository.all().forEach(ap -> registered.add(ap.hostId()));
         var credentials = hosts.credentials();
         return inventory.hosts().stream().filter(h -> !registered.contains(h.id()))
-            .filter(h -> credentials.get(h.id()) == null || !Set.of("Datacom", "Mimosa").contains(credentials.get(h.id()).manufacturer())).sorted(Comparator.comparing(Host::name)).toList();
+            .filter(h -> credentials.get(h.id()) == null || !Set.of("Datacom", "Mimosa", "Cisco").contains(credentials.get(h.id()).manufacturer())).sorted(Comparator.comparing(Host::name)).toList();
     }
     @Transactional
     public synchronized void define(List<String> ids) {
@@ -53,7 +53,7 @@ public class AccessPointService {
         if (!hosts.keySet().containsAll(ids)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Há hosts fora do inventário importado. Atualize a seleção.");
         for (String id : ids) {
             var credentials = this.hosts.credentials(id);
-            if (credentials != null && Set.of("Datacom", "Mimosa").contains(credentials.manufacturer()))
+            if (credentials != null && Set.of("Datacom", "Mimosa", "Cisco").contains(credentials.manufacturer()))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este equipamento utiliza autenticação e interfaces pelo mapa.");
         }
         new LinkedHashSet<>(ids).forEach(id -> {

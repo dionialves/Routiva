@@ -14,14 +14,15 @@ import org.springframework.web.server.ResponseStatusException;
 @Controller
 public class MappedConnectionController {
     private final JdbcTemplate jdbc;
+    private final br.com.scriptping.cisco.CiscoEquipmentProvider cisco;
     private final br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
     private final br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa;
     private final ZabbixService inventory;
     private final MikrotikService mikrotik;
     private final br.com.scriptping.hosts.HostConnections connections;
     private final br.com.scriptping.hosts.HostRepository hosts;
-    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, br.com.scriptping.hosts.HostConnections connections, br.com.scriptping.hosts.HostRepository hosts, br.com.scriptping.datacom.DatacomEquipmentProvider datacom, br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa) {
-        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.connections = connections; this.hosts = hosts; this.datacom = datacom; this.mimosa = mimosa;
+    public MappedConnectionController(JdbcTemplate jdbc, ZabbixService inventory, MikrotikService mikrotik, br.com.scriptping.hosts.HostConnections connections, br.com.scriptping.hosts.HostRepository hosts, br.com.scriptping.datacom.DatacomEquipmentProvider datacom, br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa, br.com.scriptping.cisco.CiscoEquipmentProvider cisco) {
+        this.jdbc = jdbc; this.inventory = inventory; this.mikrotik = mikrotik; this.connections = connections; this.hosts = hosts; this.datacom = datacom; this.mimosa = mimosa; this.cisco = cisco;
     }
     public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Endpoint(long measuredAt, String name, boolean up, String rxBps, String txBps, String error, Long capacityBps) {}
@@ -69,7 +70,7 @@ public class MappedConnectionController {
         return hosts.target(id);
     }
     private EquipmentProvider.Connection apiConnection(String id) {
-        if (!Set.of("MikroTik", "Datacom", "Mimosa").contains(hosts.credentials(id) == null ? "" : hosts.credentials(id).manufacturer()))
+        if (!Set.of("MikroTik", "Datacom", "Mimosa", "Cisco").contains(hosts.credentials(id) == null ? "" : hosts.credentials(id).manufacturer()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não foi possível consultar a conexão. Verifique a autenticação do host e a compatibilidade do equipamento.");
         return connections.require(host(id));
     }
@@ -86,11 +87,14 @@ public class MappedConnectionController {
     }
     private EquipmentProvider.Connection apiConnectionFor(String hostId) {
         var saved = hosts.credentials(hostId);
-        if (saved == null || !Set.of("MikroTik", "Datacom", "Mimosa").contains(saved.manufacturer()))
+        if (saved == null || !Set.of("MikroTik", "Datacom", "Mimosa", "Cisco").contains(saved.manufacturer()))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não foi possível carregar as interfaces. Verifique a autenticação do host e a compatibilidade do equipamento.");
         return connections.require(hosts.target(hostId));
     }
     private EquipmentProvider.Snapshot query(Host host, String section, String name, EquipmentProvider.Connection credentials) {
+        if ("Cisco".equals(hosts.credentials(host.id()).manufacturer())) {
+            return cisco.query(host, section, name, credentials);
+        }
         if ("Mimosa".equals(hosts.credentials(host.id()).manufacturer())) {
             return mimosa.query(host, section, name, credentials);
         }

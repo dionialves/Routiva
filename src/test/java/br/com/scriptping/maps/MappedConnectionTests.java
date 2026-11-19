@@ -22,12 +22,13 @@ class MappedConnectionTests {
     @MockitoBean MikrotikService mikrotik;
     @MockitoBean br.com.scriptping.datacom.DatacomEquipmentProvider datacom;
     @MockitoBean br.com.scriptping.mimosa.MimosaEquipmentProvider mimosa;
+    @MockitoBean br.com.scriptping.cisco.CiscoEquipmentProvider cisco;
     @MockitoBean br.com.scriptping.hosts.HostConnections connections;
     @MockitoBean br.com.scriptping.hosts.HostRepository hosts;
 
     @org.junit.jupiter.api.BeforeEach
     void freshReadingCache() {
-        controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa, cisco);
     }
 
     void equipment() {
@@ -92,7 +93,7 @@ class MappedConnectionTests {
     }
     @Test void firstCounterSampleExpiresEarlyButMeasuredRatesKeepNormalCache() {
         equipment();
-        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa, cisco);
         var c = controller.validate(new MappedConnectionController.Connection(null, "Rede", "a", "ether1", "b", "ether1"));
         persist(c);
         long now = System.currentTimeMillis();
@@ -111,7 +112,7 @@ class MappedConnectionTests {
     }
     @Test void supportsMixedDatacomAndMikrotikLinksWithoutClassifyingTheOltAsAnAp() {
         equipment();
-        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa, cisco);
         when(hosts.credentials("a")).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials(
             "Datacom", "reader", "encrypted", 22, true, "ACTIVE", "", "10.0.0.1", false, 1L));
         String port = "ten-gigabit-ethernet-1/1/1";
@@ -133,7 +134,7 @@ class MappedConnectionTests {
     }
     @Test void discoversMimosaAndReadsMappedTrafficWithResetAndUnknownStatusProtection() {
         equipment();
-        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        var controller = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa, cisco);
         when(hosts.credentials("a")).thenReturn(new br.com.scriptping.hosts.HostRepository.Credentials(
             "Mimosa", "configure", "encrypted", 443, true, "ACTIVE", "", "10.0.0.1", true, 1L));
         String port = "Ethernet (RJ45)";
@@ -154,7 +155,7 @@ class MappedConnectionTests {
         assertThat(measured.rxBps()).isEqualTo("5333");
         assertThat(measured.txBps()).isEqualTo("10666");
         assertThat(measured.error()).isNull();
-        var fresh = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        var fresh = new MappedConnectionController(jdbc, inventory, mikrotik, connections, hosts, datacom, mimosa, cisco);
         when(mimosa.query(any(), eq("connection"), eq(port), any()))
             .thenReturn(new EquipmentProvider.Snapshot(now, List.of(Map.of("rx-byte", "3000", "tx-byte", "6000")), ""));
         var unknown = fresh.readings("map", Set.of(c.id())).getFirst().a();
@@ -180,7 +181,7 @@ class MappedConnectionTests {
     @Test void slowInterfaceDoesNotBlockAnotherConnection() throws Exception {
         equipment();
         var database = mock(org.springframework.jdbc.core.JdbcTemplate.class);
-        var reader = new MappedConnectionController(database, inventory, mikrotik, connections, hosts, datacom, mimosa);
+        var reader = new MappedConnectionController(database, inventory, mikrotik, connections, hosts, datacom, mimosa, cisco);
         var slow = new MappedConnectionController.Connection("slow", "Slow", "a", "slow", "b", "slow");
         var fast = new MappedConnectionController.Connection("fast", "Fast", "a", "fast", "b", "fast");
         var json = new com.fasterxml.jackson.databind.ObjectMapper();

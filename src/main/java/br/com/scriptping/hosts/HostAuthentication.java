@@ -35,7 +35,7 @@ public class HostAuthentication {
         return "ACTIVE".equals(credentials.status()) && Objects.equals(credentials.verifiedIp(), address) ? "ACTIVE" : "ERROR";
     }
     private EquipmentProvider provider(String name) {
-        if (!Set.of("MikroTik", "Ubiquiti", "Datacom", "Mimosa").contains(Objects.toString(name, "")))
+        if (!Set.of("MikroTik", "Ubiquiti", "Datacom", "Mimosa", "Cisco").contains(Objects.toString(name, "")))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione um Fabricante");
         return providers.stream().filter(p -> p.manufacturer().equals(name)).findFirst().orElseThrow(() ->
             new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fabricante não suportado."));
