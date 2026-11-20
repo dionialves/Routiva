@@ -28,7 +28,7 @@ test('missing readings preserve endpoint definitions and report missing timestam
   assert.equal(data.status, 'Indisponível');
   assert.equal(data.endpoints[1].interface, 'sfp1');
   assert.equal(data.measuredAt, null);
-  assert.equal(data.note, 'Consulta indisponível');
+  assert.match(data.note, /Consulta indisponível/);
 });
 test('valid zero traffic and actual collection timestamps are retained', () => {
   const data = details(sample({txBps:'0',rxBps:'450000000'}), definition, hosts, false, now);

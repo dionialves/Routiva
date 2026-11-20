@@ -5,7 +5,7 @@ const MapConnectionTooltip = (() => {
     const endpoints = ['a', 'b'].map((key, index) => {
       const sample = reading?.[key];
       const hostId = (index ? reading?.hostB : reading?.hostA) || (index ? definition?.hostB : definition?.hostA);
-      const fresh = sample && Number.isFinite(sample.measuredAt) && sample.measuredAt <= now && now - sample.measuredAt <= 30000;
+      const fresh = MapTraffic.fresh(sample, now);
       const valid = fresh && !sample.error && typeof sample.up === 'boolean';
       return {name: hosts.find(host => host.id === hostId)?.name || hostId || 'Equipamento indisponível',
         interface: sample?.name || (index ? definition?.interfaceB : definition?.interfaceA) || 'Interface indisponível',
@@ -15,9 +15,12 @@ const MapConnectionTooltip = (() => {
     const status = endpoints.some(e => e.status === 'DOWN') ? 'Inativa'
       : endpoints.every(e => e.status === 'UP') ? 'Ativa' : 'Indisponível';
     const traffic = MapTraffic.state(reading, now);
+    const staleTraffic = reading?.a && !reading.a.error && (reading.a.rxBps != null && now > reading.a.rxValidUntil
+      || reading.a.txBps != null && now > reading.a.txValidUntil);
     const timestamps = endpoints.map(e => e.measuredAt).filter(t => Number.isFinite(t) && t > 0 && t <= now);
-    return {endpoints, status, traffic, measuredAt: timestamps.length ? Math.min(...timestamps) : null,
-      note: failed ? 'Consulta indisponível' : !reading ? 'Aguardando coleta' : ''};
+    const queried = [reading?.a?.queriedAt, reading?.b?.queriedAt].filter(t => Number.isFinite(t) && t > 0);
+    return {endpoints, status, traffic, queriedAt: queried.length ? Math.min(...queried) : null, measuredAt: timestamps.length ? Math.min(...timestamps) : null,
+      note: failed ? 'Consulta indisponível · últimos dados preservados' : reading?.a?.queryError || reading?.b?.queryError || reading?.a?.trafficError || (staleTraffic ? 'Tráfego: leitura desatualizada' : '') || (!reading ? 'Carregando dados do Zabbix' : '')};
   }
   let panel, activeId, activeSource, lastPoint;
   function element(tag, className, text) {
@@ -92,6 +95,12 @@ const MapConnectionTooltip = (() => {
     const label = element('span', 'connection-tooltip-direction'); label.append(icon('clock-3'), element('span', '', 'Última coleta'));
     footer.append(label, element('span', '', data.measuredAt ? new Date(data.measuredAt).toLocaleString('pt-BR') : 'Indisponível'));
     panel.replaceChildren(header, body, traffic, footer);
+    if (data.queriedAt) {
+      const queryFooter = element('footer', 'connection-tooltip-row connection-tooltip-footer');
+      queryFooter.append(element('span', '', 'Consulta ao Zabbix'),
+        element('span', '', new Date(data.queriedAt).toLocaleString('pt-BR')));
+      panel.append(queryFooter);
+    }
     if (data.note) body.append(element('p', 'connection-tooltip-note', data.note));
   }
   function position() {

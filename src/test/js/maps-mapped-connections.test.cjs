@@ -15,125 +15,79 @@ function setup() {
   vm.runInContext(source.slice(source.indexOf('let connectionDefinitions =')), context);
   return {context, listeners, run:code=>vm.runInContext(code,context)};
 }
-test('mapped collection deduplicates links and pauses in editing or hidden tabs', async () => {
+test('one deduplicated batch per map and a 60 second interval', async () => {
   const {context,run} = setup();
-  run("current = {id:'map1',layout:{links:[{mappedConnectionId:'c1'},{mappedConnectionId:'c1'},{}]}};");
-  context.fetch = async (url, options) => {
-    context.calls++; assert.equal(url, '/api/maps/map1/connections/readings'); assert.deepEqual(JSON.parse(options.body), ['c1']);
-    return {ok:true, json:async()=>[]};
-  };
-  await run('refreshMappedConnections()'); assert.equal(context.calls, 1);
-  context.editing = true; await run('refreshMappedConnections()');
-  context.editing = false; context.document.hidden = true; await run('refreshMappedConnections()');
-  assert.equal(context.calls, 1);
-});
-test('mapped collection never overlaps pending requests and exposes API failures', async () => {
-  const {context,run} = setup();
-  run("current = {layout:{links:[{mappedConnectionId:'c1'}]}};");
-  let reject;
-  context.fetch = () => { context.calls++; return new Promise((_, no) => { reject = no; }); };
-  const first = run('refreshMappedConnections()');
-  await run('refreshMappedConnections()'); assert.equal(context.calls, 1);
-  reject(new Error('offline')); await first;
-  assert.match(run("mappedConnectionTitle('c1')"), /Consulta indisponível/);
-});
-test('tooltips show endpoint rates and do not present old readings as UP', () => {
-  const {run} = setup();
-  run("connectionReadings.set('c1', {a:{name:'ether1',up:true,rxBps:'1000000',txBps:'2000000',measuredAt:Date.now()}, b:{name:'ether2',up:true,measuredAt:Date.now()-31000}})");
-  const title = run("mappedConnectionTitle('c1')");
-  assert.match(title, /ether1: UP/);
-  assert.match(title, /Download: 2 Mbps/);
-  assert.match(title, /Upload: 1 Mbps/);
-  assert.match(title, /ether2: Leitura desatualizada/);
-});
-
-test('opening a map primes traffic with one early follow-up and skips it after navigation', async () => {
-  const {context, run} = setup();
-  const timers = [];
-  context.setTimeout = (callback, delay) => timers.push({callback, delay});
-  run("current = {layout:{links:[{mappedConnectionId:'c1'}]}};");
-  context.fetch = async () => {
-    context.calls++;
-    return {ok:true,json:async()=>[{id:'c1',a:{up:true,txBps:null,rxBps:null}}]};
-  };
-  await run('refreshMappedConnections(true)');
-  assert.equal(timers.length, 1);
-  assert.equal(timers[0].delay, 1200);
-  await timers[0].callback();
-  assert.equal(context.calls, 2);
-  assert.equal(timers.length, 1);
-  await run('refreshMappedConnections(true)');
-  context.editing = true;
-  await timers[1].callback();
-  assert.equal(context.calls, 3);
-  context.editing = false;
-  context.current = {layout:{links:[]}};
-  await timers[1].callback();
-  assert.equal(context.calls, 3);
-});
-test('opening a map with measured rates does not schedule an early follow-up', async () => {
-  const {context,run} = setup();
-  context.setTimeout = () => assert.fail('unexpected follow-up');
-  run("current = {layout:{links:[{mappedConnectionId:'c1'}]}};");
-  context.fetch = async () => ({ok:true,json:async()=>[{id:'c1',a:{up:true,txBps:'0',rxBps:'0'}}]});
-  await run('refreshMappedConnections(true)');
-});
-
-test('connections receive independent results and keep polling while a different link is pending', async () => {
-  const {context, run} = setup();
-  run("current = {id:'map1',layout:{links:[{mappedConnectionId:'slow'},{mappedConnectionId:'fast'}]}};");
-  let finishSlow;
-  const calls = [];
-  context.fetch = (url, options) => {
-    const [id] = JSON.parse(options.body);
-    calls.push(id);
-    if (id === 'slow') return new Promise(resolve => { finishSlow = resolve; });
-    return Promise.resolve({ok:true, json:async()=>[{id, a:{up:true, measuredAt:Date.now()}}]});
-  };
-  const first = run('refreshMappedConnections()');
-  await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(calls, ['slow', 'fast']);
-  assert.equal(run("connectionReadings.has('fast')"), true);
-  assert.equal(run("connectionReadings.has('slow')"), false);
-  await run('refreshMappedConnections()');
-  assert.deepEqual(calls, ['slow', 'fast', 'fast']);
-  finishSlow({ok:false,json:async()=>({message:'offline'})});
-  await first;
-  assert.equal(run("connectionReadings.has('fast')"), true);
-  assert.equal(run("connectionFailures.has('fast')"), false);
-  assert.equal(run("connectionFailures.has('slow')"), true);
-});
-
-test('a response from a previous map cannot overwrite the current map', async () => {
-  const {context, run} = setup();
-  run("current = {id:'old',layout:{links:[{mappedConnectionId:'c1'}]}};");
-  let finishOld;
-  context.fetch = () => new Promise(resolve => { finishOld = resolve; });
-  const old = run('refreshMappedConnections()');
-  run("current = {id:'new',layout:{links:[{mappedConnectionId:'c1'}]}};");
-  context.fetch = async () => ({ok:true,json:async()=>[{id:'c1', marker:'new'}]});
-  await run('refreshMappedConnections()');
-  finishOld({ok:true,json:async()=>[{id:'c1',marker:'old'}]});
-  await old;
-  assert.equal(run("connectionReadings.get('c1').marker"), 'new');
-});
-
-test('all connections get their own request without a five-link or batch limit', async () => {
-  const {context, run} = setup();
   const ids = Array.from({length:125}, (_, i) => `c${i}`);
-  context.current = {id:'large',layout:{links:ids.map(mappedConnectionId => ({mappedConnectionId}))}};
-  const requested = [];
+  context.current = {id:'map',layout:{links:[...ids,ids[0]].map(mappedConnectionId=>({mappedConnectionId}))}};
   context.fetch = async (url, options) => {
-    const body = JSON.parse(options.body);
-    assert.equal(body.length, 1);
-    requested.push(body[0]);
-    return {ok:true,json:async()=>[{id:body[0]}]};
+    context.calls++;
+    assert.equal(url, '/api/maps/map/connections/readings');
+    assert.deepEqual(JSON.parse(options.body), ids);
+    return {ok:true,json:async()=>ids.map(id=>({id}))};
   };
   await run('refreshMappedConnections()');
-  assert.deepEqual(requested, ids);
-  assert.equal(run('connectionReadings.size'), 125);
+  assert.equal(context.calls,1);
+  assert.equal(run('connectionReadings.size'),125);
+  assert.match(source,/setInterval\(refreshMappedConnections, 60000\)/);
+  context.editing=true; await run('refreshMappedConnections()');
+  context.editing=false; context.document.hidden=true; await run('refreshMappedConnections()');
+  assert.equal(context.calls,1);
+});
+test('pending batches are shared and failures preserve the last readings', async () => {
+  const {context,run} = setup();
+  run("current={id:'map',layout:{links:[{mappedConnectionId:'c'}]}};connectionReadings.set('c',{marker:'old'})");
+  let reject;
+  context.fetch=()=>{context.calls++;return new Promise((_,no)=>{reject=no;});};
+  const first=run('refreshMappedConnections()');
+  const second=run('refreshMappedConnections()');
+  assert.equal(context.calls,1);
+  reject(new Error('offline'));
+  assert.equal(await first,false); assert.equal(await second,false);
+  assert.equal(run("connectionReadings.get('c').marker"),'old');
+  assert.equal(run("connectionFailures.has('c')"),true);
+});
+test('manual refresh explicitly bypasses the cache without warmup requests', async () => {
+  const {context,run} = setup();
+  run("current={id:'map',layout:{links:[{mappedConnectionId:'c'}]}}");
+  context.setTimeout=()=>assert.fail('no warmup timer');
+  context.fetch=async url=>{
+    assert.equal(url,'/api/maps/map/connections/readings?force=true');
+    return {ok:true,json:async()=>[{id:'c',a:{up:true,txBps:null}}]};
+  };
+  assert.equal(await run('refreshMappedConnections(true)'),true);
+});
+test('navigation discards late responses from a previous map', async () => {
+  const {context,run}=setup();
+  run("current={id:'old',layout:{links:[{mappedConnectionId:'c'}]}}");
+  let finish;context.fetch=()=>new Promise(resolve=>{finish=resolve;});
+  const first=run('refreshMappedConnections()');
+  run("current={id:'new',layout:{links:[]}}");
+  finish({ok:true,json:async()=>[{id:'c'}]});await first;
+  assert.equal(run('connectionReadings.size'),0);
+});
+test('manual refresh after an ordinary pending poll performs a fresh query', async () => {
+  const {context,run}=setup();
+  run("current={id:'map',layout:{links:[{mappedConnectionId:'c'}]}}");
+  let finish;const urls=[];
+  context.fetch=url=>{urls.push(url);return urls.length===1?new Promise(resolve=>{finish=resolve;}):Promise.resolve({ok:true,json:async()=>[]});};
+  const poll=run('refreshMappedConnections()');
+  const manual=run('refreshMappedConnections(true)');
+  finish({ok:true,json:async()=>[]});await poll;await manual;
+  assert.deepEqual(urls,['/api/maps/map/connections/readings','/api/maps/map/connections/readings?force=true']);
 });
 
+test('unchanged versions preserve readings and renew the visible snapshot', async () => {
+  const {context,run}=setup();
+  run("current={id:'map',layout:{links:[{mappedConnectionId:'c'}]}}");
+  let calls=0;
+  context.fetch=async(url,options)=>{
+    calls++;
+    assert.equal(options.headers['X-Map-Readings-Version'],calls===1?'':'v1');
+    return {ok:true,json:async()=>calls===1?{version:'v1',unchanged:false,readings:[{id:'c',marker:'retained'}]}:{version:'v1',unchanged:true,readings:[]}};
+  };
+  await run('refreshMappedConnections()');await run('refreshMappedConnections()');
+  assert.equal(run("connectionReadings.get('c').marker"),'retained');
+});
 
 test('hidden maps preserve their snapshot and resume immediately with updated readings', async () => {
   const {context, listeners, run} = setup();

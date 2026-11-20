@@ -187,7 +187,7 @@ function groupedConnectionSetup() {
     {id:'outside', name:'Outside', groups:[{id:'other'}]}
   ];
   ui.context.connectionDefinitions = [];
-  ui.run("current.layout.nodes=[{id:'a',groupId:'g1',name:'Site A'},{id:'b',groupId:'g2',name:'Site B'}]; openLinkDialog(link)");
+  ui.run("current.layout.nodes=[{id:'a',groupId:'g1',name:'Site A'},{id:'b',groupId:'g2',name:'Site B'},{id:'host1',hostId:'h1',ports:[{name:'ether1'},{name:'ether2'}]},{id:'host2',hostId:'h2',ports:[{name:'ether1'},{name:'ether2'}]}]; openLinkDialog(link)");
   vm.runInContext(source.slice(source.indexOf('function connectionNodes('), source.indexOf("$('link-category').onchange")), ui.context);
   return ui;
 }
@@ -204,7 +204,8 @@ test('mapped group endpoints list only member hosts and load interfaces from the
   $('connection-host-select-a').value='h1';
   $('connection-host-select-b').value='h2';
   await run('loadConnectionInterfaces()');
-  assert.deepEqual(requests, ['/api/maps/connections/interfaces/h1','/api/maps/connections/interfaces/h2']);
+  assert.deepEqual(requests, []);
+  assert.deepEqual($('connection-interface-a').options.map(o=>o.value), ['', 'ether1', 'ether2']);
   assert.equal($('connection-interface-a').disabled,false);
   $('connection-interface-a').value='ether1';
   $('connection-interface-b').value='ether1';
@@ -270,4 +271,24 @@ test('map dialog loads shared picker positioning for viewport-based popovers', (
   assert.match(template, /th:replace="~\{design-system :: picker\}"/);
   assert.match(shared, /th:fragment="picker"[^>]+href="\/multi-picker\.css\?/);
   assert.match(css, /\.group-picker-panel\[popover\]\s*\{[^}]*position:\s*fixed;[^}]*margin:\s*0;/);
+});
+
+test('connection options include only saved element ports and discard removed interface selections', async () => {
+  const {$,context,run}=groupedConnectionSetup();
+  run("current.layout.nodes.find(n=>n.hostId==='h1').ports=[{name:'eth1_emac1'},{name:'wifi0'}];link.connection={id:'c',name:'Enlace',hostA:'h1',hostB:'h2',interfaceA:'wlan0',interfaceB:'ether1'};link.mappedConnectionId='c';prepareConnectionHosts(true)");
+  $('link-category').value='mapped';
+  context.connectionRequest=()=>assert.fail('loading element ports must not query the server');
+  await run('loadConnectionInterfaces()');
+  assert.deepEqual($('connection-interface-a').options.map(o=>o.value),['','eth1_emac1','wifi0']);
+  assert.equal($('connection-interface-a').value,'');
+});
+
+test('group connections use the enabled registry without individual host elements or discovery',async()=>{
+  const {$,context,run}=groupedConnectionSetup();
+  run("current.layout.nodes=current.layout.nodes.filter(n=>!n.hostId);current.layout.nodes[0].linkInterfaces=[{hostId:'h1',name:'wifi0'},{hostId:'h1',name:'eth1_emac1'}];current.layout.nodes[1].linkInterfaces=[{hostId:'h2',name:'wlan0'}];prepareConnectionHosts()");
+  $('link-category').value='mapped';$('connection-host-select-a').value='h1';$('connection-host-select-b').value='h2';
+  context.connectionRequest=()=>assert.fail('no discovery while configuring a link');
+  await run('loadConnectionInterfaces()');
+  assert.deepEqual($('connection-interface-a').options.map(o=>o.value),['','wifi0','eth1_emac1']);
+  assert.deepEqual($('connection-interface-b').options.map(o=>o.value),['','wlan0']);
 });

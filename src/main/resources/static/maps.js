@@ -728,14 +728,15 @@ function setRefreshBusy(busy) {
 
 $('refresh-map').onclick = () => {
   if (!current || editing || $('refresh-map').disabled) return;
-  return refresh(++generation);
+  return refresh(++generation, true);
 };
 
-async function refresh(token) {
+async function refresh(token, forceConnections = false) {
   if (!current || editing || token !== generation) return;
   clearTimeout(timer);
   setRefreshBusy(true);
   updateMapOverview();
+  const mappedRefresh = forceConnections ? refreshMappedConnections(true) : Promise.resolve(true);
   const metricMode = mapView !== 'incidents';
   $('status').textContent = metricMode ? 'Consultando indicadores…' : 'Consultando incidentes…';
   try {
@@ -771,6 +772,8 @@ async function refresh(token) {
     summaryFailed = true;
     $('status').textContent = metricMode ? 'Consulta aos indicadores indisponível. Últimos dados preservados; nova tentativa em um minuto.' : 'Consulta ao Zabbix indisponível. Nova tentativa em um minuto.';
   } finally {
+    const mappedOk = await mappedRefresh;
+    if (token === generation && !mappedOk) $('status').textContent += ' · Consulta de interfaces ao Zabbix indisponível';
     if (token === generation) setRefreshBusy(false);
   }
   if (token !== generation) return;
@@ -866,7 +869,7 @@ function openMap(map, edit = false, parents = []) {
   if (map && (!edit || !map.layout.camera)) fitToView();
   refresh(generation);
   refreshPingState(pingGeneration);
-  refreshMappedConnections(true);
+  refreshMappedConnections();
 }
 
 let mapParents = [];
@@ -1113,7 +1116,8 @@ function prepareConnectionHosts(reset = false) {
     const node = current.layout.nodes.find(n => n.id === draft[side]);
     const select = $('connection-host-select-' + suffix);
     $('connection-host-field-' + suffix).hidden = !node?.groupId;
-    const candidates = inventory.filter(host => host.groups?.some(group => group.id === node?.groupId));
+    const candidates = inventory.filter(host => host.groups?.some(group => group.id === node?.groupId)
+      && (node.linkInterfaces == null || node.linkInterfaces.some(entry => entry.hostId === host.id)));
     const savedHost = existing && (draft[side] === pendingLink.from ? existing.hostA : existing.hostB);
     const previous = reset ? savedHost : select.value;
     select.replaceChildren(new Option('Selecione o host do grupo', ''), ...candidates.map(host => new Option(host.name + (host.ip ? ' · ' + host.ip : ''), host.id)));
@@ -1132,7 +1136,7 @@ for (const suffix of ['a', 'b']) {
       $('connection-interface-' + side).replaceChildren();
       $('connection-interface-' + side).disabled = true;
     }
-    $('connection-message').textContent = 'Clique em Carregar interfaces para consultar os hosts selecionados.';
+    $('connection-message').textContent = 'Clique em Carregar interfaces para listar as interfaces habilitadas dos hosts selecionados.';
     updateLinkEndpoints();
   };
 }
@@ -1368,7 +1372,7 @@ $('load-switch-interfaces').onclick = async () => {
       if (typeof data?.message === 'string' && data.message.trim())
         failureMessage = data.message;
       else if (response.status === 400 || response.status === 409)
-        failureMessage = 'Não foi possível carregar as interfaces. Configure e valide a autenticação do host e tente novamente.';
+        failureMessage = 'Não foi possível carregar as interfaces. Confira os itens de interface do host no Zabbix e tente novamente.';
       throw new Error();
     }
     if (generation !== interfaceLoadGeneration || !$('element-dialog').open
@@ -1377,11 +1381,7 @@ $('load-switch-interfaces').onclick = async () => {
     failureMessage = 'As interfaces foram recebidas, mas não foi possível montar as portas no navegador. Atualize a página para carregar a versão atual do mapa.';
     const imported = MapSwitch.importInterfaces(data, previous);
     if (!imported.ports.length) {
-      failureMessage = 'Nenhuma interface física encontrada. A configuração atual foi preservada.';
-      throw new Error();
-    }
-    if (imported.ports.filter(port => port.connector === 'wireless').length > 1) {
-      failureMessage = 'É permitida apenas uma interface Wireless por equipamento. A configuração atual foi preservada.';
+      failureMessage = 'Nenhuma interface com item de estado encontrada no Zabbix. A configuração atual foi preservada.';
       throw new Error();
     }
     if ($('element-icon').value === 'radio' && imported.ports.length > 4) {
@@ -1392,7 +1392,9 @@ $('load-switch-interfaces').onclick = async () => {
     configuredPorts = imported.ports;
     renderSwitchSlots(); drawPreview();
     $('interface-load-status').textContent = imported.ports.length + ' interfaces carregadas. Salve o elemento para aplicar.'
-      + (imported.ports.some(port => port.capacity === 'unknown') ? ' Revise os conectores e as capacidades não identificados.' : '');
+      + (imported.ports.some(port => port.capacity === 'unknown') ? ' Revise as capacidades não identificadas.' : '')
+      + (imported.ports.filter(port => port.connector === 'wireless').length > 1 ? ' O Zabbix lista mais de uma interface Wireless. Remova os slots excedentes e mantenha apenas a interface do enlace antes de salvar; nenhuma interface foi escolhida automaticamente.' : '')
+      + (imported.unidentifiedConnectors?.length ? ' Conectores não identificados pelo Zabbix: ' + imported.unidentifiedConnectors.join(', ') + '. Confira os conectores; os anteriores foram preservados quando disponíveis, e as novas portas usam Elétrico provisoriamente.' : '');
   } catch (error) {
     if (generation === interfaceLoadGeneration && $('type').value === 'host' && $('group').value === hostId) {
       $('interface-load-status').setAttribute('role', 'alert');
@@ -1491,6 +1493,10 @@ function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' 
   $('remove').hidden = !!pendingNode;
   populateBinding(type,node.hostId || node.groupId);
   syncSubMap(node.subMapId || '');
+  if (typeof groupLinkEditor !== 'undefined' && groupLinkEditor) {
+    groupLinkEditor.open(node, current.layout.links);
+    groupLinkEditor.sync($('group').value, type === 'group');
+  }
   $('element-dialog').removeAttribute('style');
   window.elementIconPicker?.sync();
   $('element-dialog').showModal();
@@ -1548,11 +1554,13 @@ $('type').onchange = () => {
   syncElementIcons();
   populateBinding($('type').value);
   resetInterfacesForHostChange();
+  if (typeof groupLinkEditor !== 'undefined') groupLinkEditor?.sync($('group').value, $('type').value === 'group');
   syncSubMap();
   drawPreview();
 };
 $('group').addEventListener('change', () => {
   resetInterfacesForHostChange();
+  if (typeof groupLinkEditor !== 'undefined') groupLinkEditor?.sync($('group').value, $('type').value === 'group');
   if (!$('element-name').value.trim()) $('element-name').value = ($('type').value === 'host' ? inventory : groups)
     .find(item => item.id === $('group').value)?.name || '';
   drawPreview();
@@ -1565,6 +1573,12 @@ $('element-form').onsubmit = event => {
   if (!name) { $('element-name').focus(); return; }
   if (type && !binding) { $('group-field').querySelector('.group-picker-trigger').click(); return; }
   const node = pendingNode || current.layout.nodes.find(n => n.id === selected);
+  const linkInterfaces = type === 'group' && typeof groupLinkEditor !== 'undefined' && groupLinkEditor ? groupLinkEditor.value() : node.linkInterfaces;
+  if (type === 'group' && typeof groupLinkEditor !== 'undefined' && groupLinkEditor?.validate(binding)) return;
+  if (type === 'group' && linkInterfaces && current.layout.links.some(link => {
+    const side = link.from === node.id ? 'A' : link.to === node.id ? 'B' : null;
+    return side && link.connection && !linkInterfaces.some(entry => entry.hostId === link.connection['host' + side] && entry.name === link.connection['interface' + side]);
+  })) { $('port-error').textContent = 'Existe um enlace usando uma interface removida da lista. Reconfigure ou remova o enlace antes de desabilitar a interface.'; return; }
   const icon = $('element-icon').value;
   const interfacesEnabled = $('interfaces-enabled').checked;
   const ports = switchDraft();
@@ -1586,7 +1600,7 @@ $('element-form').onsubmit = event => {
   if (affected.length && !confirm('A alteração remove as conexões abaixo:\n' + affectedNames.join('\n') + '\nContinuar?')) return;
   checkpoint();
   current.layout.links = current.layout.links.filter(link => !affected.includes(link));
-  Object.assign(node, {icon, switchColor: configuredSwitchColor, interfacesEnabled, ports, slots: configuredSlots.map(slot => ({...slot, name: slot.name.trim()})), name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
+  Object.assign(node, {linkInterfaces: type === 'group' ? linkInterfaces : null, icon, switchColor: configuredSwitchColor, interfacesEnabled, ports, slots: configuredSlots.map(slot => ({...slot, name: slot.name.trim()})), name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
     groupId:type === 'group' ? binding : null, subMapId:type === 'group' ? $('sub-map').value || null : null, color:node.color || null});
   ensureElementOrigin(node);
   if (pendingNode) current.layout.nodes.push(node);
@@ -1664,12 +1678,14 @@ $('save').onclick = async () => {
 })();
 
 
-let connectionDefinitions = [], connectionReadings = new Map(), connectionPending = new Map(), connectionFailures = new Set();
+let connectionDefinitions = [], connectionReadings = new Map(), connectionFailures = new Set();
 // Keep the last visible snapshot until each connection receives its first resumed result.
 const connectionPausedAt = new Map();
 function connectionDisplayTime(id) { return connectionPausedAt.get(id) ?? Date.now(); }
-async function connectionRequest(url, body) {
-  const response = await fetch(url, body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+async function connectionRequest(url, body, headers = {}) {
+  const options = body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json', ...headers}, body:JSON.stringify(body)};
+  if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) options.signal = AbortSignal.timeout(90000);
+  const response = await fetch(url, options);
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || error.detail || 'Não foi possível consultar a conexão. Verifique a configuração da API.'); }
   return response.json();
 }
@@ -1698,16 +1714,24 @@ async function loadConnectionInterfaces() {
     if (hostIds[0] === hostIds[1]) throw new Error('Selecione hosts diferentes para os lados A e B.');
     connectionDefinitions = current.layout.links.map(link => link.connection).filter(Boolean);
     const existing = connectionDefinitions.find(c => c.id === link.mappedConnectionId);
-    const interfaces = await Promise.all(hostIds.map(id => connectionRequest('/api/maps/connections/interfaces/' + encodeURIComponent(id))));
+    const interfaces = nodes.map((node, index) => {
+      if (node.groupId && node.linkInterfaces != null) return node.linkInterfaces.filter(entry => entry.hostId === hostIds[index]);
+      const element = node.hostId === hostIds[index] ? node
+        : current.layout.nodes.find(candidate => candidate.hostId === hostIds[index]);
+      return element?.interfacesEnabled === false ? [] : [...new Map((element?.ports || [])
+        .filter(port => port.name).map(port => [port.name, port])).values()]
+        .sort((a, b) => a.name.localeCompare(b.name, 'en', {numeric: true, sensitivity: 'base'}));
+    });
     if (sequence !== interfaceLoad || pendingLink !== link) return;
     interfaces.forEach((rows, i) => {
       controls[i].append(new Option('Selecione a interface', ''));
       rows.forEach(row => controls[i].append(new Option(row.comment?.trim() ? row.name + ' - ' + row.comment.trim() : row.name, row.name)));
-      controls[i].value = (existing && (hostIds[i] === existing.hostA ? existing.interfaceA : hostIds[i] === existing.hostB ? existing.interfaceB : '')) || '';
+      const selected = (existing && (hostIds[i] === existing.hostA ? existing.interfaceA : hostIds[i] === existing.hostB ? existing.interfaceB : '')) || '';
+      controls[i].value = rows.some(row => row.name === selected) ? selected : '';
       controls[i].disabled = false;
     });
     updateLinkEndpoints();
-    $('connection-message').textContent = interfaces.some(rows => !rows.length) ? 'Nenhuma interface Ethernet disponível.' : '';
+    $('connection-message').textContent = interfaces.some(rows => !rows.length) ? 'Cadastre as interfaces no elemento do mapa: portas do host ou interfaces habilitadas para enlaces do grupo.' : '';
   } catch (error) { if (sequence === interfaceLoad) $('connection-message').textContent = error.message; }
   finally { if (sequence === interfaceLoad) {
     $('connection-retry').removeAttribute('aria-busy');
@@ -1739,7 +1763,7 @@ document.addEventListener('visibilitychange', () => {
       if (!connectionPausedAt.has(id)) connectionPausedAt.set(id, now);
     });
   } else {
-    refreshMappedConnections(true);
+    refreshMappedConnections();
   }
 });
 function mappedConnectionTitle(id) {
@@ -1752,54 +1776,74 @@ function mappedConnectionTitle(id) {
   return [reading.a, reading.b].map((e, i) => {
     const hostId = i ? reading.hostB || definition?.hostB : reading.hostA || definition?.hostA;
     const host = inventory.find(h => h.id === hostId);
-    return `${i ? 'B' : 'A'} · ${host?.name || hostId || ''} · ${e.name}: ${now - e.measuredAt > 30000 ? 'Leitura desatualizada' : e.error || (e.up ? 'UP' : 'DOWN')}`;
+    return `${i ? 'B' : 'A'} · ${host?.name || hostId || ''} · ${e.name}: ${e.error || (!MapTraffic.fresh(e, now) ? 'Leitura desatualizada' : (e.up ? 'UP' : 'DOWN'))}`;
   }).concat([`Download: ${connectionRate(data.tx)} · ${utilization(data.tx)}`,
     `Upload: ${connectionRate(data.rx)} · ${utilization(data.rx)}`,
     `Capacidade: ${connectionRate(data.capacity)}`,
     `Última coleta: ${new Date(reading.a.measuredAt).toLocaleString('pt-BR')}`]).join('\n');
 }
-async function refreshMappedConnection(id, requestedMap, warmup = false) {
-  if (current !== requestedMap || editing || document.hidden) return;
-  if (connectionPending.get(id)?.map === requestedMap) return;
-  const request = {map: requestedMap};
-  connectionPending.set(id, request);
-  try {
-    const rows = await connectionRequest('/api/maps/' + encodeURIComponent(requestedMap.id) + '/connections/readings', [id]);
-    if (current !== requestedMap || editing || document.hidden) return;
-    connectionPausedAt.delete(id);
-    connectionFailures.delete(id);
-    const reading = rows.find(row => row.id === id);
-    if (reading) connectionReadings.set(id, reading);
-    else connectionReadings.delete(id);
-    if (warmup && rows.some(row => [row.a, row.b].some(endpoint => endpoint && !endpoint.error
-      && endpoint.up && (endpoint.txBps == null || endpoint.rxBps == null)))) {
-      setTimeout(() => refreshMappedConnection(id, requestedMap), 1200);
-    }
-  } catch {
-    if (current === requestedMap && !editing && !document.hidden) {
-      connectionPausedAt.delete(id);
-      connectionReadings.delete(id);
-      connectionFailures.add(id);
-    }
-  } finally {
-    if (connectionPending.get(id) === request) connectionPending.delete(id);
-    if (current === requestedMap && !editing) {
-      document.querySelectorAll('.map-traffic').forEach(layer => {
-        if (layer.trafficContext.link.mappedConnectionId === id) updateTrafficLayer(layer);
-      });
-      if (typeof MapConnectionTooltip !== 'undefined') {
-        MapConnectionTooltip.refresh(id, MapConnectionTooltip.details(connectionReadings.get(id),
-          connectionDefinitions.find(c => c.id === id), inventory, connectionFailures.has(id), connectionDisplayTime(id)));
-      }
-    }
+const mappedPending = new Map();
+const mappedVersions = new WeakMap();
+function renderMappedReadings() {
+  document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
+  if (typeof MapConnectionTooltip !== 'undefined') {
+    const ids = new Set(current?.layout.links.map(link => link.mappedConnectionId).filter(Boolean));
+    ids.forEach(id => MapConnectionTooltip.refresh(id,
+      MapConnectionTooltip.details(connectionReadings.get(id), connectionDefinitions.find(c => c.id === id), inventory,
+        connectionFailures.has(id), connectionDisplayTime(id))));
   }
 }
-async function refreshMappedConnections(warmup = false) {
-  if (document.hidden) return;
-  document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
-  if (editing || !current || document.hidden) return;
-  const ids = [...new Set(current.layout.links.map(l => l.mappedConnectionId).filter(Boolean))];
-  return Promise.all(ids.map(id => refreshMappedConnection(id, current, warmup)));
+async function refreshMappedConnections(force = false) {
+  if (editing || !current || document.hidden) return true;
+  const requestedMap = current;
+  const existing = mappedPending.get(requestedMap);
+  if (existing) {
+    if (!force || existing.force) return existing.promise;
+    await existing.promise;
+    if (current !== requestedMap || editing || document.hidden) return true;
+    return refreshMappedConnections(true);
+  }
+  const ids = [...new Set(requestedMap.layout.links.map(link => link.mappedConnectionId).filter(Boolean))];
+  if (!ids.length) return true;
+  const request = {force};
+  request.promise = (async () => {
+    try {
+      const batch = await connectionRequest('/api/maps/' + encodeURIComponent(requestedMap.id)
+        + '/connections/readings' + (force ? '?force=true' : ''), ids,
+        {'X-Map-Readings-Version': mappedVersions.get(requestedMap) || ''});
+      if (current !== requestedMap || editing || document.hidden) return true;
+      if (batch.version) mappedVersions.set(requestedMap, batch.version);
+      const rows = Array.isArray(batch) ? batch : batch.unchanged
+        ? ids.map(id => connectionReadings.get(id)).filter(Boolean) : batch.readings;
+      const rowsById = new Map(rows.map(row => [row.id, row]));
+      let ok = true;
+      ids.forEach(id => {
+        connectionPausedAt.delete(id);
+        const reading = rowsById.get(id);
+        connectionFailures.delete(id);
+        if (reading) {
+          connectionReadings.set(id, reading);
+          if (reading.a?.queryError || reading.b?.queryError) ok = false;
+        } else connectionReadings.delete(id);
+      });
+      return ok;
+    } catch {
+      if (current === requestedMap && !editing && !document.hidden) {
+        ids.forEach(id => { connectionPausedAt.delete(id); connectionFailures.add(id); });
+      }
+      return false;
+    } finally {
+      if (mappedPending.get(requestedMap) === request) mappedPending.delete(requestedMap);
+      if (current === requestedMap && !editing) renderMappedReadings();
+    }
+  })();
+  mappedPending.set(requestedMap, request);
+  return request.promise;
 }
-setInterval(refreshMappedConnections, 10000);
+setInterval(refreshMappedConnections, 60000);
 refreshMappedConnections();
+
+const groupLinkEditor = typeof GroupLinkInterfaces !== 'undefined' ? GroupLinkInterfaces.create({
+  hosts: () => inventory,
+  discover: hostId => connectionRequest('/api/maps/connections/discover/' + encodeURIComponent(hostId))
+}) : null;

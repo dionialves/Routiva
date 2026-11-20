@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.containsString;
 class MappedConnectionPageTests {
     @Autowired MockMvc mvc;
     @MockitoBean JdbcTemplate jdbc;
+    @MockitoBean MapZabbixReadings zabbixReadings;
     @MockitoBean ZabbixService inventory;
     @MockitoBean MikrotikService mikrotik;
     @MockitoBean br.com.scriptping.datacom.DatacomEquipmentProvider datacom;

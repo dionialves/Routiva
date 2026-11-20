@@ -98,6 +98,10 @@ CREATE TABLE IF NOT EXISTS zabbix_settings (
     payload TEXT NOT NULL
 );
 
+-- CREATE TABLE IF NOT EXISTS does not repair constraints on legacy tables.
+-- Enforce singleton uniqueness even when an old installation lacks its primary key.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_zabbix_settings_singleton ON zabbix_settings(id);
+
 -- Retired tables: drop dependents first, without CASCADE, preserving active data.
 -- Idempotent on fresh databases and on subsequent application starts.
 DROP TABLE IF EXISTS analytics_checkpoint_part;

@@ -11,6 +11,7 @@ const MapSwitch = (() => {
     const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
+  const interfaceNames = new Intl.Collator('en', {numeric: true, sensitivity: 'base'});
   const types = ['rj45', 'sfp', 'qsfp', 'wireless'];
   let tintSequence = 0;
   // Socket centers in the shared 22×19 port drawing, independent of cabinet color.
@@ -108,11 +109,28 @@ const MapSwitch = (() => {
       }));
     });
   }
+  function zabbixConnector(row, previous) {
+    const name = (row['default-name'] || row.name || '').toLowerCase();
+    const declared = String(row.connector || '').trim().toLowerCase();
+    const connector = ({rj45: 'electrical', 'sfp+': 'sfpplus', 'qsfp+': 'qsfpplus'})[declared] || declared;
+    if (Object.hasOwn(connectors, connector)) return {value: connector, identified: true};
+    if (['71', '157'].includes(row['snmp-type']) || /^(?:wifi|wlan|ath)\d|^wireless$/.test(name))
+      return {value: 'wireless', identified: true};
+    if (/^(?:qsfp|sfp)/.test(name)) return {value: discoveredConnector(name, true, 0), identified: true};
+    // The ASR physical TenGigabitEthernet representation uses the map's SFP+ library.
+    if (/^tengigabitethernet\d/.test(name)) return {value: 'sfpplus', identified: true};
+    if (/^(?:ether|eth)\d/.test(name)) return {value: 'electrical', identified: true};
+    const saved = previous?.connector || legacyConnectors[previous?.capacity];
+    return {value: saved || 'electrical', identified: false};
+  }
   function importInterfaces(rows, previous) {
-    const slots = [], ports = [];
+    const slots = [], ports = [], unidentifiedConnectors = [];
     for (const row of rows) {
       const name = row.name;
       if (!name || ports.some(port => port.name === name)) continue;
+      const old = previous.find(port => port.name === name);
+      const zabbix = row.source === 'zabbix' ? zabbixConnector(row, old) : null;
+      if (zabbix && !zabbix.identified) unidentifiedConnectors.push(name);
       const hardware = (row['default-name'] || name).toLowerCase();
       const declaredConnector = Object.hasOwn(connectors, row.connector || '') ? row.connector : null;
       const optical = (declaredConnector != null && !['electrical', 'wireless'].includes(declaredConnector)) || /sfp|qsfp/.test(hardware) || row['sfp-supported'] === 'true' || 'sfp-module-present' in row;
@@ -121,9 +139,12 @@ const MapSwitch = (() => {
       // Negotiated rate and configured speed never define physical capacity.
       const maximum = maximumSpeed(row.supported) || maximumSpeed(row['supported-rates'])
         || (!optical ? maximumSpeed(row.advertising) : 0);
-      const connector = declaredConnector || discoveredConnector(hardware, optical, maximum);
-      const capacity = capacityFromInterfaceName(hardware)
-        || Object.keys(portCapacities).find(key => maximumSpeed(portCapacities[key]) === maximum) || 'unknown';
+      const connector = zabbix?.value || declaredConnector || discoveredConnector(hardware, optical, maximum);
+      const opticalCapacity = zabbix && {sfp: '1g', sfpplus: '10g', sfp28: '25g', sfp56: '50g',
+        qsfpplus: '40g', qsfp28: '100g', qsfp56: '200g', qsfpdd: '400g', qsfpdd800: '800g'}[connector];
+      const capacity = capacityFromInterfaceName(hardware) || opticalCapacity
+        || (zabbix ? (old?.capacity ? legacySpeeds[old.capacity] || old.capacity : null)
+          : Object.keys(portCapacities).find(key => maximumSpeed(portCapacities[key]) === maximum)) || 'unknown';
       const interfaceName = row['default-name'] || name;
       const slotName = (interfaceName.replace(/\d+$/, '') || interfaceName).slice(0, 80);
       let slot = slots.find(slot => slot.name === slotName && slot.connector === connector && slot.capacity === capacity && slot.count < 96);
@@ -132,19 +153,26 @@ const MapSwitch = (() => {
         slots.push(slot);
       }
       slot.count++; slot.interfaceNames.push(name);
-      const old = previous.find(port => port.name === name);
       ports.push({id: old?.id || newId(), slotId: slot.id, name, capacity,
         connector, type: connectors[connector].type, comment: row.comment || '', interfaceType: row.type || 'ether',
         speed, running: row.disabled === 'true' ? false : row.status ? row.status === 'link-ok' : row.running == null ? null : row.running === 'true'});
     }
-    return {slots, ports};
+    if (!rows.some(row => row.source === 'zabbix')) return {slots, ports, unidentifiedConnectors};
+    const orderedPorts = slots.flatMap(slot => {
+      const members = ports.filter(port => port.slotId === slot.id)
+        .sort((a, b) => interfaceNames.compare(a.name || '', b.name || ''));
+      slot.interfaceNames = members.map(port => port.name);
+      return members;
+    });
+    return {slots, ports: orderedPorts, unidentifiedConnectors};
   }
   function isEquipment(node) { return node.icon === 'switch' || node.icon === 'radio'; }
   function geometry(node) {
     const ports = node.ports || [];
     const keys = [...new Set(ports.map(port => port.slotId || port.type))];
     const groups = keys.map(key => {
-      const members = ports.filter(port => (port.slotId || port.type) === key);
+      const members = ports.filter(port => (port.slotId || port.type) === key)
+        .sort((a, b) => interfaceNames.compare(a.name || '', b.name || ''));
       const singleRow = members.length <= 12;
       const columns = singleRow ? members.length : Math.ceil(members.length / 2);
       const pitch = 23;

@@ -59,7 +59,7 @@ test('pulses follow real geometry, preserve phase across metrics and respect dir
   assert.equal(layer.trafficPulses.attrs.visibility, 'visible');
 });
 
-test('a failed collection preserves DOWN and never animates presumed traffic', () => {
+test('missing readings do not preserve a stale DOWN state', () => {
   const layer = element('g'); layer.parentNode = element('g');
   layer.trafficContext = {link:{mappedConnectionId:'down-link'}};
   const path = element('path', {d:'M 0 0 L 200 0'});
@@ -68,7 +68,8 @@ test('a failed collection preserves DOWN and never animates presumed traffic', (
   traffic.render(element, layer, path, route, [], {id:'down-link',a}, true);
   assert.equal(path.attrs['traffic-down'], true);
   traffic.render(element, layer, path, route, [], undefined, true);
-  assert.equal(path.attrs['traffic-down'], true);
+  assert.equal(path.attrs['traffic-down'], false);
+  assert.equal(path.attrs['--traffic-color'], '#687486');
   assert.equal(layer.children.filter(n => n.tag === 'circle').length, 0);
 });
 
@@ -139,7 +140,7 @@ test('radio links to host groups are wireless in either direction, preserving Et
 });
 
 
-test('links default to green and use the configured source port capacity for utilization', () => {
+test('links without readings use gray and use the configured source port capacity for utilization', () => {
   for (const wireless of [false, true]) {
     const layer = element('g');
     layer.trafficContext = {wireless, link:{from:'a', fromPort:'w'}};
@@ -147,7 +148,7 @@ test('links default to green and use the configured source port capacity for uti
     const route = [{x:0,y:0},{x:300,y:0}];
     const nodes = [{id:'a', ports:[{id:'w', capacity:'1g'}]}];
     traffic.render(element, layer, path, route, nodes, undefined, true);
-    assert.equal(path.attrs['--traffic-color'], '#22C55E');
+    assert.equal(path.attrs['--traffic-color'], '#687486');
     for (const [txBps, color] of [[100e6, '#22C55E'], [700e6, '#EAB308'], [900e6, '#EF4444']]) {
       traffic.render(element, layer, path, route, nodes,
         {a:{up:true, measuredAt:Date.now(), txBps}}, true);
@@ -155,4 +156,13 @@ test('links default to green and use the configured source port capacity for uti
       assert.equal(layer.children.some(child => child.tag === 'text'), false);
     }
   }
+});
+
+test('Zabbix validity follows each item interval and traffic clock independently', () => {
+  const endpoint={measuredAt:10000,validUntil:190000,rxValidUntil:190000,txValidUntil:20000,up:true,rxBps:'0',txBps:'100'};
+  assert.equal(traffic.fresh(endpoint,70000),true);
+  const data=traffic.state({a:endpoint},70000);
+  assert.equal(data.rx,0);assert.equal(data.tx,null);
+  assert.equal(traffic.fresh(endpoint,190001),false);
+  assert.equal(traffic.fresh({...endpoint,measuredAt:80000},70000),false);
 });

@@ -178,6 +178,35 @@ public class ZabbixClient {
         }
     }
 
+    /** Standard interface items, including dependent SNMP items; no equipment connections. */
+    public synchronized List<JsonNode> mapInterfaceItems(Set<String> hostIds) {
+        if (hostIds.isEmpty()) return List.of();
+        detectVersion();
+        if (session == null) login();
+        var result = new ArrayList<JsonNode>();
+        var ids = new ArrayList<>(hostIds);
+        for (int start = 0; start < ids.size(); start += 100) {
+            authenticatedRequest("item.get", Map.of("hostids", ids.subList(start, Math.min(start + 100, ids.size())),
+                "search", Map.of("key_", "net.if."), "output", List.of("itemid", "hostid", "name", "key_", "units", "delay"),
+                "selectTags", "extend")).forEach(result::add);
+        }
+        return List.copyOf(result);
+    }
+
+    public synchronized List<JsonNode> mapItemValues(Set<String> itemIds) {
+        if (itemIds.isEmpty()) return List.of();
+        detectVersion();
+        if (session == null) login();
+        var result = new ArrayList<JsonNode>();
+        var ids = new ArrayList<>(itemIds);
+        for (int start = 0; start < ids.size(); start += 500) {
+            authenticatedRequest("item.get", Map.of("itemids", ids.subList(start, Math.min(start + 500, ids.size())),
+                "output", List.of("itemid", "lastvalue", "lastclock", "status", "state", "error"),
+                "selectHosts", List.of("status"))).forEach(result::add);
+        }
+        return List.copyOf(result);
+    }
+
     public record ItemReading(String itemId, String name, String value, String units, long collectedAt) {}
 
     public synchronized IncidentDetails incidentDetails(String eventId, List<String> hostIds) {

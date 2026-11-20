@@ -39,6 +39,62 @@ class NetworkMapPersistenceTests {
             new Layout(name, null, 0, List.of(node), List.of()), null));
     }
 
+    private Node groupWithInterfaces(List<LinkInterface> entries) {
+        return new Node("group", "ga", null, null, "Grupo", 0, 0, null, "circle", List.of(), List.of(), false,
+            null, null, 0.0, 1.0, false, null, entries);
+    }
+    @Test void persistsGroupInterfaceRegistryAndRejectsDuplicatePairsAndNonMembers(
+            @Autowired br.com.scriptping.zabbix.ZabbixService inventory) throws Exception {
+        org.mockito.Mockito.when(inventory.hosts()).thenReturn(List.of(
+            new br.com.scriptping.zabbix.Host("ha", "Host A", "10.0.0.1", List.of(new br.com.scriptping.zabbix.Host.Group("ga", "Grupo")))));
+        try {
+            var first = new LinkInterface("ha", "wifi0", "wireless", "unknown");
+            var second = new LinkInterface("ha", "eth1_emac1", "electrical", "1g");
+            var entries = List.of(first, second);
+            var saved = service.save(new Saved(null, 0, new Layout("Cadastro", null, 0,
+                List.of(groupWithInterfaces(entries)), List.of()), null));
+            assertThat(service.maps().stream().filter(map -> map.id().equals(saved.id())).findFirst().orElseThrow()
+                .layout().nodes().getFirst().linkInterfaces()).isEqualTo(entries);
+            for (var invalid : List.of(List.of(first, first), List.of(new LinkInterface("outside", "wifi0", "wireless", "unknown")))) {
+                assertThatThrownBy(() -> service.save(new Saved(null, 0, new Layout("Inválido", null, 0,
+                    List.of(groupWithInterfaces(invalid)), List.of()), null))).isInstanceOf(ResponseStatusException.class);
+            }
+        } finally { org.mockito.Mockito.reset(inventory); }
+    }
+    @Test void groupLinksUseOnlyRegisteredPairsWithoutRequiringIndividualHostElements(
+            @Autowired br.com.scriptping.zabbix.ZabbixService inventory) throws Exception {
+        org.mockito.Mockito.when(inventory.hosts()).thenReturn(List.of(
+            new br.com.scriptping.zabbix.Host("ha", "Host A", "10.0.0.1", List.of(new br.com.scriptping.zabbix.Host.Group("ga", "Grupo")))));
+        try {
+            var group = groupWithInterfaces(List.of(new LinkInterface("ha", "wifi0", "wireless", "unknown")));
+            var peer = new Node("peer", null, "hb", null, "Peer", 100, 0, null);
+            for (String name : List.of("wifi0", "wlan0")) {
+                var connection = new Connection("c", "Enlace", "ha", name, "hb", "ether1");
+                var link = new Link("group", "peer", null, null, "straight", List.of(), "straight", "c", connection);
+                var input = new Saved(null, 0, new Layout("Enlace", null, 0, List.of(group, peer), List.of(link)), null);
+                if (name.equals("wifi0")) assertThat(service.save(input).id()).isNotBlank();
+                else assertThatThrownBy(() -> service.save(input)).isInstanceOf(ResponseStatusException.class).hasMessageContaining("não está habilitada");
+            }
+        } finally { org.mockito.Mockito.reset(inventory); }
+    }
+
+    @Test void mappedInterfacesMustBelongToConfiguredElementPorts() throws Exception {
+        var a = new Node("a", null, "ha", null, "A", 0, 0, null, "switch",
+            List.of(new Port("pa", "rj45", "sa", "eth1_emac1", "1g", null, null, null, null, "electrical")),
+            List.of(new Slot("sa", "eth", "1g", 1, List.of("eth1_emac1"), "electrical")));
+        var b = new Node("b", null, "hb", null, "B", 100, 0, null, "switch",
+            List.of(new Port("pb", "rj45", "sb", "ether1", "1g", null, null, null, null, "electrical")),
+            List.of(new Slot("sb", "ether", "1g", 1, List.of("ether1"), "electrical")));
+        for (String name : List.of("eth1_emac1", "wlan0")) {
+            var connection = new Connection("c", "Enlace", "ha", name, "hb", "ether1");
+            var link = new Link("a", "b", "pa", "pb", "straight", List.of(), "straight", "c", connection);
+            var input = new Saved(null, 0, new Layout("Portas", null, 0, List.of(a, b), List.of(link)), null);
+            if (name.equals("eth1_emac1")) assertThat(service.save(input).id()).isNotBlank();
+            else assertThatThrownBy(() -> service.save(input)).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("não está cadastrada");
+        }
+    }
+
     @Test
     void mappedGroupsRequireHostsThatBelongToEachEndpointGroup(
             @Autowired br.com.scriptping.zabbix.ZabbixService inventory) throws Exception {

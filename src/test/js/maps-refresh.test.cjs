@@ -15,7 +15,7 @@ function setup() {
     current: { layout: { nodes: [{ hostId: '1' }] } }, editing: false,
     mapView: 'incidents', generation: 1, timer: 7, states: new Map(), summaryFailed: false,
     api: () => pending, draw() {}, updateMapOverview() {}, popSummary: { render() {} },
-    clearTimeout() {}, setTimeout: () => 8,
+    refreshMappedConnections: async () => true, clearTimeout() {}, setTimeout: () => 8,
   });
   vm.runInContext(source.slice(source.indexOf('function setRefreshBusy('), source.indexOf('function openMap(')), context);
   return { button, status, context, resolve, reject };

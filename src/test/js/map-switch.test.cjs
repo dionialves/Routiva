@@ -507,3 +507,55 @@ test('CRS326 groups 24 gigabit electrical ports and two ten gigabit SFP+ ports',
   assert.deepEqual(result.slots.map(s => [s.connector, s.capacity, s.count]),
     [['electrical', '1g', 24], ['sfpplus', '10g', 2]]);
 });
+
+test('Zabbix discovery classifies Mimosa electrical and wireless ports without renaming them', () => {
+  const rows = ['eth1_emac1', 'wifi0', 'wlan0'].map(name => ({name, source:'zabbix'}));
+  const {ports} = switchMap.importInterfaces(rows, []);
+  assert.deepEqual(ports.map(p => p.name), ['eth1_emac1', 'wifi0', 'wlan0']);
+  assert.deepEqual(ports.map(p => p.connector), ['electrical', 'wireless', 'wireless']);
+  assert.equal(ports.length, 3);
+  assert.ok(ports.every(p => p.capacity === 'unknown'));
+});
+test('Zabbix connectors use SNMP type and physical families independently of negotiated speed', () => {
+  const rows = [
+    {name:'radio-link', 'snmp-type':'157', speed:'1000000000bps'},
+    {name:'sfp-sfpplus1', speed:'1000000000bps'},
+    {name:'sfp28-1', speed:'1000000000bps'},
+    {name:'qsfp56-dd-1', speed:'100000000000bps'},
+    {name:'TenGigabitEthernet0/0/0', speed:'1000000000bps'},
+    {name:'uplink', connector:'SFP+', speed:'1000000000bps'}
+  ].map(row => ({...row, source:'zabbix'}));
+  const {ports} = switchMap.importInterfaces(rows, []);
+  assert.deepEqual(ports.map(p => p.connector), ['wireless','sfpplus','sfp28','qsfpdd','sfpplus','sfpplus']);
+  assert.deepEqual(ports.map(p => p.capacity), ['unknown','10g','25g','400g','10g','10g']);
+});
+test('ambiguous Zabbix media preserve existing connector capacity and port id and ask for review', () => {
+  const previous=[{id:'stable', name:'ten-gigabit-ethernet-1/1/1', connector:'sfpplus', capacity:'10g'}];
+  const rows=[{name:previous[0].name, source:'zabbix', speed:'1000000000bps'},
+    {name:'uplink-new', source:'zabbix', speed:'10000000000bps'}];
+  const result=switchMap.importInterfaces(rows,previous);
+  assert.equal(result.ports[0].id,'stable');
+  assert.equal(result.ports[0].connector,'sfpplus');
+  assert.equal(result.ports[0].capacity,'10g');
+  assert.equal(result.ports[1].capacity,'unknown');
+  assert.deepEqual(result.unidentifiedConnectors,rows.map(row=>row.name));
+});
+
+test('Zabbix import orders ether1 through ether24 numerically while preserving existing identities', () => {
+  const names=Array.from({length:24},(_,i)=>'ether'+(i+1));
+  const previous=names.map((name,i)=>({name,id:'existing-'+i}));
+  const rows=[...names].sort().map(name=>({name,source:'zabbix'}));
+  const result=switchMap.importInterfaces(rows,previous);
+  assert.deepEqual(result.ports.map(p=>p.name),names);
+  assert.deepEqual(result.ports.map(p=>p.id),previous.map(p=>p.id));
+  assert.deepEqual(result.slots[0].interfaceNames,names);
+});
+test('saved maps draw ports in numeric order without changing stored ports or cable identities', () => {
+  const names=['ether1','ether10','ether11','ether12','ether2','ether3','ether4','ether5','ether6','ether7','ether8','ether9'];
+  const ports=names.map(name=>({id:name,name,type:'rj45',slotId:'ether'}));
+  const saved=JSON.stringify(ports);
+  const shape=switchMap.geometry({icon:'switch',ports});
+  assert.deepEqual(shape.ports.map(p=>p.name),Array.from({length:12},(_,i)=>'ether'+(i+1)));
+  assert.equal(JSON.stringify(ports),saved);
+  assert.ok(shape.ports.every(p=>p.id===p.name));
+});

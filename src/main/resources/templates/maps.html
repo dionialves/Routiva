@@ -6,7 +6,7 @@
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
   <th:block th:replace="~{design-system :: picker}"></th:block>
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261119-traffic-hover"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261119-standard-chevron" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261119-site-controls" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261119-traffic-hover" defer></script><script src="/map-connection-tooltip.js?v=20261118" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/maps.js?v=20261119-wireless" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261119-traffic-hover"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261119-standard-chevron" defer></script><script src="/pop-summary.js?v=20261115-pop-availability" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261120-natural-port-order" defer></script><script src="/map-links.js?v=20261117-bend-marks" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261120-zabbix-cache" defer></script><script src="/map-connection-tooltip.js?v=20261120-zabbix-cache" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/group-link-interfaces.js?v=20261120" defer></script><script src="/maps.js?v=20261120-group-link-interfaces" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
 <body class="availability-dashboard">
@@ -225,7 +225,7 @@
         </section>
         <fieldset id="switch-config" hidden>
           <legend class="sr-only">Interfaces</legend>
-          <div class="element-section-heading"><div><h3>Interfaces</h3><p>Configure os grupos de portas do equipamento.</p></div>
+          <div class="element-section-heading"><div><h3>Interfaces</h3><p>Carregue as interfaces do Zabbix e revise conectores e capacidades.</p></div>
             <div class="element-interface-actions"><button type="button" id="load-switch-interfaces" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#refresh"/></svg>Carregar interfaces</button>
             <button type="button" id="add-switch-slot" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>Adicionar slot</button></div>
           </div>
@@ -234,6 +234,18 @@
           </div>
           <p id="interface-load-status" role="status" aria-live="polite"></p>
         </fieldset>
+        <section id="group-link-interfaces" class="form-dialog-section" hidden aria-labelledby="group-link-title">
+          <h3 id="group-link-title" class="form-dialog-section-title">Interfaces habilitadas para enlaces</h3>
+          <p>Adicione interfaces dos hosts deste grupo. Um host pode aparecer várias vezes, com interfaces diferentes.</p>
+          <div class="form-dialog-section-fields">
+            <div><label id="group-link-host-label" for="group-link-host">Host do grupo</label><select id="group-link-host"></select></div>
+            <button id="group-link-load" type="button" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#refresh"/></svg>Carregar interfaces</button>
+            <label>Interface<select id="group-link-interface" disabled><option value="">Selecione a interface</option></select></label>
+            <button id="group-link-add" type="button" class="system-button" disabled><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>Habilitar interface</button>
+          </div>
+          <div class="element-slot-table-scroll"><table class="element-slot-table"><thead><tr><th scope="col">Host</th><th scope="col">Interface</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="group-link-rows"></tbody></table></div>
+          <p id="group-link-status" role="status" aria-live="polite"></p>
+        </section>
         <p id="port-error" role="alert"></p>
         <section class="element-preview" aria-labelledby="preview-heading">
           <div><h3 id="preview-heading">Pré-visualização</h3><p>Como o elemento será exibido no mapa.</p></div>

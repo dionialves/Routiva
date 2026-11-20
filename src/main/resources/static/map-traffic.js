@@ -1,7 +1,6 @@
 'use strict';
 
 const MapTraffic = (() => {
-  const operational = new Map();
   let nextMask = 0;
   function isWireless(link, nodes) {
     const endpoints = [['from', 'fromPort'], ['to', 'toPort']].map(([nodeKey, portKey]) => {
@@ -35,12 +34,15 @@ const MapTraffic = (() => {
     const giga = n >= 1e9;
     return (n / (giga ? 1e9 : 1e6)).toLocaleString('pt-BR', {minimumFractionDigits: fixed ? 2 : 0, maximumFractionDigits: 2}) + (giga ? ' Gbps' : ' Mbps');
   }
+  function fresh(e, now = Date.now()) {
+    return Boolean(e && !e.error && e.measuredAt > 0 && now >= e.measuredAt
+      && now <= (e.validUntil ?? e.measuredAt + 30000));
+  }
   function state(reading, now = Date.now()) {
-    const fresh = e => e && !e.error && now - e.measuredAt <= 30000 && now >= e.measuredAt;
-    const down = [reading?.a, reading?.b].some(e => fresh(e) && !e.up);
+    const down = [reading?.a, reading?.b].some(e => fresh(e, now) && !e.up);
     const a = reading?.a;
-    return {down, tx: !down && fresh(a) ? number(a.txBps) : null,
-      rx: !down && fresh(a) ? number(a.rxBps) : null, capacity: number(a?.capacityBps)};
+    return {down, tx: !down && fresh(a, now) ? (now <= (a.txValidUntil ?? a.measuredAt + 30000) ? number(a.txBps) : null) : null,
+      rx: !down && fresh(a, now) ? (now <= (a.rxValidUntil ?? a.measuredAt + 30000) ? number(a.rxBps) : null) : null, capacity: number(a?.capacityBps)};
   }
   function render(svg, layer, path, route, nodes, reading, enabled, reverse = false, now = Date.now()) {
     const wireless = Boolean(layer.trafficContext?.wireless);
@@ -50,20 +52,15 @@ const MapTraffic = (() => {
       '25g': 25e9, '40g': 40e9, '50g': 50e9, '100g': 100e9,
       '200g': 200e9, '400g': 400e9, '800g': 800e9 };
     const source = nodes.find(node => node.id === link?.[reverse ? 'to' : 'from']);
-    const port = source?.ports?.find(port => port.id === link?.[reverse ? 'toPort' : 'fromPort']);
+    const port = source?.ports?.find(port => port.id === link?.[reverse ? 'toPort' : 'fromPort'])
+      || source?.linkInterfaces?.find(entry => entry.hostId === (reading?.hostA || link?.connection?.hostA)
+        && entry.name === (reading?.a?.name || link?.connection?.interfaceA));
     data.capacity = capacities[port?.capacity] || data.capacity;
-    const id = link?.mappedConnectionId || reading?.id;
-    const previous = operational.get(id) || [null, null];
-    [reading?.a, reading?.b].forEach((endpoint, i) => {
-      if (endpoint && !endpoint.error && now >= endpoint.measuredAt && now - endpoint.measuredAt <= 30000)
-        previous[i] = endpoint.up;
-    });
-    if (id) operational.set(id, previous);
-    data.down = previous.includes(false);
+    data.down = [reading?.a, reading?.b].some(endpoint => fresh(endpoint, now) && !endpoint.up);
     if (data.down) { data.tx = null; data.rx = null; }
     path.classList.toggle('traffic-down', data.down);
     const d = path.getAttribute('d');
-    const color = data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity) || '#22C55E';
+    const color = data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity) || '#687486';
     path.style?.setProperty('--traffic-color', color);
     path.classList.toggle('traffic-measured', Boolean(color));
     // Geometry owns the animation. Metric updates only change visibility and color.
@@ -122,6 +119,6 @@ const MapTraffic = (() => {
     }
   }
 
-  return {isWireless, number, count, utilizationColor, rate, state, render};
+  return {fresh, isWireless, number, count, utilizationColor, rate, state, render};
 })();
 if (typeof module !== 'undefined') module.exports = MapTraffic;

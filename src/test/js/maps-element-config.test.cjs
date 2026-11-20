@@ -239,3 +239,19 @@ test('group binding hides and disables interface controls without discarding the
     assert.equal($('switch-config').hidden, false);
   }
 });
+
+test('Mimosa Zabbix discovery keeps both wireless candidates for explicit review', async () => {
+  const {$, context}=setup();
+  $('type').value='host';$('group').value='42';$('element-dialog').open=true;
+  $('interface-load-status').setAttribute=function(key,value){this[key]=value;};
+  context.fetch=async url=>{
+    assert.equal(url,'/api/maps/connections/discover/42');
+    return {ok:true,status:200,json:async()=>['eth1_emac1','wifi0','wlan0'].map(name=>({name,source:'zabbix'}))};
+  };
+  vm.runInContext(source.slice(source.indexOf("$('load-switch-interfaces').onclick ="),source.indexOf("$('add-switch-slot').onclick =")),context);
+  await $('load-switch-interfaces').onclick();
+  assert.equal(context.configuredPorts.length,3);
+  assert.equal(context.configuredPorts.filter(p=>p.connector==='wireless').length,2);
+  assert.match($('interface-load-status').textContent,/mais de uma interface Wireless/);
+  assert.match($('interface-load-status').textContent,/nenhuma interface foi escolhida automaticamente/);
+});

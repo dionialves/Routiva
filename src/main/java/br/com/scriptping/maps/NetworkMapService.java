@@ -128,6 +128,19 @@ public class NetworkMapService {
             var capacities = Map.of("electrical", "rj45", "sfp1g", "sfp", "sfp10g", "sfp", "sfp40g", "qsfp", "sfp100g", "qsfp");
             var connectors = Map.ofEntries(Map.entry("electrical", "rj45"), Map.entry("sfp", "sfp"), Map.entry("sfpplus", "sfp"), Map.entry("sfp28", "sfp"), Map.entry("qsfpplus", "qsfp"), Map.entry("sfp56", "sfp"), Map.entry("qsfp28", "qsfp"), Map.entry("qsfp56", "qsfp"), Map.entry("qsfpdd", "qsfp"), Map.entry("qsfpdd800", "qsfp"), Map.entry("wireless", "wireless"));
             var speeds = Set.of("unknown", "10m", "100m", "1g", "10g", "25g", "40g", "50g", "100g", "200g", "400g", "800g");
+            if (node.linkInterfaces() != null) {
+                if (node.groupId() == null && !node.linkInterfaces().isEmpty()) throw invalid();
+                if (node.linkInterfaces().size() > 1000) throw invalid();
+                var enabled = new HashSet<List<String>>();
+                for (var entry : node.linkInterfaces()) {
+                    if (entry == null || entry.hostId() == null || entry.name() == null || entry.name().isBlank()
+                        || entry.name().length() > 128 || !connectionHostMatches(node, entry.hostId())
+                        || entry.connector() == null || !connectors.containsKey(entry.connector())
+                        || entry.capacity() == null || !speeds.contains(entry.capacity())
+                        || !enabled.add(List.of(entry.hostId(), entry.name())))
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Revise as interfaces habilitadas do grupo: host membro, interface única por host, conector e capacidade válidos.");
+                }
+            }
             var slots = new HashMap<String, Slot>();
             for (var slot : node.slots()) {
                 if (slot == null || slot.id() == null || slot.id().isBlank() || slot.id().length() > 80
@@ -179,6 +192,20 @@ public class NetworkMapService {
                     || c.hostA() == null || c.hostA().equals(c.hostB())
                     || !connectionHostMatches(nodes.get(link.from()), c.hostA())
                     || !connectionHostMatches(nodes.get(link.to()), c.hostB())) throw invalid();
+                for (var endpoint : List.of(Map.entry(nodes.get(link.from()), List.of(c.hostA(), c.interfaceA())),
+                        Map.entry(nodes.get(link.to()), List.of(c.hostB(), c.interfaceB())))) {
+                    var element = endpoint.getKey();
+                    if (element.groupId() != null && element.linkInterfaces() != null
+                        && element.linkInterfaces().stream().noneMatch(entry -> entry.hostId().equals(endpoint.getValue().get(0))
+                            && entry.name().equals(endpoint.getValue().get(1))))
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A interface da conexão não está habilitada no grupo.");
+                }
+                for (var endpoint : List.of(Map.entry(nodes.get(link.from()), c.interfaceA()), Map.entry(nodes.get(link.to()), c.interfaceB()))) {
+                    var element = endpoint.getKey();
+                    if (element.ports() != null && !element.ports().isEmpty()
+                        && element.ports().stream().noneMatch(port -> endpoint.getValue().equals(port.name())))
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A interface da conexão não está cadastrada no elemento do mapa.");
+                }
             }
             for (var point : link.points()) {
                 if (point == null || !Double.isFinite(point.x()) || !Double.isFinite(point.y())) throw invalid();
