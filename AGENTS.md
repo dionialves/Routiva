@@ -196,7 +196,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - `map-element-controls.js` desenha borda de seleção e quatro controles vetoriais de 24px integrados à borda (girar, redimensionar, inverter por clique, restaurar por clique), com tooltip de hover/foco e tamanho estável no zoom. Restaurar aplica `scale=1`, `rotation=0` e `flipX=false`, como um equipamento recém-inserido, preservando a posição atual, propriedades técnicas e vínculos. `origin` mantém compatibilidade com mapas já salvos, mas não define o tamanho ou a orientação padrão.
 
-- O ícone `telecom-site` (Estação de telecomunicações) usa `map-assets/telecom-site.png` e é exclusivo de Grupo de Hosts, com restrição no seletor e no servidor. Compartilha prévia e desenho do mapa, indicador de estado agregado, rótulo e navegação para submapas.
+- O ícone `telecom-site` (Estação de telecomunicações) usa `map-assets/telecom-site.webp` e é exclusivo de Grupo de Hosts, com restrição no seletor e no servidor. Compartilha prévia e desenho do mapa, indicador de estado agregado, rótulo e navegação para submapas.
 
 - Estação de telecomunicações reutiliza os controles de transformação de `MapElementControls` e os limites transformados de `MapSwitch.bounds`; escala, rotação e espelhamento afetam a arte e o indicador, mantendo o rótulo horizontal.
 
@@ -213,3 +213,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - O editor de interfaces habilitadas de grupos usa formulário expansível em `group-link-interfaces.js`: tabela sempre visível, descoberta automática ao selecionar host, cancelamento local e proteção de pares usados em enlaces. Seletores pesquisáveis via `setupGroupPicker` respeitam `disabled` no select e nas opções; chame `sync()` após atualizar opções ou estado.
 - A descoberta para `linkInterfaces` de grupos usa `includeLogical=true` no endpoint existente, compartilhando o cache; a descoberta padrão de portas físicas continua excluindo tipos virtuais conhecidos.
+
+- O ícone `cloud` (Nuvem) usa a imagem fornecida em `map-assets/cloud.webp`, disponível para hosts, grupos e elementos livres. Reutiliza prévia, indicador de estado e transformações compartilhadas; rótulos permanecem horizontais.
+
+- Imagens raster usam WebP sem perda; SVGs de equipamentos preservam máscaras e geometria com WebP embutido recortado. Portas conectadas têm até 512px. A moldura 40G vazia reutiliza `qsfp.svg` com filtro neutro em MapSwitch. Ao trocar imagens, atualize a versão nas URLs; o cache de imagens dura 30 dias.

@@ -119,7 +119,7 @@ public class NetworkMapService {
         validateHierarchy(input, hierarchy);
         var nodes = layout.nodes().stream().collect(java.util.stream.Collectors.toMap(Node::id, n -> n));
         for (var node : layout.nodes()) {
-            if (!Set.of("circle", "switch", "radio", "telecom-site").contains(node.icon())) throw invalid();
+            if (!Set.of("circle", "switch", "radio", "telecom-site", "cloud").contains(node.icon())) throw invalid();
             if ("telecom-site".equals(node.icon()) && (node.groupId() == null || node.groupId().isBlank()
                 || (node.hostId() != null && !node.hostId().isBlank()))) throw invalid();
             if ("radio".equals(node.icon()) && (node.hostId() == null || node.hostId().isBlank()

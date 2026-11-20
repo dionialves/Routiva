@@ -26,6 +26,27 @@ class SecurityFlowTests {
     @Autowired UserRepository repository;
     @MockitoBean ZabbixClient zabbix;
     @MockitoBean CollectorClient collector;
+    @Test
+    void publicBrandUsesWebpAndBrowserCache() throws Exception {
+        var result = mvc.perform(get("/traceone-brand.webp?v=3"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/webp"))
+            .andExpect(header().string("Cache-Control", "max-age=2592000, private"))
+            .andReturn();
+        mvc.perform(get("/traceone-brand.webp?v=3")
+            .header("If-Modified-Since", result.getResponse().getHeader("Last-Modified")))
+            .andExpect(status().isNotModified());
+    }
+
+    @Test @WithMockUser(roles = "USER")
+    void mapImagesUseBrowserCache() throws Exception {
+        mvc.perform(get("/map-assets/rj45.svg?v=20261120-optimized"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "max-age=2592000, private"));
+        mvc.perform(get("/map-assets/cloud.webp?v=20261120-optimized"))
+            .andExpect(status().isOk()).andExpect(content().contentType("image/webp"));
+    }
+
     @Test @WithMockUser(roles = "USER")
     void hostConfigurationRequiresAdministrator() throws Exception {
         mvc.perform(get("/configuracao/hosts")).andExpect(status().isForbidden());

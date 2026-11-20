@@ -209,7 +209,9 @@ test('every capacity uses the supplied connected art and its own socket, with ne
     if(capacity==='sfp40g') {
       const empty=make('g',{});switchMap.draw(make,empty,node,'gray',false);
       const emptyPort=empty.children.find(child=>child.attributes.class==='switch-port');
-      assert.match(emptyPort.children.find(child=>child.tag==='image').attributes.href,/\/qsfp40\.svg/);
+      assert.match(emptyPort.children.find(child=>child.tag==='image').attributes.href,/\/qsfp\.svg/);
+      assert.match(emptyPort.children.find(child=>child.tag==='image').attributes.filter,/^url\(#port-neutral-/);
+      assert.equal(emptyPort.children.find(child=>child.tag==='defs').children[0].children[0].attributes.values,'0');
     }
   }
 });

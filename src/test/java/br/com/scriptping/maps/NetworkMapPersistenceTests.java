@@ -125,6 +125,19 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
+    void persistsCloudIconForEveryBinding() throws Exception {
+        for (var node : List.of(
+            new Node("cloud", null, null, null, "Nuvem", 10, 20, null, "cloud", List.of()),
+            new Node("cloud", "g1", null, null, "Nuvem", 10, 20, null, "cloud", List.of()),
+            new Node("cloud", null, "host-a", null, "Nuvem", 10, 20, null, "cloud", List.of()))) {
+            var saved = service.save(new Saved(null, 0,
+                new Layout("Nuvem", null, 0, List.of(node), List.of()), null));
+            assertThat(service.maps().stream().filter(map -> map.id().equals(saved.id()))
+                .findFirst().orElseThrow().layout().nodes().getFirst().icon()).isEqualTo("cloud");
+        }
+    }
+
+    @Test
     void telecomSiteRequiresGroupBindingAndPersistsItsIcon() throws Exception {
         var node = new Node("site", "g1", null, null, "POP", 10, 20, null, "telecom-site", List.of());
         var saved = service.save(new Saved(null, 0,

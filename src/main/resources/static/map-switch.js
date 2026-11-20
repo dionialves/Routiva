@@ -241,9 +241,10 @@ const MapSwitch = (() => {
       y: x * Math.sin(angle) + y * Math.cos(angle)};
   }
   function bounds(node) {
-    const shape = node.icon === 'telecom-site' ? {width: 112, height: 106}
+    const shape = node.icon === 'cloud' ? {width: 152, height: 76}
+      : node.icon === 'telecom-site' ? {width: 112, height: 106}
       : geometry(node.interfacesEnabled === false ? {...node, ports: []} : node);
-    const top = node.icon === 'telecom-site' ? -53 : node.icon === 'radio' ? -90 : -55;
+    const top = node.icon === 'cloud' ? -38 : node.icon === 'telecom-site' ? -53 : node.icon === 'radio' ? -90 : -55;
     const corners = [-shape.width / 2, shape.width / 2].flatMap(x =>
       [top, top + shape.height].map(y => transformPoint(node, x, y)));
     return {left: Math.min(...corners.map(p => p.x)), right: Math.max(...corners.map(p => p.x)),
@@ -258,7 +259,15 @@ const MapSwitch = (() => {
     return {x: node.x + point.x, y: node.y + point.y};
   }
   function image(svg, parent, file, x, y, width, height, filter) {
-    parent.append(svg('image', {href: '/map-assets/' + file + '.svg' + (file === 'radio' ? '?v=20261119-wireless-tip' : file === 'switch' ? '?v=20261117-ping-led' : '?v=20261117-connected-ports'), x, y, width, height,
+    // Reuse the QSFP image for the neutral 40G frame instead of downloading it twice.
+    if (file === 'qsfp40') {
+      file = 'qsfp';
+      const id = 'port-neutral-' + (++tintSequence);
+      const defs = svg('defs', {}), neutral = svg('filter', {id});
+      neutral.append(svg('feColorMatrix', {type: 'saturate', values: '0'}));
+      defs.append(neutral); parent.append(defs); filter = 'url(#' + id + ')';
+    }
+    parent.append(svg('image', {href: '/map-assets/' + file + '.svg?v=20261120-optimized', x, y, width, height,
       preserveAspectRatio: 'none', 'aria-hidden': 'true', 'pointer-events': 'none', ...(filter ? {filter} : {})}));
   }
   function pingIndicator(state) {

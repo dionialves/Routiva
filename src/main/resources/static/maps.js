@@ -196,12 +196,14 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
   const outer = group;
   group = svg('g', {transform: `rotate(${node.rotation || 0}) scale(${(node.flipX ? -1 : 1) * (node.scale || 1)} ${node.scale || 1})`});
   outer.append(group);
-  group.append(svg('image', {href: '/map-assets/telecom-site.png',
-    x: -96, y: -64, width: 192, height: 128}));
-  if (isSelected) group.append(svg('rect', {x: -56, y: -53, width: 110, height: 104,
+  const cloud = node.icon === 'cloud';
+  group.append(svg('image', cloud
+    ? {href: '/map-assets/cloud.webp?v=20261120-optimized', x: -103, y: -77, width: 206, height: 154}
+    : {href: '/map-assets/telecom-site.webp?v=20261120-optimized', x: -96, y: -64, width: 192, height: 128}));
+  if (isSelected) group.append(svg('rect', {x: cloud ? -76 : -56, y: cloud ? -38 : -53, width: cloud ? 152 : 110, height: cloud ? 76 : 104,
     rx: 6, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2}));
-  if (!editing) group.append(svg('circle', {cx: 0, cy: 48, r: 5, fill, stroke: 'var(--panel-bg)', 'stroke-width': 2}));
-  const box = MapSwitch.bounds({...node, icon: 'telecom-site'});
+  if (!editing) group.append(svg('circle', {cx: 0, cy: cloud ? 30 : 48, r: 5, fill, stroke: 'var(--panel-bg)', 'stroke-width': 2}));
+  const box = MapSwitch.bounds({...node, icon: cloud ? 'cloud' : 'telecom-site'});
   const positions = {ABOVE: {x: 0, y: box.top - 8, 'text-anchor': 'middle'},
     BELOW: {x: 0, y: box.bottom + 17, 'text-anchor': 'middle'},
     LEFT: {x: box.left - 9, y: 0, 'text-anchor': 'end'},
@@ -358,7 +360,7 @@ function draw() {
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
       onPort: portId => connectEndpoint(n, portId)
     });
-    else (n.icon === 'telecom-site' ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
+    else (['telecom-site', 'cloud'].includes(n.icon) ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n, event.shiftKey || event.ctrlKey || event.metaKey); }
     };
@@ -435,7 +437,7 @@ function draw() {
   if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
   if (editing && tool === 'select' && selection.size === 1) {
     const node = nodes.find(n => selection.has(n.id));
-    if (node && ['switch', 'radio', 'telecom-site'].includes(node.icon)) drawTransformHandles(canvas, node);
+    if (node && ['switch', 'radio', 'telecom-site', 'cloud'].includes(node.icon)) drawTransformHandles(canvas, node);
   }
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
@@ -1467,11 +1469,11 @@ function drawPreview() {
   if (isSwitch) MapSwitch.draw(svg, group, {...transformState(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon, name, labelPosition: $('label-position').value,
     ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
     {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
-  else (icon === 'telecom-site' ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, current.layout.nodes.find(n => n.id === configuredNodeId) || {});
+  else (['telecom-site', 'cloud'].includes(icon) ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, {...(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon});
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
   preview.setAttribute('viewBox', [box.x + (box.width-w)/2, box.y + (box.height-h)/2, w, h].join(' '));
-  preview.setAttribute('aria-label', (icon === 'telecom-site' ? 'Estação de telecomunicações' : isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
+  preview.setAttribute('aria-label', (icon === 'cloud' ? 'Nuvem' : icon === 'telecom-site' ? 'Estação de telecomunicações' : isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
 }
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {
