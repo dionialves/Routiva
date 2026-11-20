@@ -59,13 +59,31 @@ const MapLinks = (() => {
     }
     return point;
   }
-  function snap(route, index, point, scale) {
+  function snap(route, index, point, scale, otherRoutes = []) {
     const neighbors = [route[index - 1], route[index + 1]].filter(Boolean);
     const position = {x: Math.round(point.x), y: Math.round(point.y)};
     const guides = [];
     for (const axis of ['x', 'y']) {
-      const closest = neighbors.reduce((best, neighbor) =>
-        Math.abs(neighbor[axis] - point[axis]) <= 6 / scale &&
+      // Only nearby segments with overlapping spans attract the edited corner.
+      // This avoids pulling it toward unrelated lines elsewhere on the map.
+      const along = axis === 'x' ? 'y' : 'x';
+      const candidates = [];
+      for (const other of otherRoutes) {
+        for (let i = 1; i < other.length; i++) {
+          const a = other[i - 1], b = other[i];
+          if (a[axis] !== b[axis] || a[along] === b[along]) continue;
+          const min = Math.min(a[along], b[along]), max = Math.max(a[along], b[along]);
+          const overlaps = neighbors.some(neighbor =>
+            Math.max(point[along], neighbor[along]) >= min - 8 / scale &&
+            Math.min(point[along], neighbor[along]) <= max + 8 / scale);
+          if (overlaps && Math.abs(a[axis] - point[axis]) <= 8 / scale) {
+            candidates.push({[axis]: a[axis], [along]: Math.max(min, Math.min(max, point[along]))});
+          }
+        }
+      }
+      const targets = candidates.length ? candidates : neighbors;
+      const closest = targets.reduce((best, neighbor) =>
+        Math.abs(neighbor[axis] - point[axis]) <= (candidates.length ? 8 : 6) / scale &&
         (!best || Math.abs(neighbor[axis] - point[axis]) < Math.abs(best[axis] - point[axis]))
           ? neighbor : best, null);
       if (!closest) continue;

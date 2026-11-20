@@ -694,3 +694,17 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
   .pop-host-summary .host-incident-table :is(th, td) { padding:6px 3px; }
   .pop-host-summary .host-incident-status { white-space:normal; }
 }
+
+/* Outline the selected route while keeping live traffic pulses above it. */
+#canvas .map-connectors .map-connector.selected-link {
+  stroke: #CA8A04;
+  stroke-width: 4;
+}
+#canvas .map-connector-selection-border {
+  fill: none;
+  stroke: #FDE68A;
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}

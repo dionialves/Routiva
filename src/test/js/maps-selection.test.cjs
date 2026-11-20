@@ -12,7 +12,7 @@ function setup() {
     const $ = () => canvas;
     let editing = true, tool = 'select', selected, selectedLink, drag, marquee;
     const selection = new Set();
-    const current = {layout:{nodes:[{id:'a',x:0,y:0},{id:'b',x:40,y:20},{id:'c',x:200,y:200}]}};
+    const current = {layout:{links:[],nodes:[{id:'a',x:0,y:0},{id:'b',x:40,y:20},{id:'c',x:200,y:200}]}};
     const camera = {scale:1};
     function draw() {}
     function checkpoint() { checkpoints++; }
@@ -117,4 +117,22 @@ test('clicking a line without dragging never creates a corner', () => {
   canvas.onpointerup({pointerId:9});
   assert.equal(run('link.points.length'),0);
   assert.equal(run('checkpoints'),0);
+});
+
+
+test('dragging a corner snaps to another connection and preserves its route', () => {
+  const {canvas, run} = setup();
+  run(`
+    function canvasPoint(event) {return {x:event.clientX,y:event.clientY};}
+    function linkRoute(link) {return [{x:0,y:0}, ...link.points, {x:200,y:0}];}
+    const link = {style:'corners',points:[{x:0,y:80},{x:200,y:80}]};
+    const target = {style:'corners',points:[{x:0,y:100},{x:200,y:100}]};
+    current.layout.links = [link, target];
+    drag = {kind:'bend',link,index:0,pointer:4,moved:false};
+  `);
+  canvas.onpointermove({pointerId:4,clientX:0,clientY:96});
+  assert.equal(run('link.points[0].y'), 100);
+  assert.equal(run('target.points[0].y'), 100);
+  assert.equal(run('target.points[1].y'), 100);
+  assert.equal(run('checkpoints'), 1);
 });

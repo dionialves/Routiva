@@ -1,0 +1,66 @@
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/static/maps.js'), 'utf8');
+
+test('click and keyboard bring the selected connection above other routes without reordering saved links', () => {
+  function svg(tag, attributes) {
+    const classes = new Set((attributes.class || '').split(' '));
+    return {tag, attributes, children: [], dataset: {},
+      append(...items) {this.children.push(...items);},
+      getAttribute(key) {return this.attributes[key];},
+      setAttribute(key, value) {this.attributes[key] = value;},
+      classList: {toggle(name, enabled) {if (enabled) classes.add(name); else classes.delete(name);},
+        contains(name) {return classes.has(name);}}};
+  }
+  const canvas = svg('svg', {});
+  canvas.replaceChildren = () => {canvas.children = [];};
+  const links = [{from:'a',to:'b'}, {from:'b',to:'a'}];
+  const context = vm.createContext({document:{activeElement:null}, svg,
+    $: id => id === 'canvas' ? canvas : {},
+    current:{layout:{name:'Map',nodes:[{id:'a',name:'A'},{id:'b',name:'B'}],links}},
+    editing:false, drag:null, marquee:null, selected:null, selectedLink:null, selection:new Set(),
+    MapSwitch:{endpoint:() => ({x:0,y:0})}, MapLinks:{path:link => link === links[0] ? 'first' : 'second'},
+    MapConnectionTooltip:{hide() {}}, updateTrafficLayer(layer) {layer.updated = true;},
+    MapTraffic:{isWireless:() => false}, colors:['gray','green'], labels:['','OK'], drawNode() {}});
+  vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')), context);
+  const routes = () => canvas.children.find(child => child.attributes.class === 'map-connectors').children;
+  vm.runInContext('draw()', context);
+  routes()[0].onclick({stopPropagation() {}});
+  assert.equal(routes().at(-3).attributes.class, 'map-connector-selection-border');
+  assert.equal(routes().at(-3).attributes.d, 'first');
+  assert.equal(routes().at(-2).attributes.d, 'first');
+  assert.ok(routes().at(-2).classList.contains('selected-link'));
+  assert.equal(routes().at(-2).attributes['aria-pressed'], 'true');
+  routes()[0].onkeydown({key:'Enter',preventDefault() {},stopPropagation() {}});
+  assert.equal(routes().at(-2).attributes.d, 'second');
+  assert.equal(links[0].from, 'a');
+  links[1].mappedConnectionId = 'mapped';
+  context.MapLinks.points = () => [];
+  vm.runInContext('draw()', context);
+  assert.equal(routes().at(-1).attributes.class, 'map-traffic');
+  assert.equal(routes().at(-1).updated, true);
+  assert.equal(routes().at(-1).trafficContext.link, links[1]);
+  assert.equal(routes().at(-4).attributes.class, 'map-connector-selection-border');
+  context.MapTraffic.isWireless = () => true;
+  vm.runInContext('draw()', context);
+  assert.equal(routes().at(-4).attributes.class, 'map-connector-selection-border map-connector-wireless');
+  assert.ok(routes().at(-3).classList.contains('map-connector-wireless'));
+  assert.ok(routes().at(-3).classList.contains('selected-link'));
+  assert.equal(routes().at(-1).attributes.class, 'map-traffic');
+  assert.equal(routes().at(-1).trafficContext.wireless, true);
+  assert.equal(routes().at(-1).updated, true);
+  // A mapped route saved first must still cover a simple route saved last.
+  delete links[1].mappedConnectionId;
+  links[0].mappedConnectionId = 'mapped';
+  vm.runInContext('selectedLink = null; draw()', context);
+  const painted = routes().filter(path => path.classList.contains('map-connector'));
+  assert.equal(painted[0].attributes.d, 'second');
+  assert.equal(painted[1].attributes.d, 'first');
+  assert.equal(links[0].mappedConnectionId, 'mapped');
+  painted[0].onclick({stopPropagation() {}});
+  const selectedRoutes = routes().filter(path => path.classList.contains('map-connector'));
+  assert.equal(selectedRoutes.at(-1).attributes.d, 'second');
+  assert.ok(selectedRoutes.at(-1).classList.contains('selected-link'));
+});

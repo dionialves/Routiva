@@ -294,7 +294,8 @@ function draw() {
   }
   const connectors = svg('g', {class: 'map-connectors'});
   const byId = new Map(nodes.map(n => [n.id, n]));
-  for (const link of links) {
+  const linkLayer = link => link === selectedLink ? 2 : link.mappedConnectionId ? 1 : 0;
+  for (const link of [...links].sort((a, b) => linkLayer(a) - linkLayer(b))) {
     const a = byId.get(link.from), b = byId.get(link.to);
     if (!a || !b) continue;
     const start = MapSwitch.endpoint(a, link.fromPort), end = MapSwitch.endpoint(b, link.toPort);
@@ -303,6 +304,19 @@ function draw() {
     const line = svg('path', {d, class: 'map-connector' +
       (link.mappedConnectionId ? ' map-connector-mapped' : '') +
       (wireless ? ' map-connector-wireless' : '')});
+    line.classList.toggle('selected-link', selectedLink === link);
+    line.setAttribute('tabindex', 0);
+    line.setAttribute('role', 'button');
+    line.setAttribute('aria-label', 'Conexão entre ' + a.name + ' e ' + b.name);
+    line.setAttribute('aria-pressed', String(selectedLink === link));
+    line.onclick = event => {
+      event?.stopPropagation();
+      if (selectedLink === link) return;
+      selectedLink = link; selected = null; selection.clear(); draw();
+    };
+    line.onkeydown = event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); line.onclick(event); }
+    };
     if (editing && tool === 'select') {
       line.onpointerdown = event => {
         if (event.button !== 0) return;
@@ -311,7 +325,6 @@ function draw() {
         drag = {kind: 'new-bend', link, pointer: event.pointerId, x: event.clientX, y: event.clientY,
           start: canvasPoint(event), moved: false};
       };
-      line.classList.toggle('selected-link', selectedLink === link);
       line.setAttribute('tabindex', 0);
       line.setAttribute('role', 'button');
       line.setAttribute('aria-label', 'Conexão entre ' + a.name + ' e ' + b.name);
@@ -357,9 +370,16 @@ function draw() {
         line.setAttribute('tabindex', 0);
         line.setAttribute('role', 'button');
         line.setAttribute('aria-label', 'Abrir conexão mapeada entre ' + a.name + ' e ' + b.name);
-        line.onclick = hit.onclick = event => line.onfocus(event);
-        line.onkeydown = event => { if (event.key === 'Enter') line.onclick(); };
+        const selectConnection = line.onclick;
+        line.onclick = hit.onclick = event => {
+          if (selectedLink === link) line.onfocus();
+          else selectConnection(event);
+        };
       }
+    }
+    if (selectedLink === link) {
+      connectors.append(svg('path', {d, class: 'map-connector-selection-border' +
+        (wireless ? ' map-connector-wireless' : ''), 'aria-hidden': 'true'}));
     }
     connectors.append(line, hit);
     if (link.mappedConnectionId && !editing) {
@@ -709,7 +729,8 @@ $('canvas').onpointermove = event => {
   if (drag.kind === 'bend') {
     const point = canvasPoint(event);
     point.x += drag.dx || 0; point.y += drag.dy || 0;
-    const snapped = MapLinks.snap(linkRoute(drag.link), drag.index + 1, point, camera.scale);
+    const snapped = MapLinks.snap(linkRoute(drag.link), drag.index + 1, point, camera.scale,
+      current.layout.links.filter(link => link !== drag.link).map(linkRoute));
     drag.guides = snapped.guides;
     const previous = drag.link.points[drag.index];
     if (previous.x === snapped.position.x && previous.y === snapped.position.y) { draw(); return; }

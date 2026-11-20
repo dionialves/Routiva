@@ -68,3 +68,22 @@ test('bend marks trace the real corner or rounded arc without a separate point g
   link.points=[{x:0,y:0}];
   assert.ok(!/NaN|Infinity/.test(links.bendPath(link,start,end,0)));
 });
+
+test('nearby horizontal and vertical lines attract corners to exact coordinates', () => {
+  const route = [{x:0,y:0},{x:40,y:80},{x:100,y:100}];
+  const others = [[{x:10,y:85.5},{x:150,y:85.5}], [{x:45.5,y:20},{x:45.5,y:150}]];
+  const result = links.snap(route, 1, {x:40,y:80}, 1, others);
+  assert.deepEqual(result.position, {x:45.5,y:85.5});
+  assert.equal(result.guides.length, 2);
+  assert.deepEqual(others[0], [{x:10,y:85.5},{x:150,y:85.5}]);
+});
+
+test('line attraction respects zoom, overlap and nearest segment', () => {
+  const route = [{x:0,y:0},{x:40,y:80},{x:100,y:100}];
+  const far = [[{x:500,y:84},{x:600,y:84}]];
+  assert.equal(links.snap(route, 1, {x:40,y:80}, 1, far).position.y, 80);
+  const others = [[{x:10,y:87},{x:150,y:87}], [{x:10,y:84},{x:150,y:84}]];
+  assert.equal(links.snap(route, 1, {x:40,y:80}, 1, others).position.y, 84);
+  assert.equal(links.snap(route, 1, {x:40,y:80}, 3, others).position.y, 80);
+  assert.equal(links.snap(route, 1, {x:40,y:80}, 0.5, others).position.y, 84);
+});

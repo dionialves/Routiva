@@ -145,6 +145,12 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - `map-switch.js` compartilha composição SVG, geometria e pontos de conexão entre o mapa e a prévia. Reutilize `MapSwitch` para equipamentos com portas; imagens em `static/map-assets/`. Portas têm IDs estáveis, coordenadas locais e uma conexão por porta.
 
+- Conexões simples cinzas são desenhadas abaixo dos enlaces mapeados, independentemente da ordem de cadastro; a conexão selecionada mantém prioridade acima de todas. A ordenação visual não modifica o JSON persistido.
+
+- Clicar em um enlace na edição ou visualização destaca o trajeto em amarelo queimado acima dos outros enlaces, sem alterar a ordem persistida. O destaque tem borda amarelo-clara, prevalece sobre as cores de tráfego e preserva os feixes de luz animados e o tracejado Wireless, inclusive na borda clara; oferece seleção por teclado.
+
+- Ao arrastar cantos, `MapLinks.snap` atrai para trechos horizontais/verticais próximos de outros enlaces com alcance de 8px na tela e sobreposição de extensão, preservando âncoras e os demais enlaces.
+
 - `map-links.js` concentra a geometria das conexões: reta ou caminho com cantos editáveis. Os pontos intermediários são coordenadas do mapa; extremidades continuam vinculadas ao equipamento/porta.
 
 - Conexões separam `style` (straight/corners: Direta/Com ponto) de `lineStyle` (straight/curved: Reta/Curvada). `MapLinks.path` suaviza os cantos sem alterar pontos e âncoras; duplo clique abre o modal compartilhado de configuração.
