@@ -280,6 +280,12 @@
       description.addEventListener('click', event => { event.preventDefault(); openIncident(row, description); });
       description.textContent = row.name; description.title = row.name;
       const descriptionCell = cell(tr); descriptionCell.className = 'incident-description-cell'; descriptionCell.append(description);
+      if (initial.get('history') === 'all') {
+        const state = document.createElement('small');
+        state.textContent = row.resolved ? 'Resolvido' : 'Ativo';
+        state.style.color = row.resolved ? 'var(--success)' : 'var(--warning)';
+        descriptionCell.append(state);
+      }
       const elapsed = document.createElement('span'); elapsed.className = 'incident-duration';
       const value = document.createElement('span'); value.dataset.openedAt = row.timestamp;
       value.textContent = duration(row.timestamp); elapsed.append(icon('clock-3'), value); cell(tr).append(elapsed);
@@ -896,6 +902,7 @@
     // Names stay in local storage. Large selections also stay off the URL and Referer header.
     const params = new URLSearchParams();
     if (eventId) params.set('eventId', eventId);
+    if (initial.get('history') === 'all') params.set('history', 'all');
     for (const key of ['groupId', 'hostId', 'severity']) {
       if (applied.get(key)) params.set(key, applied.get(key));
     }
@@ -909,6 +916,7 @@
     $('incidents-panel').setAttribute('aria-busy', 'true');
     updateLocation();
     const query = Object.fromEntries(['groupId', 'hostId', 'severity'].map(key => [key, applied.get(key) || '']));
+    query.history = initial.get('history') === 'all';
     controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
     try {

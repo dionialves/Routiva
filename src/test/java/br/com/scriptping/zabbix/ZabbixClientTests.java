@@ -346,6 +346,25 @@ class ZabbixClientTests {
         }
     }
 
+    @Test void hostHistoryQueriesOnlyProblemEventsWithoutATimeLimitAndKeepsRecoveryState() throws Exception {
+        try (var api = new FakeApi(false)) {
+            api.occurrences = """
+                [{"eventid":"101","name":"Recovered","clock":"200","severity":"2","r_eventid":"102"},
+                 {"eventid":"99","name":"Active","clock":"100","severity":"4","r_eventid":"0"}]
+                """;
+            var client = new ZabbixClient(api.url(), "monitor", "secret");
+            var history = client.hostIncidentHistory("1", 5);
+            assertThat(history).extracting(ZabbixClient.HostIncident::resolved).containsExactly(true, false);
+            assertThat(history).extracting(ZabbixClient.HostIncident::timestamp).containsExactly(200000L, 100000L);
+            assertThat(api.occurrenceParams.path("hostids").get(0).asText()).isEqualTo("1");
+            assertThat(api.occurrenceParams.path("value").asInt()).isEqualTo(1);
+            assertThat(api.occurrenceParams.path("limit").asInt()).isEqualTo(5);
+            assertThat(api.occurrenceParams.has("time_from")).isFalse();
+            client.hostIncidentHistory("1", null);
+            assertThat(api.occurrenceParams.has("limit")).isFalse();
+        }
+    }
+
     private static class FakeApi implements AutoCloseable {
 
         final HttpServer server;
@@ -430,7 +449,7 @@ class ZabbixClientTests {
                         "{\"result\":" + triggers + "}";
                     else if (method.equals("event.get")) {
                         lastEventParams = request.path("params");
-                        if (lastEventParams.has("objectids")) {
+                        if (lastEventParams.has("objectids") || (lastEventParams.has("hostids") && !lastEventParams.has("eventids"))) {
                             occurrenceParams = lastEventParams;
                             response = "{\"result\":" + occurrences + "}";
                         } else if (lastEventParams.path("eventids").get(0).asText().equals("99")) {

@@ -120,7 +120,7 @@ class PopElement {
 }
 
 function renderPreview(hosts, fresh = {updatedAt: Date.now(), failed: false}, minimumSeverity = 0) {
-  const dom = {createElement: tag => new PopElement(tag), createElementNS: (_, tag) => new PopElement(tag)};
+  const dom = {createTextNode: text => { const node = new PopElement('#text'); node.textContent = text; return node; }, createElement: tag => new PopElement(tag), createElementNS: (_, tag) => new PopElement(tag)};
   const preview = vm.createContext({document: dom, hosts, fresh, minimumSeverity});
   vm.runInContext(fs.readFileSync('src/main/resources/static/pop-summary.js', 'utf8'), preview);
   preview.box = new PopElement('section');
@@ -236,9 +236,9 @@ test('hides acknowledged incidents from the list, counts and worst severity', ()
 });
 
 
-test('incident links open only their encoded event in a new tab for hosts and groups', () => {
+test('group incident links open their encoded event in a new tab', () => {
   const preview = renderPreview([host('a', [issue('123 /&', 4, 1000)])]);
-  for (const hostId of [undefined, 'host-1']) {
+  for (const hostId of [undefined]) {
     preview.subject.node.hostId = hostId;
     preview.subject.render();
     const link = preview.box.querySelector('.pop-incident-copy');
@@ -272,4 +272,74 @@ test('monitoring cards reuse the summary layout, format readings once and preser
     assert.ok(preview.box.querySelector('.pop-metrics').textContent.includes('Sem dados'));
     assert.equal(preview.box.querySelector('.pop-freshness').textContent, 'Horário indisponível');
   }
+});
+
+
+test('individual hosts show real operational metrics, resolved history and filtered navigation without group counts', () => {
+  const preview = renderPreview([]);
+  preview.subject.node = {hostId:'host /1', name:'Router'};
+  preview.subject.hostCache = new Map([['host /1', {at:Date.now(), data:{name:'Router', status:'online', active:2,
+    metrics:{operational:99.81, latency:1.8, loss:0}, p95:3.4, latencyState:'NORMAL', lossState:'NORMAL',
+    updatedAt:Date.now(), incidents:[{name:'CPU <safe>', timestamp:Date.now(), severity:2, resolved:true},
+      {name:'Interface', timestamp:Date.now()-1000, severity:4, resolved:false}]}}]]);
+  preview.subject.render();
+  const box = preview.box;
+  assert.equal(box.querySelector('.pop-details'), null);
+  assert.equal(box.querySelector('.pop-metrics').children.length, 3);
+  assert.ok(box.textContent.includes('Disponibilidade Operacional'));
+  assert.ok(box.textContent.includes('99,81%'));
+  assert.ok(box.textContent.includes('P95: 3,4 ms'));
+  const rows = box.querySelector('tbody').children;
+  for (const [index, label] of ['Resolvido', 'Aberto'].entries()) {
+    const status = rows[index].querySelector('.host-incident-status');
+    assert.equal(status.textContent.trim(), '');
+    assert.equal(status.attributes['aria-label'], label);
+    assert.equal(status.title, label);
+    assert.equal(status.querySelector('svg').attributes.width, '16');
+  }
+  assert.equal(box.querySelector('.host-incident-name').title, 'CPU <safe>');
+  assert.equal(box.querySelector('.host-all-incidents').href, '/incidentes?hostId=host%20%2F1&history=all');
+  assert.ok(!box.textContent.includes('Equipamentos'));
+  assert.ok(!box.textContent.includes('Uptime'));
+});
+
+test('missing host metrics stay unknown and an empty history keeps the full-history link', () => {
+  const preview = renderPreview([]);
+  preview.subject.node = {hostId:'1', name:'Router'};
+  preview.subject.hostCache = new Map([['1', {at:Date.now(), data:{status:'unknown', incidents:[], warning:''}}]]);
+  preview.subject.render();
+  assert.equal(preview.box.querySelector('.host-state').textContent, 'Desconhecido');
+  assert.ok(preview.box.textContent.includes('Sem dados'));
+  assert.ok(!preview.box.textContent.includes('0,00%'));
+  assert.ok(preview.box.textContent.includes('Nenhum incidente registrado para este host.'));
+  assert.ok(preview.box.querySelector('.host-all-incidents'));
+});
+
+test('host refresh preserves history keyboard focus and uses its own collection failure state', () => {
+  const preview = renderPreview([], {updatedAt:Date.now(), failed:true});
+  preview.subject.node = {hostId:'1', name:'Router'};
+  const entry = {at:Date.now(), data:{status:'online', updatedAt:Date.now(), incidents:[]}};
+  preview.subject.hostCache = new Map([['1', entry]]);
+  preview.subject.render();
+  assert.ok(preview.box.querySelector('.pop-freshness').textContent.startsWith('Atualizado há'));
+  preview.document.activeElement = preview.box.querySelector('.host-all-incidents');
+  preview.subject.renderHost();
+  assert.equal(preview.box.querySelector('.host-all-incidents').focused, true);
+  entry.error = true;
+  preview.subject.updateFooter();
+  assert.ok(preview.box.querySelector('.pop-freshness').textContent.includes('Dados desatualizados'));
+});
+
+
+test('host refinements keep compact icons, unavailable percentile and active severity', () => {
+  const preview = renderPreview([]);
+  preview.subject.node = {hostId:'1', name:'Router'};
+  preview.subject.hostCache = new Map([['1', {at:Date.now(), data:{status:'unknown', active:1,
+    activeSeverity:4, metrics:{latency:1.8}, incidents:[], updatedAt:Date.now()}}]]);
+  preview.subject.render();
+  assert.ok(preview.box.textContent.includes('P95: —'));
+  assert.equal(preview.box.querySelector('.pop-symbol').querySelector('svg').attributes.width, '18');
+  assert.equal(preview.box.querySelector('.host-active-count').style.color, 'high');
+  assert.ok(preview.box.querySelector('footer').textContent.includes('Atualizado há'));
+  assert.equal(preview.box.querySelector('.host-all-incidents').querySelector('svg').attributes.width, '15');
 });

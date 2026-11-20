@@ -72,7 +72,7 @@ test('server drawing replaces the VM light and puts the tower light in its upper
     assert.equal(leds.length,1);assert.equal(leds[0].attrs.fill,'#ff0000');
     if(icon==='vm-server') {
       assert.ok(parts.some(part=>part.tag==='image' && part.attrs['clip-path']));
-      assert.equal(leds[0].attrs.cx,-49.7);assert.equal(leds[0].attrs.cy,5);
+      assert.equal(leds[0].attrs.cx,-67.3);assert.equal(leds[0].attrs.cy,7.9);
     } else {
       assert.ok(leds[0].attrs.cx>0);assert.ok(leds[0].attrs.cy<0);
     }

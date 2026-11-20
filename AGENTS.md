@@ -218,6 +218,10 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - Imagens raster usam WebP sem perda; SVGs de equipamentos preservam máscaras e geometria com WebP embutido recortado. Portas conectadas têm até 512px. A moldura 40G vazia reutiliza `qsfp.svg` com filtro neutro em MapSwitch. Ao trocar imagens, atualize a versão nas URLs; o cache de imagens dura 30 dias.
 
+- A legenda de hosts individuais no mapa usa `PopSummary.renderHost` e `/api/maps/hosts/{id}/summary`, com disponibilidade operacional publicada de 24h, latência/perda e cinco eventos de problema ativos ou resolvidos do Zabbix. Grupos preservam a legenda agregada. P95 exige amostras brutas completas da mesma janela; sem elas, exiba Sem dados. O histórico completo abre `/incidentes?hostId=...&history=all`.
+
 - Os ícones `tower-server` (Servidor em torre) e `vm-server` (VM Server) usam as imagens fornecidas em WebP sem perda, disponíveis para hosts, grupos e elementos livres; compartilham prévia, estado e transformações dos ícones raster.
 
 - Servidor em torre e VM Server usam LED dinâmico do ping recente (2s; validade 10s): verde com resposta abaixo de 15ms, amarelo a partir de 15ms, vermelho no timeout e cinza em edição/erro/ausência. O LED da VM substitui a cor fixa por sobreposição SVG neutralizada; o da torre fica no canto superior direito. Grupos agregam seus hosts, priorizando timeout e depois ausência de dados.
+
+- As imagens de Servidor em torre e VM Server têm fundo transparente e recorte justo em WebP sem perda. Geometria, prévia e LEDs seguem as proporções dos arquivos recortados.

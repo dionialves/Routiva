@@ -200,7 +200,7 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
   const cloud = node.icon === 'cloud';
   const server = MapSwitch.serverImages?.[node.icon];
   group.append(svg('image', server
-    ? {href: `/map-assets/${node.icon}.webp?v=20261120-servers`, x: -server.width / 2, y: -server.height / 2, width: server.width, height: server.height}
+    ? {href: `/map-assets/${node.icon}.webp?v=20261120-server-cutouts`, x: -server.width / 2, y: -server.height / 2, width: server.width, height: server.height}
     : cloud
     ? {href: '/map-assets/cloud.webp?v=20261120-optimized', x: -103, y: -77, width: 206, height: 154}
     : {href: '/map-assets/telecom-site.webp?v=20261120-optimized', x: -96, y: -64, width: 192, height: 128}));
@@ -208,7 +208,7 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
     rx: 6, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2}));
   if (server) {
     const vm = node.icon === 'vm-server';
-    const cx = vm ? -49.7 : 20, cy = vm ? 5 : -34;
+    const cx = vm ? -67.3 : 22, cy = vm ? 7.9 : -33;
     if (vm) {
       // Neutralize the baked-in green light and its halo before drawing the live LED.
       const id = 'server-led-' + (++serverLedSequence);
@@ -217,12 +217,12 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
       const filter = svg('filter', {id: id + '-neutral'});
       filter.append(svg('feColorMatrix', {type: 'saturate', values: '0'}));
       defs.append(clip, filter); group.append(defs);
-      group.append(svg('image', {href: '/map-assets/vm-server.webp?v=20261120-servers',
+      group.append(svg('image', {href: '/map-assets/vm-server.webp?v=20261120-server-cutouts',
         x: -server.width / 2, y: -server.height / 2, width: server.width, height: server.height,
         'clip-path': `url(#${id}-clip)`, filter: `url(#${id}-neutral)`}));
     }
     const status = serverStatusFor(node);
-    const led = svg('circle', {cx, cy, r: vm ? 2 : 2.5, fill: status.color,
+    const led = svg('circle', {cx, cy, r: vm ? 3 : 2.5, fill: status.color,
       stroke: '#344052', 'stroke-width': .6, class: 'server-status-led',
       'data-server-node': node.id || '', role: 'img', 'aria-label': status.label});
     const title = svg('title', {}); title.textContent = status.label;
@@ -270,6 +270,8 @@ function draw() {
   if (typeof MapConnectionTooltip !== 'undefined') MapConnectionTooltip.hide();
   const canvas = $('canvas');
   const focusedPort = document.activeElement?.getAttribute('data-port-id');
+  for (const menu of draw.hostMenus || []) menu.remove();
+  draw.hostMenus = [];
   canvas.replaceChildren();
   if (!current) return;
   const { nodes, links } = current.layout;
@@ -367,16 +369,15 @@ function draw() {
       updateTrafficLayer(layer);
     }
   }
-  // Connections meet at the element center unless a port supplies an anchor.
-  // Paint every element above the paths so the image covers the internal segment.
-  canvas.append(connectors);
+  // Keep central anchors hidden, but leave cables visible over equipment with ports.
+  const foregroundElements = [];
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
     const level = monitored ? groupLevel(nodeHosts(n)) + 2 : 1;
     const metric = monitored ? metricSummary(n) : null;
     const description = metric ? `${n.name} · ${metric.label}: ${metric.formatted} · ${metric.state}` : monitored ? n.name + ' · ' + labels[level] : n.name;
     const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
-      ...(!editing && n.groupId && n.subMapId ? {tabindex:0, role:'link'} : editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
+      ...(!editing && n.hostId ? {tabindex:0, role:'button'} : !editing && n.groupId && n.subMapId ? {tabindex:0, role:'link'} : editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
@@ -389,7 +390,11 @@ function draw() {
     });
     else (['telecom-site', 'cloud', 'tower-server', 'vm-server'].includes(n.icon) ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
     g.onkeydown = event => {
-      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n, event.shiftKey || event.ctrlKey || event.metaKey); }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        if (!editing && n.hostId) g.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        else choose(n, event.shiftKey || event.ctrlKey || event.metaKey);
+      }
     };
     g.onpointerdown = event => {
       if (event.button !== 0 || (editing && tool === 'pan')) return;
@@ -418,9 +423,17 @@ function draw() {
       choose(n);
     };
     if (!editing && n.groupId && n.subMapId) g.onclick = event => { event.stopPropagation(); choose(n); };
+    if (!editing && n.hostId) {
+      const host = inventory.find(host => host.id === n.hostId);
+      draw.hostMenus.push(window.HostMenu.attach(g, $('workspace'), {ip: host?.ip, hostId: n.hostId}));
+    }
     if (monitored) popSummary.bind(g, n);
-    canvas.append(g);
+    if (['switch', 'radio'].includes(n.icon) && n.interfacesEnabled !== false && n.ports?.length)
+      canvas.append(g);
+    else foregroundElements.push(g);
   }
+  canvas.append(connectors);
+  for (const element of foregroundElements) canvas.append(element);
   if (editing && tool === 'select') for (const [linkIndex, link] of links.entries()) {
     if (link.style !== 'corners') continue;
     const route = linkRoute(link);
@@ -546,9 +559,10 @@ function fitToView(smooth = false) {
   if (current.layout.nodes.length) {
     const box = $('canvas').getBBox();
     const padding = Math.min(56, w / 5, h / 5);
+    const verticalPadding = padding / 2;
     target = {
       x:box.x + box.width / 2, y:box.y + box.height / 2,
-      scale:Math.min(maxZoom, (w - 2 * padding) / (box.width + 4), (h - 2 * padding) / (box.height + 4))
+      scale:Math.min(maxZoom, (w - 2 * padding) / (box.width + 4), (h - 2 * verticalPadding) / (box.height + 4))
     };
   }
   const start = {...camera}, since = performance.now();
@@ -899,7 +913,8 @@ function openMap(map, edit = false, parents = []) {
   pan = null;
   $('workspace').classList.toggle('viewing', !!map && !edit);
   setMapExpanded(!!map && !edit);
-  $('refresh-map').hidden = $('fullscreen-map').hidden = $('maximize-map').hidden = edit;
+  $('refresh-map').hidden = $('fullscreen-map').hidden = edit;
+  $('maximize-map').hidden = !map;
   if (map) {
     viewport.scrollTo(0, 0);
     camera = map.layout.camera ? {...map.layout.camera} : {x:0, y:0, scale:1};

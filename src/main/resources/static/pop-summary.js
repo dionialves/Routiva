@@ -39,7 +39,7 @@ function popIcon(name, size = 16) {
     icon.setAttribute(key, value);
   }
   const use = document.createElementNS(namespace, 'use');
-  use.setAttribute('href', `/icons.svg?v=20261115-pop-metrics#${name}`);
+  use.setAttribute('href', `/icons.svg?v=20261120-host-summary#${name}`);
   icon.append(use);
   return icon;
 }
@@ -90,6 +90,8 @@ class PopSummary {
         if (!anchor || anchor.isConnected === false || this.stage.hidden) { this.close(); return; }
         this.position(anchor.getBoundingClientRect());
         this.updateFooter();
+        if (this.node.hostId && !this.box.contains(document.activeElement) && !this.hostCache?.get(this.node.hostId)?.pending && Date.now() - (this.hostCache?.get(this.node.hostId)?.at || 0) >= 15000)
+          this.renderHost();
         this.frame = requestAnimationFrame(track);
       };
       track();
@@ -130,6 +132,9 @@ class PopSummary {
   }
   render() {
     if (!this.node) return;
+    this.box.classList.toggle('pop-host-summary', !!this.node.hostId);
+    if (this.node.hostId) { this.renderHost(); return; }
+    this.box.setAttribute('aria-label', 'Resumo do POP');
     const metric = this.metric?.(this.node);
     this.monitoringUpdatedAt = undefined;
     if (metric) { this.renderMetric(metric); return; }
@@ -253,6 +258,119 @@ class PopSummary {
     this.box.append(footer);
     this.updateFooter();
   }
+  renderHost() {
+    const id = this.node.hostId;
+    this.hostCache ??= new Map();
+    const cached = this.hostCache.get(id);
+    const data = cached?.data;
+    this.box.setAttribute('aria-label', 'Resumo do host');
+    const el = (tag, text, className) => {
+      const item = document.createElement(tag);
+      if (text != null) item.textContent = text;
+      if (className) item.className = className;
+      return item;
+    };
+    const heading = el('header');
+    const symbol = el('span', null, 'pop-symbol'); symbol.append(popIcon('server', 18));
+    const name = el('div', null, 'pop-heading-copy');
+    name.append(el('strong', data?.name || this.node.name));
+    if (data?.description) name.append(el('small', data.description));
+    const states = {online:'Disponível', offline:'Indisponível', unknown:'Desconhecido'};
+    const activeCount = el('small', data?.active == null ? '— incidentes ativos' :
+      `${data.active} ${data.active === 1 ? 'incidente ativo' : 'incidentes ativos'}`, 'host-active-count');
+    heading.append(symbol, name, el('span', states[data?.status] || states.unknown,
+      'host-state ' + (data?.status || 'unknown')), activeCount);
+    if (data?.active > 0) {
+      const severity = data.activeSeverity;
+      activeCount.style.color = this.colors[severity + 2] || 'var(--warning)';
+    }
+    const restoreHistoryFocus = this.box.querySelector('.host-all-incidents') === document.activeElement;
+    this.box.replaceChildren(heading);
+    this.box.setAttribute('aria-busy', String(!data && !cached?.error));
+    const metrics = el('div', null, 'pop-metrics host-summary-metrics');
+    const format = (v, digits, suffix) => Number.isFinite(v)
+      ? v.toLocaleString('pt-BR', {minimumFractionDigits:digits, maximumFractionDigits:digits}) + suffix : '—';
+    const values = data?.metrics;
+    for (const [title, icon, value, digits, suffix, note, state] of [
+      ['Disponibilidade Operacional', 'pulse', values?.operational, 2, '%', 'Últimas 24 h', 'operational'],
+      ['Latência média', 'timer', values?.latency, 1, ' ms',
+        Number.isFinite(data?.p95) ? 'P95: ' + format(data.p95, 1, ' ms') : 'P95: —', data?.latencyState],
+      ['Perda de pacotes', 'arrow-down-up', values?.loss, 2, '%', 'Últimas 24 h', data?.lossState]
+    ]) {
+      const item = el('div', null, 'pop-metric');
+      item.append(popIcon(icon, 17), el('span', title, 'host-metric-label'),
+        el('strong', format(value, digits, suffix), 'host-metric-value ' + (Number.isFinite(value) ? state : '')),
+        el('small', Number.isFinite(value) ? note : 'Sem dados'));
+      metrics.append(item);
+    }
+    this.box.append(metrics);
+    if (!data && !cached?.error) {
+      const loading = el('p', 'Carregando resumo…', 'pop-loading'); loading.setAttribute('role', 'status');
+      this.box.append(loading);
+    }
+    if (cached?.error || data?.warning) this.box.append(el('p', data?.warning ||
+      'Não foi possível atualizar os dados deste host.', 'pop-message pop-failure'));
+    const title = el('h3'); title.append(popIcon('alert'), document.createTextNode('Últimos 5 incidentes'));
+    this.box.append(title);
+    if (data?.incidents?.length) {
+      const table = el('table', null, 'host-incident-table');
+      const head = el('thead'), labels = el('tr');
+      for (const label of ['Data / Hora', 'Severidade', 'Incidente', 'Status']) {
+        const cell = el('th', label); cell.scope = 'col'; labels.append(cell);
+      }
+      head.append(labels); table.append(head);
+      const body = el('tbody');
+      for (const issue of data.incidents.slice(0, 5)) {
+        const row = el('tr');
+        const date = el('td', hostIncidentDate(issue.timestamp));
+        date.title = new Date(issue.timestamp).toLocaleString('pt-BR');
+        const severity = el('td');
+        const badge = el('span', this.labels[issue.severity + 2] || 'Desconhecida', 'host-severity');
+        badge.style.color = this.colors[issue.severity + 2] || 'var(--muted)';
+        severity.append(badge);
+        const text = el('td', issue.name, 'host-incident-name'); text.title = issue.name;
+        const status = el('td'), state = el('span', null, 'host-incident-status ' + (issue.resolved ? 'resolved' : 'active'));
+        const statusLabel = issue.resolved ? 'Resolvido' : 'Aberto';
+        state.setAttribute('role', 'img');
+        state.setAttribute('aria-label', statusLabel);
+        state.title = statusLabel;
+        state.append(popIcon(issue.resolved ? 'check-circle' : 'circle-alert', 16));
+        status.append(state); row.append(date, severity, text, status); body.append(row);
+      }
+      table.append(body);
+      const scroll = el('div', null, 'host-incident-scroll');
+      scroll.tabIndex = 0; scroll.setAttribute('role', 'region');
+      scroll.setAttribute('aria-label', 'Últimos 5 incidentes');
+      scroll.append(table); this.box.append(scroll);
+    } else if (data?.incidents) {
+      const empty = el('p', null, 'pop-message pop-empty');
+      empty.append(popIcon('check-circle'), document.createTextNode('Nenhum incidente registrado para este host.'));
+      this.box.append(empty);
+    }
+    const link = el('a', null, 'host-all-incidents');
+    link.href = `/incidentes?hostId=${encodeURIComponent(id)}&history=all`;
+    link.append(popIcon('list', 15), document.createTextNode('Ver todos os incidentes'), popIcon('arrow-right', 14));
+    this.box.append(link);
+    if (restoreHistoryFocus) link.focus({preventScroll:true});
+    const footer = el('footer'), updated = el('span', null, 'pop-updated');
+    updated.append(popIcon('refresh', 12), el('span', null, 'pop-freshness'));
+    footer.append(updated); this.box.append(footer);
+    this.monitoringUpdatedAt = data?.updatedAt ?? null;
+    this.updateFooter();
+    if (cached?.pending || (cached && Date.now() - cached.at < 15000)) return;
+    const entry = {at:Date.now(), data, pending:true};
+    // Bound memory when browsing many maps; in-flight entries remain shared per host.
+    for (const [key, item] of this.hostCache) if (!item.pending && Date.now() - item.at > 60000) this.hostCache.delete(key);
+    this.hostCache.set(id, entry);
+    fetch(`/api/maps/hosts/${encodeURIComponent(id)}/summary`, {cache:'no-store', signal:AbortSignal.timeout(20000)})
+      .then(response => { if (!response.ok) throw new Error('Resumo indisponível'); return response.json(); })
+      .then(result => { entry.data = result; entry.error = false; })
+      .catch(() => { entry.error = true; })
+      .finally(() => {
+        entry.pending = false; entry.at = Date.now();
+        if (this.node?.hostId === id) this.renderHost();
+      });
+  }
   renderMetric(metric) {
     if (metric.view === 'latency' || metric.view === 'loss') {
       this.renderMonitoring(metric);
@@ -355,9 +473,21 @@ class PopSummary {
     const updatedAt = this.monitoringUpdatedAt === undefined ? fresh.updatedAt : this.monitoringUpdatedAt;
     if (!updatedAt) { freshness.textContent = 'Horário indisponível'; return; }
     const age = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
-    const text = fresh.failed || age > 90
+    const failed = this.node?.hostId ? this.hostCache?.get(this.node.hostId)?.error ||
+      this.hostCache?.get(this.node.hostId)?.data?.warning : fresh.failed;
+    const text = failed || age > 90
       ? `Dados desatualizados · última atualização ${new Date(updatedAt).toLocaleTimeString('pt-BR')}`
       : `Atualizado há ${age} segundos`;
     if (freshness.textContent !== text) freshness.textContent = text;
   }
 }
+
+function hostIncidentDate(timestamp, now = Date.now()) {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp), today = new Date(now), yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const day = date.toDateString() === today.toDateString() ? 'Hoje' :
+    date.toDateString() === yesterday.toDateString() ? 'Ontem' : date.toLocaleDateString('pt-BR');
+  return `${day}, ${date.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}`;
+}
+if (typeof module !== 'undefined') module.exports = {summarizePop, popElapsed, hostIncidentDate};

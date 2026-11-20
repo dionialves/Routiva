@@ -90,15 +90,21 @@ test('acknowledged incidents affect host and group colors only when enabled', ()
   assert.equal(vm.runInContext('hostLevel(host)', context), 5);
 });
 
-test('all map elements cover the connections leading to their central anchors', () => {
+test('equipment ports remain reachable while central anchors stay behind their elements', () => {
   const canvas = {children:[], dataset:{}, replaceChildren(){this.children=[];}, append(child){this.children.push(child);}};
+  const hostMenus = [];
   const nodes = [
     {id:'group',groupId:'g',icon:'circle',name:'Group',x:0,y:0},
     {id:'cloud',icon:'cloud',name:'Cloud',x:50,y:0},
     {id:'site',hostId:'s',icon:'telecom-site',name:'Site',x:75,y:0},
-    {id:'host',hostId:'h',icon:'switch',name:'Host',x:100,y:0}
+    {id:'host',hostId:'h',icon:'switch',name:'Host',x:100,y:0,ports:[{id:'ether1',type:'rj45'}]}
   ];
   const context = vm.createContext({
+    inventory: [{id:'h', ip:'192.0.2.1'}],
+    window: {HostMenu: {attach(element, container, options) {
+      hostMenus.push({element, options});
+      return {remove(){}};
+    }}},
     document:{activeElement:null}, current:{layout:{name:'Map',nodes,links:[]}},
     editing:false,tool:'select',connectionOrigin:null,drag:null,marquee:null,selection:new Set(),selected:null,
     colors:['gray','green'],labels:['No data','Healthy'],
@@ -109,9 +115,22 @@ test('all map elements cover the connections leading to their central anchors', 
   });
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')),context);
   vm.runInContext('draw()',context);
-  assert.equal(canvas.children[0].attributes.class,'map-connectors');
-  assert.equal(canvas.children[1].attributes['aria-label'],'Group · Healthy');
-  assert.equal(canvas.children[2].attributes['aria-label'],'Cloud');
-  assert.equal(canvas.children[3].attributes['aria-label'],'Site · Healthy');
-  assert.equal(canvas.children[4].attributes['aria-label'],'Host · Healthy');
+  assert.equal(hostMenus.length, 2);
+  assert.equal(hostMenus[1].options.hostId, 'h');
+  assert.equal(hostMenus[1].options.ip, '192.0.2.1');
+  assert.equal(hostMenus[1].element.attributes.role, 'button');
+  assert.equal(hostMenus[1].element.attributes.tabindex, 0);
+  assert.equal(canvas.children[0].attributes['aria-label'],'Host · Healthy');
+  assert.equal(canvas.children[1].attributes.class,'map-connectors');
+  assert.equal(canvas.children[2].attributes['aria-label'],'Group · Healthy');
+  assert.equal(canvas.children[3].attributes['aria-label'],'Cloud');
+  assert.equal(canvas.children[4].attributes['aria-label'],'Site · Healthy');
+  nodes[3].icon = 'radio';
+  vm.runInContext('draw()', context);
+  assert.equal(canvas.children[0].attributes['aria-label'], 'Host · Healthy');
+  assert.equal(canvas.children[1].attributes.class, 'map-connectors');
+  nodes[3].interfacesEnabled = false;
+  vm.runInContext('draw()', context);
+  assert.equal(canvas.children[0].attributes.class, 'map-connectors');
+  assert.equal(canvas.children[4].attributes['aria-label'], 'Host · Healthy');
 });

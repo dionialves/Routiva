@@ -241,8 +241,8 @@ const MapSwitch = (() => {
       y: x * Math.sin(angle) + y * Math.cos(angle)};
   }
   const serverImages = {
-    'tower-server': {width: 96, height: 119, label: 'Servidor em torre'},
-    'vm-server': {width: 192, height: 64, label: 'VM Server'}
+    'tower-server': {width: 70, height: 119.6, label: 'Servidor em torre'},
+    'vm-server': {width: 160, height: 48.75, label: 'VM Server'}
   };
   function bounds(node) {
     const shape = serverImages[node.icon] || (node.icon === 'cloud' ? {width: 152, height: 76}

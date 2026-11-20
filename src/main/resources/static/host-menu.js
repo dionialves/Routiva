@@ -87,7 +87,7 @@ window.HostMenu = (() => {
       if (next !== undefined) { event.preventDefault(); items[next]?.focus(); }
     });
     link.href = groupUrl || '#';
-    link.className += ' host-action-link';
+    link.setAttribute('class', `${link.getAttribute?.('class') || link.className?.baseVal || link.className || ''} host-action-link`);
     link.setAttribute('aria-haspopup', 'menu');
     link.setAttribute('aria-expanded', 'false');
     link.addEventListener('click', event => {
@@ -108,6 +108,7 @@ window.HostMenu = (() => {
       link.setAttribute('aria-expanded', String(event.newState === 'open'));
     });
     container.append(menu);
+    return menu;
   }
   return { attach, winboxUrl };
 })();

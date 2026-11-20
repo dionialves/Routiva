@@ -31,6 +31,18 @@ class IncidentsControllerTests {
             "99", "Link", 3, false, closed, false, writable, manualClose, List.of()));
     }
 
+    @Test void fullHostHistoryUsesInventoryAndIncludesResolvedIncidentsInOpeningOrder() {
+        when(inventory.hosts()).thenReturn(List.of(a, b));
+        when(client.hostIncidentHistory("1", null)).thenReturn(List.of(
+            new ZabbixClient.HostIncident("old", "Old active", 4, 100, false, false, 0),
+            new ZabbixClient.HostIncident("new", "Recent resolved", 2, 200, true, false, 0)));
+        var page = controller.groupedData(new IncidentsController.QueryRequest("g", "1", "", true)).getBody();
+        assertEquals(List.of("new", "old"), page.rows().stream().map(IncidentsController.Row::eventId).toList());
+        assertTrue(page.rows().getFirst().resolved());
+        verify(client, never()).hostIncidentHistory(eq("2"), any());
+        verify(client, never()).activeIncidents(any());
+    }
+
     @Test void combinesActionsAndRecordsLocalActor() {
         incident(true, true, false);
         controller.update("99", new IncidentsController.UpdateRequest("Investigando", true, true, 4), admin);

@@ -19,7 +19,11 @@ public class IncidentsController {
     }
 
     public record Row(String eventId, String name, int severity, String severityLabel,
-                      long timestamp, List<Host> hosts, boolean acknowledged, boolean hasMessages, int messageCount) {}
+                      long timestamp, List<Host> hosts, boolean acknowledged, boolean hasMessages, int messageCount, boolean resolved) {
+        public Row(String eventId, String name, int severity, String severityLabel, long timestamp, List<Host> hosts, boolean acknowledged, boolean hasMessages, int messageCount) {
+            this(eventId, name, severity, severityLabel, timestamp, hosts, acknowledged, hasMessages, messageCount, false);
+        }
+    }
     private static final List<String> SEVERITIES = List.of("Não classificada", "Informação", "Atenção", "Média", "Alta", "Desastre");
 
     @Value("${spring.jackson.time-zone:America/Sao_Paulo}")
@@ -68,13 +72,44 @@ public class IncidentsController {
         return query(groupId, hostId, "", severity, "date", "desc", 1, Integer.MAX_VALUE);
     }
 
-    public record QueryRequest(String groupId, String hostId, String severity) {}
+    public record QueryRequest(String groupId, String hostId, String severity, boolean history) {
+        public QueryRequest(String groupId, String hostId, String severity) { this(groupId, hostId, severity, false); }
+    }
 
     @PostMapping("/api/incidents/grouped-data")
     @ResponseBody
     public ResponseEntity<Page> groupedData(@RequestBody QueryRequest filters) {
+        if (filters.history()) return history(filters);
         return groupedData(Objects.requireNonNullElse(filters.groupId(), ""),
             Objects.requireNonNullElse(filters.hostId(), ""), Objects.requireNonNullElse(filters.severity(), ""));
+    }
+
+    private ResponseEntity<Page> history(QueryRequest filters) {
+        var ids = Set.copyOf(Arrays.asList(Objects.requireNonNullElse(filters.hostId(), "").split(",")));
+        var groups = Objects.requireNonNullElse(filters.groupId(), "");
+        var groupIds = Arrays.asList(groups.split(","));
+        var hosts = inventory.hosts().stream().filter(h -> ids.contains(h.id()))
+            .filter(h -> groups.isEmpty() || h.groups().stream().anyMatch(g -> groupIds.contains(g.id()))).toList();
+        var rows = new LinkedHashMap<String, Row>();
+        try {
+            for (var host : hosts) for (var event : zabbix.hostIncidentHistory(host.id(), null)) {
+                if (filters.severity() != null && !filters.severity().isEmpty()
+                    && !Arrays.asList(filters.severity().split(",")).contains(Integer.toString(event.severity()))) continue;
+                var related = new ArrayList<Host>(rows.containsKey(event.eventId()) ? rows.get(event.eventId()).hosts() : List.of());
+                related.add(host);
+                int level = event.severity();
+                rows.put(event.eventId(), new Row(event.eventId(), event.name(), level,
+                    level >= 0 && level < SEVERITIES.size() ? SEVERITIES.get(level) : "Desconhecida",
+                    event.timestamp(), List.copyOf(related), event.acknowledged(), event.messageCount() > 0,
+                    event.messageCount(), event.resolved()));
+            }
+            var sorted = rows.values().stream().sorted(Comparator.comparingLong(Row::timestamp).reversed()).toList();
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new Page(sorted, sorted.size(), 1, 1,
+                Integer.MAX_VALUE, System.currentTimeMillis(), ""));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new Page(List.of(), 0, 1, 1, 50, 0,
+                "Não foi possível atualizar o histórico do Zabbix."));
+        }
     }
 
     public record UpdateRequest(String message, boolean acknowledge, boolean close, Integer severity) {}

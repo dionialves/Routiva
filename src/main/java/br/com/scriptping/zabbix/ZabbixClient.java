@@ -155,6 +155,33 @@ public class ZabbixClient {
         return result;
     }
 
+    public record HostIncident(String eventId, String name, int severity, long timestamp,
+        boolean resolved, boolean acknowledged, int messageCount) {}
+
+    /** Problem events only; recovery events are represented by r_eventid, never separate rows. */
+    public synchronized List<HostIncident> hostIncidentHistory(String hostId, Integer limit) {
+        detectVersion();
+        var params = new LinkedHashMap<String, Object>();
+        params.put("hostids", List.of(hostId));
+        params.put("source", 0);
+        params.put("object", 0);
+        params.put("value", 1);
+        params.put("output", List.of("eventid", "name", "severity", "clock", "r_eventid", "acknowledged"));
+        params.put(legacyEvents ? "select_acknowledges" : "selectAcknowledges", List.of("message"));
+        params.put("sortfield", List.of("clock", "eventid"));
+        params.put("sortorder", "DESC");
+        if (limit != null) params.put("limit", limit);
+        var result = new ArrayList<HostIncident>();
+        for (var event : authenticatedRequest("event.get", params)) {
+            String recovery = event.path("r_eventid").asText("0");
+            result.add(new HostIncident(event.path("eventid").asText(), event.path("name").asText(),
+                event.path("severity").asInt(), event.path("clock").asLong() * 1000,
+                !recovery.isBlank() && !recovery.equals("0"), event.path("acknowledged").asInt() == 1,
+                messageCount(event)));
+        }
+        return List.copyOf(result);
+    }
+
     private static int messageCount(JsonNode event) {
         int count = 0;
         for (var update : event.path("acknowledges")) {
