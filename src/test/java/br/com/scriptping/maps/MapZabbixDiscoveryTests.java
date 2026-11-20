@@ -56,6 +56,10 @@ class MapZabbixDiscoveryTests {
         when(client.mapItemValues(anySet())).thenReturn(List.of(value("1", "1"), value("2", "1"), value("3", "135")));
         var rows = service.discover("1");
         assertThat(rows).hasSize(1);
+        assertThat(service.discover("1", true)).extracting(row -> row.get("name"))
+            .containsExactly("sfp-sfpplus1", "vlan10");
+        assertThat(service.discover("1")).hasSize(1);
+        verify(client, times(1)).mapInterfaceItems(anySet());
         assertThat(rows.getFirst()).containsEntry("name", "sfp-sfpplus1").containsEntry("connector", "sfpplus");
         var key = new MapZabbixReadings.Key("1", "sfp-sfpplus1");
         assertThat(service.read(Set.of(key), false).get(key).error()).isNull();

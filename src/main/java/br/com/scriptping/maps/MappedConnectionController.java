@@ -30,6 +30,11 @@ public class MappedConnectionController {
             .body(Map.of("message", ex.getReason() == null ? "Consulta indisponível." : ex.getReason()));
     }
     @GetMapping("/api/maps/connections/discover/{hostId}") @ResponseBody
+    public List<Map<String, String>> discoverForPicker(@PathVariable String hostId,
+            @RequestParam(defaultValue = "false") boolean includeLogical) {
+        hosts.target(hostId);
+        return zabbixReadings.discover(hostId, includeLogical);
+    }
     public List<Map<String, String>> discover(@PathVariable String hostId) {
         hosts.target(hostId);
         return zabbixReadings.discover(hostId);

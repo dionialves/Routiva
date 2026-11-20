@@ -41,6 +41,14 @@ class MappedConnectionTests {
         verifyNoInteractions(mikrotik, datacom, mimosa, cisco, connections, inventory);
         verify(hosts, never()).credentials(anyString());
     }
+    @Test void groupInterfacePickerIncludesLogicalInterfacesOnlyWhenRequested() {
+        var rows = List.of(Map.of("name", "vlan632", "source", "zabbix"));
+        when(zabbixReadings.discover("a", true)).thenReturn(rows);
+        assertThat(controller.discoverForPicker("a", true)).isEqualTo(rows);
+        verify(hosts).target("a");
+        verify(zabbixReadings).discover("a", true);
+        verifyNoInteractions(mikrotik, datacom, mimosa, cisco, connections, inventory);
+    }
     @Test void validatesDraftShapeWithoutQueryingZabbixOrPersistingConnections() {
         var saved = controller.validate(new MappedConnectionController.Connection(null, "Cabo A-B", "a", "eth1_emac1", "b", "wifi0"));
         assertThat(saved.id()).isNotBlank();

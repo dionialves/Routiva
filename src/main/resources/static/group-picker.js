@@ -65,7 +65,7 @@
       else input.removeAttribute('aria-activedescendant');
     }
     function choose(index) {
-      if (!matches[index]) return;
+      if (select.disabled || !matches[index] || matches[index].disabled) return;
       if (multiple) {
         const option = matches[index];
         const groups = Array.from(select.options).filter(item => item.value);
@@ -87,6 +87,7 @@
       list.replaceChildren();
       matches.forEach((option, index) => {
         const result = document.createElement('button'); result.type = 'button'; result.tabIndex = -1;
+        result.disabled = option.disabled;
         result.id = select.id + '-result-' + index; result.setAttribute('role', 'option'); result.setAttribute('aria-selected', String(multiple ? (option.value ? option.selected : Array.from(select.options).filter(item => item.value).every(item => item.selected)) : option.value === select.value));
         if (multiple) {
           const check = document.createElement('span'); check.className = 'group-picker-check'; check.setAttribute('aria-hidden', 'true');
@@ -97,14 +98,17 @@
       empty.hidden = matches.length !== 0; highlight(-1);
     }
     function open() {
+      if (select.disabled) return;
       panel.hidden = false; trigger.setAttribute('aria-expanded', 'true'); input.setAttribute('aria-expanded', 'true'); input.value = ''; render();
       if (dialog) { panel.showPopover(); positionPanel(); }
       input.focus();
     }
     function sync() {
+      trigger.disabled = select.disabled;
+      trigger.setAttribute('aria-busy', select.getAttribute('aria-busy') || 'false');
       const selected = Array.from(select.options).filter(option => option.value && option.selected);
       selection.textContent = multiple ? (!selected.length ? 'Todos os hosts' : selected.length === 1 ? selected[0].textContent : `${selected.length} grupos selecionados`) : select.selectedOptions[0]?.textContent || 'Todos os hosts';
-      const next = JSON.stringify(Array.from(select.options, option => [option.value, option.textContent]));
+      const next = JSON.stringify(Array.from(select.options, option => [option.value, option.textContent, option.disabled]));
       if (next !== signature && !panel.hidden) render();
       signature = next;
     }

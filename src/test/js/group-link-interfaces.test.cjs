@@ -32,7 +32,7 @@ test('group editor loads interfaces on demand and blocks duplicate additions',as
     append(...items){this.children.push(...items);}
     add(item){this.append(item);}
     replaceChildren(...items){this.children=[...items];}
-    setAttribute(){} removeAttribute(){} closest(){return {open:true};}
+    setAttribute(){} removeAttribute(){} focus(){} closest(){return {open:true};}
   }
   class Option extends Element {constructor(text,value){super('option');this.textContent=text;this.value=value;}}
   const elements=new Map();
@@ -43,12 +43,36 @@ test('group editor loads interfaces on demand and blocks duplicate additions',as
   const editor=ctx.module.exports.create({hosts:()=>hosts,discover:async()=>{calls++;return [{name:'wifi0',source:'zabbix'},{name:'wlan0',source:'zabbix'}];}});
   editor.open({id:'group'},[]);editor.sync('g',true);
   const get=id=>document.getElementById('group-link-'+id);
-  get('host').value='a';get('host').onchange();
-  await get('load').onclick();
+  get('host').value='a';await get('host').onchange();
   assert.equal(calls,1);
-  get('interface').value='wifi0';get('add').onclick();get('add').onclick();
-  assert.equal(editor.value().length,1);assert.match(get('status').textContent,/já estão habilitados/);
+  get('interface').value='wifi0';get('add').onclick();
+  assert.equal(editor.value().length,1);
+  assert.equal(get('editor').hidden,true);
+  get('host').value='a'; await get('host').onchange();
   get('interface').value='wlan0';get('add').onclick();
   assert.equal(editor.value().length,2);
   assert.equal(editor.validate('g'),'');
+  editor.open({id:'group',linkInterfaces:[entry('a','wifi0')]},[
+    {id:'uplink',from:'group',to:'peer',connection:{hostA:'a',interfaceA:'wifi0'}}]);
+  const remove=get('rows').children[0].children[4].children[0];
+  remove.onclick();
+  assert.equal(editor.value().length,1);
+  assert.match(get('status').textContent,/uplink/);
+  const pending=[];
+  const racing=ctx.module.exports.create({hosts:()=>hosts,discover:id=>new Promise(resolve=>pending.push({id,resolve}))});
+  racing.open({id:'group'},[]);racing.sync('g',true);
+  get('host').value='a';const first=get('host').onchange();
+  get('host').value='b';const second=get('host').onchange();
+  pending[1].resolve([{name:'new-port',source:'zabbix'}]);await second;
+  pending[0].resolve([{name:'stale-port',source:'zabbix'}]);await first;
+  assert.equal(get('interface').options[1].value,'new-port');
+  get('interface').value='new-port';get('add').onclick();
+  assert.equal(racing.value()[0].hostId,'b');
+  get('cancel').onclick();
+  assert.equal(racing.value().length,1);
+  assert.equal(get('editor').hidden,true);
+  get('host').value='a';const cancelled=get('host').onchange();
+  get('cancel').onclick();pending[2].resolve([{name:'cancelled-port',source:'zabbix'}]);await cancelled;
+  assert.equal(get('interface').disabled,true);
+  assert.equal(get('add').disabled,true);
 });

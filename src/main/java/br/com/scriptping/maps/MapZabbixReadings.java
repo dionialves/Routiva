@@ -119,7 +119,14 @@ public class MapZabbixReadings implements AutoCloseable {
     }
     /** One-shot editing discovery, serialized with collection and cached for one minute. */
     public List<Map<String, String>> discover(String hostId) {
-        try { return worker.submit(() -> discoverRows(hostId)).get(); }
+        return discover(hostId, false);
+    }
+    public List<Map<String, String>> discover(String hostId, boolean includeLogical) {
+        try {
+            return worker.submit(() -> discoverRows(hostId).stream()
+                .filter(row -> includeLogical || !Set.of("24", "53", "131", "135", "161").contains(row.get("snmp-type")))
+                .toList()).get();
+        }
         catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
@@ -159,8 +166,6 @@ public class MapZabbixReadings implements AutoCloseable {
             var typeItem = unique(related, "type");
             var typeValue = value(typeItem, values);
             String snmpType = issue(typeItem, typeValue) == null ? typeValue.path("lastvalue").asText() : "";
-            // Known virtual interfaces must not become physical sockets in the map.
-            if (Set.of("24", "53", "131", "135", "161").contains(snmpType)) continue;
             if (!names.add(normalized(name))) throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.BAD_GATEWAY, "O Zabbix contém interfaces com nomes duplicados. Revise os itens e as tags do host.");
             var row = new LinkedHashMap<String, String>();

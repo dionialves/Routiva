@@ -106,7 +106,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #map-error:empty { display:none; }
 #editor-actions button, #editor .editor-toolbar > button { display:inline-flex; gap:.5rem; align-items:center; justify-content:center; }
 
-#element-dialog { --form-dialog-width:820px; width:min(var(--form-dialog-width), calc(100vw - 32px)); }
+#element-dialog { --form-dialog-width:1080px; width:min(var(--form-dialog-width), calc(100vw - 32px)); }
 .element-heading { display:grid; grid-template-columns:1fr auto; gap:4px 16px; }
 .element-heading p { margin:0; color:var(--muted); font-size:13px; }
 .element-heading p { grid-column:1 / -1; }
@@ -601,3 +601,34 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 
 /* Stationary round dots identify wireless independently of utilization. */
 #canvas .map-connector-wireless { stroke-dasharray: 0 10; stroke-linecap: round; }
+
+/* Group link interfaces share the element dialog's scrolling frame and controls. */
+.element-binding-row > * { min-width:0; }
+#group-link-interfaces { padding:16px; }
+#group-link-interfaces .form-dialog-section-title { padding:0; border:0; }
+#group-link-interfaces p { margin:8px 0; color:var(--muted); font-size:13px; }
+#group-link-interfaces .element-section-heading { align-items:flex-start; }
+#group-link-open { flex-shrink:0; }
+.group-link-editor { margin:16px 0; padding:16px; border:1px solid var(--border); border-radius:8px; background:var(--surface-bg); }
+.group-link-editor h4 { margin:0 0 12px; font-size:14px; }
+.group-link-editor-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:12px; }
+.group-link-editor .group-picker-trigger:disabled { opacity:.6; cursor:not-allowed; }
+#group-link-interfaces .group-link-table th { width:auto; text-align:left; }
+#group-link-interfaces .group-link-table th:first-child { width:29%; }
+#group-link-interfaces .group-link-table th:nth-child(2) { width:19%; }
+#group-link-interfaces .group-link-table th:last-child { width:120px; text-align:right; }
+.group-link-table td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.group-link-table td:last-child { text-align:right; }
+#group-link-interfaces .group-link-empty { padding:24px 12px; text-align:center; white-space:normal; }
+.group-link-empty svg { display:block; margin:0 auto 12px; color:var(--muted); }
+.group-link-empty strong, .group-link-empty span { display:block; margin-top:8px; }
+.group-link-empty span { color:var(--muted); }
+#node-preview { border:1px solid var(--border); border-radius:8px; background:var(--panel-bg); }
+@media(max-width:700px) {
+  #group-link-interfaces .element-section-heading { flex-direction:column; }
+  .group-link-editor .map-dimensions, .element-binding-row { grid-template-columns:1fr; }
+  #group-link-interfaces .group-link-table { min-width:680px; }
+}
+.group-link-editor .group-picker-trigger[aria-busy=true]::after { content:''; width:14px; height:14px; flex-shrink:0; border:2px solid var(--border); border-top-color:var(--text); border-radius:50%; animation:group-interface-loading .8s linear infinite; }
+@keyframes group-interface-loading { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .group-link-editor .group-picker-trigger[aria-busy=true]::after { animation:none; } }

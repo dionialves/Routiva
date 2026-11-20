@@ -1845,5 +1845,5 @@ refreshMappedConnections();
 
 const groupLinkEditor = typeof GroupLinkInterfaces !== 'undefined' ? GroupLinkInterfaces.create({
   hosts: () => inventory,
-  discover: hostId => connectionRequest('/api/maps/connections/discover/' + encodeURIComponent(hostId))
+  discover: hostId => connectionRequest('/api/maps/connections/discover/' + encodeURIComponent(hostId) + '?includeLogical=true')
 }) : null;

@@ -29,15 +29,17 @@ const GroupLinkInterfaces = (() => {
   function create({hosts, discover}) {
     const get = id => document.getElementById('group-link-' + id);
     const root = document.getElementById('group-link-interfaces');
-    const hostSelect = get('host'), interfaceSelect = get('interface'), load = get('load'), add = get('add');
-    let entries = [], available = [], groupId = '', generation = 0;
+    const hostSelect = get('host'), interfaceSelect = get('interface'), retry = get('retry'), add = get('add');
+    let entries = [], available = [], groupId = '', generation = 0, editingNode = null, links = [];
     const picker = window.setupGroupPicker(hostSelect, 'group-link-host-label', 'Pesquisar host do grupo',
       {listLabel:'Hosts do grupo', emptyText:'Nenhum host encontrado.'});
     function message(text) { get('status').textContent = text; }
+    const interfacePicker = window.setupGroupPicker(interfaceSelect, 'group-link-interface-label', 'Pesquisar interface', {listLabel:'Interfaces', emptyText:'Nenhuma interface disponível.'});
+    function feedback(text) { get('feedback').textContent = text; }
     function reset() {
-      generation++; available = []; interfaceSelect.replaceChildren(new Option('Selecione a interface', ''));
-      interfaceSelect.disabled = true; add.disabled = true; load.disabled = !hostSelect.value;
-      load.classList.remove('system-button-loading'); load.removeAttribute('aria-busy');
+      generation++; available = []; interfaceSelect.replaceChildren(new Option('Selecione um host para carregar as interfaces', ''));
+      interfaceSelect.disabled = true; add.disabled = true; retry.hidden = true;
+      interfaceSelect.removeAttribute('aria-busy'); interfacePicker.sync();
     }
     function select(value, choices, label, update) {
       const input = document.createElement('select'); input.setAttribute('aria-label', label);
@@ -49,39 +51,74 @@ const GroupLinkInterfaces = (() => {
       entries.forEach((entry, index) => {
         const row = document.createElement('tr');
         const cell = content => { const td = document.createElement('td'); typeof content === 'string' ? td.textContent = content : td.append(content); row.append(td); };
-        cell(hosts().find(host => host.id === entry.hostId)?.name || entry.hostId);
+        const hostName = hosts().find(host => host.id === entry.hostId)?.name || entry.hostId;
+        cell(hostName); row.children[0].title = hostName;
         cell(entry.name);
         cell(select(entry.connector, Object.entries(MapSwitch.connectors).map(([key, info]) => [key, info.label]),
           'Conector de ' + entry.name, value => { entry.connector = value; }));
         cell(select(entry.capacity, [['unknown','Não identificada'], ...Object.entries(MapSwitch.portCapacities)],
           'Capacidade de ' + entry.name, value => { entry.capacity = value; }));
         const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'system-button system-button-danger';
-        remove.textContent = 'Remover'; remove.setAttribute('aria-label', 'Remover ' + entry.name + ' de ' + (hosts().find(h => h.id === entry.hostId)?.name || entry.hostId));
-        remove.onclick = () => { entries.splice(index, 1); render(); };
+        remove.innerHTML = '<svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#trash-2"/></svg>Remover'; remove.setAttribute('aria-label', 'Remover ' + entry.name + ' de ' + (hosts().find(h => h.id === entry.hostId)?.name || entry.hostId));
+        remove.onclick = () => {
+          const dependency = links.find(link => {
+            const side = link.from === editingNode.id ? 'A' : link.to === editingNode.id ? 'B' : null;
+            return side && link.connection?.['host' + side] === entry.hostId && link.connection?.['interface' + side] === entry.name;
+          });
+          if (dependency) { message('A interface é usada pelo enlace ' + (dependency.name || dependency.id || dependency.from + ' → ' + dependency.to) + '. Reconfigure ou remova o enlace primeiro.'); return; }
+          entries.splice(index, 1); render(); message('Interface removida. Salve o elemento para aplicar.');
+        };
         cell(remove); get('rows').append(row);
       });
       if (!entries.length) {
         const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 5;
-        cell.textContent = 'Nenhuma interface habilitada para enlaces.'; row.append(cell); get('rows').append(row);
+        cell.className = 'group-link-empty';
+        cell.innerHTML = '<svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="4"/><path d="M7 9h18v12h-4v4H11v-4H7zM10 9v4m4-4v4m4-4v4m4-4v4"/></svg><strong>Nenhuma interface habilitada para enlaces.</strong><span>Clique em Adicionar interface para incluir a primeira interface deste elemento.</span>'; row.append(cell); get('rows').append(row);
       }
     }
-    hostSelect.onchange = () => { reset(); message(''); };
-    interfaceSelect.onchange = () => { add.disabled = !interfaceSelect.value; };
-    load.onclick = async () => {
-      if (!hostSelect.value || load.disabled) return;
-      const token = ++generation, hostId = hostSelect.value;
-      load.disabled = true; add.disabled = true; interfaceSelect.disabled = true;
-      load.classList.add('system-button-loading'); load.setAttribute('aria-busy', 'true'); message('Carregando interfaces do Zabbix…');
+    function closeEditor(focus = false) {
+      reset(); hostSelect.value = ''; picker.sync(); get('editor').hidden = true;
+      get('open').hidden = false; get('open').setAttribute('aria-expanded', 'false'); feedback('');
+      if (focus) get('open').focus();
+    }
+    get('open').onclick = () => {
+      closeEditor(); get('editor').hidden = false; get('open').hidden = true;
+      get('open').setAttribute('aria-expanded', 'true');
+      feedback(hostSelect.options.length > 1 ? 'As interfaces serão carregadas após a seleção do host.' : 'Nenhum host encontrado neste grupo.');
+      hostSelect.parentElement.querySelector?.('button')?.focus();
+    };
+    get('cancel').onclick = () => closeEditor(true);
+    interfaceSelect.onchange = () => {
+      add.disabled = !available.some(row => row.name === interfaceSelect.value)
+        || entries.some(entry => entry.hostId === hostSelect.value && entry.name === interfaceSelect.value);
+      feedback(add.disabled ? 'Selecione uma interface disponível.' : 'Interface pronta para ser adicionada à lista.');
+    };
+    async function loadInterfaces() {
+      reset();
+      if (!hostSelect.value) { feedback('Selecione um host.'); return; }
+      const token = generation, hostId = hostSelect.value;
+      interfaceSelect.replaceChildren(new Option('Carregando interfaces...', ''));
+      interfaceSelect.setAttribute('aria-busy', 'true'); interfacePicker.sync(); feedback('Carregando interfaces...');
       try {
         const rows = await discover(hostId);
         if (token !== generation || root.hidden || !root.closest('dialog').open) return;
         available = rows;
-        interfaceSelect.replaceChildren(new Option('Selecione a interface', ''), ...rows.map(row => new Option(row.name, row.name)));
+        interfaceSelect.replaceChildren(new Option('Selecione a interface', ''), ...rows.map(row => {
+          const duplicate = entries.some(entry => entry.hostId === hostId && entry.name === row.name);
+          const option = new Option(row.name + (duplicate ? ' · Já adicionada' : ''), row.name);
+          option.disabled = duplicate; return option;
+        }));
         interfaceSelect.disabled = !rows.length;
-        message(rows.length ? 'Selecione a interface e clique em Habilitar interface. Revise conector e capacidade na lista.' : 'Nenhuma interface encontrada no Zabbix.');
-      } catch (error) { if (token === generation) message(error.message || 'Não foi possível consultar o Zabbix.'); }
-      finally { if (token === generation) { load.disabled = false; load.classList.remove('system-button-loading'); load.removeAttribute('aria-busy'); } }
-    };
+        feedback(rows.length ? 'Interfaces carregadas. Selecione uma interface.' : 'Nenhuma interface encontrada para este host.');
+      } catch (error) {
+        if (token === generation) { feedback('Não foi possível carregar as interfaces deste host.'); retry.hidden = false; }
+      } finally {
+        if (token === generation) { interfaceSelect.removeAttribute('aria-busy'); interfacePicker.sync(); }
+      }
+    }
+    hostSelect.onchange = loadInterfaces;
+    retry.onclick = loadInterfaces;
+    root.closest('dialog').addEventListener?.('close', () => { generation++; });
     add.onclick = () => {
       const source = available.find(row => row.name === interfaceSelect.value);
       if (!source) return;
@@ -90,17 +127,17 @@ const GroupLinkInterfaces = (() => {
       const entry = {hostId:hostSelect.value, name:source.name, connector:imported.connector, capacity:imported.capacity};
       const error = validate([...entries, entry], hosts(), groupId);
       if (error) { message(error); return; }
-      entries.push(entry); render(); message('Interface habilitada. Salve o elemento para aplicar.');
+      entries.push(entry); render(); closeEditor(true); message('Interface habilitada. Salve o elemento para aplicar.');
     };
     return {
-      open(node, links) { entries = seed(node, links); generation++; render(); message(''); },
+      open(node, currentLinks) { editingNode = node; links = currentLinks; entries = seed(node, links); closeEditor(); render(); message(''); },
       sync(id, visible) {
         root.hidden = !visible; groupId = id;
         const previous = hostSelect.value;
         hostSelect.replaceChildren(new Option('Selecione um host', ''), ...hosts()
           .filter(host => host.groups.some(group => group.id === id)).map(host => new Option(host.name + (host.ip ? ' · ' + host.ip : ''), host.id)));
         if ([...hostSelect.options].some(option => option.value === previous)) hostSelect.value = previous;
-        picker.sync(); reset();
+        picker.sync(); closeEditor();
       },
       value() { return entries.map(entry => ({...entry})); },
       validate(id) { const error = validate(entries, hosts(), id); message(error); return error; }
