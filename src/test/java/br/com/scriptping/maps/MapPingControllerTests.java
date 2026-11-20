@@ -42,6 +42,8 @@ class MapPingControllerTests {
         sample(7, "paused", "10.0.0.6", now - 1000, 1d, null);
         var response = controller.status(new NetworkMapModels.Targets(Set.of(),
             Set.of("up", "down", "error", "stale", "missing", "paused", "unknown")));
+        assertThat(response.getBody()).extracting(MapPingController.State::latencyMs)
+            .containsExactly(80d, null, null, null, null, 1d);
         assertThat(response.getHeaders().getCacheControl()).isEqualTo("no-store");
         assertThat(response.getBody()).extracting(MapPingController.State::state)
             .containsExactly("online", "offline", "unknown", "unknown", "unknown", "online");

@@ -217,3 +217,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 - O ícone `cloud` (Nuvem) usa a imagem fornecida em `map-assets/cloud.webp`, disponível para hosts, grupos e elementos livres. Reutiliza prévia, indicador de estado e transformações compartilhadas; rótulos permanecem horizontais.
 
 - Imagens raster usam WebP sem perda; SVGs de equipamentos preservam máscaras e geometria com WebP embutido recortado. Portas conectadas têm até 512px. A moldura 40G vazia reutiliza `qsfp.svg` com filtro neutro em MapSwitch. Ao trocar imagens, atualize a versão nas URLs; o cache de imagens dura 30 dias.
+
+- Os ícones `tower-server` (Servidor em torre) e `vm-server` (VM Server) usam as imagens fornecidas em WebP sem perda, disponíveis para hosts, grupos e elementos livres; compartilham prévia, estado e transformações dos ícones raster.
+
+- Servidor em torre e VM Server usam LED dinâmico do ping recente (2s; validade 10s): verde com resposta abaixo de 15ms, amarelo a partir de 15ms, vermelho no timeout e cinza em edição/erro/ausência. O LED da VM substitui a cor fixa por sobreposição SVG neutralizada; o da torre fica no canto superior direito. Grupos agregam seus hosts, priorizando timeout e depois ausência de dados.

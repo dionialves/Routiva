@@ -240,11 +240,15 @@ const MapSwitch = (() => {
     return {x: x * Math.cos(angle) - y * Math.sin(angle),
       y: x * Math.sin(angle) + y * Math.cos(angle)};
   }
+  const serverImages = {
+    'tower-server': {width: 96, height: 119, label: 'Servidor em torre'},
+    'vm-server': {width: 192, height: 64, label: 'VM Server'}
+  };
   function bounds(node) {
-    const shape = node.icon === 'cloud' ? {width: 152, height: 76}
+    const shape = serverImages[node.icon] || (node.icon === 'cloud' ? {width: 152, height: 76}
       : node.icon === 'telecom-site' ? {width: 112, height: 106}
-      : geometry(node.interfacesEnabled === false ? {...node, ports: []} : node);
-    const top = node.icon === 'cloud' ? -38 : node.icon === 'telecom-site' ? -53 : node.icon === 'radio' ? -90 : -55;
+      : geometry(node.interfacesEnabled === false ? {...node, ports: []} : node));
+    const top = serverImages[node.icon] ? -shape.height / 2 : node.icon === 'cloud' ? -38 : node.icon === 'telecom-site' ? -53 : node.icon === 'radio' ? -90 : -55;
     const corners = [-shape.width / 2, shape.width / 2].flatMap(x =>
       [top, top + shape.height].map(y => transformPoint(node, x, y)));
     return {left: Math.min(...corners.map(p => p.x)), right: Math.max(...corners.map(p => p.x)),
@@ -353,6 +357,6 @@ const MapSwitch = (() => {
     label.textContent = node.name;
     outer.append(label);
   }
-  return {isEquipment, newId, importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, transformPoint, bounds, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
+  return {serverImages, isEquipment, newId, importInterfaces, types, capacities, connectors, portCapacities, normalizeSlot, slotsFor, portsForSlots, portsFor, geometry, transformPoint, bounds, endpoint, portVisual, cableDirection, connectedPorts, pingIndicator, draw};
 })();
 if (typeof module !== 'undefined') module.exports = MapSwitch;

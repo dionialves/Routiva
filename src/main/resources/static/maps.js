@@ -21,6 +21,7 @@ let pendingLink = null, lastConnectionClick = null;
 let suppressConnectionUntil = 0;
 let savingConnection = false;
 let states = new Map(), generation = 0, timer;
+let serverLedSequence = 0;
 let pingStates = new Map(), pingGeneration = 0, pingTimer;
 let summaryUpdatedAt = 0, summaryFailed = false;
 let latencySummaries = new Map();
@@ -197,13 +198,37 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
   group = svg('g', {transform: `rotate(${node.rotation || 0}) scale(${(node.flipX ? -1 : 1) * (node.scale || 1)} ${node.scale || 1})`});
   outer.append(group);
   const cloud = node.icon === 'cloud';
-  group.append(svg('image', cloud
+  const server = MapSwitch.serverImages?.[node.icon];
+  group.append(svg('image', server
+    ? {href: `/map-assets/${node.icon}.webp?v=20261120-servers`, x: -server.width / 2, y: -server.height / 2, width: server.width, height: server.height}
+    : cloud
     ? {href: '/map-assets/cloud.webp?v=20261120-optimized', x: -103, y: -77, width: 206, height: 154}
     : {href: '/map-assets/telecom-site.webp?v=20261120-optimized', x: -96, y: -64, width: 192, height: 128}));
-  if (isSelected) group.append(svg('rect', {x: cloud ? -76 : -56, y: cloud ? -38 : -53, width: cloud ? 152 : 110, height: cloud ? 76 : 104,
+  if (isSelected) group.append(svg('rect', {x: server ? -server.width / 2 : cloud ? -76 : -56, y: server ? -server.height / 2 : cloud ? -38 : -53, width: server ? server.width : cloud ? 152 : 110, height: server ? server.height : cloud ? 76 : 104,
     rx: 6, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2}));
-  if (!editing) group.append(svg('circle', {cx: 0, cy: cloud ? 30 : 48, r: 5, fill, stroke: 'var(--panel-bg)', 'stroke-width': 2}));
-  const box = MapSwitch.bounds({...node, icon: cloud ? 'cloud' : 'telecom-site'});
+  if (server) {
+    const vm = node.icon === 'vm-server';
+    const cx = vm ? -49.7 : 20, cy = vm ? 5 : -34;
+    if (vm) {
+      // Neutralize the baked-in green light and its halo before drawing the live LED.
+      const id = 'server-led-' + (++serverLedSequence);
+      const defs = svg('defs', {}), clip = svg('clipPath', {id: id + '-clip'});
+      clip.append(svg('circle', {cx, cy, r: 7}));
+      const filter = svg('filter', {id: id + '-neutral'});
+      filter.append(svg('feColorMatrix', {type: 'saturate', values: '0'}));
+      defs.append(clip, filter); group.append(defs);
+      group.append(svg('image', {href: '/map-assets/vm-server.webp?v=20261120-servers',
+        x: -server.width / 2, y: -server.height / 2, width: server.width, height: server.height,
+        'clip-path': `url(#${id}-clip)`, filter: `url(#${id}-neutral)`}));
+    }
+    const status = serverStatusFor(node);
+    const led = svg('circle', {cx, cy, r: vm ? 2 : 2.5, fill: status.color,
+      stroke: '#344052', 'stroke-width': .6, class: 'server-status-led',
+      'data-server-node': node.id || '', role: 'img', 'aria-label': status.label});
+    const title = svg('title', {}); title.textContent = status.label;
+    led.append(title); group.append(led);
+  } else if (!editing) group.append(svg('circle', {cx: 0, cy: cloud ? 30 : 48, r: 5, fill, stroke: 'var(--panel-bg)', 'stroke-width': 2}));
+  const box = MapSwitch.bounds({...node, icon: server ? node.icon : cloud ? 'cloud' : 'telecom-site'});
   const positions = {ABOVE: {x: 0, y: box.top - 8, 'text-anchor': 'middle'},
     BELOW: {x: 0, y: box.bottom + 17, 'text-anchor': 'middle'},
     LEFT: {x: box.left - 9, y: 0, 'text-anchor': 'end'},
@@ -362,7 +387,7 @@ function draw() {
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
       onPort: portId => connectEndpoint(n, portId)
     });
-    else (['telecom-site', 'cloud'].includes(n.icon) ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
+    else (['telecom-site', 'cloud', 'tower-server', 'vm-server'].includes(n.icon) ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(n, event.shiftKey || event.ctrlKey || event.metaKey); }
     };
@@ -436,7 +461,7 @@ function draw() {
   if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
   if (editing && tool === 'select' && selection.size === 1) {
     const node = nodes.find(n => selection.has(n.id));
-    if (node && ['switch', 'radio', 'telecom-site', 'cloud'].includes(node.icon)) drawTransformHandles(canvas, node);
+    if (node && ['switch', 'radio', 'telecom-site', 'cloud', 'tower-server', 'vm-server'].includes(node.icon)) drawTransformHandles(canvas, node);
   }
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
@@ -788,7 +813,23 @@ function pingStateFor(hostId) {
   const reading = pingStates.get(hostId);
   return reading?.measuredAt != null && Date.now() - reading.measuredAt <= 10000 ? reading.state : 'unknown';
 }
+function serverStatusFor(node) {
+  const hosts = node.hostId ? [node.hostId] : node.groupId
+    ? inventory.filter(host => host.groups?.some(group => group.id === node.groupId)).map(host => host.id) : [];
+  const readings = hosts.map(id => ({state: pingStateFor(id), latency: pingStates.get(id)?.latencyMs}));
+  const state = editing || !readings.length ? 'unknown'
+    : readings.some(reading => reading.state === 'offline') ? 'offline'
+    : readings.some(reading => reading.state === 'unknown') ? 'unknown'
+    : readings.some(reading => Number.isFinite(reading.latency) && reading.latency >= 15) ? 'latency' : 'online';
+  return state === 'latency' ? {color: '#fced4e', label: 'Latência elevada (ping)'} : MapSwitch.pingIndicator(state);
+}
 function updatePingIndicators() {
+  for (const led of $('canvas').querySelectorAll('.server-status-led')) {
+    const node = current.layout.nodes.find(node => node.id === led.dataset.serverNode);
+    const status = serverStatusFor(node || {});
+    led.setAttribute('fill', status.color); led.setAttribute('aria-label', status.label);
+    led.querySelector('title').textContent = status.label;
+  }
   for (const led of $('canvas').querySelectorAll('.switch-status-led')) {
     const status = MapSwitch.pingIndicator(editing ? 'unknown' : pingStateFor(led.dataset.pingHost));
     led.setAttribute('fill', status.color); led.setAttribute('aria-label', status.label);
@@ -798,10 +839,12 @@ function updatePingIndicators() {
 async function refreshPingState(token) {
   if (!current || editing || token !== pingGeneration) return;
   clearTimeout(pingTimer);
-  const hosts = [...new Set(current.layout.nodes.filter(n => ['switch', 'radio'].includes(n.icon)).map(n => n.hostId).filter(Boolean))];
-  if (!hosts.length) return;
+  const equipment = current.layout.nodes.filter(n => ['switch', 'radio', 'tower-server', 'vm-server'].includes(n.icon));
+  const hosts = [...new Set(equipment.map(n => n.hostId).filter(Boolean))];
+  const groups = [...new Set(equipment.filter(n => ['tower-server', 'vm-server'].includes(n.icon)).map(n => n.groupId).filter(Boolean))];
+  if (!hosts.length && !groups.length) return;
   try {
-    const readings = await api('/ping-status', {hosts, groups: []});
+    const readings = await api('/ping-status', {hosts, groups});
     if (token !== pingGeneration || editing) return;
     pingStates = new Map(readings.map(reading => [reading.id, reading]));
   } catch {
@@ -1468,11 +1511,11 @@ function drawPreview() {
   if (isSwitch) MapSwitch.draw(svg, group, {...transformState(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon, name, labelPosition: $('label-position').value,
     ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
     {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
-  else (['telecom-site', 'cloud'].includes(icon) ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, {...(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon});
+  else (['telecom-site', 'cloud', 'tower-server', 'vm-server'].includes(icon) ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, {...(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon});
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
   preview.setAttribute('viewBox', [box.x + (box.width-w)/2, box.y + (box.height-h)/2, w, h].join(' '));
-  preview.setAttribute('aria-label', (icon === 'cloud' ? 'Nuvem' : icon === 'telecom-site' ? 'Estação de telecomunicações' : isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo') + ' · ' + name);
+  preview.setAttribute('aria-label', (MapSwitch.serverImages?.[icon]?.label || (icon === 'cloud' ? 'Nuvem' : icon === 'telecom-site' ? 'Estação de telecomunicações' : isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo')) + ' · ' + name);
 }
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {

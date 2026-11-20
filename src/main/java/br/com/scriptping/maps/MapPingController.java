@@ -24,7 +24,11 @@ public class MapPingController {
         this.jdbc = jdbc;
     }
 
-    public record State(String id, String state, Long measuredAt) {}
+    public record State(String id, String state, Long measuredAt, Double latencyMs) {
+        public State(String id, String state, Long measuredAt) {
+            this(id, state, measuredAt, null);
+        }
+    }
 
     @PostMapping("/api/maps/ping-status")
     public ResponseEntity<List<State>> status(@RequestBody NetworkMapModels.Targets targets) {
@@ -54,7 +58,8 @@ public class MapPingController {
             String state = sample == null || now - sample.measuredAt() > 10000
                 ? "unknown" : sample.outcome() == PingSample.SUCCESS ? "online"
                 : sample.outcome() == PingSample.LOSS ? "offline" : "unknown";
-            return new State(host.id(), state, sample == null ? null : sample.measuredAt());
+            return new State(host.id(), state, sample == null ? null : sample.measuredAt(),
+                "online".equals(state) ? sample.latency() : null);
         }).toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
     }
