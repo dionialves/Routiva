@@ -90,7 +90,7 @@ test('acknowledged incidents affect host and group colors only when enabled', ()
   assert.equal(vm.runInContext('hostLevel(host)', context), 5);
 });
 
-test('clouds, sites and group circles cover connections while switches keep cable overlays', () => {
+test('all map elements cover the connections leading to their central anchors', () => {
   const canvas = {children:[], dataset:{}, replaceChildren(){this.children=[];}, append(child){this.children.push(child);}};
   const nodes = [
     {id:'group',groupId:'g',icon:'circle',name:'Group',x:0,y:0},
@@ -109,9 +109,9 @@ test('clouds, sites and group circles cover connections while switches keep cabl
   });
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')),context);
   vm.runInContext('draw()',context);
-  assert.equal(canvas.children[0].attributes['aria-label'],'Host · Healthy');
-  assert.equal(canvas.children[1].attributes.class,'map-connectors');
-  assert.equal(canvas.children[2].attributes['aria-label'],'Group · Healthy');
-  assert.equal(canvas.children[3].attributes['aria-label'],'Cloud');
-  assert.equal(canvas.children[4].attributes['aria-label'],'Site · Healthy');
+  assert.equal(canvas.children[0].attributes.class,'map-connectors');
+  assert.equal(canvas.children[1].attributes['aria-label'],'Group · Healthy');
+  assert.equal(canvas.children[2].attributes['aria-label'],'Cloud');
+  assert.equal(canvas.children[3].attributes['aria-label'],'Site · Healthy');
+  assert.equal(canvas.children[4].attributes['aria-label'],'Host · Healthy');
 });
