@@ -355,7 +355,7 @@ function draw() {
         connectionDefinitions.find(c => c.id === link.mappedConnectionId), inventory, connectionFailures.has(link.mappedConnectionId), connectionDisplayTime(link.mappedConnectionId));
       for (const path of [line, hit]) {
         path.dataset.connectionTooltip = link.mappedConnectionId;
-        path.onpointermove = event => MapConnectionTooltip.show(link.mappedConnectionId, path,
+        path.onpointermove = event => MapConnectionTooltip.scheduleShow(link.mappedConnectionId, path,
           {x:event.clientX, y:event.clientY}, tooltipData());
         path.onpointerleave = event => {
           if (event.relatedTarget?.dataset?.connectionTooltip !== link.mappedConnectionId) MapConnectionTooltip.hide();

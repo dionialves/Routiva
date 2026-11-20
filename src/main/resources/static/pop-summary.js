@@ -66,13 +66,13 @@ class PopSummary {
     element.setAttribute('tabindex', '0');
     element.onpointerenter = () => this.scheduleOpen(element, node);
     element.onpointerleave = () => this.scheduleClose();
-    element.onfocus = () => this.scheduleOpen(element, node);
+    element.onfocus = () => this.scheduleOpen(element, node, 0);
     element.onblur = () => this.scheduleClose();
     element.addEventListener('pointerdown', () => {
       if (this.node?.id !== node.id) this.close();
     });
   }
-  scheduleOpen(element, node) {
+  scheduleOpen(element, node, delay = 2000) {
     clearTimeout(this.openTimer);
     clearTimeout(this.closeTimer);
     if (this.node?.id === node.id) return;
@@ -95,7 +95,7 @@ class PopSummary {
         this.frame = requestAnimationFrame(track);
       };
       track();
-    }, 250);
+    }, delay);
   }
   scheduleClose() {
     clearTimeout(this.openTimer);

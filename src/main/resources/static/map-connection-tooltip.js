@@ -22,7 +22,7 @@ const MapConnectionTooltip = (() => {
     return {endpoints, status, traffic, queriedAt: queried.length ? Math.min(...queried) : null, measuredAt: timestamps.length ? Math.min(...timestamps) : null,
       note: failed ? 'Consulta indisponível · últimos dados preservados' : reading?.a?.queryError || reading?.b?.queryError || reading?.a?.trafficError || (staleTraffic ? 'Tráfego: leitura desatualizada' : '') || (!reading ? 'Carregando dados do Zabbix' : '')};
   }
-  let panel, activeId, activeSource, lastPoint;
+  let panel, activeId, activeSource, lastPoint, openTimer, pending, watchingDismissal = false;
   function element(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -117,16 +117,38 @@ const MapConnectionTooltip = (() => {
     const pointsAtLink = lastPoint.x >= x + 18 && lastPoint.x <= x + rect.width - 18;
     panel.setAttribute('data-pointer', pointsAtLink && (fitsAbove || fitsBelow) ? (fitsAbove ? 'bottom' : 'top') : 'none');
   }
+  function cancelOpen() {
+    clearTimeout(openTimer);
+    openTimer = null; pending = null;
+  }
+  function watchDismissal() {
+    if (watchingDismissal) return;
+    watchingDismissal = true;
+    window.addEventListener('resize', hide); window.addEventListener('scroll', hide, true);
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
+  }
+  function scheduleShow(id, source, point, data) {
+    watchDismissal();
+    if (activeId === id && panel && !panel.hidden) { show(id, source, point, data); return; }
+    if (pending?.id === id) { Object.assign(pending, {source, point, data}); return; }
+    hide();
+    pending = {id, source, point, data};
+    openTimer = setTimeout(() => {
+      const next = pending;
+      if (next) show(next.id, next.source, next.point, next.data);
+    }, 2000);
+  }
   function hide() {
+    cancelOpen();
     if (panel) panel.hidden = true;
     activeSource?.removeAttribute('aria-describedby'); activeSource = null; activeId = null;
   }
   function show(id, source, point, data) {
+    cancelOpen();
+    watchDismissal();
     if (!panel) {
       panel = element('div', 'map-connection-tooltip'); panel.id = 'map-connection-tooltip';
       panel.setAttribute('role', 'tooltip'); document.body.append(panel);
-      window.addEventListener('resize', hide); window.addEventListener('scroll', hide, true);
-      document.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
     }
     if (activeId !== id || panel.hidden) render(data);
     activeSource?.removeAttribute('aria-describedby'); activeSource = source;
@@ -134,6 +156,6 @@ const MapConnectionTooltip = (() => {
     activeId = id; lastPoint = point; panel.hidden = false; position();
   }
   function refresh(id, data) { if (panel && !panel.hidden && activeId === id) { render(data); position(); } }
-  return {details, show, hide, refresh};
+  return {details, show, scheduleShow, hide, refresh};
 })();
 if (typeof module !== 'undefined') module.exports = MapConnectionTooltip;
