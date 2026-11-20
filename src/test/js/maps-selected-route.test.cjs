@@ -18,7 +18,7 @@ test('click and keyboard bring the selected connection above other routes withou
   canvas.replaceChildren = () => {canvas.children = [];};
   const links = [{from:'a',to:'b'}, {from:'b',to:'a'}];
   const context = vm.createContext({document:{activeElement:null}, svg,
-    $: id => id === 'canvas' ? canvas : {},
+    $: id => id === 'canvas' ? canvas : {setAttribute() {}},
     current:{layout:{name:'Map',nodes:[{id:'a',name:'A'},{id:'b',name:'B'}],links}},
     editing:false, drag:null, marquee:null, selected:null, selectedLink:null, selection:new Set(),
     MapSwitch:{endpoint:() => ({x:0,y:0})}, MapLinks:{path:link => link === links[0] ? 'first' : 'second'},
@@ -63,4 +63,13 @@ test('click and keyboard bring the selected connection above other routes withou
   const selectedRoutes = routes().filter(path => path.classList.contains('map-connector'));
   assert.equal(selectedRoutes.at(-1).attributes.d, 'second');
   assert.ok(selectedRoutes.at(-1).classList.contains('selected-link'));
+  Object.assign(context, {editing:true, tool:'select', past:[], future:[],
+    suppressConnectionUntil:0, lastConnectionClick:null});
+  vm.runInContext('selectedLink = null; draw()', context);
+  routes()[0].onclick();
+  const editorRoutes = routes().filter(path => path.classList.contains('map-connector'));
+  assert.ok(editorRoutes.every(path => !path.classList.contains('selected-link')));
+  assert.ok(routes().every(path => !path.attributes.class.includes('map-connector-selection-border')));
+  assert.equal(editorRoutes.at(-1).attributes['aria-pressed'], 'true');
+  assert.equal(context.selectedLink, links[1]);
 });

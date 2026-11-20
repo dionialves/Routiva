@@ -304,7 +304,7 @@ function draw() {
     const line = svg('path', {d, class: 'map-connector' +
       (link.mappedConnectionId ? ' map-connector-mapped' : '') +
       (wireless ? ' map-connector-wireless' : '')});
-    line.classList.toggle('selected-link', selectedLink === link);
+    line.classList.toggle('selected-link', !editing && selectedLink === link);
     line.setAttribute('tabindex', 0);
     line.setAttribute('role', 'button');
     line.setAttribute('aria-label', 'Conexão entre ' + a.name + ' e ' + b.name);
@@ -377,7 +377,7 @@ function draw() {
         };
       }
     }
-    if (selectedLink === link) {
+    if (!editing && selectedLink === link) {
       connectors.append(svg('path', {d, class: 'map-connector-selection-border' +
         (wireless ? ' map-connector-wireless' : ''), 'aria-hidden': 'true'}));
     }

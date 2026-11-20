@@ -149,7 +149,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - Legendas de hosts, grupos e conexões aguardam 2s de hover; sair antes cancela a abertura. Movimentos na mesma conexão não reiniciam o prazo. Acesso por foco/teclado permanece imediato.
 
-- Clicar em um enlace na edição ou visualização destaca o trajeto em amarelo queimado acima dos outros enlaces, sem alterar a ordem persistida. O destaque tem borda amarelo-clara, prevalece sobre as cores de tráfego e preserva os feixes de luz animados e o tracejado Wireless, inclusive na borda clara; oferece seleção por teclado.
+- Clicar em um enlace na visualização destaca o trajeto em amarelo queimado acima dos outros enlaces, sem alterar a ordem persistida. O destaque tem borda amarelo-clara, prevalece sobre as cores de tráfego e preserva os feixes de luz animados e o tracejado Wireless, inclusive na borda clara; oferece seleção por teclado. Na edição, selecionar preserva a cor original da linha e não desenha a borda amarela.
 
 - Ao arrastar cantos, `MapLinks.snap` atrai para trechos horizontais/verticais próximos de outros enlaces com alcance de 8px na tela e sobreposição de extensão, preservando âncoras e os demais enlaces.
 
