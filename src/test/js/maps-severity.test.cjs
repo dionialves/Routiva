@@ -90,10 +90,12 @@ test('acknowledged incidents affect host and group colors only when enabled', ()
   assert.equal(vm.runInContext('hostLevel(host)', context), 5);
 });
 
-test('group circles cover connections while host and switch layers remain beneath them', () => {
+test('clouds, sites and group circles cover connections while switches keep cable overlays', () => {
   const canvas = {children:[], dataset:{}, replaceChildren(){this.children=[];}, append(child){this.children.push(child);}};
   const nodes = [
     {id:'group',groupId:'g',icon:'circle',name:'Group',x:0,y:0},
+    {id:'cloud',icon:'cloud',name:'Cloud',x:50,y:0},
+    {id:'site',hostId:'s',icon:'telecom-site',name:'Site',x:75,y:0},
     {id:'host',hostId:'h',icon:'switch',name:'Host',x:100,y:0}
   ];
   const context = vm.createContext({
@@ -102,7 +104,7 @@ test('group circles cover connections while host and switch layers remain beneat
     colors:['gray','green'],labels:['No data','Healthy'],
     $:id=>id==='canvas'?canvas:{}, metricSummary:()=>null,groupLevel:()=>-1,nodeHosts:()=>[],
     svg:(tag,attributes)=>({tag,attributes,append(){}}),popSummary:{bind(){}},
-    drawNode(){},pingStateFor:()=> 'unknown',
+    drawNode(){},drawTelecomSite(){},pingStateFor:()=> 'unknown',
     MapSwitch:{draw(){},connectedPorts:()=>new Set()}
   });
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')),context);
@@ -110,4 +112,6 @@ test('group circles cover connections while host and switch layers remain beneat
   assert.equal(canvas.children[0].attributes['aria-label'],'Host · Healthy');
   assert.equal(canvas.children[1].attributes.class,'map-connectors');
   assert.equal(canvas.children[2].attributes['aria-label'],'Group · Healthy');
+  assert.equal(canvas.children[3].attributes['aria-label'],'Cloud');
+  assert.equal(canvas.children[4].attributes['aria-label'],'Site · Healthy');
 });

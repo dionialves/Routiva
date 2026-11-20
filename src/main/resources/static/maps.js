@@ -342,7 +342,7 @@ function draw() {
       updateTrafficLayer(layer);
     }
   }
-  const groupCircles = [];
+  const foregroundElements = [];
   for (const n of nodes) {
     const monitored = !editing && (n.hostId || n.groupId);
     const level = monitored ? groupLevel(nodeHosts(n)) + 2 : 1;
@@ -392,11 +392,12 @@ function draw() {
     };
     if (!editing && n.groupId && n.subMapId) g.onclick = event => { event.stopPropagation(); choose(n); };
     if (monitored) popSummary.bind(g, n);
-    if (n.groupId && !['switch', 'radio'].includes(n.icon)) groupCircles.push(g);
+    if (['cloud', 'telecom-site'].includes(n.icon) ||
+        (n.groupId && !['switch', 'radio'].includes(n.icon))) foregroundElements.push(g);
     else canvas.append(g);
   }
   canvas.append(connectors);
-  for (const circle of groupCircles) canvas.append(circle);
+  for (const element of foregroundElements) canvas.append(element);
   if (editing && tool === 'select') for (const [linkIndex, link] of links.entries()) {
     if (link.style !== 'corners') continue;
     const route = linkRoute(link);
