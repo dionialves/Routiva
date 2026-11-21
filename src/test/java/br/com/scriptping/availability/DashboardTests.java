@@ -53,7 +53,9 @@ class DashboardTests {
             .andExpect(view().name("diagnostics"))
             .andExpect(content().string(org.hamcrest.Matchers.containsString("diagnostic-groups")));
         mvc.perform(get("/diagnostico/grupos/pop")).andExpect(status().isOk())
-            .andExpect(content().string(org.hamcrest.Matchers.containsString("operational-details")));
+            .andExpect(view().name("diagnostics"))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("diagnostic-groups-table")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("data-group-sort=\"operational\"")));
         mvc.perform(get("/disponibilidade")).andExpect(status().isOk())
             .andExpect(content().string(org.hamcrest.Matchers.containsString("operational-details")));
     }
