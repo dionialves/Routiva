@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.*;
 class ManagedHostTests {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String HOST = """
-        {"hostid":"42","host":"router","name":"Roteador","status":"1","flags":"0",
+        {"hostid":"42","host":"router","name":"Roteador","description":"Observação original","status":"1","flags":"0",
          "hostgroups":[{"groupid":"5","name":"Rede"}],"parentTemplates":[{"templateid":"9","name":"SNMP"}],
          "interfaces":[{"interfaceid":"10","type":"1","main":"1","useip":"1","ip":"192.0.2.1","dns":"","port":"10050","available":"1","details":[]},
            {"interfaceid":"11","type":"2","main":"1","useip":"1","ip":"192.0.2.1","dns":"","port":"161","available":"0",
@@ -23,7 +23,16 @@ class ManagedHostTests {
 
     private ManagedHost.Input input(String revision) {
         return new ManagedHost.Input("router-new", "Novo roteador", List.of("5"), List.of(),
-            "192.0.2.3", "", true, "1161", 1, "{$MY_COMMUNITY}", true, revision);
+            "192.0.2.3", "", true, "1161", 1, "{$MY_COMMUNITY}", true, revision, "Observação editada");
+    }
+    @Test void descriptionChangedRemotelyRejectsStaleSave() throws Exception {
+        try (var api = new Api("7.0.0")) {
+            var host = api.client.managedHosts().getFirst();
+            api.host = HOST.replace("Observação original", "Observação alterada no Zabbix");
+            assertThatThrownBy(() -> api.client.saveManagedHost("42", input(host.revision())))
+                .hasMessageContaining("409");
+            assertThat(api.calls).noneMatch(call -> call.path("method").asText().equals("host.update"));
+        }
     }
     @Test void deletionChecksRevisionAndRequiresZabbixConfirmation() throws Exception {
         try (var api = new Api("7.0.0")) {
@@ -74,6 +83,7 @@ class ManagedHostTests {
             var call = api.calls.getLast();
             assertThat(call.path("method").asText()).isEqualTo("host.create");
             var params = call.path("params");
+            assertThat(params.path("description").asText()).isEqualTo("Observação editada");
             assertThat(params.path("host").asText()).isEqualTo("router-new");
             assertThat(params.path("name").asText()).isEqualTo("Novo roteador");
             assertThat(params.path("status").asInt()).isZero();
@@ -89,10 +99,12 @@ class ManagedHostTests {
     @Test void updatesDisabledHostAndPreservesOtherInterfacesAndSnmpTuning() throws Exception {
         try (var api = new Api("7.0.0")) {
             var host = api.client.managedHosts().getFirst();
+            assertThat(host.description()).isEqualTo("Observação original");
             assertThat(host.active()).isFalse();
             assertThat(host.templates()).extracting(ManagedHost.Choice::id).containsExactly("9");
             api.client.saveManagedHost("42", input(host.revision()));
             var params = api.calls.getLast().path("params");
+            assertThat(params.path("description").asText()).isEqualTo("Observação editada");
             assertThat(params.path("hostid").asText()).isEqualTo("42");
             assertThat(params.path("interfaces")).hasSize(3);
             var agent = params.path("interfaces").get(0);
@@ -150,7 +162,7 @@ class ManagedHostTests {
     }
     @Test void validatesBeforeCallingZabbix() throws Exception {
         try (var api = new Api("7.0.0")) {
-            var value = new ManagedHost.Input("router", "", List.of(), List.of(), "192.0.2.1", "", true, "161", 2, "public", true, null);
+            var value = new ManagedHost.Input("router", "", List.of(), List.of(), "192.0.2.1", "", true, "161", 2, "public", true, null, "");
             assertThatThrownBy(() -> api.client.saveManagedHost(null, value)).hasMessageContaining("grupo");
             assertThat(api.calls).isEmpty();
         }

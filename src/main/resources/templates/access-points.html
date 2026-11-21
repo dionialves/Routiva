@@ -7,8 +7,9 @@
   <link rel="icon" href="/favicon.svg"><th:block th:replace="~{design-system :: base}"></th:block>
   <link rel="stylesheet" href="/availability.css"><th:block th:replace="~{design-system :: picker}"></th:block><link rel="stylesheet" href="/access-points.css?v=20261118-no-status">
 
-  <script src="/shell.js?v=20261117-host-actions" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261118-no-status" defer></script>
-<th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
+  <link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261120-inline-settings" defer></script>
+  <script src="/shell.js?v=20261117-host-actions" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261120-host-menu" defer></script>
+<th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{host-dialog :: resources}"></th:block></head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('ap')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -43,4 +44,4 @@
   <div class="ap-import-feedback"><span id="ap-import-status-icon" data-ap-icon="info"></span><p id="ap-import-state" role="status" aria-live="polite">Marque os hosts e use → para selecionar ou ← para retirar.</p></div>
   <footer><button id="ap-cancel" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button id="ap-save" class="system-button system-button-primary ap-primary" disabled><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#download"></use></svg><span id="ap-save-label">Definir como AP</span></button></footer>
 </dialog>
-</body></html>
+<th:block th:replace="~{host-dialog :: dialogs}"></th:block></body></html>

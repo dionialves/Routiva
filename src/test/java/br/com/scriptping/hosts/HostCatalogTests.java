@@ -23,7 +23,7 @@ class HostCatalogTests {
     ZabbixSettings settings;
     ManagedHost host(String id) {
         return new ManagedHost(id, "router-" + id, "Router " + id, List.of(new ManagedHost.Choice("1", "Rede")),
-            List.of(), "5", "192.0.2." + id, "", true, "161", 2, "community-secret", true, "revision", true, 1, 1, "available");
+            List.of(), "5", "192.0.2." + id, "", true, "161", 2, "community-secret", true, "revision", true, 1, 1, "available", "Observação do host");
     }
     @BeforeEach void setup() {
         var source = new DriverManagerDataSource("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1", "sa", "");
@@ -69,6 +69,7 @@ class HostCatalogTests {
         catalog.reconcile(); clearInvocations(client);
         var restarted = new HostRepository(jdbc, new ObjectMapper(), secrets);
         assertThat(restarted.require("42")).isEqualTo(host("42"));
+        assertThat(jdbc.queryForObject("SELECT description FROM app_host WHERE host_id='42'", String.class)).isEqualTo("Observação do host");
         assertThat(secrets.decrypt(restarted.credentials("42").encryptedPassword())).isEqualTo("equipment-secret");
         catalog.options(); catalog.all(); verifyNoInteractions(client);
         assertThat(jdbc.queryForObject("SELECT payload FROM app_host WHERE host_id='42'", String.class)).doesNotContain("community-secret");

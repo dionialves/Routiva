@@ -379,3 +379,5 @@ ALTER TABLE host_catalog_state ADD COLUMN IF NOT EXISTS options_payload TEXT;
 ALTER TABLE app_host ADD COLUMN IF NOT EXISTS zabbix_payload TEXT;
 -- The previous AP columns remain only for compatibility; do not keep a second secret copy.
 UPDATE access_point SET api_password=NULL, api_login=NULL, verified_ip=NULL;
+
+ALTER TABLE app_host ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';

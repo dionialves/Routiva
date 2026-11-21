@@ -56,7 +56,34 @@
   if (typeof document === 'undefined') return;
   const $ = id => document.getElementById(id);
   const form = $('host-form'), dialog = $('host-dialog');
+  if (!form || window.HostConfiguration) return;
+  const hasList = Boolean($('hosts-rows'));
   const field = name => form.elements.namedItem(name);
+  const filterStorageKey = 'routiva.hosts.filters';
+  let savedFilters = null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(filterStorageKey));
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) savedFilters = saved;
+  } catch {}
+  if (hasList && savedFilters) {
+    if (typeof savedFilters.ip === 'string') $('host-search').value = savedFilters.ip;
+    if ([...$('host-filter-connection').options].some(option => option.value === savedFilters.connection)) {
+      $('host-filter-connection').value = savedFilters.connection;
+    }
+  }
+  function filtersChanged() {
+    try {
+      localStorage.setItem(filterStorageKey, JSON.stringify({
+        groups: [...$('incident-filter-group').selectedOptions].map(option => option.value),
+        hosts: [...$('incident-filter-host').selectedOptions].map(option => option.value),
+        connection: $('host-filter-connection').value,
+        ip: $('host-search').value
+      }));
+    } catch {}
+    page = 0;
+    render();
+  }
+
   const discardDialog = $('host-discard-dialog'), deleteDialog = $('host-delete-dialog');
   let baseline = '', closeTrigger, authBaseline = '', authLoaded = false, activeTab = 'general';
   let hosts = [], options, current, opener, busy = false, loading = false, page = 0;
@@ -72,6 +99,7 @@
     return data;
   }
   function render() {
+    if (!hasList) return;
     const query = $('host-search').value.trim().toLowerCase();
     const groups = new Set([...$('incident-filter-group').selectedOptions].map(option => option.value));
     const selectedHosts = new Set([...$('incident-filter-host').selectedOptions].map(option => option.value));
@@ -126,6 +154,7 @@
     $('hosts-prev').disabled = page === 0; $('hosts-next').disabled = start + 50 >= matches.length;
   }
   async function load() {
+    if (!hasList) return;
     if (loading) return;
     loading = true; $('host-new').disabled = true;
     $('hosts-state').textContent = 'Carregando hosts…';
@@ -135,7 +164,7 @@
       const wanted = new URLSearchParams(location.search).get('host');
       if (wanted && !dialog.open) {
         const host = hosts.find(h => h.id === wanted);
-        if (host) { open(host, $('host-new')); tab('auth'); history.replaceState(null, '', location.pathname); }
+        if (host) { open(host, $('host-new')); tab(new URLSearchParams(location.search).get('tab') === 'general' ? 'general' : 'auth'); history.replaceState(null, '', location.pathname); }
       }
     } catch (error) { $('hosts-state').textContent = error.message; }
     finally { loading = false; }
@@ -150,17 +179,19 @@
       ['filter-host', hostChoices, 'Todos os hosts', 'hosts selecionados']
     ]) {
       const select = $(`incident-${kind}`);
-      const selected = new Set([...select.selectedOptions].map(option => option.value));
+      const stored = savedFilters?.[kind === 'filter-group' ? 'groups' : 'hosts'];
+      const selected = new Set(Array.isArray(stored) ? stored : [...select.selectedOptions].map(option => option.value));
       pickers[kind]?.dispose();
       choices.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
       select.replaceChildren(...choices.map(choice => new Option(choice.name, choice.id, false, selected.has(choice.id))));
       $(`incident-${kind}-options`).replaceChildren();
-      pickers[kind] = window.setupMultiPicker(kind, select, allLabel, () => { page = 0; render(); }, {
+      pickers[kind] = window.setupMultiPicker(kind, select, allLabel, filtersChanged, {
         allText: kind === 'filter-group' ? 'Selecionar todos os grupos' : 'Selecionar todos os hosts',
         selectedLabel, preserveSelection: true
       });
-      select.onchange = () => { pickers[kind](); page = 0; render(); };
+      select.onchange = () => { pickers[kind](); filtersChanged(); };
     }
+    savedFilters = null;
   }
   function picker(kind, available, selected) {
     pickers[kind]?.dispose();
@@ -184,7 +215,7 @@
   }
   const selected = kind => [...$(`incident-${kind}`).selectedOptions].map(option => option.value).sort();
   function readInput() {
-    const input = Object.fromEntries(['hostname', 'visibleName', 'ip', 'dns', 'port', 'community'].map(name => [name, field(name).value]));
+    const input = Object.fromEntries(['hostname', 'visibleName', 'description', 'ip', 'dns', 'port', 'community'].map(name => [name, field(name).value]));
     return Object.assign(input, { useIp: field('useIp').value === 'true', snmpVersion: Number(field('snmpVersion').value),
       active: field('active').checked, groupIds: selected('host-group'), templateIds: selected('host-template') });
   }
@@ -328,9 +359,9 @@
     $('host-dialog-description').textContent = host ? 'As alterações serão aplicadas ao host no Zabbix ao salvar.'
       : 'O novo host será cadastrado no Zabbix ao salvar.';
     $('host-delete').hidden = !host || !host.editable;
-    $('host-general').querySelectorAll('input, select, button').forEach(control => { control.disabled = Boolean(host && !host.editable); });
+    $('host-general').querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = Boolean(host && !host.editable); });
     if (host) {
-      for (const name of ['hostname', 'visibleName', 'ip', 'dns', 'port', 'snmpVersion', 'community']) field(name).value = host[name];
+      for (const name of ['hostname', 'visibleName', 'description', 'ip', 'dns', 'port', 'snmpVersion', 'community']) field(name).value = host[name] ?? '';
       field('useIp').value = String(host.useIp); field('active').checked = host.active;
     }
     picker('host-group', options.groups, host?.groups || []);
@@ -346,14 +377,14 @@
   }
   function setBusy(value, operation = 'save') {
     busy = value; form.setAttribute('aria-busy', String(value)); deleteDialog.setAttribute('aria-busy', String(value));
-    for (const control of form.querySelectorAll('input, select, button')) control.disabled = value;
+    for (const control of form.querySelectorAll('input, select, textarea, button')) control.disabled = value;
     for (const details of form.querySelectorAll('details')) { details.inert = value; if (value) details.open = false; }
     for (const control of deleteDialog.querySelectorAll('button')) control.disabled = value;
     $('host-save-label').textContent = value && operation === 'save' ? 'Salvando…' : 'Salvar no Zabbix';
     $('host-save').classList.toggle('system-button-loading', value && operation === 'save');
     $('host-save').setAttribute('aria-busy', String(value && operation === 'save'));
     $('host-delete-label').textContent = value && operation === 'delete' ? 'Excluindo…' : 'Excluir no Zabbix';
-    if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; tab(activeTab); }
+    if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; tab(activeTab); }
   }
   document.querySelectorAll('[data-host-sort]').forEach(button => {
     button.addEventListener('click', () => {
@@ -361,7 +392,7 @@
       direction = key === sortKey ? -direction : 1; sortKey = key; page = 0; render();
     });
   });
-  $('host-new').addEventListener('click', event => open(null, event.currentTarget));
+  $('host-new')?.addEventListener('click', event => open(null, event.currentTarget));
   $('host-cancel').addEventListener('click', requestClose);
   $('host-close').addEventListener('click', requestClose);
   dialog.addEventListener('cancel', event => {
@@ -371,10 +402,10 @@
     }
     event.preventDefault(); requestClose();
   });
-  $('host-search').addEventListener('input', () => { page = 0; render(); });
-  $('host-filter-connection').addEventListener('change', () => { page = 0; render(); });
-  $('hosts-prev').addEventListener('click', () => { page--; render(); });
-  $('hosts-next').addEventListener('click', () => { page++; render(); });
+  $('host-search')?.addEventListener('input', filtersChanged);
+  $('host-filter-connection')?.addEventListener('change', filtersChanged);
+  $('hosts-prev')?.addEventListener('click', () => { page--; render(); });
+  $('hosts-next')?.addEventListener('click', () => { page++; render(); });
   field('useIp').addEventListener('change', endpointRequired);
   form.querySelectorAll('[data-host-endpoint]').forEach(button => {
     button.addEventListener('click', () => {
@@ -415,7 +446,7 @@
     finally { setBusy(false); }
     if (deleted) {
       deleteDialog.close(); closeNow(); hosts = hosts.filter(host => host.id !== id); render();
-      $('host-new').focus(); window.notify?.('Host excluído do Zabbix.'); await load();
+      $('host-new')?.focus(); window.notify?.('Host excluído do Zabbix.'); await load();
     }
   });
   form.addEventListener('submit', async event => {
@@ -443,11 +474,23 @@
       }
     }
   });
-  $('host-sync').addEventListener('click', async () => {
+  $('host-sync')?.addEventListener('click', async () => {
     $('host-sync').disabled = true;
     try { await request('/synchronize', 'POST'); await load(); }
     catch (error) { $('hosts-state').textContent = error.message; }
     finally { $('host-sync').disabled = false; }
   });
+  window.HostConfiguration = {
+    async open(hostId, trigger) {
+      if (busy || dialog.open) return;
+      try {
+        const [rows, choices] = await Promise.all([request(), request('/options')]);
+        const host = rows.find(item => String(item.id) === String(hostId));
+        if (!host) throw new Error('Host não disponível para configuração.');
+        hosts = rows; options = choices;
+        open(host, trigger);
+      } catch (error) { window.notify?.(error.message, 'error'); }
+    }
+  };
   load();
 })();

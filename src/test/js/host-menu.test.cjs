@@ -16,7 +16,7 @@ function surface() {
   const context = { document: { createElement: () => new Element() }, innerWidth: 1000, innerHeight: 700 };
   context.window = context;
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
-  return { api: context.HostMenu, link: new Element(), container: new Element() };
+  return { context, api: context.HostMenu, link: new Element(), container: new Element() };
 }
 test('host menu offers access actions and launches WinBox only on explicit action', () => {
   const { api, link, container } = surface();
@@ -74,5 +74,22 @@ test('host menu does not offer equipment panels or query manufacturer lists', ()
   context.window = context;
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   context.HostMenu.attach(link, container, { ip: '192.0.2.42', hostId: 'olt/42' });
-  assert.equal(container.children[0].children.length, 1);
+  assert.equal(container.children[0].children.length, 2);
+});
+
+test('host section disables future features and links to host incidents and settings', () => {
+  const { context, api, link, container } = surface();
+  let opened;
+  context.HostConfiguration = { open(id, trigger) { opened = { id, trigger }; } };
+  api.attach(link, container, { hostId: 'host/42', ip: '192.0.2.42' });
+  const host = container.children[0].children[1];
+  assert.equal(host.children[0].textContent, 'HOST');
+  assert.equal(host.children[1].disabled, true);
+  assert.equal(host.children[2].disabled, true);
+  assert.equal(host.children[3].href, '/incidentes?hostId=host%2F42');
+  assert.equal(host.children[4].href, undefined);
+  assert.equal(host.children[4].type, 'button');
+  host.children[4].listeners.click();
+  assert.equal(opened.id, 'host/42');
+  assert.equal(opened.trigger, link);
 });

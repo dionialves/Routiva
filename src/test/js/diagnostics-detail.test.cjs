@@ -32,40 +32,16 @@ async function surface(report = null, { storage = new Map(), search = '', storag
     localStorage:{getItem:key=>{if(storageUnavailable)throw Error('unavailable');return storage.get(key);},setItem:(key,value)=>{if(storageUnavailable)throw Error('unavailable');storage.set(key,value);}},
     history:{replaceState(_state,_title,url){context.location.search=url.slice(url.indexOf('?'));}},
     AppIcon:()=>new Element(),AvailabilityView:{format:(v,u='%')=>v==null?'Sem dados':v+u,times(){}},
-    AvailabilityChart:{paths:require('../../main/resources/static/availability-chart.js').paths,Chart:class { clear(){} update(){} draw(){} }},
     AbortSignal:{timeout(){}},Date:Clock,
     setTimeout(fn,ms) { timers.set(++serial,{fn,ms});return serial; },clearTimeout(id){timers.delete(id);},
     fetch:async url=>{requests.push(url);if(failLive&&url.includes('/live?')) throw Error('offline');return {ok:true,json:async()=>data[url.split('?')[0]]||{view:report ? {report} : null}};},
   };
   context.window=context;
   vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
-  vm.runInNewContext(fs.readFileSync('src/main/resources/static/performance-chart.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../main/resources/static/diagnostics.js'),'utf8'),context);
   await flush();
   return {elements,timers,requests,live,location:context.location,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
 }
-test('period survives reload even when the original URL specified another period',async()=>{
-  const storage=new Map();
-  const ui=await surface(null,{storage,search:'?minutes=1440&other=kept'});
-  ui.elements.period.value='60';ui.elements.period.emit('change');await flush();
-  assert.equal(storage.get('routiva.diagnostics.period'),'60');
-  assert.equal(new URLSearchParams(ui.location.search).get('other'),'kept');
-  const reloaded=await surface(null,{storage,search:ui.location.search});
-  assert.equal(reloaded.elements.period.value,'60');
-  assert.ok(reloaded.requests.includes('/api/availability?minutes=60&groupId=g'));
-  const reopened=await surface(null,{storage});
-  assert.equal(reopened.elements.period.value,'60');
-});
-test('explicit valid period overrides storage and invalid preferences use the default',async()=>{
-  const storage=new Map([['routiva.diagnostics.period','60']]);
-  const explicit=await surface(null,{storage,search:'?minutes=10080'});
-  assert.equal(explicit.elements.period.value,'10080');
-  storage.set('routiva.diagnostics.period','invalid');
-  const invalid=await surface(null,{storage,search:'?minutes=invalid'});
-  assert.equal(invalid.elements.period.value,'1440');
-  const unavailable=await surface(null,{storageUnavailable:true});
-  assert.ok(unavailable.requests.includes('/api/availability?minutes=1440&groupId=g'));
-});
 test('live badges use configured thresholds and incidents do not imply connectivity',async()=>{
   const ui=await surface();
   ui.elements['diagnostic-ping'].emit('click'); await flush();
@@ -85,20 +61,11 @@ test('live badges use configured thresholds and incidents do not imply connectiv
   assert.equal(row.children[0].children[0].dataset.state,'unknown');
   assert.equal(row.children[6].children[0].textContent,'Sem dados');
 });
-test('cards and charts refresh every ten seconds without a toggle',async()=>{
-  const ui=await surface();
-  assert.ok(![...ui.timers.values()].some(t=>t.ms===2000));
-  const timer=[...ui.timers.values()].find(t=>t.ms===10000);
-  assert.ok(timer);
-  assert.equal(ui.elements['diagnostic-auto'].listeners.change,undefined);
-  const row=ui.row();
-  const before=ui.requests.length;
-  await timer.fn(); await flush();
-  assert.ok(ui.requests.length>before);
-  assert.ok(ui.requests.slice(before).some(url=>url.includes('/availability')));
-  assert.equal(ui.elements['diagnostic-reload'].listeners.click, undefined);
-  assert.equal(ui.row(),row);
-  assert.ok(!ui.requests.slice(before).some(url=>url.includes('/details')||url.includes('/live?')));
+test('group opens only the host table without history requests or background refresh', async () => {
+  const ui = await surface();
+  assert.equal(ui.row().children.length, 7);
+  assert.equal(ui.requests.some(url => url.includes('/availability')), false);
+  assert.equal(ui.timers.size, 0);
 });
 test('live fetch failure clears previous connectivity and numeric badges',async()=>{
   const ui=await surface();
@@ -111,27 +78,6 @@ test('live fetch failure clears previous connectivity and numeric badges',async(
   assert.equal(row.children[6].children[0].className,'diagnostic-badge neutral');
 });
 
-test('secondary charts expose real interval values and missing data through keyboard tooltips',async()=>{
-  const report={from:0,to:180000,evaluatedAt:180000,version:'test',total:{},series:[
-    {from:0,to:60000,metrics:{latency:5,loss:0}},
-    {from:60000,to:120000,metrics:{latency:null,loss:null}},
-    {from:120000,to:180000,metrics:{latency:30,loss:100}},
-  ]};
-  const ui=await surface(report);
-  const [svg,tooltip]=ui.elements['latency-chart'].children;
-  assert.ok(svg.children.some(node => node.stroke === '#06b6d4' && node.d));
-  assert.ok(svg.children.some(node => node.stroke === '#f59e0b' && node.d));
-  assert.ok(svg.children.some(node => node.textContent === '100%'));
-  svg.emit('focus'); assert.match(tooltip.textContent,/5 ms/);
-  assert.match(tooltip.textContent,/Perda: 0%/);
-  svg.emit('keydown',{key:'ArrowRight',preventDefault(){}});
-  assert.match(tooltip.textContent,/Sem dados/);
-  svg.emit('keydown',{key:'End',preventDefault(){}});
-  assert.match(tooltip.textContent,/30 ms/);
-  assert.match(tooltip.textContent,/Perda: 100%/);
-  svg.emit('keydown',{key:'Escape'});assert.equal(tooltip.hidden,true);
-});
-
 test('live averaging starts on play and resets only when ping is restarted', async () => {
   const ui = await surface();
   ui.elements['diagnostic-ping'].emit('click'); await flush();
@@ -139,7 +85,7 @@ test('live averaging starts on play and resets only when ping is restarted', asy
   const opened = since();
   assert.ok(Number(opened) > 0);
   ui.advance(60000);
-  await [...ui.timers.values()].find(timer => timer.ms === 10000).fn();
+  await [...ui.timers.values()].find(timer => timer.ms === 2000).fn();
   await flush();
   assert.equal(since(), opened);
   ui.elements['diagnostic-ping'].emit('click');

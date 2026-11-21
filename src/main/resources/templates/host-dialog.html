@@ -1,0 +1,79 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org"><head><th:block th:fragment="resources">
+<th:block th:replace="~{design-system :: dialogStyles}"></th:block>
+<th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
+<th:block th:replace="~{design-system :: picker}"></th:block>
+<link rel="stylesheet" href="/hosts.css?v=20261120-description-input">
+<script src="/multi-picker.js" defer></script>
+<script src="/hosts.js?v=20261120-inline-settings" defer></script>
+</th:block></head><body>
+<th:block th:fragment="dialogs">
+<dialog th:replace="~{design-system :: formDialog('host-dialog', 'host-dialog-title', 'host-dialog-description', ~{host-dialog :: hostForm})}"><th:block th:fragment="hostForm">
+  <form id="host-form" class="connection-form form-dialog-frame" novalidate>
+    <header class="form-dialog-header host-dialog-heading">
+      <span class="host-dialog-icon"><svg th:replace="~{shell :: icon('server')}"></svg></span>
+      <div><h2 id="host-dialog-title">Novo host</h2><p id="host-dialog-description">O novo host será cadastrado no Zabbix ao salvar.</p></div>
+      <button id="host-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar configuração do host"><svg th:replace="~{shell :: icon('close')}"></svg></button>
+    </header>
+    <div class="form-dialog-content host-form-fields">
+      <div class="analysis-tabs" role="tablist" aria-label="Configuração do host">
+        <button type="button" id="host-general-tab" role="tab" aria-selected="true" aria-controls="host-general"><span><strong>Configuração</strong><small>Cadastro e SNMP no Zabbix</small></span></button>
+        <button type="button" id="host-auth-tab" role="tab" aria-selected="false" aria-controls="host-auth" tabindex="-1"><span><strong>Autenticação</strong><small>Acesso do app ao equipamento</small></span></button>
+      </div>
+      <div id="host-general" class="host-form-fields" role="tabpanel" aria-labelledby="host-general-tab">
+
+      <section th:replace="~{design-system :: formSection('host-identification-title', 'Identificação', 'info', ~{host-dialog :: hostIdentification})}"><th:block th:fragment="hostIdentification">
+        <label for="host-hostname">Nome do host <span class="host-required" aria-hidden="true">*</span></label>
+        <div class="host-field"><input id="host-hostname" name="hostname" required maxlength="128" pattern="[A-Za-z0-9_. \-]+" autocomplete="off" autofocus aria-describedby="host-hostname-help host-hostname-error"><small id="host-hostname-help">Nome técnico único no Zabbix, sem acentos.</small><p id="host-hostname-error" class="host-field-error" data-error-for="hostname" aria-live="polite"></p></div>
+        <label for="host-visible-name">Nome visível</label>
+        <div class="host-field"><input id="host-visible-name" name="visibleName" maxlength="128" autocomplete="off" aria-describedby="host-visible-name-help host-visibleName-error"><small id="host-visible-name-help">Se vazio, utiliza o nome do host.</small><p id="host-visibleName-error" class="host-field-error" data-error-for="visibleName" aria-live="polite"></p></div>
+      <label class="host-active"><input name="active" type="checkbox" role="switch" class="system-switch" checked>Ativo</label>
+      </th:block></section>
+      <section th:replace="~{design-system :: formSection('host-associations-title', 'Associação', 'layers', ~{host-dialog :: hostAssociations})}"><th:block th:fragment="hostAssociations">
+        <div th:replace="~{multi-picker :: checklist('host-template', 'Templates', 'server', 'Selecione os templates', 'Pesquisar template')}"></div>
+        <div th:replace="~{multi-picker :: checklist('host-group', 'Grupos (obrigatório)', 'server', 'Selecione os grupos', 'Pesquisar grupo')}"></div>
+        <p id="host-groups-error" class="host-field-error" aria-live="polite"></p>
+      </th:block></section>
+      <section th:replace="~{design-system :: formSection('host-snmp-title', 'Interface SNMP', 'network', ~{host-dialog :: hostSnmp})}"><th:block th:fragment="hostSnmp">
+        <div class="host-endpoint-row">
+          <div class="host-endpoint-mode"><span id="host-endpoint-mode-label">Conectar usando</span>
+            <select id="host-use-ip" name="useIp" hidden aria-hidden="true"><option value="true">Endereço IP</option><option value="false">Nome DNS</option></select>
+            <div class="host-endpoint-buttons" role="group" aria-labelledby="host-endpoint-mode-label"><button type="button" class="system-button" data-host-endpoint="true" aria-pressed="true" aria-controls="host-ip-field host-dns-field">IP</button><button type="button" class="system-button" data-host-endpoint="false" aria-pressed="false" aria-controls="host-ip-field host-dns-field">DNS</button></div>
+          </div>
+          <div id="host-ip-field" class="host-endpoint-field"><label for="host-ip">Endereço IP <span id="host-ip-required" class="host-required" aria-hidden="true">*</span></label><div class="host-field"><input id="host-ip" name="ip" maxlength="64" autocomplete="off" placeholder="192.0.2.1" aria-describedby="host-ip-error"><p id="host-ip-error" class="host-field-error" data-error-for="ip" aria-live="polite"></p></div></div>
+          <div id="host-dns-field" class="host-endpoint-field" hidden><label for="host-dns">Nome DNS <span id="host-dns-required" class="host-required" aria-hidden="true" hidden>*</span></label><div class="host-field"><input id="host-dns" name="dns" maxlength="255" autocomplete="off" placeholder="switch.exemplo.com" aria-describedby="host-dns-error"><p id="host-dns-error" class="host-field-error" data-error-for="dns" aria-live="polite"></p></div></div>
+          <div class="host-endpoint-field host-port-field"><label for="host-port">Porta <span class="host-required" aria-hidden="true">*</span></label><div class="host-field"><input id="host-port" name="port" value="161" type="number" min="1" max="65535" required aria-describedby="host-port-error"><p id="host-port-error" class="host-field-error" data-error-for="port" aria-live="polite"></p></div></div>
+        </div>
+        <div class="host-snmp-settings-row">
+          <div class="host-endpoint-field"><label for="host-snmp-version">Versão do SNMP</label><div class="host-field"><select id="host-snmp-version" name="snmpVersion"><option value="1">SNMPv1</option><option value="2" selected>SNMPv2c</option><option value="3" disabled>SNMPv3 — indisponível nesta versão</option></select></div></div>
+          <div class="host-endpoint-field"><label for="host-community">Comunidade SNMP <span class="host-required" aria-hidden="true">*</span></label><div class="host-field"><input id="host-community" name="community" required maxlength="255" value="{$SNMP_COMMUNITY}" autocomplete="off" spellcheck="false" aria-describedby="host-community-error"><p id="host-community-error" class="host-field-error" data-error-for="community" aria-live="polite"></p></div></div>
+        </div>
+        <label for="host-description">Observações</label>
+        <div class="host-field"><textarea id="host-description" name="description" rows="4"></textarea></div>
+      </th:block></section>
+      </div>
+      <div id="host-auth" class="host-form-fields" role="tabpanel" aria-labelledby="host-auth-tab" hidden>
+        <p>Credenciais exclusivas do app, compartilhadas por Access Points, mapas e análises. Salve o cadastro do host antes de configurar a autenticação.</p>
+        <fieldset id="host-auth-fields" class="host-auth-fields">
+          <label for="host-auth-manufacturer">Fabricante</label><select id="host-auth-manufacturer"><option value="">Selecione</option><option>MikroTik</option><option>Ubiquiti</option><option>Datacom</option><option>Cisco</option><option>Mimosa</option></select>
+          <label id="host-auth-login-label" for="host-auth-login">Usuário</label><input id="host-auth-login" maxlength="255" autocomplete="off">
+          <label for="host-auth-password">Senha</label><input id="host-auth-password" type="password" maxlength="4096" autocomplete="new-password" aria-describedby="host-auth-password-help">
+          <small id="host-auth-password-help">Informe a senha do equipamento.</small>
+          <label for="host-auth-port">Porta API / SSH</label><input id="host-auth-port" type="number" min="1" max="65535" value="8728">
+          <label id="host-auth-tls-row"><input id="host-auth-tls" type="checkbox" role="switch" class="system-switch"> API com TLS</label>
+        </fieldset>
+        <p id="host-auth-state" role="status" aria-live="polite"></p>
+      </div>
+      <p id="host-error" role="alert"></p>
+    </div>
+    <footer class="form-dialog-footer settings-actions"><button id="host-delete" class="system-button system-button-danger" type="button" hidden><svg th:replace="~{shell :: icon('trash-2')}"></svg>Excluir host</button><button id="host-auth-test" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg>Testar conexão</button><button id="host-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button><button id="host-save" class="system-button system-button-primary" type="submit"><svg th:replace="~{shell :: icon('check')}"></svg><span id="host-save-label">Salvar no Zabbix</span></button></footer>
+  </form>
+</th:block></dialog>
+<dialog th:replace="~{design-system :: formDialog('host-discard-dialog', 'host-discard-title', 'host-discard-description', ~{host-dialog :: hostDiscard})}"><th:block th:fragment="hostDiscard">
+  <div class="form-dialog-frame"><header class="form-dialog-header"><h2 id="host-discard-title">Descartar alterações?</h2></header><div class="form-dialog-content"><p id="host-discard-description">Existem alterações não salvas. Deseja fechar o formulário e descartá-las?</p></div><footer class="form-dialog-footer settings-actions"><button id="host-discard-cancel" type="button" class="system-button">Continuar editando</button><button id="host-discard-confirm" type="button" class="system-button">Descartar alterações</button></footer></div>
+</th:block></dialog>
+<dialog th:replace="~{design-system :: formDialog('host-delete-dialog', 'host-delete-title', 'host-delete-description', ~{host-dialog :: hostDelete})}"><th:block th:fragment="hostDelete">
+  <div class="form-dialog-frame"><header class="form-dialog-header"><h2 id="host-delete-title">Excluir host?</h2></header><div class="form-dialog-content"><p id="host-delete-description">O host <strong id="host-delete-name"></strong> será excluído do app e do Zabbix, incluindo seus itens, triggers e histórico. Esta ação não pode ser desfeita.</p><p id="host-delete-error" role="alert"></p></div><footer class="form-dialog-footer settings-actions"><button id="host-delete-cancel" type="button" class="system-button">Cancelar</button><button id="host-delete-confirm" type="button" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash-2')}"></svg><span id="host-delete-label">Excluir no Zabbix</span></button></footer></div>
+</th:block></dialog>
+</th:block>
+</body></html>

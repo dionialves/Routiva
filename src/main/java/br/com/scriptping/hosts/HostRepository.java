@@ -38,8 +38,8 @@ public class HostRepository {
     public void put(ManagedHost host) {
         try {
             String payload = secrets.encrypt(json.writeValueAsString(host));
-            if (jdbc.update("UPDATE app_host SET payload=?, synced_at=? WHERE host_id=?", payload, System.currentTimeMillis(), host.id()) == 0)
-                jdbc.update("INSERT INTO app_host(host_id,payload,synced_at) VALUES (?,?,?)", host.id(), payload, System.currentTimeMillis());
+            if (jdbc.update("UPDATE app_host SET payload=?, synced_at=?, description=? WHERE host_id=?", payload, System.currentTimeMillis(), Objects.requireNonNullElse(host.description(), ""), host.id()) == 0)
+                jdbc.update("INSERT INTO app_host(host_id,payload,synced_at,description) VALUES (?,?,?,?)", host.id(), payload, System.currentTimeMillis(), Objects.requireNonNullElse(host.description(), ""));
         } catch (Exception ex) { throw new IllegalStateException("Não foi possível persistir o host."); }
     }
     private Credentials credentials(java.sql.ResultSet rs) throws java.sql.SQLException {

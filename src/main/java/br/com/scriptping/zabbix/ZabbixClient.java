@@ -428,7 +428,7 @@ public class ZabbixClient {
     private String configurationRevision(JsonNode row) {
         // Availability/error counters change during polling and are not configuration edits.
         var stable = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
-        for (String key : List.of("hostid", "host", "name", "status", "flags")) stable.set(key, row.path(key));
+        for (String key : List.of("hostid", "host", "name", "description", "status", "flags")) stable.set(key, row.path(key));
         for (String key : List.of(legacyGroups ? "groups" : "hostgroups", "parentTemplates", "interfaces")) {
             var nodes = new ArrayList<JsonNode>();
             row.path(key).forEach(nodes::add);
@@ -511,7 +511,7 @@ public class ZabbixClient {
                 row.path("flags").asInt() == 0 && (version == 1 || version == 2),
                 row.path("status").asInt() == 0 ? itemCounts.getOrDefault(row.path("hostid").asText(), 0) : 0,
                 row.path("status").asInt() == 0 ? triggerCounts.getOrDefault(row.path("hostid").asText(), 0) : 0,
-                availability));
+                availability, row.path("description").asText("")));
         }
         result.sort(Comparator.comparing(ManagedHost::hostname, String.CASE_INSENSITIVE_ORDER));
         var configurations = new ArrayList<JsonNode>();
@@ -604,7 +604,9 @@ public class ZabbixClient {
         }
         face.put("details", details); interfaces.add(face);
         var params = new LinkedHashMap<String, Object>();
-        params.put("host", hostname); params.put("name", visible.isEmpty() ? hostname : visible);
+        params.put("host", hostname);
+        params.put("description", Objects.requireNonNullElse(input.description(), ""));
+        params.put("name", visible.isEmpty() ? hostname : visible);
         params.put("status", input.active() ? 0 : 1);
         params.put("groups", input.groupIds().stream().distinct().map(value -> Map.of("groupid", value)).toList());
         params.put("templates", templates.stream().distinct().map(value -> Map.of("templateid", value)).toList());

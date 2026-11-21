@@ -27,7 +27,7 @@ class ZabbixServiceTests {
         when(settings.current()).thenAnswer(call -> state);
         doAnswer(call -> { state = call.getArgument(0); return null; }).when(settings).save(any());
         var localHost = new br.com.scriptping.hosts.ManagedHost("h", "Router", "Router", List.of(new br.com.scriptping.hosts.ManagedHost.Choice("g", "Rede")),
-            List.of(), "", "10.0.0.1", "", true, "161", 2, "public", true, "r", true, 0, 0, "unknown");
+            List.of(), "", "10.0.0.1", "", true, "161", 2, "public", true, "r", true, 0, 0, "unknown", "");
         when(catalog.all()).thenReturn(List.of(localHost));
         monitor = new ZabbixService(client, collector, settings, catalog);
         clearInvocations(client, collector, settings);

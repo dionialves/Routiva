@@ -6,10 +6,10 @@ import java.util.List;
 public record ManagedHost(String id, String hostname, String visibleName, List<Choice> groups,
                           List<Choice> templates, String interfaceId, String ip, String dns,
                           boolean useIp, String port, int snmpVersion, String community,
-                          boolean active, String revision, boolean editable, int monitoredItems, int monitoredTriggers, String snmpAvailability) {
+                          boolean active, String revision, boolean editable, int monitoredItems, int monitoredTriggers, String snmpAvailability, String description) {
     public record Choice(String id, String name) {}
     public record Input(String hostname, String visibleName, List<String> groupIds,
                         List<String> templateIds, String ip, String dns, boolean useIp,
                         String port, int snmpVersion, String community, boolean active,
-                        String revision) {}
+                        String revision, String description) {}
 }

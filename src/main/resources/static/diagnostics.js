@@ -1,24 +1,44 @@
-/* Group diagnostics shares the availability report, cards and chart renderer. */
+/* Group host inventory and on-demand live ping. */
 (() => {
   'use strict';
+  const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+  function compareHostRows(a, b, key = 'name', direction = 1) {
+    const left = a[key], right = b[key];
+    const missing = value => value == null || value === '' || (typeof value === 'number' && !Number.isFinite(value));
+    if (missing(left) !== missing(right)) return missing(left) ? 1 : -1;
+    const order = missing(left) ? 0 : typeof left === 'number' && typeof right === 'number'
+      ? left - right : collator.compare(String(left), String(right));
+    return direction * order || collator.compare(a.name, b.name) || collator.compare(a.id, b.id);
+  }
+  if (typeof module !== 'undefined' && module.exports) module.exports = { compareHostRows };
+  if (typeof document === 'undefined') return;
   if (!location.pathname.split('/')[3]) return;
   const $ = id => document.getElementById(id);
   const format = window.AvailabilityView.format;
   const groupId = decodeURIComponent(location.pathname.split('/')[3] || '');
-  const selectedPeriod = location.search ? new URLSearchParams(location.search).get('minutes') : null;
-  const periodStorageKey = 'routiva.diagnostics.period';
-  const periods = Array.from($('period').options || [], option => option.value);
-  let savedPeriod;
-  try { savedPeriod = localStorage.getItem(periodStorageKey); } catch {}
-  $('period').value = periods.includes(selectedPeriod) ? selectedPeriod
-    : periods.includes(savedPeriod) ? savedPeriod : '1440';
-  function savePeriod() {
-    try { localStorage.setItem(periodStorageKey, $('period').value); } catch {}
+  let hosts = [], busy = false, stopped = false;
+  const cells = new Map(), tableRows = new Map();
+  const sortKeys = ['name', 'ip', 'model', 'version', 'incidents', 'ping', 'loss'];
+  let sortKey = 'name', sortDirection = 1;
+  function sortRows() {
+    const fragment = document.createDocumentFragment();
+    const rows = [...tableRows.values()].sort((a, b) => compareHostRows(a.values, b.values, sortKey, sortDirection));
+    for (const row of rows) fragment.append(row.element);
+    $('diagnostic-hosts').replaceChildren(fragment);
+    for (const key of sortKeys) {
+      const button = $('diagnostic-sort-' + key);
+      button.closest('th').setAttribute('aria-sort', key === sortKey ? sortDirection === 1 ? 'ascending' : 'descending' : 'none');
+      $('diagnostic-sort-icon-' + key).textContent = key === sortKey ? sortDirection === 1 ? '↑' : '↓' : '↕';
+    }
   }
-  savePeriod();
-  let hosts = [], report, busy = false, stopped = false, historyVersion = 0;
-  const cells = new Map();
-  let refreshTimer, liveTimer, liveBusy = false, pollGeneration = 0;
+  for (const key of sortKeys) {
+    $('diagnostic-sort-' + key).addEventListener('click', () => {
+      sortDirection = sortKey === key ? -sortDirection : 1;
+      sortKey = key;
+      sortRows();
+    });
+  }
+  let liveTimer, liveBusy = false, pollGeneration = 0;
   let limits = {};
   let pingRunning = false;
   let liveSince = Date.now();
@@ -36,15 +56,16 @@
     $('diagnostic-feedback-icon').hidden = !error;
   }
   function unknownLive() {
-    for (const target of cells.values()) {
+    for (const [id, target] of cells) {
+      const row = tableRows.get(id);
+      if (row) { row.values.ping = null; row.values.loss = null; }
       badge(target[0], 'Indisponível'); badge(target[1], 'Indisponível');
       target[2].dataset.state = 'unknown';
       target[2].title = 'Falha na atualização das medições';
       target[2].setAttribute('aria-label', 'Estado desconhecido: falha na atualização');
     }
+    if (['ping', 'loss'].includes(sortKey)) sortRows();
   }
-  const chart = new window.AvailabilityChart.Chart($('availability-chart'), $('chart-granularity'));
-  chart.height = 260;
   async function get(url) {
     let response;
     try { response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15000) }); }
@@ -62,7 +83,7 @@
     const data = await get(`/api/diagnostics/groups/${encodeURIComponent(groupId)}/details`);
     hosts = data.hosts;
     limits = data.limits || {};
-    const fragment = document.createDocumentFragment(); cells.clear();
+    cells.clear(); tableRows.clear();
     for (const host of hosts) {
       const tr = document.createElement('tr'), equipment = data.equipment[host.id] || {};
       const nameCell = textCell(tr, '', true);
@@ -104,9 +125,10 @@
       const ping = textCell(tr, ''), loss = textCell(tr, '');
       badge(ping, 'Aguardando'); badge(loss, 'Aguardando');
       cells.set(host.id, [ping, loss, dot]);
-      fragment.append(tr);
+      tableRows.set(host.id, { element: tr, values: { id: host.id, name: host.name, ip: host.ip,
+        model: equipment.model, version: equipment.version, incidents: incident, ping: null, loss: null } });
     }
-    $('diagnostic-hosts').replaceChildren(fragment);
+    sortRows();
     $('diagnostic-hosts-empty').hidden = hosts.length !== 0;
     const known = hosts.filter(h => Number.isFinite(data.incidents[h.id]));
     const incidents = known.reduce((sum, h) => sum + data.incidents[h.id], 0);
@@ -122,6 +144,8 @@
     for (const row of data) {
       const target = cells.get(row.id); if (!target) continue;
       const fresh = ['Respondendo', 'Sem resposta'].includes(row.state);
+      const values = tableRows.get(row.id).values;
+      values.ping = fresh ? row.ping : null; values.loss = fresh ? row.loss : null;
       const pingState = row.ping == null || !fresh ? 'neutral'
         : Number.isFinite(limits.latency) ? row.ping <= limits.latency ? 'success' : 'warning' : 'neutral';
       const lossState = row.loss == null || !fresh ? 'neutral'
@@ -134,43 +158,7 @@
       target[2].title = row.state + measured;
       target[2].setAttribute('aria-label', row.state + measured);
     }
-  }
-  function chartEmpty(container, message) {
-    container.replaceChildren();
-    const empty = document.createElement('p'); empty.className = 'diagnostic-chart-empty';
-    empty.append(window.AppIcon('chart-line'), document.createTextNode(message));
-    container.append(empty);
-  }
-  const secondaryCharts = [];
-  const latencyChart = new window.PerformanceChart($('latency-chart'), 'latency', ' ms', '#06b6d4');
-  secondaryCharts.push(latencyChart);
-  async function history() {
-    const version = ++historyVersion;
-    if (report && report.minutes !== $('period').value) {
-      chart.clear();
-      for (const key of ['operational', 'technical', 'loss', 'latency']) $(key).textContent = '—';
-      secondaryCharts.forEach(chart => chart.clear('Carregando período…'));
-      window.AvailabilityView.times(null);
-      $('diagnostic-range').textContent = 'Carregando período…';
-    }
-    const data = await get(`/api/availability?minutes=${$('period').value}&groupId=${encodeURIComponent(groupId)}`);
-    if (version !== historyVersion) return;
-    report = data.view?.report;
-    if (report) report.minutes = $('period').value;
-    if (!report || report.evaluatedAt == null) {
-      chart.clear(); chartEmpty($('availability-chart'), 'Histórico em preparação…');
-      for (const key of ['operational','technical','loss','latency']) $(key).textContent = 'Sem dados';
-      window.AvailabilityView.times(null);
-      secondaryCharts.forEach(chart => chart.clear('Histórico em preparação…'));
-      $('diagnostic-range').textContent = 'Histórico em preparação…'; return;
-    }
-    for (const key of ['operational','technical','loss','latency']) $(key).textContent = format(report.total[key], key === 'latency' ? ' ms' : '%');
-    window.AvailabilityView.times(report); chart.update(report);
-    $('diagnostic-range').textContent = `${new Date(report.from).toLocaleString('pt-BR')} — ${new Date(report.to).toLocaleString('pt-BR')} · ${report.grouping || ''}`;
-    latencyChart.update(report);
-    if (!report.series.some(p => p.metrics.technical != null || p.metrics.operational != null)) {
-      chart.clear(); chartEmpty($('availability-chart'), 'Sem medições no período.');
-    }
+    if (['ping', 'loss'].includes(sortKey)) sortRows();
   }
   async function poll() {
     const generation = pollGeneration;
@@ -182,17 +170,6 @@
       finally { liveBusy = false; }
     }
     if (!stopped && pingRunning && generation === pollGeneration) liveTimer = setTimeout(poll, 2000);
-  }
-  function scheduleRefresh() {
-    clearTimeout(refreshTimer);
-    if (stopped) return;
-    refreshTimer = setTimeout(async () => {
-      if (!document.hidden && !busy) {
-        try { await history(); }
-        catch (error) { feedback(error.message, true); }
-      }
-      scheduleRefresh();
-    }, 10000);
   }
   $('diagnostic-ping').addEventListener('click', () => {
     pingRunning = !pingRunning;
@@ -207,54 +184,36 @@
     $('auto-summary').textContent = pingRunning ? 'Ping em execução · 2 s' : 'Ping parado';
     if (pingRunning) {
       liveSince = Date.now();
-      for (const target of cells.values()) {
+      for (const [id, target] of cells) {
+        const values = tableRows.get(id).values; values.ping = null; values.loss = null;
         badge(target[0], 'Aguardando'); badge(target[1], 'Aguardando');
         target[2].dataset.state = 'unknown';
         target[2].setAttribute('aria-label', 'Aguardando medições');
         target[2].title = 'Aguardando medições';
       }
+      if (['ping', 'loss'].includes(sortKey)) sortRows();
       poll();
     }
   });
-  $('diagnostic-retry').addEventListener('click', () => {
-    if (groupId && !$('group-details').hidden) history().catch(e => feedback(e.message, true));
-    else start().catch(e => feedback(e.message, true));
-  });
-  $('period').addEventListener('change', () => {
-    savePeriod();
-    const params = new URLSearchParams(location.search);
-    params.set('minutes', $('period').value);
-    window.history.replaceState(null, '', location.pathname + '?' + params);
-    history().catch(e => feedback(e.message, true));
-  });
-  $('chart-lines').addEventListener('click', () => { chart.mode='lines'; chart.draw(); $('chart-lines').setAttribute('aria-pressed','true'); $('chart-bars').setAttribute('aria-pressed','false'); });
-  $('chart-bars').addEventListener('click', () => { chart.mode='bars'; chart.draw(); $('chart-bars').setAttribute('aria-pressed','true'); $('chart-lines').setAttribute('aria-pressed','false'); });
-  $('chart-expand').addEventListener('click', () => { chart.expanded=!chart.expanded;
-    $('chart-expand').setAttribute('aria-expanded',String(chart.expanded));
-    $('chart-expand').setAttribute('aria-label',chart.expanded ? 'Recolher gráfico' : 'Expandir gráfico');
-    $('chart-expand').title = chart.expanded ? 'Recolher gráfico' : 'Expandir gráfico';
-    $('availability-chart').closest('.chart-card').classList.toggle('chart-expanded',chart.expanded);
-    document.body.classList.toggle('chart-is-expanded',chart.expanded); chart.draw(); });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && chart.expanded) $('chart-expand').click(); });
-  window.addEventListener('pagehide', () => { stopped=true; pollGeneration++; clearTimeout(liveTimer); clearTimeout(refreshTimer); });
-  window.addEventListener('pageshow', event => { if (event.persisted && groupId) { stopped=false; poll(); scheduleRefresh(); } });
+  $('diagnostic-retry').addEventListener('click', () => start().catch(e => feedback(e.message, true)));
+  window.addEventListener('pagehide', () => { stopped=true; pollGeneration++; clearTimeout(liveTimer); });
+  window.addEventListener('pageshow', event => { if (event.persisted && groupId) { stopped=false; poll(); } });
   async function start() {
     const groups = await get('/api/diagnostics/groups');
     const group = groups.find(g => g.id===groupId);
     if (!group) throw new Error('Grupo não encontrado no inventário monitorado.');
-    $('diagnostic-title').textContent=group.name; $('diagnostic-description').textContent='Indicadores do grupo e comunicação dos hosts em tempo real.';
+    $('diagnostic-title').textContent=group.name; $('diagnostic-description').textContent='Hosts do grupo e comunicação em tempo real.';
     $('group-details').hidden=false; $('diagnostic-groups').hidden=true;
     busy = true;
     $('group-details').classList.toggle('initial-loading', true);
     try {
-      await Promise.all([details(), history()]);
+      await details();
     } catch (error) {
       feedback(error.message, true);
     } finally {
       busy = false;
       $('group-details').classList.remove('initial-loading');
     }
-    scheduleRefresh();
   }
   start().catch(error => feedback(error.message, true));
 })();

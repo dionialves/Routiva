@@ -28,7 +28,7 @@ public class HostCatalog {
         transactions.executeWithoutResult(tx -> {
             for (var h : legacy.values()) repository.put(new ManagedHost(h.id(), h.hostname(), h.name(),
                 h.groups().stream().map(g -> new ManagedHost.Choice(g.id(), g.name())).toList(), List.of(), "", h.ip(), "", true,
-                "161", 2, "", true, "", false, 0, 0, "unknown"));
+                "161", 2, "", true, "", false, 0, 0, "unknown", ""));
             repository.source(state.url());
             var groups = legacy.values().stream().flatMap(h -> h.groups().stream()).distinct().toList();
             repository.options(Map.of("groups", groups, "templates", List.of()));
@@ -66,7 +66,7 @@ public class HostCatalog {
         // Persist confirmed writes immediately, even when the subsequent remote read is unavailable.
         repository.put(new ManagedHost(saved, input.hostname(), input.visibleName() == null || input.visibleName().isBlank() ? input.hostname() : input.visibleName(),
             groups, templates, "", input.ip(), input.dns(), input.useIp(), input.port(), input.snmpVersion(), input.community(),
-            input.active(), "", true, 0, 0, "unknown"));
+            input.active(), "", true, 0, 0, "unknown", Objects.requireNonNullElse(input.description(), "")));
         try { reconcile(); }
         catch (RuntimeException ex) {
             org.slf4j.LoggerFactory.getLogger(HostCatalog.class).warn("Host salvo no Zabbix; atualização local será reconciliada.");

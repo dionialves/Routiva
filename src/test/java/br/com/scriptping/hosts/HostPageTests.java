@@ -31,12 +31,13 @@ class HostPageTests {
         verify(catalog).delete("42", "version");
     }
     @Test void listIncludesLocalConnectionStatusWithoutExposingCredentials() throws Exception {
-        var host = new ManagedHost("42", "router", "Router", java.util.List.of(), java.util.List.of(), "5", "192.0.2.42", "", true, "161", 2, "public", true, "r", true, 1, 1, "available");
+        var host = new ManagedHost("42", "router", "Router", java.util.List.of(), java.util.List.of(), "5", "192.0.2.42", "", true, "161", 2, "public", true, "r", true, 1, 1, "available", "Observação do host");
         when(catalog.all()).thenReturn(java.util.List.of(host));
         when(authentication.connectionStatuses(java.util.List.of(host))).thenReturn(java.util.Map.of("42", "ACTIVE"));
         mvc.perform(get("/api/host-configurations")).andExpect(status().isOk())
             .andExpect(jsonPath("$[0].id").value("42"))
             .andExpect(jsonPath("$[0].hostname").value("router"))
+            .andExpect(jsonPath("$[0].description").value("Observação do host"))
             .andExpect(jsonPath("$[0].connectionStatus").value("ACTIVE"))
             .andExpect(jsonPath("$[0].encryptedPassword").doesNotExist());
         verifyNoInteractions(inventory);
@@ -46,6 +47,7 @@ class HostPageTests {
             .andExpect(content().string(containsString("id=\"incident-host-group-picker\"")))
             .andExpect(content().string(containsString("id=\"incident-host-template-picker\"")))
             .andExpect(content().string(containsString("form-dialog-frame")))
+            .andExpect(content().string(containsString("name=\"description\"")))
             .andExpect(content().string(containsString("Salvar no Zabbix")))
             .andExpect(content().string(containsString("host-auth-tab")))
             .andExpect(content().string(containsString("host-filter-connection")))

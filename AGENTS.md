@@ -235,3 +235,5 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 - As imagens de Servidor em torre e VM Server têm fundo transparente e recorte justo em WebP sem perda. Geometria, prévia e LEDs seguem as proporções dos arquivos recortados.
 
 - O ícone `battery` (Bateria) usa `map-assets/battery.webp`, recortado e transparente, para hosts, grupos e elementos livres; reutiliza transformações, prévia e LED dinâmico de ping dos servidores (2s; validade 10s).
+
+- Nomes de hosts clicáveis usam o menu compartilhado `HostMenu`, incluindo Access Points e mapas. A seção HOST oferece Inventário e Dados Recentes desativados, Incidentes filtrados e Configurações abrindo o modal compartilhado na página atual, sem navegação. Em Configurações → Hosts, o nome continua abrindo diretamente o modal de edição.

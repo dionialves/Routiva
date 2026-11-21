@@ -38,7 +38,10 @@
     $('collection-state').textContent=labels[state]||'Estado da coleta indisponível';
     $('collection-state').dataset.state=state==='RECEBENDO'?'normal':state==='PARCIAL'||state==='ATRASADO'||state==='PROCESSANDO'?'warning':'neutral';
     $('availability-status').textContent=stale?'A agregação dos indicadores está atrasada.':r.evaluatedAt?`Dados consolidados até ${date(r.to)} · Processamento em ${date(r.evaluatedAt)}`:'Carregando indicadores…';
-    $('availability-coverage').textContent=[r.load&&r.load.phase!=='COMPLETE'?'Processando histórico pendente; os dados ainda são parciais.':'',r.retainedFrom>r.from?'O histórico retido é menor que o período selecionado.':'',r.observedMillis!=null&&data.page.selectedTotal>0&&r.observedMillis<r.to-r.from?'A cobertura de medições é parcial no período selecionado.':'',r.total.technical==null&&data.page.selectedTotal>0?'Os hosts selecionados não possuem medições válidas neste período.':''].filter(Boolean).join(' ');
+    $('availability-coverage').textContent=[r.load&&r.load.phase!=='COMPLETE'?'Processando histórico pendente; os dados ainda são parciais.':'',r.retainedFrom>r.from?'O histórico retido é menor que o período selecionado.':'',r.total.technical==null&&data.page.selectedTotal>0?'Os hosts selecionados não possuem medições válidas neste período.':''].filter(Boolean).join(' ');
+    if ($('availability-coverage').parentElement) {
+      $('availability-coverage').parentElement.hidden = !$('availability-coverage').textContent;
+    }
     chart.update(r); performanceChart.update(r); AvailabilityView.table(data); page=data.page.number;
     loading(r.evaluatedAt==null);
   }

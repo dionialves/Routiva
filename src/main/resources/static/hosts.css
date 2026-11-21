@@ -69,3 +69,5 @@
 .hosts-page [data-connection-status=NOT_CONFIGURED] { color:var(--muted); }
 .hosts-page [data-connection-status=ACTIVE] { color:var(--success); }
 .hosts-page [data-connection-status=ERROR] { color:var(--error); }
+
+#host-dialog #host-description { background:var(--input-bg, #07131f); }

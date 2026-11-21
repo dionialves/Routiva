@@ -22,7 +22,7 @@ async function surface(initialRows = []) {
   let fail = false;
   const rows = [{ hostId: '42', name: 'AP A', ip: '192.0.2.42', available: true, connectedClients: 0 }];
   const context = {
-    window: { setupMultiPicker(kind, select, label, onChange) { select.addEventListener('change', onChange); return () => {}; } },
+    window: { HostMenu: { attach(link, container, options) { link.hostMenuOptions = options; } }, setupMultiPicker(kind, select, label, onChange) { select.addEventListener('change', onChange); return () => {}; } },
     document: { querySelectorAll: () => [], addEventListener() {}, getElementById: id => elements[id], createElement: () => new Element(), createDocumentFragment: () => new Element() },
     fetch: async (url, options) => {
       requests.push({ url, options });
@@ -58,7 +58,7 @@ test('arrows physically transfer hosts and only the saved selection is posted', 
   const posted = ui.requests.find(request => request.options.method === 'POST');
   assert.deepEqual(JSON.parse(posted.options.body), { hostIds: ['42'] });
   assert.equal(e['ap-dialog'].open, false);
-  assert.equal(e['ap-rows'].children[0].children[0].children[0].children[0].href, '/ap/42');
+  assert.deepEqual(e['ap-rows'].children[0].children[0].children[0].children[0].hostMenuOptions.hostId, '42');
   assert.equal(e['ap-rows'].children[0].children[0].children[3].textContent, 0);
   assert.equal(e['ap-rows'].children[0].children[0].children.length, 5);
 });

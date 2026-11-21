@@ -29,7 +29,7 @@ class AccessPointTests {
     br.com.scriptping.hosts.HostConnections connections;
     void local(Host h) {
         hosts.put(new br.com.scriptping.hosts.ManagedHost(h.id(), h.hostname(), h.name(),
-            h.groups().stream().map(g -> new br.com.scriptping.hosts.ManagedHost.Choice(g.id(),g.name())).toList(), List.of(), "", h.ip(), "", true, "161", 2, "public", true, "r", true, 0, 0, "unknown"));
+            h.groups().stream().map(g -> new br.com.scriptping.hosts.ManagedHost.Choice(g.id(),g.name())).toList(), List.of(), "", h.ip(), "", true, "161", 2, "public", true, "r", true, 0, 0, "unknown", ""));
     }
     AccessPointService.ConfigurationInput valid = new AccessPointService.ConfigurationInput("MikroTik", "reader", "private-secret", 8729, true);
     Host host = new Host("42", "AP Outdoor", "192.0.2.42", List.of());
