@@ -7,7 +7,7 @@ const path = require('node:path');
 function surface(kind = 'group', labels = {}) {
   class Element {
     constructor() { this.children = []; this.listeners = {}; this.value = ''; }
-    append(...nodes) { this.children.push(...nodes); }
+    append(...nodes) { this.children = this.children.filter(child => !nodes.includes(child)); this.children.push(...nodes); }
     addEventListener(type, listener) { this.listeners[type] = listener; }
     focus() { this.focused = true; }
     querySelector() { return this.summary ||= new Element(); }
@@ -31,7 +31,7 @@ function surface(kind = 'group', labels = {}) {
     search.listeners.keydown(event);
     return event;
   };
-  return { options, search, menu, enter, changes: () => changes };
+  return { options, search, menu, enter, container: elements[`incident-${kind}-options`], changes: () => changes };
 }
 
 for (const kind of ['group', 'host']) {
@@ -81,4 +81,21 @@ test('Enter narrows an existing selection of every option to the search matches'
   ui.menu.open = true; ui.search.value = 'POP A'; ui.enter();
   assert.deepEqual(ui.options.map(option => option.selected), [true, false, true, false]);
   assert.equal(ui.menu.open, true);
+});
+
+test('selected options stay first through selection, deselection and accent-insensitive search', () => {
+  const ui = surface();
+  const rows = () => ui.container.children.slice(1).map(label => label.children[1].textContent);
+  assert.deepEqual(rows(), ['Outro', 'POP A', 'POP B', 'POP indisponível']);
+  const row = ui.container.children.find(label => label.children[1].textContent === 'POP B');
+  row.children[0].checked = true;
+  row.children[0].listeners.change();
+  assert.deepEqual(rows(), ['POP B', 'Outro', 'POP A', 'POP indisponível']);
+  row.children[0].checked = false;
+  row.children[0].listeners.change();
+  assert.deepEqual(rows(), ['Outro', 'POP A', 'POP B', 'POP indisponível']);
+  ui.search.value = 'óutro';
+  ui.search.listeners.input();
+  assert.equal(ui.container.children[1].hidden, false);
+  assert.equal(ui.container.children[2].hidden, true);
 });

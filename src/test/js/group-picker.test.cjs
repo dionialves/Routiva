@@ -199,3 +199,16 @@ test('dialog picker stays within the viewport and clears its bottom position whe
   assert.equal(ui.panel.style.top,'146px');
   assert.equal(ui.panel.style.bottom,'auto');
 });
+
+test('multiple choices put selected items first and keep keyboard focus on the toggled item', () => {
+  const ui = setup(true);
+  ui.select.options.forEach(option => option.selected = false);
+  ui.select.options[2].selected = true;
+  ui.trigger.emit('click');
+  assert.deepEqual(ui.list.children.map(row => row.attributes['aria-selected']), ['false', 'true', 'false']);
+  ui.list.children[1].emit('click');
+  ui.input.emit('keydown', 'Enter');
+  assert.equal(ui.select.options[2].selected, true);
+  assert.equal(ui.select.options[1].selected || false, false);
+  assert.deepEqual(ui.select.options.map(option => option.value), ['', 'a', 'b']);
+});

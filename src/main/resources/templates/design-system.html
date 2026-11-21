@@ -1,12 +1,12 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org"><head>
-<link th:fragment="base" rel="stylesheet" href="/style.css?v=20261115-ui-pagination">
+<th:block th:fragment="base"><link rel="stylesheet" href="/style.css?v=20261120-modal-tabs"><script src="/modal-tabs.js?v=20261120" defer></script></th:block>
 <link th:fragment="actions" rel="stylesheet" href="/buttons.css?v=20261118-danger">
 <link th:fragment="filters" rel="stylesheet" href="/query-filters.css?v=20261115-ds1">
 <link th:fragment="layout" rel="stylesheet" href="/page-layout.css?v=20261115-ds1">
 <link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261120-observation">
 <link th:fragment="picker" rel="stylesheet" href="/multi-picker.css?v=20261119-popover-position">
-<link th:fragment="analysisDialogStyles" rel="stylesheet" href="/analysis-dialog.css?v=20261116-header">
+<link th:fragment="analysisDialogStyles" rel="stylesheet" href="/analysis-dialog.css?v=20261120-modal-tabs">
 </head><body>
 <article th:fragment="indicator(title, valueId, description, descriptionId)" class="card">
   <h2 th:text="${title}"></h2>

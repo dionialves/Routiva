@@ -1,4 +1,5 @@
-@import url("/design-tokens.css");
+@import url("/design-tokens.css?v=20261120-modal-tabs");
+@import url("/modal-tabs.css?v=20261120");
 @import url("/pagination.css");
 @import url("/signal-indicators.css");
 

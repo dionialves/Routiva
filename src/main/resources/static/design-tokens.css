@@ -30,6 +30,9 @@
   --analysis-bg:#071a28;
   --analysis-border:#315b72;
   --analysis-tab-bg:#102b3d;
+  --analysis-tab-border:#476174;
+  --analysis-tab-accent:#06b6d4;
+  --analysis-tab-hover:#193b50;
   --analysis-tab-active:#0b3448;
   --analysis-table-head:#103347;
 }

@@ -73,7 +73,7 @@
           const all = groups.every(item => item.selected);
           groups.forEach(item => item.selected = !all);
         } else option.selected = !option.selected;
-        sync(); render(); highlight(index);
+        sync(); render(); highlight(matches.indexOf(option));
         select.dispatchEvent(new Event('change', {bubbles: true}));
         return;
       }
@@ -84,6 +84,12 @@
     function render() {
       const query = normalize(input.value.trim());
       matches = Array.from(select.options).filter(option => normalize(option.textContent).includes(query));
+      if (multiple) {
+        matches.sort((a, b) => {
+          if (!a.value || !b.value) return Number(!!a.value) - Number(!!b.value);
+          return Number(!!b.selected) - Number(!!a.selected);
+        });
+      }
       list.replaceChildren();
       matches.forEach((option, index) => {
         const result = document.createElement('button'); result.type = 'button'; result.tabIndex = -1;
@@ -108,7 +114,7 @@
       trigger.setAttribute('aria-busy', select.getAttribute('aria-busy') || 'false');
       const selected = Array.from(select.options).filter(option => option.value && option.selected);
       selection.textContent = multiple ? (!selected.length ? 'Todos os hosts' : selected.length === 1 ? selected[0].textContent : `${selected.length} grupos selecionados`) : select.selectedOptions[0]?.textContent || 'Todos os hosts';
-      const next = JSON.stringify(Array.from(select.options, option => [option.value, option.textContent, option.disabled]));
+      const next = JSON.stringify(Array.from(select.options, option => [option.value, option.textContent, option.disabled, option.selected]));
       if (next !== signature && !panel.hidden) render();
       signature = next;
     }

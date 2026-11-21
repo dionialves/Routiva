@@ -45,6 +45,10 @@
         label.hidden = option.disabled || !normalize(option.textContent).includes(query);
         if (!label.hidden) visible++;
       }
+      const focused = document.activeElement;
+      const ordered = [...entries].sort((a, b) => Number(b.option.selected) - Number(a.option.selected));
+      for (const { label } of ordered) container.append(label);
+      if (entries.some(entry => entry.checkbox === focused)) focused.focus();
       const available = entries.filter(entry => !entry.option.disabled);
       const selected = available.filter(entry => entry.option.selected);
       allCheckbox.disabled = available.length === 0;
@@ -79,7 +83,7 @@
       }
     });
     listen(menu, 'toggle', () => {
-      if (menu.open) search.focus();
+      if (menu.open) { refresh(); search.focus(); }
     });
     listen(menu, 'keydown', event => {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
