@@ -11,7 +11,7 @@ dialog.form-dialog::backdrop { background:rgb(3 12 20 / 68%); }
 .form-dialog .connection-form { gap:16px; }
 .form-dialog h2 { margin:0 0 6px; font-size:1.5rem; }
 .form-dialog .connection-form > label { max-width:none; }
-.form-dialog :is(input, select):focus-visible { outline:1px solid var(--cyan); outline-offset:0; border-color:var(--cyan); }
+.form-dialog :is(input, select, textarea):focus-visible { outline:1px solid var(--cyan); outline-offset:0; border-color:var(--cyan); }
 .form-dialog .settings-actions { border-top:1px solid var(--border); padding-top:18px; justify-content:flex-end; }
 .form-dialog [role=alert]:empty { display:none; }
 .form-dialog [hidden] { display:none !important; }
@@ -43,3 +43,5 @@ dialog.form-dialog:has(.form-dialog-frame) { padding:0; max-height:90vh; overflo
 .form-dialog-section-title svg { width:18px; height:18px; flex:0 0 18px; color:var(--cyan); }
 .form-dialog-section-fields { display:grid; gap:16px; padding:20px; min-width:0; }
 @media(max-width:600px) { .form-dialog-section-title, .form-dialog-section-fields { padding:16px; } }
+
+.form-dialog textarea { box-sizing:border-box; width:100%; min-height:100px; resize:vertical; padding:12px; color:var(--text); background:var(--panel-bg); border:1px solid var(--border); border-radius:6px; font:inherit; font-size:13px; }

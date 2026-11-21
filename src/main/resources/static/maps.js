@@ -208,7 +208,8 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
     rx: 6, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 2}));
   if (server) {
     const vm = node.icon === 'vm-server';
-    const cx = vm ? -67.3 : 22, cy = vm ? 7.9 : -33;
+    const battery = node.icon === 'battery';
+    const cx = battery ? 48 : vm ? -67.3 : 22, cy = battery ? -4 : vm ? 7.9 : -33;
     if (vm) {
       // Neutralize the baked-in green light and its halo before drawing the live LED.
       const id = 'server-led-' + (++serverLedSequence);
@@ -408,7 +409,7 @@ function draw() {
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
       onPort: portId => connectEndpoint(n, portId)
     });
-    else (['telecom-site', 'cloud', 'tower-server', 'vm-server'].includes(n.icon) ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
+    else (['telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(n.icon) ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -494,7 +495,7 @@ function draw() {
   if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
   if (editing && tool === 'select' && selection.size === 1) {
     const node = nodes.find(n => selection.has(n.id));
-    if (node && ['switch', 'radio', 'telecom-site', 'cloud', 'tower-server', 'vm-server'].includes(node.icon)) drawTransformHandles(canvas, node);
+    if (node && ['switch', 'radio', 'telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(node.icon)) drawTransformHandles(canvas, node);
   }
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
@@ -874,9 +875,9 @@ function updatePingIndicators() {
 async function refreshPingState(token) {
   if (!current || editing || token !== pingGeneration) return;
   clearTimeout(pingTimer);
-  const equipment = current.layout.nodes.filter(n => ['switch', 'radio', 'tower-server', 'vm-server'].includes(n.icon));
+  const equipment = current.layout.nodes.filter(n => ['switch', 'radio', 'tower-server', 'vm-server', 'battery'].includes(n.icon));
   const hosts = [...new Set(equipment.map(n => n.hostId).filter(Boolean))];
-  const groups = [...new Set(equipment.filter(n => ['tower-server', 'vm-server'].includes(n.icon)).map(n => n.groupId).filter(Boolean))];
+  const groups = [...new Set(equipment.filter(n => ['tower-server', 'vm-server', 'battery'].includes(n.icon)).map(n => n.groupId).filter(Boolean))];
   if (!hosts.length && !groups.length) return;
   try {
     const readings = await api('/ping-status', {hosts, groups});
@@ -1547,7 +1548,7 @@ function drawPreview() {
   if (isSwitch) MapSwitch.draw(svg, group, {...transformState(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon, name, labelPosition: $('label-position').value,
     ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
     {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
-  else (['telecom-site', 'cloud', 'tower-server', 'vm-server'].includes(icon) ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, {...(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon});
+  else (['telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(icon) ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, {...(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon});
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
   preview.setAttribute('viewBox', [box.x + (box.width-w)/2, box.y + (box.height-h)/2, w, h].join(' '));
@@ -1567,6 +1568,7 @@ function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' 
   $('interfaces-enabled').checked = node.interfacesEnabled ?? !!(node.ports?.length || node.slots?.length);
   renderSwitchSlots();
   $('element-name').value = node.name;
+  $('element-observation').value = node.observation || '';
   $('label-position').value = node.labelPosition || 'BELOW';
   $('type').value = type;
   syncElementIcons();
@@ -1680,7 +1682,7 @@ $('element-form').onsubmit = event => {
   if (affected.length && !confirm('A alteração remove as conexões abaixo:\n' + affectedNames.join('\n') + '\nContinuar?')) return;
   checkpoint();
   current.layout.links = current.layout.links.filter(link => !affected.includes(link));
-  Object.assign(node, {linkInterfaces: type === 'group' ? linkInterfaces : null, icon, switchColor: configuredSwitchColor, interfacesEnabled, ports, slots: configuredSlots.map(slot => ({...slot, name: slot.name.trim()})), name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
+  Object.assign(node, {observation: $('element-observation').value.trim() || null, linkInterfaces: type === 'group' ? linkInterfaces : null, icon, switchColor: configuredSwitchColor, interfacesEnabled, ports, slots: configuredSlots.map(slot => ({...slot, name: slot.name.trim()})), name, labelPosition:$('label-position').value, hostId:type === 'host' ? binding : null,
     groupId:type === 'group' ? binding : null, subMapId:type === 'group' ? $('sub-map').value || null : null, color:node.color || null});
   ensureElementOrigin(node);
   if (pendingNode) current.layout.nodes.push(node);

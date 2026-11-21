@@ -242,6 +242,7 @@ const MapSwitch = (() => {
   }
   const serverImages = {
     'tower-server': {width: 70, height: 119.6, label: 'Servidor em torre'},
+    'battery': {width: 140, height: 98.10, label: 'Bateria'},
     'vm-server': {width: 160, height: 48.75, label: 'VM Server'}
   };
   function bounds(node) {

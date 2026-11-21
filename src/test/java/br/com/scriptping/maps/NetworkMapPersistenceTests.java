@@ -17,6 +17,16 @@ import static org.assertj.core.api.Assertions.*;
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=none")
 @Import({NetworkMapService.class, NetworkMapPersistenceTests.Config.class})
 class NetworkMapPersistenceTests {
+    @Test
+    void elementObservationPersistsAndLegacyNodesRemainCompatible() throws Exception {
+        var json = new ObjectMapper();
+        var node = json.readValue("{\"id\":\"battery\",\"name\":\"Bateria\",\"icon\":\"battery\",\"observation\":\"Trocar bateria em dezembro\"}", Node.class);
+        var saved = service.save(new Saved(null, 0, new Layout("Energia", null, 0, List.of(node), List.of()), null));
+        var reloaded = service.maps().stream().filter(map -> map.id().equals(saved.id())).findFirst().orElseThrow();
+        assertThat(reloaded.layout().nodes().getFirst().observation()).isEqualTo("Trocar bateria em dezembro");
+        assertThat(json.readValue("{\"id\":\"old\",\"name\":\"Antigo\"}", Node.class).observation()).isNull();
+    }
+
     @TestConfiguration
     static class Config {
         @Bean ObjectMapper objectMapper() { return new ObjectMapper(); }

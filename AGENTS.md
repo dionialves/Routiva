@@ -233,3 +233,5 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 - Servidor em torre e VM Server usam LED dinâmico do ping recente (2s; validade 10s): verde com resposta abaixo de 15ms, amarelo a partir de 15ms, vermelho no timeout e cinza em edição/erro/ausência. O LED da VM substitui a cor fixa por sobreposição SVG neutralizada; o da torre fica no canto superior direito. Grupos agregam seus hosts, priorizando timeout e depois ausência de dados.
 
 - As imagens de Servidor em torre e VM Server têm fundo transparente e recorte justo em WebP sem perda. Geometria, prévia e LEDs seguem as proporções dos arquivos recortados.
+
+- O ícone `battery` (Bateria) usa `map-assets/battery.webp`, recortado e transparente, para hosts, grupos e elementos livres; reutiliza transformações, prévia e LED dinâmico de ping dos servidores (2s; validade 10s).

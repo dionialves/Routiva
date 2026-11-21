@@ -51,11 +51,11 @@ test('server LEDs use fresh ping latency and distinguish timeout, collection err
 });
 test('server icons participate in periodic ping requests, including group bindings',async()=>{
   const {context,run}=setup();
-  context.current.layout.nodes=[{icon:'tower-server',hostId:'tower'},{icon:'vm-server',groupId:'group'}];
+  context.current.layout.nodes=[{icon:'tower-server',hostId:'tower'},{icon:'vm-server',groupId:'group'},{icon:'battery',hostId:'battery'},{icon:'battery',groupId:'batteries'}];
   context.api=async(url,body)=>{context.request=body;return [];};
   await run('refreshPingState(1)');
-  assert.deepEqual(Array.from(context.request.hosts),['tower']);
-  assert.deepEqual(Array.from(context.request.groups),['group']);
+  assert.deepEqual(Array.from(context.request.hosts),['tower','battery']);
+  assert.deepEqual(Array.from(context.request.groups),['group','batteries']);
   assert.equal(context.delay,2000);
 });
 test('server drawing replaces the VM light and puts the tower light in its upper right corner',()=>{
@@ -64,7 +64,7 @@ test('server drawing replaces the VM light and puts the tower light in its upper
   const context=vm.createContext({MapSwitch,svg,editing:false,serverLedSequence:0,
     serverStatusFor:()=>({color:'#ff0000',label:'Offline (ping)'})});
   vm.runInContext(source.slice(source.indexOf('function drawTelecomSite('),source.indexOf('function alignDraggedNode(')),context);
-  for(const icon of ['vm-server','tower-server']) {
+  for(const icon of ['vm-server','tower-server','battery']) {
     context.root=svg('g',{});context.node={id:'server',icon};
     vm.runInContext("drawTelecomSite(root,'Server','BELOW','#58bd83',false,node)",context);
     const parts=context.root.children[0].children;

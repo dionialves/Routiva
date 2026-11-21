@@ -10,7 +10,10 @@ public final class NetworkMapModels {
 
     public enum LabelPosition { ABOVE, BELOW, LEFT, RIGHT }
 
-    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId, Double rotation, Double scale, Boolean flipX, Origin origin, List<LinkInterface> linkInterfaces) {
+    public record Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId, Double rotation, Double scale, Boolean flipX, Origin origin, List<LinkInterface> linkInterfaces, String observation) {
+        public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId, Double rotation, Double scale, Boolean flipX, Origin origin, List<LinkInterface> linkInterfaces) {
+            this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, switchColor, subMapId, rotation, scale, flipX, origin, linkInterfaces, null);
+        }
         public Node(String id, String groupId, String hostId, String color, String name, int x, int y, LabelPosition labelPosition, String icon, List<Port> ports, List<Slot> slots, Boolean interfacesEnabled, String switchColor, String subMapId, Double rotation, Double scale, Boolean flipX, Origin origin) {
             this(id, groupId, hostId, color, name, x, y, labelPosition, icon, ports, slots, interfacesEnabled, switchColor, subMapId, rotation, scale, flipX, origin, null);
         }
