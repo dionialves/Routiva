@@ -29,7 +29,7 @@
     $('chart-granularity').replaceChildren(new Option('Agrupamento: '+(r.grouping||'Automático'),'auto'));
     $('chart-granularity').value='auto';
     for(const key of ['operational','technical','loss','latency']) $(key).textContent=AvailabilityView.format(r.total[key],key==='latency'?' ms':'%');
-    $('availability-range').textContent=r.evaluatedAt?`Período: ${date(r.from)} → ${date(r.to)}`:'Aguardando a primeira publicação de indicadores.';
+    $('availability-range').textContent='';
     $('last-measurement').textContent='Última medição: '+(r.lastSampleAt?date(r.lastSampleAt):'Sem medições');
     const stale=r.evaluatedAt!=null&&Date.now()-r.evaluatedAt>180000;
     const catchingUp=r.load&&r.load.phase!=='COMPLETE';
@@ -37,7 +37,7 @@
     const labels={PROCESSANDO:'Processando histórico pendente',RECEBENDO:'Coleta recebendo medições',PARCIAL:'Coleta parcial ou atrasada',SEM_HOSTS:'Nenhum host monitorado',SEM_DADOS:'Sem medições disponíveis',CARREGANDO:'Carregando indicadores',ATRASADO:'Indicadores desatualizados'};
     $('collection-state').textContent=labels[state]||'Estado da coleta indisponível';
     $('collection-state').dataset.state=state==='RECEBENDO'?'normal':state==='PARCIAL'||state==='ATRASADO'||state==='PROCESSANDO'?'warning':'neutral';
-    $('availability-status').textContent=stale?'A agregação dos indicadores está atrasada.':r.evaluatedAt?`Dados consolidados até ${date(r.to)} · Processamento em ${date(r.evaluatedAt)}`:'Carregando indicadores…';
+    $('availability-status').textContent=stale?'A agregação dos indicadores está atrasada.':r.evaluatedAt?'':'Carregando indicadores…';
     $('availability-coverage').textContent=[r.load&&r.load.phase!=='COMPLETE'?'Processando histórico pendente; os dados ainda são parciais.':'',r.retainedFrom>r.from?'O histórico retido é menor que o período selecionado.':'',r.total.technical==null&&data.page.selectedTotal>0?'Os hosts selecionados não possuem medições válidas neste período.':''].filter(Boolean).join(' ');
     if ($('availability-coverage').parentElement) {
       $('availability-coverage').parentElement.hidden = !$('availability-coverage').textContent;

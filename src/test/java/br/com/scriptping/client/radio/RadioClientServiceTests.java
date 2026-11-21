@@ -54,6 +54,30 @@ class RadioClientServiceTests {
         service.persistCollection(batch, resolved);
     }
     @SuppressWarnings("unchecked") Map<String, Object> data(Map<String, Object> collection) { return (Map<String, Object>) collection.get("data"); }
+    @Test void listUsesFiveQueriesRegardlessOfHistorySizeAndMatchesHistoryDetails() {
+        for (int i = 0; i < 25; i++) {
+            complete("ap1", MAC, now - 50000 + i * 1000, "alice");
+            complete("ap2", OTHER, now - 50000 + i * 1000, "bob");
+        }
+        // Exercise legacy diagnosis recovery and period-scoped latency in the batched path.
+        var latest = db.queryForMap("SELECT * FROM radio_collection WHERE client_id = (SELECT id FROM radio_client WHERE login = 'alice') ORDER BY observed_to DESC LIMIT 1");
+        db.update("INSERT INTO radio_latency(visit_id, mac, tested_at, data) VALUES (?, ?, ?, ?)",
+            latest.get("visit_id"), MAC, now, "{\"latency\":2,\"loss\":0}");
+        var tracked = spy(db);
+        var listing = new RadioClientService(tracked, new TransactionTemplate(new DataSourceTransactionManager(db.getDataSource())), mapper, inventory, 2, 10000);
+        var clients = listing.list();
+        assertThat(clients).hasSize(2);
+        assertThat(mockingDetails(tracked).getInvocations().stream()
+            .filter(call -> call.getMethod().getName().equals("query")
+                && Arrays.equals(call.getMethod().getParameterTypes(),
+                    new Class<?>[] { String.class, org.springframework.jdbc.core.RowMapper.class, Object[].class })).count()).isEqualTo(5);
+        for (var client : clients) {
+            assertThat(client.get("latest")).isEqualTo(service.history(client.get("id").toString(), 0).getFirst());
+            assertThat(client.get("observedFrom")).isEqualTo(now - 50000);
+            assertThat(((Map<?, ?>) client.get("lastSeen")).containsKey("raw_data")).isFalse();
+        }
+    }
+
     @Test void filtersUseCurrentGroupsOfTheApDisplayedForTheLatestValidCollection() {
         when(inventory.hosts()).thenReturn(List.of(
             new Host("ap1", "AP 1", "192.0.2.1", List.of(new Host.Group("g1", "Norte"))),

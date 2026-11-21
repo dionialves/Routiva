@@ -263,10 +263,19 @@ public class RadioClientService {
         });
     }
     private Map<String, Object> collection(Map<String, Object> row) {
+        Map<String, Object> source = null;
+        var data = decode(row.get("data"));
+        if (needsSource(data)) source = one("SELECT raw_data, measured_at FROM radio_observation WHERE visit_id = ? AND client_id = ? AND mac = ? AND measured_at <= ? ORDER BY measured_at DESC LIMIT 1", row.get("visit_id"), row.get("client_id"), row.get("mac"), row.get("observed_to"));
+        return collection(row, source, rows("SELECT * FROM radio_latency WHERE visit_id = ? AND mac = ? ORDER BY tested_at DESC", row.get("visit_id"), row.get("mac")));
+    }
+    private boolean needsSource(Map<String, Object> data) {
+        return !data.containsKey("connectionDiagnosis") || !data.containsKey("radio-name") || !data.containsKey("signalSeverity");
+    }
+    private Map<String, Object> collection(Map<String, Object> row, Map<String, Object> source,
+            List<Map<String, Object>> latencies) {
         var result = new LinkedHashMap<>(row);
         var data = decode(row.get("data"));
-        if (!data.containsKey("connectionDiagnosis") || !data.containsKey("radio-name") || !data.containsKey("signalSeverity")) {
-            var source = one("SELECT raw_data, measured_at FROM radio_observation WHERE visit_id = ? AND client_id = ? AND mac = ? AND measured_at <= ? ORDER BY measured_at DESC", row.get("visit_id"), row.get("client_id"), row.get("mac"), row.get("observed_to"));
+        if (needsSource(data)) {
             if (source != null) {
                 var raw = decode(source.get("raw_data"));
                 if (!data.containsKey("connectionDiagnosis") || !data.containsKey("signalSeverity")) copyDiagnosis(raw, number(source, "measured_at"), data);
@@ -274,7 +283,7 @@ public class RadioClientService {
             }
         }
         result.put("data", data);
-        for (var latency : rows("SELECT * FROM radio_latency WHERE visit_id = ? AND mac = ? ORDER BY tested_at DESC", row.get("visit_id"), row.get("mac"))) {
+        for (var latency : latencies) {
             var stats = decode(latency.get("data"));
             Object observation = stats.get("observationAt");
             if (!(observation instanceof Number at) || (at.longValue() >= number(row, "observed_from") && at.longValue() <= number(row, "observed_to"))) {
@@ -293,25 +302,73 @@ public class RadioClientService {
             .filter(r -> visible.contains(r.get("host_id"))).skip((long) Math.max(0, page) * 20).limit(20).map(this::collection).toList();
     }
     public List<Map<String, Object>> list() {
-        var result = new ArrayList<Map<String, Object>>(); Set<String> visible = visibleHosts();
+        var hosts = inventory.hosts();
+        if (hosts.isEmpty()) return List.of();
         var hostGroups = new HashMap<String, List<br.com.scriptping.zabbix.Host.Group>>();
-        inventory.hosts().forEach(host -> hostGroups.put(host.id(), host.groups()));
+        hosts.forEach(host -> hostGroups.put(host.id(), host.groups()));
+        Object[] visible = hostGroups.keySet().toArray();
+        String placeholders = String.join(",", Collections.nCopies(visible.length, "?"));
+        // Rank only visible rows, before selecting the latest record or the first observation date.
+        var observations = new HashMap<String, Map<String, Object>>();
+        for (var observation : rows("""
+                SELECT o.*, v.host_id, v.host_name, ranked.first_at
+                FROM (
+                    SELECT o.id, MIN(o.measured_at) OVER (PARTITION BY o.client_id) AS first_at,
+                        ROW_NUMBER() OVER (PARTITION BY o.client_id ORDER BY o.measured_at DESC, o.id DESC) AS rn
+                    FROM radio_observation o JOIN radio_visit v ON v.id = o.visit_id
+                    WHERE v.host_id IN (%s)
+                ) ranked JOIN radio_observation o ON o.id = ranked.id
+                JOIN radio_visit v ON v.id = o.visit_id WHERE ranked.rn = 1
+                """.formatted(placeholders), visible)) {
+            observations.put(observation.get("client_id").toString(), observation);
+        }
+        if (observations.isEmpty()) return List.of();
+        String latestCte = """
+                WITH ranked AS (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY observed_to DESC, id DESC) AS rn
+                    FROM radio_collection WHERE host_id IN (%s)
+                ), latest AS (
+                    SELECT c.* FROM radio_collection c JOIN ranked r ON r.id = c.id WHERE r.rn = 1
+                )
+                """.formatted(placeholders);
+        var latest = new HashMap<String, Map<String, Object>>();
+        var collections = rows(latestCte + "SELECT * FROM latest", visible);
+        // Legacy collections may need their original diagnosis; fetch one source row per collection in a batch.
+        var sources = new HashMap<String, Map<String, Object>>();
+        for (var source : rows(latestCte + """
+                SELECT source.collection_id, o.raw_data, o.measured_at FROM (
+                    SELECT c.id AS collection_id, o.id AS observation_id,
+                        ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY o.measured_at DESC, o.id DESC) AS rn
+                    FROM latest c JOIN radio_observation o ON o.visit_id = c.visit_id
+                        AND o.client_id = c.client_id AND o.mac = c.mac AND o.measured_at <= c.observed_to
+                ) source JOIN radio_observation o ON o.id = source.observation_id WHERE source.rn = 1
+                """, visible)) sources.put(source.get("collection_id").toString(), source);
+        var tests = new HashMap<String, List<Map<String, Object>>>();
+        for (var test : rows(latestCte + """
+                SELECT c.id AS collection_id, l.* FROM latest c JOIN radio_latency l
+                    ON l.visit_id = c.visit_id AND l.mac = c.mac ORDER BY l.tested_at DESC
+                """, visible)) {
+            String collectionId = test.remove("collection_id").toString();
+            tests.computeIfAbsent(collectionId, key -> new ArrayList<>()).add(test);
+        }
+        for (var row : collections) {
+            String id = row.get("id").toString();
+            latest.put(row.get("client_id").toString(), collection(row, sources.get(id), tests.getOrDefault(id, List.of())));
+        }
+        var result = new ArrayList<Map<String, Object>>();
         for (var client : rows("SELECT * FROM radio_client ORDER BY login, provisional_mac")) {
             String clientId = client.get("id").toString();
-            var observations = rows("SELECT o.*, v.host_id, v.host_name FROM radio_observation o JOIN radio_visit v ON v.id = o.visit_id WHERE o.client_id = ? ORDER BY o.measured_at DESC", clientId)
-                .stream().filter(o -> visible.contains(o.get("host_id"))).toList();
-            if (observations.isEmpty()) continue;
-            client.put("latest", history(clientId, 0).stream().findFirst().orElse(null));
-            var source = decode(observations.getFirst().get("raw_data"));
-            observations.getFirst().put("radioName", source.get("radio-name"));
-            observations.getFirst().put("interface", source.get("interface"));
-            client.put("lastSeen", observations.getFirst());
-            var latest = (Map<?, ?>) client.get("latest");
-            String displayedHost = (latest == null ? observations.getFirst().get("host_id") : latest.get("host_id")).toString();
+            var observation = observations.get(clientId);
+            if (observation == null) continue;
+            var collection = latest.get(clientId);
+            client.put("latest", collection);
+            var source = decode(observation.remove("raw_data"));
+            observation.put("radioName", source.get("radio-name"));
+            observation.put("interface", source.get("interface"));
+            client.put("observedFrom", observation.remove("first_at"));
+            client.put("lastSeen", observation);
+            String displayedHost = (collection == null ? observation.get("host_id") : collection.get("host_id")).toString();
             client.put("groups", hostGroups.getOrDefault(displayedHost, List.of()));
-            client.put("observedFrom", observations.getLast().get("measured_at"));
-            // Never send raw source rows to the list endpoint.
-            ((Map<?, ?>) client.get("lastSeen")).remove("raw_data");
             result.add(client);
         }
         return result;

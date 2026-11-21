@@ -4,9 +4,13 @@
   const date = n => n == null ? '—' : new Date(Number(n)).toLocaleString('pt-BR');
   function overviewFields(client) {
     const c = client.latest, data = c?.data || {}, seen = client.lastSeen || {};
-    return [['AP', data.apName || seen.host_name || seen.host_id || '-'], ['Data da coleta', c ? date(c.observed_to) : '-'],
-      ['MAC', c?.mac || seen.mac || '-'], ['Interface', data.interface || seen.interface || '-'],
-      ['Login', client.login || '-'], ['Nome do rádio', data['radio-name'] || seen.radioName || '-']];
+    return [['MAC', c?.mac || seen.mac || '-'], ['Login', client.login || '-'],
+      ['Nome do rádio', data['radio-name'] || seen.radioName || '-'],
+      ['Grupo', (client.groups || []).map(group => group.name).join(', ') || '-'],
+      ['AP', data.apName || seen.host_name || seen.host_id || '-'],
+      ['Interface', data.interface || seen.interface || '-'], ['IP (última coleta)', data['ip-address'] || '-'],
+      ['Última coleta', c ? date(c.observed_to) : '-'], ['Tempo conectado', data.uptime || '-'],
+      ['Plano / Perfil', '-']];
   }
   const historyMetric = (n, unit) => n == null ? '—' : format(n, unit);
   function historyValues(c) {
@@ -102,10 +106,30 @@
   }
   function description(client) {
     const dl = document.createElement('dl');
-    for (const [label, value] of overviewFields(client).filter(([label]) => ['MAC', 'Login', 'Nome do rádio'].includes(label))) {
+    for (const [label, value] of overviewFields(client)) {
       const dt = document.createElement('dt'), dd = document.createElement('dd');
       const property = document.createElement('div'); property.className = 'radio-property';
-      dt.textContent = label; dd.textContent = value; property.append(dt, dd); dl.append(property);
+      dt.textContent = label;
+      const text = document.createElement('span'); text.textContent = value; dd.append(text);
+      if (['MAC', 'Login'].includes(label)) {
+        const copy = document.createElement('button'); copy.type = 'button';
+        copy.className = 'system-button system-button-icon-only'; copy.title = 'Copiar';
+        copy.setAttribute('aria-label', `Copiar ${label}`); copy.disabled = value === '-';
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('class', 'ui-icon'); icon.setAttribute('aria-hidden', 'true');
+        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', '/icons.svg#copy'); icon.append(use); copy.append(icon);
+        copy.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            use.setAttribute('href', '/icons.svg#check'); copy.title = 'Copiado';
+            copy.setAttribute('aria-label', `${label} copiado`);
+            $('radio-dialog-state').textContent = `${label} copiado.`;
+          } catch { $('radio-dialog-state').textContent = 'Não foi possível copiar. Selecione e copie o valor.'; }
+        };
+        dd.append(copy);
+      }
+      property.append(dt, dd); dl.append(property);
     }
     return dl;
   }
@@ -184,12 +208,14 @@
     selected = client; trigger = source; page = 0; generation++; pending = null;
     $('radio-title').textContent = client.login || client.provisional_mac;
     $('radio-details').replaceChildren(description(client));
-    const identity = Object.fromEntries(overviewFields(client)), connection = tableValues(client);
-    $('radio-summary-ap').textContent = identity.AP === '-' ? '—' : identity.AP;
-    $('radio-summary-date').textContent = identity['Data da coleta'] === '-' ? '—' : identity['Data da coleta'];
-    $('radio-summary-interface').textContent = identity.Interface === '-' ? '—' : identity.Interface;
-    $('radio-summary-status').textContent = connection.statusLabel === '-' ? '—' : connection.statusLabel;
-    $('radio-summary-connection').dataset.severity = client.latest?.data.connectionSeverity ?? 'unknown';
+    const connection = tableValues(client);
+    $('radio-summary-status').textContent = connection.statusLabel;
+    for (const [key, severity] of [['signal', connection.signal == null ? null : client.latest?.data.signalSeverity],
+      ['status', client.latest?.data.connectionSeverity]]) {
+      $('radio-summary-' + key).closest('.radio-summary-card').dataset.severity = severity ?? 'unknown';
+    }
+    for (const [key, unit] of [['signal', 'dBm'], ['latency', 'ms'], ['loss', '%']])
+      $('radio-summary-' + key).textContent = tableFormat(connection[key], unit);
     $('radio-binding').hidden = !!client.login; $('radio-binding').reset();
     const at = new Date(Number(client.observedFrom));
     $('radio-from').value = new Date(at - at.getTimezoneOffset() * 60000).toISOString().slice(0, 19);

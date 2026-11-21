@@ -32,9 +32,17 @@ test('connection label preserves the AP diagnosis independently from signal', ()
 const { overviewFields, historyValues } = require('../../main/resources/static/radio-clients.js');
 test('overview contains only the requested identity fields', () => {
   const c = client('alice', 0, -60); c.latest.data['radio-name'] = 'Radio Casa';
+  c.groups = [{ id:'g1', name:'Grupo real' }];
+  c.latest.data['ip-address'] = '192.0.2.10'; c.latest.data.uptime = '2d14h32m';
   const values = overviewFields(c);
-  assert.deepEqual(values.map(([label]) => label), ['AP','Data da coleta','MAC','Interface','Login','Nome do rádio']);
-  assert.equal(Object.fromEntries(values)['Nome do rádio'], 'Radio Casa');
+  assert.deepEqual(values.map(([label]) => label), ['MAC','Login','Nome do rádio','Grupo','AP','Interface','IP (última coleta)','Última coleta','Tempo conectado','Plano / Perfil']);
+  const fields = Object.fromEntries(values);
+  assert.equal(fields['Nome do rádio'], 'Radio Casa');
+  assert.equal(fields.Grupo, 'Grupo real');
+  assert.equal(fields['IP (última coleta)'], '192.0.2.10');
+  assert.equal(fields['Tempo conectado'], '2d14h32m');
+  assert.equal(fields['Plano / Perfil'], '-');
+  assert.equal(Object.fromEntries(overviewFields({}))['IP (última coleta)'], '-');
 });
 test('history presents one row of metrics and keeps total loss distinct from no test', () => {
   const c = { ...collection, latency:{ data:{ latency:null, loss:100 } } };

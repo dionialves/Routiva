@@ -55,7 +55,7 @@
 #radio-state:empty { display:none; }
 
 /* Compact client analysis: changes stay scoped to this modal. */
-#radio-dialog { height:auto; max-height:calc(100dvh - 32px); padding:20px 24px; }
+#radio-dialog { width:1118px; max-width:90vw; height:auto; max-height:calc(100dvh - 32px); padding:20px 24px; }
 #radio-dialog > .analysis-dialog-layout { height:auto; max-height:calc(100dvh - 78px); gap:16px; }
 #radio-dialog .analysis-header {
   border-bottom:0;
@@ -70,32 +70,35 @@
 #radio-dialog .analysis-tabs { margin:0; }
 #radio-dialog .analysis-body { flex:0 1 auto; padding:0; border:0; border-radius:0; background:transparent; overflow:auto; }
 #radio-dialog #radio-dialog-state { flex-shrink:0; margin:0; }
-.radio-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; margin-bottom:16px; }
+.radio-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:16px; }
 .radio-summary-card { display:flex; align-items:center; gap:12px; padding:12px 16px; min-width:0; border:1px solid var(--analysis-border); border-radius:8px; background:var(--panel-bg); }
 .radio-summary-card > div { min-width:0; }
 .radio-summary-card > div > span { display:block; color:var(--muted); font-size:12px; margin-bottom:4px; }
-.radio-summary-card strong { display:block; font-size:14px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+.radio-summary-card strong { display:block; font-size:20px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+/* Preserve the independent signal and connection diagnoses from the last collection. */
+.radio-summary-card[data-severity] { --summary-state-color:var(--muted); }
+.radio-summary-card[data-severity="0"] { --summary-state-color:var(--success); }
+.radio-summary-card[data-severity="1"],
+.radio-summary-card[data-severity="2"] { --summary-state-color:var(--warning); }
+.radio-summary-card[data-severity="3"] { --summary-state-color:var(--error); }
+.radio-summary-card[data-severity] :is(strong, .radio-summary-icon) { color:var(--summary-state-color); }
 .radio-summary-icon { display:grid; place-items:center; width:40px; height:40px; flex:0 0 40px; border-radius:7px; background:var(--surface-bg); color:var(--cyan); }
 .radio-summary-icon svg { width:22px; height:22px; }
-.radio-connection-dot { width:14px; height:14px; border-radius:50%; background:currentColor; }
-#radio-summary-connection { --connection-color:var(--muted); }
-#radio-summary-connection[data-severity="0"] { --connection-color:var(--success); }
-#radio-summary-connection[data-severity="1"] { --connection-color:var(--warning); }
-#radio-summary-connection[data-severity="2"] { --connection-color:#fb923c; }
-#radio-summary-connection[data-severity="3"] { --connection-color:var(--error); }
-#radio-summary-connection :is(strong, .radio-summary-icon) { color:var(--connection-color); }
 .radio-identity-panel { padding:12px 20px; border:1px solid var(--analysis-border); border-radius:8px; background:var(--panel-bg); }
 .radio-identity-panel h3 { display:flex; align-items:center; gap:12px; margin:0; padding-bottom:10px; border-bottom:1px solid var(--border); font-size:15px; font-weight:600; }
 .radio-identity-panel h3 svg { width:20px; height:20px; color:var(--cyan); }
-#radio-dialog #radio-details dl { display:block; max-width:720px; }
-#radio-details .radio-property { padding:10px 0; grid-template-columns:minmax(120px, 2fr) minmax(0, 3fr); }
+#radio-dialog #radio-details dl { display:block; width:100%; }
+#radio-details dd { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+#radio-details dd > span { min-width:0; overflow-wrap:anywhere; }
+#radio-details dd button { flex-shrink:0; }
+#radio-details .radio-property { padding:6px 0; min-height:38px; box-sizing:border-box; align-items:center; grid-template-columns:minmax(0, 2fr) minmax(0, 3fr); }
 #radio-history .hosts-table { min-width:1180px; }
 #radio-history .hosts-table :is(th, td) { padding:10px 12px; }
 #radio-history .hosts-table thead th { font-size:12px; }
 #radio-history .hosts-table tbody tr:hover { background:var(--hover-bg); }
 #radio-history-items [data-severity="2"] { color:#fb923c; }
 #radio-history .system-pagination { margin-top:14px; }
-@media(max-width:1000px) { .radio-summary-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+@media(max-width:760px) { .radio-summary-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
 @media(max-width:600px) {
   #radio-dialog { padding:16px; }
   #radio-dialog > .analysis-dialog-layout { max-height:calc(100dvh - 66px); }

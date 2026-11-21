@@ -131,13 +131,14 @@ test('internal gaps and collection errors are excluded; lost pings count as cove
   assert.equal(ui.elements['technical-unavailable'].textContent, '1 min');
 });
 
-test('minute aggregation shows consolidation and pending backlog without claiming fresh collection', async () => {
+test('minute aggregation hides date captions and preserves pending backlog warning', async () => {
   const ui=surface(), payload=data();
   payload.view.report.load.phase='CATCHING_UP';
   payload.view.report.to=Math.floor(Date.now()/60000)*60000;
   ui.respond(0,payload);await flush();
   assert.equal(ui.elements['collection-state'].textContent,'Processando histórico pendente');
-  assert.match(ui.elements['availability-status'].textContent,/Dados consolidados até/);
+  assert.equal(ui.elements['availability-status'].textContent, '');
+  assert.equal(ui.elements['availability-range'].textContent, '');
   assert.match(ui.elements['availability-coverage'].textContent,/dados ainda são parciais/);
 });
 

@@ -11,8 +11,8 @@
   <th:block th:replace="~{design-system :: filters}"></th:block>
   <th:block th:replace="~{design-system :: picker}"></th:block>
   <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
-  <link rel="stylesheet" href="/radio-clients.css?v=20261118-compact-tables">
-  <script src="/multi-picker.js?v=20261115-radio" defer></script><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/radio-clients.js?v=20261116-host-groups" defer></script>
+  <link rel="stylesheet" href="/radio-clients.css?v=20261121-state-colors">
+  <script src="/multi-picker.js?v=20261115-radio" defer></script><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/radio-clients.js?v=20261121-state-colors" defer></script>
 </head><body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('radio-clients')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -36,15 +36,15 @@
 <th:block th:fragment="content">
 <div class="analysis-dialog-layout">
 <header class="analysis-header"><div class="analysis-title"><span class="analysis-title-icon"><svg th:replace="~{shell :: icon('wifi')}"></svg></span><div><h2 id="radio-title">Cliente Rádio</h2><p id="radio-description">Identificação do cliente e informações de conexão.</p></div></div><button id="radio-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar cliente" title="Fechar"><svg th:replace="~{shell :: icon('close')}"></svg></button></header>
-<div class="analysis-tabs" role="tablist" aria-label="Dados do cliente"><button type="button" id="radio-overview-tab" role="tab" aria-selected="true" aria-controls="radio-overview"><svg th:replace="~{shell :: icon('file')}"></svg><span><strong>Visão geral</strong><small>Identificação do cliente</small></span></button><button type="button" id="radio-history-tab" role="tab" tabindex="-1" aria-selected="false" aria-controls="radio-history"><svg th:replace="~{shell :: icon('chart-line')}"></svg><span><strong>Histórico</strong><small>Métricas por coleta</small></span></button></div>
+<div class="analysis-tabs" role="tablist" aria-label="Dados do cliente"><button type="button" id="radio-overview-tab" role="tab" aria-selected="true" aria-controls="radio-overview"><svg th:replace="~{shell :: icon('file')}"></svg><span><strong>Visão geral</strong><small>Identificação e status</small></span></button><button type="button" id="radio-history-tab" role="tab" tabindex="-1" aria-selected="false" aria-controls="radio-history"><svg th:replace="~{shell :: icon('chart-line')}"></svg><span><strong>Histórico</strong><small>Métricas por coleta</small></span></button></div>
 <section class="analysis-body" id="radio-overview" role="tabpanel" aria-labelledby="radio-overview-tab" tabindex="0">
 <div class="radio-summary-grid" aria-label="Resumo da conexão">
-<article class="radio-summary-card"><span class="radio-summary-icon"><svg th:replace="~{shell :: icon('radio-tower')}"></svg></span><div><span>AP</span><strong id="radio-summary-ap">—</strong></div></article>
-<article class="radio-summary-card"><span class="radio-summary-icon"><svg th:replace="~{shell :: icon('calendar-days')}"></svg></span><div><span>Última coleta</span><strong id="radio-summary-date">—</strong></div></article>
-<article class="radio-summary-card" id="radio-summary-connection"><span class="radio-summary-icon"><span class="radio-connection-dot" aria-hidden="true"></span></span><div><span>Conexão</span><strong id="radio-summary-status">—</strong></div></article>
-<article class="radio-summary-card"><span class="radio-summary-icon"><svg th:replace="~{shell :: icon('activity')}"></svg></span><div><span>Interface</span><strong id="radio-summary-interface">—</strong></div></article>
+<article class="radio-summary-card"><span class="radio-summary-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M4 20v-3m5 3v-7m5 7V9m5 11V4"/></svg></span><div><span>Sinal (RSSI)</span><strong id="radio-summary-signal">—</strong></div></article>
+<article class="radio-summary-card"><span class="radio-summary-icon"><svg th:replace="~{shell :: icon('wifi')}"></svg></span><div><span>Conexão</span><strong id="radio-summary-status">—</strong></div></article>
+<article class="radio-summary-card"><span class="radio-summary-icon"><svg th:replace="~{shell :: icon('arrows-left-right')}"></svg></span><div><span>Latência</span><strong id="radio-summary-latency">—</strong></div></article>
+<article class="radio-summary-card"><span class="radio-summary-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m5 19 14-14"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/></svg></span><div><span>Perda de pacotes</span><strong id="radio-summary-loss">—</strong></div></article>
 </div>
-<section class="radio-identity-panel" aria-labelledby="radio-identity-title"><h3 id="radio-identity-title"><svg th:replace="~{shell :: icon('info')}"></svg>Dados do cliente</h3><div id="radio-details"></div></section>
+<section class="radio-identity-panel" aria-labelledby="radio-identity-title"><h3 id="radio-identity-title"><svg th:replace="~{shell :: icon('info')}"></svg>Informações do cliente</h3><div id="radio-details"></div></section>
 <form id="radio-binding" class="connection-form" hidden>
 <h3>Vincular login</h3><p>O vínculo será usado nas próximas visitas quando o IXC estiver indisponível. Coletas de proprietários anteriores serão preservadas.</p>
 <div class="radio-binding-fields"><label for="radio-login">Login IXC<input id="radio-login" maxlength="255" autocomplete="off" required></label>

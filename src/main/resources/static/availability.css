@@ -196,12 +196,14 @@
 .availability-page .availability-filters .group-picker-trigger:focus-visible { outline:2px solid #53cfee; outline-offset:3px; }
 .availability-context { display:flex; align-items:baseline; flex-wrap:wrap; gap:12px 30px; }
 .availability-context-item { display:flex; align-items:center; gap:12px; min-width:0; }
-.availability-status-item { border-left:1px solid #24516a; padding-left:30px; }
+.availability-status-item { border-left:0; padding-left:0; }
 .availability-page .availability-range,
 .availability-page #availability-status { margin:0; font-size:14px; line-height:1.6; color:#bdd3e3; font-variant-numeric:tabular-nums; }
 .availability-coverage-note { display:flex; align-items:center; gap:6px; margin-top:12px; }
 .availability-coverage-note:has(#availability-coverage:empty),
-.availability-range-item:has(#availability-range:empty) { display:none; }
+.availability-range-item:has(#availability-range:empty),
+.availability-status-item:has(#availability-status:empty),
+.availability-context:not(:has(p:not(:empty))) { display:none; }
 .availability-coverage-note .availability-context-icon { width:17px; height:17px; flex-basis:17px; color:#50d5f5; }
 .availability-page .availability-coverage-note .note { margin:0; color:#b9d0e0; font-size:13px; line-height:1.6; font-style:italic; }
 @media(max-width:1200px) {

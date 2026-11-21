@@ -23,6 +23,10 @@ class RadioClientPageTests {
         assertThat(html.indexOf("incident-radio-ap-picker")).isLessThan(html.indexOf("incident-radio-client-picker"));
         assertThat(html.indexOf("incident-radio-client-picker")).isLessThan(html.indexOf("incident-radio-status-picker"));
         assertThat(html).contains("Clientes Rádio", "hosts-table", "form-dialog", "role=\"tablist\"", "aria-controls=\"radio-history\"", "Vincular login");
+        assertThat(html).contains("Informações do cliente", "Identificação e status", "Sinal (RSSI)",
+            "id=\"radio-summary-signal\"", "id=\"radio-summary-status\"", "id=\"radio-summary-latency\"", "id=\"radio-summary-loss\"");
+        assertThat(html).doesNotContain("id=\"radio-summary-ap\"", "id=\"radio-summary-date\"",
+            "id=\"radio-summary-connection\"", "id=\"radio-summary-interface\"");
         assertThat(html.split("id=\"radio-overview\"", -1)).hasSize(2);
         assertThat(html.split("id=\"radio-title\"", -1)).hasSize(2);
     }
