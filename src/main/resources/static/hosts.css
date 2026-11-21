@@ -18,7 +18,7 @@
 .host-dialog-icon { display:grid; place-items:center; flex:0 0 44px; height:44px; border-radius:10px; background:var(--surface-bg); color:var(--cyan); }
 .host-dialog-icon svg { width:22px; height:22px; }
 #host-dialog-description { color:var(--muted); margin:0; font-size:13px; line-height:1.6; }
-.host-form-fields { display:grid; gap:24px; }
+.host-form-fields { display:grid; grid-auto-rows:max-content; gap:24px; }
 #host-dialog .form-dialog-section-fields { gap:0; }
 #host-dialog .form-dialog-section-fields > label { display:block; width:100%; max-width:none; margin:16px 0 8px; font-size:13px; font-weight:600; }
 #host-dialog .form-dialog-section-fields > label:first-child { margin-top:0; }

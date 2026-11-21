@@ -6,6 +6,8 @@
   gap:5px;
   flex-shrink:0;
   min-width:0;
+  /* Scroll containers otherwise contribute a zero automatic minimum to grid rows. */
+  min-height:min-content;
   max-width:100%;
   overflow-x:auto;
   overscroll-behavior-x:contain;

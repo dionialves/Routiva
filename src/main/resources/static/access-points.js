@@ -92,7 +92,7 @@
     for (const row of filtered.slice((page - 1) * pageSize, page * pageSize)) {
       const tr = document.createElement('tr'), th = document.createElement('th'), link = document.createElement('a');
       th.scope = 'row'; link.textContent = row.name; link.className = 'availability-host-name';
-      window.HostMenu.attach(link, th, { ip: row.ip, hostId: row.hostId });
+      link.href = '/ap/' + encodeURIComponent(row.hostId);
       th.append(link); tr.append(th);
       for (const value of [row.ip, [row.manufacturer, row.model].filter(Boolean).join(' / '), row.connectedClients, row.lastCollectedAt ? new Date(row.lastCollectedAt).toLocaleString('pt-BR') : null]) {
         const td = document.createElement('td'); td.textContent = value ?? '—';

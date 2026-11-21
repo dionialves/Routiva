@@ -238,4 +238,4 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - O ícone `battery` (Bateria) usa `map-assets/battery.webp`, recortado e transparente, para hosts, grupos e elementos livres; reutiliza transformações, prévia e LED dinâmico de ping dos servidores (2s; validade 10s).
 
-- Nomes de hosts clicáveis usam o menu compartilhado `HostMenu`, incluindo Access Points e mapas. A seção HOST oferece Inventário e Dados Recentes desativados, Incidentes filtrados e Configurações abrindo o modal compartilhado na página atual, sem navegação. Em Configurações → Hosts, o nome continua abrindo diretamente o modal de edição.
+- Nomes de hosts clicáveis usam o menu compartilhado `HostMenu`, incluindo mapas. Na listagem Access Point, o nome do AP abre diretamente seu painel (`/ap/{hostId}`), sem menu. A seção HOST oferece Inventário e Dados Recentes desativados, Incidentes filtrados e Configurações abrindo o modal compartilhado na página atual, sem navegação. Em Configurações → Hosts, o nome continua abrindo diretamente o modal de edição.
