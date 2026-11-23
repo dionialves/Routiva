@@ -1413,7 +1413,6 @@ function renderSwitchSlots() {
     capacity.onchange = () => { slot.capacity = capacity.value; drawPreview(); };
     field('Capacidade', capacity);
     const count = document.createElement('input');
-    count.readOnly = !!slot.interfaceNames;
     count.type = 'number'; count.min = 1; count.max = slot.connector === 'wireless' ? 1 : 96; count.required = true; count.value = slot.count;
     count.oninput = () => { slot.count = Number(count.value); drawPreview(); };
     field('Portas', count);
