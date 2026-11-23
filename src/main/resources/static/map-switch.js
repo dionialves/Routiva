@@ -166,7 +166,7 @@ const MapSwitch = (() => {
     });
     return {slots, ports: orderedPorts, unidentifiedConnectors};
   }
-  function isEquipment(node) { return node.icon === 'switch' || node.icon === 'radio'; }
+  function isEquipment(node) { return node.icon === 'switch' || ['radio', 'sector-radio'].includes(node.icon); }
   function geometry(node) {
     const ports = node.ports || [];
     const keys = [...new Set(ports.map(port => port.slotId || port.type))];
@@ -197,6 +197,13 @@ const MapSwitch = (() => {
           cableDirection: singleRow || row === 0 ? 1 : -1});
       });
       left += group.width + gap;
+    }
+    if (node.icon === 'sector-radio') {
+      const wired = positioned.filter(port => port.connector !== 'wireless' && port.type !== 'wireless');
+      return {width: 90, height: 184, ports: positioned.map(port =>
+        port.connector === 'wireless' || port.type === 'wireless'
+          ? {...port, x: 33, y: 0, cableDirection: 1}
+          : {...port, x: -24 + (wired.indexOf(port) - (wired.length - 1) / 2) * 13.5, y: 54, visualScale: .55, cableDirection: 1})};
     }
     if (node.icon === 'radio') {
       const wired = positioned.filter(port => port.connector !== 'wireless' && port.type !== 'wireless');
@@ -249,7 +256,7 @@ const MapSwitch = (() => {
     const shape = serverImages[node.icon] || (node.icon === 'cloud' ? {width: 152, height: 76}
       : node.icon === 'telecom-site' ? {width: 112, height: 106}
       : geometry(node.interfacesEnabled === false ? {...node, ports: []} : node));
-    const top = serverImages[node.icon] ? -shape.height / 2 : node.icon === 'cloud' ? -38 : node.icon === 'telecom-site' ? -53 : node.icon === 'radio' ? -90 : -55;
+    const top = serverImages[node.icon] ? -shape.height / 2 : node.icon === 'cloud' ? -38 : node.icon === 'telecom-site' ? -53 : node.icon === 'sector-radio' ? -92 : node.icon === 'radio' ? -90 : -55;
     const corners = [-shape.width / 2, shape.width / 2].flatMap(x =>
       [top, top + shape.height].map(y => transformPoint(node, x, y)));
     return {left: Math.min(...corners.map(p => p.x)), right: Math.max(...corners.map(p => p.x)),
@@ -272,7 +279,7 @@ const MapSwitch = (() => {
       neutral.append(svg('feColorMatrix', {type: 'saturate', values: '0'}));
       defs.append(neutral); parent.append(defs); filter = 'url(#' + id + ')';
     }
-    parent.append(svg('image', {href: '/map-assets/' + file + '.svg?v=20261120-optimized', x, y, width, height,
+    parent.append(svg('image', {href: '/map-assets/' + file + (file === 'sector-radio' ? '.webp?v=20261123-sector' : '.svg?v=20261120-optimized'), x, y, width, height,
       preserveAspectRatio: 'none', 'aria-hidden': 'true', 'pointer-events': 'none', ...(filter ? {filter} : {})}));
   }
   function pingIndicator(state) {
@@ -288,7 +295,7 @@ const MapSwitch = (() => {
       outer.append(group);
     }
     let bodyFilter;
-    if (node.icon !== 'radio' && /^#[0-9a-fA-F]{6}$/.test(node.switchColor || '')) {
+    if (!['radio', 'sector-radio'].includes(node.icon) && /^#[0-9a-fA-F]{6}$/.test(node.switchColor || '')) {
       const id = 'switch-tint-' + (++tintSequence);
       const channels = [1, 3, 5].map(offset => parseInt(node.switchColor.slice(offset, offset + 2), 16) / 255);
       const matrix = channels.flatMap(channel => [channel * 0.2126, channel * 0.7152, channel * 0.0722, 0, 0]);
@@ -296,15 +303,16 @@ const MapSwitch = (() => {
       filter.append(svg('feColorMatrix', {type: 'matrix', values: [...matrix, 0, 0, 0, 1, 0].join(' ')}));
       defs.append(filter); group.append(defs); bodyFilter = 'url(#' + id + ')';
     }
-    const radio = node.icon === 'radio';
-    const top = radio ? -90 : -55;
-    image(svg, group, radio ? 'radio' : 'switch', -shape.width / 2, top, shape.width, shape.height, bodyFilter);
+    const sector = node.icon === 'sector-radio';
+    const radio = node.icon === 'radio' || sector;
+    const top = sector ? -92 : radio ? -90 : -55;
+    image(svg, group, sector ? 'sector-radio' : radio ? 'radio' : 'switch', -shape.width / 2, top, shape.width, shape.height, bodyFilter);
     group.append(svg('rect', {x: -shape.width / 2, y: top, width: shape.width, height: shape.height,
       rx: 6, fill: 'transparent', stroke: selected && !options.selectionFrame ? 'var(--cyan)' : 'none',
       'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke',
       'pointer-events': 'all'}));
     const status = pingIndicator(options.pingState);
-    const led = svg('circle', {cx: radio ? -36.4 : -shape.width / 2 + shape.width * 0.0557, cy: radio ? 35.2 : 17, r: radio ? 1.6 : 3.5,
+    const led = svg('circle', {cx: sector ? -23.7 : radio ? -36.4 : -shape.width / 2 + shape.width * 0.0557, cy: sector ? 28.8 : radio ? 35.2 : 17, r: sector ? 2.7 : radio ? 1.6 : 3.5,
       fill: status.color, class: 'switch-status-led', 'data-ping-host': node.hostId || '',
       role: 'img', 'aria-label': status.label});
     const statusTitle = svg('title', {}); statusTitle.textContent = status.label;
@@ -319,7 +327,9 @@ const MapSwitch = (() => {
       const title = svg('title', {});
       title.textContent = description;
       g.append(title);
-      if (radio && (port.connector === 'wireless' || port.type === 'wireless')) {
+      if (sector && (port.connector === 'wireless' || port.type === 'wireless')) {
+        // Invisible anchor; retain focus and hit target for editing.
+      } else if (radio && (port.connector === 'wireless' || port.type === 'wireless')) {
         const mark = svg('g', {class: 'radio-wireless-indicator', fill: 'none', stroke: plugged ? '#7dd3fc' : '#55565a',
           'stroke-width': 1.1, 'stroke-linecap': 'round', 'data-wireless-connected': String(!!plugged)});
         mark.append(svg('circle', {cx: -2.7, cy: 0, r: .8, fill: plugged ? '#7dd3fc' : '#55565a', stroke: 'none'}));

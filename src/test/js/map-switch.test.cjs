@@ -561,3 +561,25 @@ test('saved maps draw ports in numeric order without changing stored ports or ca
   assert.equal(JSON.stringify(ports),saved);
   assert.ok(shape.ports.every(p=>p.id===p.name));
 });
+
+test('sector radio keeps wired and invisible wireless anchors attached through transforms', () => {
+  const node = {icon: 'sector-radio', x: 100, y: 200, ports: [
+    {id: 'ether', name: 'ether1', type: 'rj45', connector: 'electrical'},
+    {id: 'wifi', name: 'wlan1', type: 'wireless', connector: 'wireless'}]};
+  assert.equal(switchMap.isEquipment(node), true);
+  const shape = switchMap.geometry(node);
+  assert.deepEqual(shape.ports.map(p => [p.x, p.y]), [[-24, 54], [33, 0]]);
+  assert.deepEqual(switchMap.endpoint(node, 'wifi'), {x: 133, y: 200});
+  assert.deepEqual(switchMap.endpoint({...node, rotation: 90, scale: 2}, 'wifi'), {x: 100, y: 266});
+});
+test('sector radio hides wireless artwork and overlays the existing LED with ping state', () => {
+  const make = (tag, attributes) => ({tag, attributes, children: [], append(...children) {this.children.push(...children);}});
+  for (const [pingState, color] of [['online', '#58bd83'], ['offline', '#ff0000'], [null, '#687486']]) {
+    const root = make('g', {});
+    switchMap.draw(make, root, {icon: 'sector-radio', hostId: '1', ports: [
+      {id: 'wifi', type: 'wireless', connector: 'wireless', name: 'wlan1'}]}, 'gray', false, {pingState});
+    assert.equal(root.children.find(c => c.attributes.class === 'switch-status-led').attributes.fill, color);
+    const port = root.children.find(c => c.attributes.class === 'switch-port');
+    assert.ok(port.children.every(c => c.tag === 'title' || c.tag === 'rect'));
+  }
+});

@@ -119,10 +119,10 @@ public class NetworkMapService {
         validateHierarchy(input, hierarchy);
         var nodes = layout.nodes().stream().collect(java.util.stream.Collectors.toMap(Node::id, n -> n));
         for (var node : layout.nodes()) {
-            if (!Set.of("circle", "switch", "radio", "telecom-site", "cloud", "tower-server", "vm-server", "battery").contains(node.icon())) throw invalid();
+            if (!Set.of("circle", "switch", "radio", "sector-radio", "telecom-site", "cloud", "tower-server", "vm-server", "battery").contains(node.icon())) throw invalid();
             if ("telecom-site".equals(node.icon()) && (node.groupId() == null || node.groupId().isBlank()
                 || (node.hostId() != null && !node.hostId().isBlank()))) throw invalid();
-            if ("radio".equals(node.icon()) && (node.hostId() == null || node.hostId().isBlank()
+            if (Set.of("radio", "sector-radio").contains(node.icon()) && (node.hostId() == null || node.hostId().isBlank()
                 || node.ports().size() > 4 || node.slots().stream().anyMatch(java.util.Objects::isNull)
                 || node.slots().stream().mapToLong(Slot::count).sum() > 4)) throw invalid();
             var capacities = Map.of("electrical", "rj45", "sfp1g", "sfp", "sfp10g", "sfp", "sfp40g", "qsfp", "sfp100g", "qsfp");

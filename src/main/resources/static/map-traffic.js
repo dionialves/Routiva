@@ -10,7 +10,7 @@ const MapTraffic = (() => {
         portId: link[portKey]};
     });
     if (endpoints.every(endpoint => endpoint.wireless)) return true;
-    return endpoints.some((endpoint, i) => endpoint.node?.icon === 'radio'
+    return endpoints.some((endpoint, i) => ['radio', 'sector-radio'].includes(endpoint.node?.icon)
       && (endpoint.wireless || !endpoint.portId) && Boolean(endpoints[1 - i].node?.groupId));
   }
 

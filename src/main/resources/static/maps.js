@@ -402,7 +402,7 @@ function draw() {
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
-    if (['switch', 'radio'].includes(n.icon)) MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
+    if (['switch', 'radio', 'sector-radio'].includes(n.icon)) MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
       selectionFrame: editing && tool === 'select' && selection.size === 1,
       connectedPorts: MapSwitch.connectedPorts(n, links),
       pingState: editing ? 'unknown' : pingStateFor(n.hostId),
@@ -449,7 +449,7 @@ function draw() {
       draw.hostMenus.push(window.HostMenu.attach(g, $('workspace'), {ip: host?.ip, hostId: n.hostId}));
     }
     if (monitored) popSummary.bind(g, n);
-    if (['switch', 'radio'].includes(n.icon) && n.interfacesEnabled !== false && n.ports?.length)
+    if (['switch', 'radio', 'sector-radio'].includes(n.icon) && n.interfacesEnabled !== false && n.ports?.length)
       canvas.append(g);
     else foregroundElements.push(g);
   }
@@ -495,7 +495,7 @@ function draw() {
   if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
   if (editing && tool === 'select' && selection.size === 1) {
     const node = nodes.find(n => selection.has(n.id));
-    if (node && ['switch', 'radio', 'telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(node.icon)) drawTransformHandles(canvas, node);
+    if (node && ['switch', 'radio', 'sector-radio', 'telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(node.icon)) drawTransformHandles(canvas, node);
   }
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
@@ -516,7 +516,7 @@ function choose(node, additive = false) {
   }
   if (!editing || tool === 'pan') return;
   if (tool === 'connect') {
-    if (!['switch', 'radio'].includes(node.icon) || node.interfacesEnabled === false || !node.ports?.length) connectEndpoint(node, null);
+    if (!['switch', 'radio', 'sector-radio'].includes(node.icon) || node.interfacesEnabled === false || !node.ports?.length) connectEndpoint(node, null);
     return;
   }
   const origin = selected;
@@ -875,7 +875,7 @@ function updatePingIndicators() {
 async function refreshPingState(token) {
   if (!current || editing || token !== pingGeneration) return;
   clearTimeout(pingTimer);
-  const equipment = current.layout.nodes.filter(n => ['switch', 'radio', 'tower-server', 'vm-server', 'battery'].includes(n.icon));
+  const equipment = current.layout.nodes.filter(n => ['switch', 'radio', 'sector-radio', 'tower-server', 'vm-server', 'battery'].includes(n.icon));
   const hosts = [...new Set(equipment.map(n => n.hostId).filter(Boolean))];
   const groups = [...new Set(equipment.filter(n => ['tower-server', 'vm-server', 'battery'].includes(n.icon)).map(n => n.groupId).filter(Boolean))];
   if (!hosts.length && !groups.length) return;
@@ -1363,7 +1363,7 @@ $('link-form').onsubmit = async event => {
 };
 function switchDraft() {
   const ports = MapSwitch.portsForSlots(configuredPorts, configuredSlots);
-  return $('element-icon').value === 'radio' && ports?.length > 4 ? null : ports;
+  return ['radio', 'sector-radio'].includes($('element-icon').value) && ports?.length > 4 ? null : ports;
 }
 function renderSwitchSlots() {
   const panel = $('switch-slots');
@@ -1465,7 +1465,7 @@ $('load-switch-interfaces').onclick = async () => {
       failureMessage = 'Nenhuma interface com item de estado encontrada no Zabbix. A configuração atual foi preservada.';
       throw new Error();
     }
-    if ($('element-icon').value === 'radio' && imported.ports.length > 4) {
+    if (['radio', 'sector-radio'].includes($('element-icon').value) && imported.ports.length > 4) {
       failureMessage = 'O host possui mais de 4 interfaces. Configure manualmente até 4 interfaces para este rádio. A configuração atual foi preservada.';
       throw new Error();
     }
@@ -1486,7 +1486,7 @@ $('load-switch-interfaces').onclick = async () => {
   }
 };
 $('add-switch-slot').onclick = () => {
-  if ($('element-icon').value === 'radio' && configuredSlots.reduce((sum, slot) => sum + slot.count, 0) >= 4) return;
+  if (['radio', 'sector-radio'].includes($('element-icon').value) && configuredSlots.reduce((sum, slot) => sum + slot.count, 0) >= 4) return;
   configuredSlots.push({id: MapSwitch.newId(), name: '', connector: 'electrical', capacity: '1g', count: 1});
   renderSwitchSlots(); drawPreview();
   $('switch-slots').lastElementChild.querySelector('input').focus();
@@ -1530,8 +1530,8 @@ function drawPreview() {
   preview.replaceChildren(group);
   const name = $('element-name').value.trim() || 'Nome do elemento';
   const icon = $('element-icon').value;
-  const isRadio = icon === 'radio';
-  const isSwitch = ['switch', 'radio'].includes(icon);
+  const isRadio = ['radio', 'sector-radio'].includes(icon);
+  const isSwitch = ['switch', 'radio', 'sector-radio'].includes(icon);
   $('element-color-note').hidden = isSwitch;
   $('switch-color-field').hidden = !isSwitch || isRadio;
   $('reset-switch-color').disabled = !configuredSwitchColor;
@@ -1666,7 +1666,7 @@ $('element-form').onsubmit = event => {
   const ports = switchDraft();
   if (!ports) {
     drawPreview();
-    $('port-error').textContent = (icon === 'radio' ? 'O rádio permite no máximo 4 interfaces, sendo apenas uma Wireless. Revise os nomes, capacidades e quantidades dos slots.' : 'Existem slots inválidos ou mais de uma interface Wireless. Habilite as interfaces e preencha nome, capacidade e quantidade de 1 a 96 portas.');
+    $('port-error').textContent = (['radio', 'sector-radio'].includes(icon) ? 'O rádio permite no máximo 4 interfaces, sendo apenas uma Wireless. Revise os nomes, capacidades e quantidades dos slots.' : 'Existem slots inválidos ou mais de uma interface Wireless. Habilite as interfaces e preencha nome, capacidade e quantidade de 1 a 96 portas.');
     $('port-error').scrollIntoView({block: 'nearest'});
     return;
   }
