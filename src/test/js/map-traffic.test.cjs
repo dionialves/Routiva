@@ -166,3 +166,16 @@ test('Zabbix validity follows each item interval and traffic clock independently
   assert.equal(traffic.fresh(endpoint,190001),false);
   assert.equal(traffic.fresh({...endpoint,measuredAt:80000},70000),false);
 });
+
+test('aggregate PON load does not drive branch color or traffic pulses', () => {
+  const layer = element('g');
+  layer.trafficContext = {link: {from:'olt', to:'pop', fromPort:'pon1',
+    connection:{hostA:'host-olt', interfaceA:'gpon-1'}}};
+  const nodes = [{id:'olt', hostId:'host-olt', ports:[{id:'pon1', name:'gpon-1', connector:'pon'}]}];
+  const path = element('path', {d:'M 0 0 L 200 0'});
+  const route = [{x:0,y:0},{x:200,y:0}];
+  const a = {name:'gpon-1', up:true, measuredAt:10000, txBps:90, rxBps:10, capacityBps:100};
+  traffic.render(element, layer, path, route, nodes, {a}, true, false, 11000);
+  assert.equal(path.attrs['--traffic-color'], '#687486');
+  assert.equal(layer.trafficPulses.attrs.visibility, 'hidden');
+});

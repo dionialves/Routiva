@@ -94,3 +94,12 @@ test('tooltip clamps position to the viewport and renders host text safely', () 
   assert.equal(panel.hidden, true);
   assert.equal(source.attributes['aria-describedby'], undefined);
 });
+
+test('aggregate PON traffic remains available when an individual destination is down', () => {
+  const reading = sample({txBps: '200000000'});
+  reading.b.up = false;
+  const data = details(reading, definition, hosts, false, now, true);
+  assert.equal(data.status, 'Inativa');
+  assert.equal(data.aggregatePon, true);
+  assert.equal(data.traffic.tx, 200e6);
+});

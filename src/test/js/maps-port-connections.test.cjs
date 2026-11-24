@@ -34,3 +34,13 @@ test('self links do not complete and legacy center links cannot be duplicated in
   assert.equal(run('current.layout.links.length'), 1);
   assert.equal(run('checkpoints'), 1);
 });
+
+test('PON allows multiple links in either direction and rejects duplicate endpoint pairs', () => {
+  const run = setup();
+  run("a.ports = [{id:'pon1', connector:'pon'}]; const c = {id:'c'};");
+  run("connectEndpoint(a, 'pon1'); connectEndpoint(b, null);");
+  run("connectEndpoint(c, null); connectEndpoint(a, 'pon1');");
+  run("connectEndpoint(b, null); connectEndpoint(a, 'pon1');");
+  assert.equal(run('current.layout.links.length'), 2);
+  assert.equal(run('checkpoints'), 2);
+});

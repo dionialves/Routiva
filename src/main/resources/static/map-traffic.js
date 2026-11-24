@@ -44,6 +44,18 @@ const MapTraffic = (() => {
     return {down, tx: !down && fresh(a, now) ? (now <= (a.txValidUntil ?? a.measuredAt + 30000) ? number(a.txBps) : null) : null,
       rx: !down && fresh(a, now) ? (now <= (a.rxValidUntil ?? a.measuredAt + 30000) ? number(a.rxBps) : null) : null, capacity: number(a?.capacityBps)};
   }
+  function mappedSourcePort(link, nodes, reading, definition = link?.connection) {
+    const hostId = reading?.hostA || definition?.hostA;
+    const name = reading?.a?.name || definition?.interfaceA;
+    if (!hostId || !name) return null;
+    for (const side of ['from', 'to']) {
+      const node = nodes.find(node => node.id === link?.[side]);
+      if (node?.hostId === hostId) return node.ports?.find(port => port.name === name);
+      const entry = node?.linkInterfaces?.find(entry => entry.hostId === hostId && entry.name === name);
+      if (entry) return entry;
+    }
+    return null;
+  }
   function render(svg, layer, path, route, nodes, reading, enabled, reverse = false, now = Date.now()) {
     const wireless = Boolean(layer.trafficContext?.wireless);
     const data = state(reading, now);
@@ -58,7 +70,10 @@ const MapTraffic = (() => {
         && entry.name === (reading?.a?.name || link?.connection?.interfaceA));
     data.capacity = capacities[port?.capacity] || data.capacity;
     data.down = [reading?.a, reading?.b].some(endpoint => fresh(endpoint, now) && !endpoint.up);
-    if (data.down) { data.tx = null; data.rx = null; }
+    if (data.down || mappedSourcePort(link, nodes, reading)?.connector === 'pon') {
+      data.tx = null;
+      data.rx = null;
+    }
     path.classList.toggle('traffic-down', !explicitPulses && data.down);
     const d = path.getAttribute('d');
     const color = explicitPulses ? '#22C55E' : data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity) || '#687486';
@@ -120,6 +135,6 @@ const MapTraffic = (() => {
     }
   }
 
-  return {fresh, isWireless, number, count, utilizationColor, rate, state, render};
+  return {fresh, isWireless, mappedSourcePort, number, count, utilizationColor, rate, state, render};
 })();
 if (typeof module !== 'undefined') module.exports = MapTraffic;

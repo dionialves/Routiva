@@ -1,7 +1,7 @@
 'use strict';
 
 const MapConnectionTooltip = (() => {
-  function details(reading, definition, hosts, failed = false, now = Date.now()) {
+  function details(reading, definition, hosts, failed = false, now = Date.now(), aggregatePon = false) {
     const endpoints = ['a', 'b'].map((key, index) => {
       const sample = reading?.[key];
       const hostId = (index ? reading?.hostB : reading?.hostA) || (index ? definition?.hostB : definition?.hostA);
@@ -14,12 +14,12 @@ const MapConnectionTooltip = (() => {
     });
     const status = endpoints.some(e => e.status === 'DOWN') ? 'Inativa'
       : endpoints.every(e => e.status === 'UP') ? 'Ativa' : 'Indisponível';
-    const traffic = MapTraffic.state(reading, now);
+    const traffic = MapTraffic.state(aggregatePon && reading ? {a: reading.a} : reading, now);
     const staleTraffic = reading?.a && !reading.a.error && (reading.a.rxBps != null && now > reading.a.rxValidUntil
       || reading.a.txBps != null && now > reading.a.txValidUntil);
     const timestamps = endpoints.map(e => e.measuredAt).filter(t => Number.isFinite(t) && t > 0 && t <= now);
     const queried = [reading?.a?.queriedAt, reading?.b?.queriedAt].filter(t => Number.isFinite(t) && t > 0);
-    return {endpoints, status, traffic, queriedAt: queried.length ? Math.min(...queried) : null, measuredAt: timestamps.length ? Math.min(...timestamps) : null,
+    return {endpoints, status, traffic, aggregatePon, queriedAt: queried.length ? Math.min(...queried) : null, measuredAt: timestamps.length ? Math.min(...timestamps) : null,
       note: failed ? 'Consulta indisponível · últimos dados preservados' : reading?.a?.queryError || reading?.b?.queryError || reading?.a?.trafficError || (staleTraffic ? 'Tráfego: leitura desatualizada' : '') || (!reading ? 'Carregando dados do Zabbix' : '')};
   }
   let panel, activeId, activeSource, lastPoint, openTimer, pending, watchingDismissal = false;
@@ -69,7 +69,7 @@ const MapConnectionTooltip = (() => {
     const traffic = element('section', 'connection-tooltip-traffic');
     const heading = element('div', 'connection-tooltip-row');
     const trafficTitle = element('strong', 'connection-tooltip-traffic-title');
-    trafficTitle.append(icon('chart-column'), element('span', '', 'Tráfego atual'));
+    trafficTitle.append(icon('chart-column'), element('span', '', data.aggregatePon ? 'Tráfego da porta PON' : 'Tráfego atual'));
     heading.append(trafficTitle,
       badge(data.traffic.capacity > 0 ? MapTraffic.rate(data.traffic.capacity) : 'Capacidade indisponível'));
     traffic.append(heading);
@@ -77,7 +77,7 @@ const MapConnectionTooltip = (() => {
       const row = element('div', 'connection-tooltip-rate ' + key);
       const line = element('div', 'connection-tooltip-rate-line');
       const label = element('span', 'connection-tooltip-direction ' + key);
-      label.append(icon(index ? 'arrow-left' : 'arrow-right'), element('span', '', index ? 'RX · B → A' : 'TX · A → B'));
+      label.append(icon(index ? 'arrow-left' : 'arrow-right'), element('span', '', data.aggregatePon ? (index ? 'RX total' : 'TX total') : (index ? 'RX · B → A' : 'TX · A → B')));
       const value = data.traffic[key];
       const utilization = value != null && data.traffic.capacity > 0 ? value / data.traffic.capacity * 100 : null;
       const valueBlock = element('strong', 'connection-tooltip-value', MapTraffic.rate(value));

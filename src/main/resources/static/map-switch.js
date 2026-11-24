@@ -26,7 +26,7 @@ const MapSwitch = (() => {
   const capacities = {electrical: {label: 'Elétrica', type: 'rj45'}, sfp1g: {label: 'SFP1G', type: 'sfp'},
     sfp10g: {label: 'SFP10G', type: 'sfp'}, sfp40g: {label: 'SFP40G', type: 'qsfp'}, sfp100g: {label: 'SFP100G', type: 'qsfp'}};
   const connectors = {
-    wireless: {label: 'Wireless', type: 'wireless'},
+    wireless: {label: 'Wireless', type: 'wireless'}, pon: {label: 'PON', type: 'sfp'},
     electrical: {label: 'Elétrico', type: 'rj45'}, sfp: {label: 'SFP', type: 'sfp'},
     sfpplus: {label: 'SFP+', type: 'sfp'}, sfp28: {label: 'SFP28', type: 'sfp'},
     qsfpplus: {label: 'QSFP+', type: 'qsfp'}, sfp56: {label: 'SFP56', type: 'sfp'},
@@ -112,10 +112,11 @@ const MapSwitch = (() => {
   function zabbixConnector(row, previous) {
     const name = (row['default-name'] || row.name || '').toLowerCase();
     const declared = String(row.connector || '').trim().toLowerCase();
-    const connector = ({rj45: 'electrical', 'sfp+': 'sfpplus', 'qsfp+': 'qsfpplus'})[declared] || declared;
+    const connector = ({rj45: 'electrical', 'sfp+': 'sfpplus', 'qsfp+': 'qsfpplus', gpon: 'pon', epon: 'pon'})[declared] || declared;
     if (Object.hasOwn(connectors, connector)) return {value: connector, identified: true};
     if (['71', '157'].includes(row['snmp-type']) || /^(?:wifi|wlan|ath)\d|^wireless$/.test(name))
       return {value: 'wireless', identified: true};
+    if (/^(?:gpon|epon|xgpon|xgs-?pon|pon)[-_]?[0-9]/.test(name)) return {value: 'pon', identified: true};
     if (/^(?:qsfp|sfp)/.test(name)) return {value: discoveredConnector(name, true, 0), identified: true};
     // The ASR physical TenGigabitEthernet representation uses the map's SFP+ library.
     if (/^tengigabitethernet\d/.test(name)) return {value: 'sfpplus', identified: true};

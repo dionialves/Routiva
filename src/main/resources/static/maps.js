@@ -367,8 +367,7 @@ function draw() {
       'aria-hidden': 'true'});
     for (const handler of ['onpointerdown', 'onclick', 'ondblclick']) hit[handler] = line[handler];
     if (link.mappedConnectionId && !editing) {
-      const tooltipData = () => MapConnectionTooltip.details(connectionReadings.get(link.mappedConnectionId),
-        connectionDefinitions.find(c => c.id === link.mappedConnectionId), inventory, connectionFailures.has(link.mappedConnectionId), connectionDisplayTime(link.mappedConnectionId));
+      const tooltipData = () => mappedConnectionTooltip(link);
       for (const path of [line, hit]) {
         path.dataset.connectionTooltip = link.mappedConnectionId;
         path.onpointermove = event => MapConnectionTooltip.scheduleShow(link.mappedConnectionId, path,
@@ -1577,9 +1576,10 @@ $('add-switch-slot').onclick = () => {
 function connectEndpoint(node, portId) {
   if (!editing) return;
   if (tool !== 'connect') { setTool('connect'); }
-  const occupied = (id, port) => port && current.layout.links.some(link =>
-    (link.from === id && link.fromPort === port) || (link.to === id && link.toPort === port));
-  if (occupied(node.id, portId)) { $('hint').textContent = 'Esta porta já possui uma conexão.'; return; }
+  const port = node.ports?.find(port => port.id === portId);
+  const occupied = portId && port?.connector !== 'pon' && current.layout.links.some(link =>
+    (link.from === node.id && link.fromPort === portId) || (link.to === node.id && link.toPort === portId));
+  if (occupied) { $('hint').textContent = 'Esta porta já possui uma conexão.'; return; }
   if (!connectionOrigin) {
     connectionOrigin = {nodeId: node.id, portId};
     selected = node.id;
@@ -1755,6 +1755,17 @@ $('element-form').onsubmit = event => {
     return;
   }
   const ids = new Set(ports.map(port => port.id));
+  const connectionsPerPort = new Map();
+  for (const link of current.layout.links) {
+    const portId = link.from === node.id ? link.fromPort : link.to === node.id ? link.toPort : null;
+    if (portId) connectionsPerPort.set(portId, (connectionsPerPort.get(portId) || 0) + 1);
+  }
+  const sharedPort = ports.find(port => port.connector !== 'pon' && connectionsPerPort.get(port.id) > 1);
+  if (sharedPort) {
+    $('port-error').textContent = sharedPort.name + ' tem vários enlaces. Remova os excedentes antes de mudar o conector.';
+    $('port-error').scrollIntoView({block: 'nearest'});
+    return;
+  }
   const affected = current.layout.links.filter(link => (link.from === node.id && link.fromPort && !ids.has(link.fromPort))
     || (link.to === node.id && link.toPort && !ids.has(link.toPort)));
   const affectedNames = affected.map(link => {
@@ -1950,13 +1961,20 @@ function mappedConnectionTitle(id) {
 }
 const mappedPending = new Map();
 const mappedVersions = new WeakMap();
+function mappedConnectionTooltip(link) {
+  const id = link.mappedConnectionId;
+  const reading = connectionReadings.get(id);
+  const definition = connectionDefinitions.find(c => c.id === id) || link.connection;
+  const port = MapTraffic.mappedSourcePort(link, current.layout.nodes, reading, definition);
+  return MapConnectionTooltip.details(reading, definition, inventory, connectionFailures.has(id),
+    connectionDisplayTime(id), port?.connector === 'pon');
+}
 function renderMappedReadings() {
   document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);
   if (typeof MapConnectionTooltip !== 'undefined') {
-    const ids = new Set(current?.layout.links.map(link => link.mappedConnectionId).filter(Boolean));
-    ids.forEach(id => MapConnectionTooltip.refresh(id,
-      MapConnectionTooltip.details(connectionReadings.get(id), connectionDefinitions.find(c => c.id === id), inventory,
-        connectionFailures.has(id), connectionDisplayTime(id))));
+    for (const link of current?.layout.links || []) {
+      if (link.mappedConnectionId) MapConnectionTooltip.refresh(link.mappedConnectionId, mappedConnectionTooltip(link));
+    }
   }
 }
 async function refreshMappedConnections(force = false) {

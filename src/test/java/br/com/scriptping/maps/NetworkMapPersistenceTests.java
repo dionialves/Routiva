@@ -88,6 +88,23 @@ class NetworkMapPersistenceTests {
         } finally { org.mockito.Mockito.reset(inventory); }
     }
 
+    @Test void ponPortsAllowMultipleLinksButRejectDuplicateEndpointPairs() throws Exception {
+        var a = new Node("a", null, null, null, "OLT", 0, 0, null, "switch",
+            List.of(new Port("pa", "sfp", "sa", "gpon-1", "unknown", null, null, null, null, "pon")),
+            List.of(new Slot("sa", "gpon-", "unknown", 1, null, "pon")));
+        var b = new Node("b", null, null, null, "POP A", 100, 0, null);
+        var c = new Node("c", null, null, null, "POP B", 200, 0, null);
+        var first = new Link("a", "b", "pa", null);
+        var second = new Link("c", "a", null, "pa");
+        var saved = service.save(new Saved(null, 0, new Layout("PON", null, 0,
+            List.of(a, b, c), List.of(first, second)), null));
+        var reloaded = service.maps().stream().filter(map -> map.id().equals(saved.id())).findFirst().orElseThrow();
+        assertThat(reloaded.layout().links()).containsExactly(first, second);
+        assertThatThrownBy(() -> service.save(new Saved(null, 0, new Layout("Duplicado", null, 0,
+            List.of(a, b, c), List.of(first, second, new Link("b", "a", null, "pa"))), null)))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
     @Test void mappedInterfacesMustBelongToConfiguredElementPorts() throws Exception {
         var a = new Node("a", null, "ha", null, "A", 0, 0, null, "switch",
             List.of(new Port("pa", "rj45", "sa", "eth1_emac1", "1g", null, null, null, null, "electrical")),

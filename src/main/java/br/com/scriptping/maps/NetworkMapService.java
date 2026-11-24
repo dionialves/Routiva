@@ -126,7 +126,7 @@ public class NetworkMapService {
                 || node.ports().size() > 4 || node.slots().stream().anyMatch(java.util.Objects::isNull)
                 || node.slots().stream().mapToLong(Slot::count).sum() > 4)) throw invalid();
             var capacities = Map.of("electrical", "rj45", "sfp1g", "sfp", "sfp10g", "sfp", "sfp40g", "qsfp", "sfp100g", "qsfp");
-            var connectors = Map.ofEntries(Map.entry("electrical", "rj45"), Map.entry("sfp", "sfp"), Map.entry("sfpplus", "sfp"), Map.entry("sfp28", "sfp"), Map.entry("qsfpplus", "qsfp"), Map.entry("sfp56", "sfp"), Map.entry("qsfp28", "qsfp"), Map.entry("qsfp56", "qsfp"), Map.entry("qsfpdd", "qsfp"), Map.entry("qsfpdd800", "qsfp"), Map.entry("wireless", "wireless"));
+            var connectors = Map.ofEntries(Map.entry("electrical", "rj45"), Map.entry("sfp", "sfp"), Map.entry("sfpplus", "sfp"), Map.entry("sfp28", "sfp"), Map.entry("qsfpplus", "qsfp"), Map.entry("sfp56", "sfp"), Map.entry("qsfp28", "qsfp"), Map.entry("qsfp56", "qsfp"), Map.entry("qsfpdd", "qsfp"), Map.entry("qsfpdd800", "qsfp"), Map.entry("wireless", "wireless"), Map.entry("pon", "sfp"));
             var speeds = Set.of("unknown", "10m", "100m", "1g", "10g", "25g", "40g", "50g", "100g", "200g", "400g", "800g");
             if (node.linkInterfaces() != null) {
                 if (node.groupId() == null && !node.linkInterfaces().isEmpty()) throw invalid();
@@ -216,8 +216,10 @@ public class NetworkMapService {
             if (!pairs.add(Set.copyOf(endpoints))) throw invalid();
             for (var endpoint : endpoints) {
                 if (endpoint.get(1).isEmpty()) continue;
-                if (nodes.get(endpoint.get(0)).ports().stream().noneMatch(port -> port.id().equals(endpoint.get(1)))
-                    || !occupied.add(endpoint)) throw invalid();
+                var port = nodes.get(endpoint.get(0)).ports().stream()
+                    .filter(candidate -> candidate.id().equals(endpoint.get(1))).findFirst()
+                    .orElseThrow(this::invalid);
+                if (!"pon".equals(port.connector()) && !occupied.add(endpoint)) throw invalid();
             }
         }
         long now = System.currentTimeMillis();

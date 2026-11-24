@@ -583,3 +583,14 @@ test('sector radio hides wireless artwork and overlays the existing LED with pin
     assert.ok(port.children.every(c => c.tag === 'title' || c.tag === 'rect'));
   }
 });
+
+test('Zabbix identifies physical GPON ports and keeps their IDs when reimported', () => {
+  const previous = [{id: 'existing', name: 'gpon-1', connector: 'sfp', capacity: '1g'}];
+  const {ports} = switchMap.importInterfaces([
+    {name: 'gpon-1', source: 'zabbix'},
+    {name: 'gpon-2', source: 'zabbix'},
+  ], previous);
+  assert.deepEqual(ports.map(port => [port.connector, port.type]), [['pon', 'sfp'], ['pon', 'sfp']]);
+  assert.equal(ports[0].id, 'existing');
+  assert.equal(ports[1].capacity, 'unknown');
+});
