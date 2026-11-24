@@ -222,9 +222,14 @@
   function updateAuthLogin() {
     const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
     document.querySelector('label[for="host-auth-port"]').textContent = mimosa ? 'Porta HTTPS' : 'Porta API / SSH';
-    $('host-auth-login').hidden = mimosa;
-    $('host-auth-login-label').hidden = mimosa;
+    $('host-auth-login-field').hidden = mimosa;
     if (mimosa) $('host-auth-login').value = 'configure';
+  }
+  function hideAuthPassword() {
+    $('host-auth-password').type = 'password';
+    $('host-auth-password-toggle').setAttribute('aria-label', 'Mostrar senha');
+    $('host-auth-password-toggle').setAttribute('aria-pressed', 'false');
+    $('host-auth-password-toggle').querySelector('use').setAttribute('href', '/icons.svg#eye');
   }
   function authInput() {
     return { manufacturer: $('host-auth-manufacturer').value, login: $('host-auth-login').value,
@@ -232,6 +237,7 @@
       tls: $('host-auth-tls').checked };
   }
   function tab(name, focus = false) {
+    $('host-edit-content').scrollTop = 0;
     activeTab = name;
     $('host-auth-test').hidden = name !== 'auth';
     for (const key of ['general', 'auth']) {
@@ -241,7 +247,7 @@
       if (focus && key === name) button.focus();
     }
     $('host-save').disabled = busy || (name === 'auth' ? !authLoaded : current && !current.editable);
-    $('host-save-label').textContent = name === 'auth' ? 'Salvar autenticação' : 'Salvar no Zabbix';
+    $('host-save-label').textContent = name === 'auth' ? 'Salvar autenticação' : 'Salvar';
   }
   for (const name of ['general', 'auth']) {
     $(`host-${name}-tab`).addEventListener('click', () => tab(name));
@@ -277,6 +283,14 @@
     $('host-auth-tls-row').hidden = ssh || mimosa;
     if (ssh || mimosa) $('host-auth-tls').checked = mimosa;
   });
+  $('host-auth-password-toggle').addEventListener('click', event => {
+    const button = event.currentTarget, password = $('host-auth-password');
+    const visible = password.type === 'password';
+    password.type = visible ? 'text' : 'password';
+    button.setAttribute('aria-label', visible ? 'Ocultar senha' : 'Mostrar senha');
+    button.setAttribute('aria-pressed', String(visible));
+    button.querySelector('use').setAttribute('href', visible ? '/icons.svg#eye-off' : '/icons.svg#eye');
+  });
   $('host-auth-tls').addEventListener('change', () => {
     if (['8728', '8729'].includes($('host-auth-port').value)) $('host-auth-port').value = $('host-auth-tls').checked ? 8729 : 8728;
   });
@@ -286,7 +300,7 @@
     try {
       const result = await request('/' + current.id + '/authentication' + (testOnly ? '/test' : ''), testOnly ? 'POST' : 'PUT', authInput());
       if (!testOnly) {
-        $('host-auth-password').value = ''; authBaseline = JSON.stringify(authInput());
+        $('host-auth-password').value = ''; hideAuthPassword(); authBaseline = JSON.stringify(authInput());
         current.connectionStatus = result.status === 'ACTIVE' ? 'ACTIVE' : 'ERROR';
         const row = hosts.find(host => host.id === current.id);
         if (row) row.connectionStatus = current.connectionStatus;
@@ -354,9 +368,9 @@
   }
   function open(host, trigger) {
     if (busy || !options) return;
-    current = host; opener = trigger; form.reset(); clearErrors();
+    current = host; opener = trigger; form.reset(); hideAuthPassword(); clearErrors();
     $('host-dialog-title').textContent = host ? 'Editar host' : 'Novo host';
-    $('host-dialog-description').textContent = host ? 'As alterações serão aplicadas ao host no Zabbix ao salvar.'
+    $('host-dialog-description').textContent = host ? 'Altere os dados do host e salve as alterações no Zabbix.'
       : 'O novo host será cadastrado no Zabbix ao salvar.';
     $('host-delete').hidden = !host || !host.editable;
     $('host-general').querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = Boolean(host && !host.editable); });
@@ -366,9 +380,9 @@
     }
     picker('host-group', options.groups, host?.groups || []);
     picker('host-template', options.templates, host?.templates || []);
-    endpointRequired(); baseline = JSON.stringify(readInput()); dialog.showModal(); tab('general'); loadAuth(host); field('hostname').focus();
+    endpointRequired(); baseline = JSON.stringify(readInput()); $('host-edit-content').scrollTop = 0; dialog.showModal(); tab('general'); loadAuth(host); field('hostname').focus();
   }
-  function closeNow() { dialog.close(); $('host-auth-password').value = ''; authLoaded = false; opener?.focus(); }
+  function closeNow() { dialog.close(); $('host-auth-password').value = ''; hideAuthPassword(); authLoaded = false; opener?.focus(); }
   function requestClose() {
     if (busy) return;
     if (isDirty()) {
@@ -380,7 +394,7 @@
     for (const control of form.querySelectorAll('input, select, textarea, button')) control.disabled = value;
     for (const details of form.querySelectorAll('details')) { details.inert = value; if (value) details.open = false; }
     for (const control of deleteDialog.querySelectorAll('button')) control.disabled = value;
-    $('host-save-label').textContent = value && operation === 'save' ? 'Salvando…' : 'Salvar no Zabbix';
+    $('host-save-label').textContent = value && operation === 'save' ? 'Salvando…' : 'Salvar';
     $('host-save').classList.toggle('system-button-loading', value && operation === 'save');
     $('host-save').setAttribute('aria-busy', String(value && operation === 'save'));
     $('host-delete-label').textContent = value && operation === 'delete' ? 'Excluindo…' : 'Excluir no Zabbix';

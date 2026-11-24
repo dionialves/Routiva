@@ -728,30 +728,73 @@
   $('incident-trigger-retry').addEventListener('click', loadOccurrences);
   function renderIncidentHistory(data) {
     const history = $('incident-history'); history.replaceChildren();
-    for (const item of [...data.history].sort((a, b) => b.timestamp - a.timestamp)) {
+    for (const [index, item] of [...data.history].sort((a, b) => b.timestamp - a.timestamp).entries()) {
       const tr = document.createElement('tr');
-      const time = document.createElement('time'); time.dateTime = new Date(item.timestamp).toISOString();
-      time.textContent = formatOccurrenceDate(item.timestamp); cell(tr).append(time);
-      cell(tr, item.user);
-      const actions = cell(tr);
-      for (const label of updateActions(item.action, item)) {
-        const badge = document.createElement('span'); badge.className = 'incident-action-badge';
-        badge.textContent = label; actions.append(badge);
-      }
+      const expandedId = `incident-history-detail-${index}`;
+      const disclosureCell = cell(tr);
+      const disclosure = document.createElement('button'); disclosure.type = 'button';
+      disclosure.className = 'incident-history-expand';
+      disclosure.setAttribute('aria-expanded', 'false');
+      disclosure.setAttribute('aria-controls', expandedId);
+      disclosure.setAttribute('aria-label', 'Mostrar ações realizadas e mensagem completa');
+      disclosure.title = 'Mostrar ações realizadas e mensagem completa';
+      disclosure.append(icon('chevron-down')); disclosureCell.append(disclosure);
+      const [dateLabel, timeLabel] = formatOccurrenceDate(item.timestamp).split(' ');
+      cell(tr, dateLabel || '—');
+      const fullUser = String(item.user || '').trim();
+      const firstName = fullUser.split(/\s+/)[0] || '—';
+      cell(tr, firstName);
+      const actionLabels = updateActions(item.action, item);
       const messageCell = cell(tr);
       if (item.message) {
-        const message = document.createElement('button'); message.type = 'button';
+        const message = document.createElement('span');
         message.className = 'incident-history-message'; message.textContent = item.message;
-        message.setAttribute('aria-expanded', 'false');
-        message.title = 'Clique para expandir a mensagem completa';
-        let expanded = false;
-        message.addEventListener('click', () => {
-          expanded = !expanded; message.setAttribute('aria-expanded', String(expanded));
-          message.title = expanded ? 'Clique para recolher a mensagem' : 'Clique para expandir a mensagem completa';
-        });
         messageCell.append(message);
       } else messageCell.textContent = '—';
       history.append(tr);
+
+      const detailsRow = document.createElement('tr');
+      detailsRow.id = expandedId; detailsRow.className = 'incident-history-details-row'; detailsRow.hidden = true;
+      const detailsCell = document.createElement('td'); detailsCell.colSpan = 4;
+      const details = document.createElement('div'); details.className = 'incident-history-details';
+      const info = document.createElement('span'); info.className = 'incident-history-details-icon';
+      info.append(icon('info')); details.append(info);
+      const content = document.createElement('div'); content.className = 'incident-history-expanded-content';
+      const dateLine = document.createElement('div'); dateLine.className = 'incident-history-detail-line';
+      const dateTitle = document.createElement('strong'); dateTitle.textContent = 'Data: ';
+      const fullDate = document.createElement('strong');
+      fullDate.textContent = `${dateLabel || '—'}${timeLabel ? ` ${timeLabel}` : ''}`;
+      dateLine.append(dateTitle, fullDate); content.append(dateLine);
+      const userLine = document.createElement('div'); userLine.className = 'incident-history-detail-line';
+      const userTitle = document.createElement('strong'); userTitle.textContent = 'Usuário: ';
+      const fullUserLabel = document.createElement('span'); fullUserLabel.textContent = fullUser || '—';
+      userLine.append(userTitle, fullUserLabel); content.append(userLine);
+      const actionLine = document.createElement('div'); actionLine.className = 'incident-history-detail-line incident-history-actions-line';
+      const actionTitle = document.createElement('strong'); actionTitle.textContent = 'Ações realizadas: ';
+      const actions = document.createElement('span'); actions.className = 'incident-history-actions';
+      if (actionLabels.length) {
+        actionLabels.forEach((label, actionIndex) => {
+          if (actionIndex) actions.append(document.createTextNode(' · '));
+          actions.append(document.createTextNode(label));
+        });
+      } else actions.textContent = 'Nenhuma ação registrada';
+      actionLine.append(actionTitle, actions); content.append(actionLine);
+      if (item.message) {
+        const messageLine = document.createElement('div'); messageLine.className = 'incident-history-detail-line incident-history-message-line';
+        const messageTitle = document.createElement('strong'); messageTitle.textContent = 'Mensagem: ';
+        const fullMessage = document.createElement('span'); fullMessage.className = 'incident-history-full-message';
+        fullMessage.textContent = item.message;
+        messageLine.append(messageTitle, fullMessage); content.append(messageLine);
+      }
+      details.append(content);
+      detailsCell.append(details); detailsRow.append(detailsCell); history.append(detailsRow);
+      disclosure.addEventListener('click', () => {
+        const expanded = disclosure.getAttribute('aria-expanded') !== 'true';
+        disclosure.setAttribute('aria-expanded', String(expanded));
+        disclosure.setAttribute('aria-label', expanded ? 'Ocultar ações realizadas e mensagem completa' : 'Mostrar ações realizadas e mensagem completa');
+        disclosure.title = expanded ? 'Ocultar detalhes' : 'Mostrar ações realizadas e mensagem completa';
+        detailsRow.hidden = !expanded;
+      });
     }
     $('incident-history-count').textContent = `${data.history.length} ${data.history.length === 1 ? 'registro' : 'registros'}`;
     $('incident-history-empty').hidden = data.history.length !== 0;

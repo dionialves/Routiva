@@ -44,7 +44,6 @@
 
 #radio-dialog #radio-dialog-state { color:var(--error); }
 
-#radio-collection-dialog { --form-dialog-width:620px; }
 #radio-collection-description { color:var(--muted); font-size:13px; line-height:1.6; }
 #radio-collection-dialog .settings-actions { display:flex; }
 
@@ -55,8 +54,8 @@
 #radio-state:empty { display:none; }
 
 /* Compact client analysis: changes stay scoped to this modal. */
-#radio-dialog { width:1118px; max-width:90vw; height:auto; max-height:calc(100dvh - 32px); padding:20px 24px; }
-#radio-dialog > .analysis-dialog-layout { height:auto; max-height:calc(100dvh - 78px); gap:16px; }
+#radio-dialog { padding:20px 24px; }
+#radio-dialog > .analysis-dialog-layout { height:100%; min-height:0; max-height:100%; gap:16px; }
 #radio-dialog .analysis-header {
   border-bottom:0;
   align-items:flex-start;
@@ -68,7 +67,7 @@
 #radio-dialog .analysis-title h2 { font-size:22px; font-weight:600; }
 #radio-dialog .analysis-title-icon { width:44px; height:44px; }
 #radio-dialog .analysis-tabs { margin:0; }
-#radio-dialog .analysis-body { flex:0 1 auto; padding:0; border:0; border-radius:0; background:transparent; overflow:auto; }
+#radio-dialog .analysis-body { flex:1 1 auto; min-height:0; padding:0; border:0; border-radius:0; background:transparent; overflow:auto; }
 #radio-dialog #radio-dialog-state { flex-shrink:0; margin:0; }
 .radio-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:16px; }
 .radio-summary-card { display:flex; align-items:center; gap:12px; padding:12px 16px; min-width:0; border:1px solid var(--analysis-border); border-radius:8px; background:var(--panel-bg); }
@@ -101,7 +100,7 @@
 @media(max-width:760px) { .radio-summary-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
 @media(max-width:600px) {
   #radio-dialog { padding:16px; }
-  #radio-dialog > .analysis-dialog-layout { max-height:calc(100dvh - 66px); }
+  #radio-dialog > .analysis-dialog-layout { max-height:100%; }
   #radio-dialog .analysis-title h2 { font-size:20px; }
   .radio-summary-card { padding:12px; gap:8px; }
   .radio-summary-icon { width:32px; height:32px; flex-basis:32px; }
@@ -109,7 +108,7 @@
 }
 
 /* Read-only technical details, scoped independently from the client dialog. */
-#radio-collection-dialog { --form-dialog-width:1120px; --collection-status-color:var(--muted); display:none; flex-direction:column; gap:16px; padding:24px; overflow:hidden; max-height:calc(100dvh - 32px); background:var(--analysis-bg); }
+#radio-collection-dialog { --collection-status-color:var(--muted); display:none; flex-direction:column; gap:16px; padding:24px; overflow:hidden; background:var(--analysis-bg); }
 #radio-collection-dialog[open] { display:flex; }
 #radio-collection-dialog .collection-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; width:100%; max-width:none; padding:0; margin:0; border:0; flex-shrink:0; }
 .collection-title { display:flex; align-items:center; gap:16px; min-width:0; }

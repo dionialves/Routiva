@@ -1,13 +1,22 @@
-/* Shared form dialog, based on the existing Map dialogs. */
-dialog.form-dialog {
-  width:min(var(--form-dialog-width, 380px), calc(100vw - 32px));
-  max-height:94vh;
+/* Shared modal shell: every system dialog uses the host editor's outer geometry. */
+dialog.form-dialog.app-modal {
+  width:min(900px, 95vw);
+  height:min(820px, 90dvh);
+  max-width:95vw;
+  max-height:90dvh;
   margin:auto;
-  overflow:auto;
+  flex-direction:column;
+  padding:0;
+  overflow:hidden;
+  box-sizing:border-box;
   color:var(--text);
+  background:var(--modal-bg, #0f1b2a);
+  border:1px solid var(--border);
+  border-radius:12px;
   box-shadow:0 18px 48px rgb(0 0 0 / 35%);
 }
-dialog.form-dialog::backdrop { background:rgb(3 12 20 / 68%); }
+dialog.form-dialog.app-modal::backdrop { background:rgb(3 12 20 / 68%); }
+dialog.form-dialog.app-modal[open] { display:flex; }
 .form-dialog .connection-form { gap:16px; }
 .form-dialog h2 { margin:0 0 6px; font-size:1.5rem; }
 .form-dialog .connection-form > label { max-width:none; }
@@ -21,11 +30,27 @@ dialog.form-dialog::backdrop { background:rgb(3 12 20 / 68%); }
 .form-dialog .hosts-table tbody th .availability-host-name:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
 
 /* A fixed header and footer with a scrolling form body, for larger configuration forms. */
-dialog.form-dialog:has(.form-dialog-frame) { padding:0; max-height:90vh; overflow:hidden; }
-.form-dialog .form-dialog-frame { display:flex; flex-direction:column; gap:0; max-width:none; max-height:90vh; margin:0; }
+dialog.form-dialog:has(.form-dialog-frame) { padding:0; overflow:hidden; }
+.form-dialog .form-dialog-frame { display:flex; flex:1 1 auto; flex-direction:column; gap:0; min-height:0; max-width:none; max-height:100%; margin:0; }
 .form-dialog .form-dialog-header { flex-shrink:0; margin:0; width:100%; max-width:none; padding:20px 24px 16px; border-bottom:1px solid var(--border); }
-.form-dialog .form-dialog-content { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:20px 24px; }
+.form-dialog .app-modal-header { display:flex; align-items:center; gap:16px; }
+.app-modal-header > div { flex:1; min-width:0; }
+.app-modal-header h2 { margin:0 0 4px; font-size:22px; font-weight:600; line-height:1.25; }
+.app-modal-header p { margin:0; color:var(--muted); font-size:13px; line-height:1.5; }
+.app-modal-title-icon { display:grid; place-items:center; flex:0 0 48px; width:48px; height:48px; border-radius:10px; color:var(--cyan); background:var(--surface-bg); }
+.app-modal-title-icon svg { width:22px; height:22px; }
+.app-modal-header > button { flex:0 0 auto; }
+.form-dialog .form-dialog-content { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:20px 24px 28px; }
 .form-dialog .form-dialog-footer { flex-shrink:0; padding:16px 24px; border-top:1px solid var(--border); background:var(--panel-bg); }
+/* The standard frame can also host tabbed analyses and custom content panels. */
+.app-modal > .analysis-dialog-layout { display:flex; flex:1 1 auto; flex-direction:column; height:auto; min-height:0; overflow:hidden; }
+.app-modal > .app-modal-body { flex:1 1 auto; min-height:0; overflow:auto; overscroll-behavior:contain; }
+.app-modal > .connection-form:not(.form-dialog-frame) { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; max-height:100%; overflow:hidden; gap:0; }
+.app-modal > .connection-form:not(.form-dialog-frame) > :is(.user-dialog-content, .map-dialog-scroll, .app-modal-body) { flex:1 1 auto; min-height:0; overflow-y:auto; }
+.app-modal > .connection-form:not(.form-dialog-frame) > .settings-actions { flex:0 0 auto; margin-top:auto; }
+@media(max-width:600px) {
+  dialog.form-dialog.app-modal { width:95vw; height:90dvh; }
+}
 .system-switch, .form-dialog input.system-switch { appearance:none; position:relative; width:40px; height:24px; border:1px solid var(--border); border-radius:20px; background:var(--muted); flex-shrink:0; cursor:pointer; margin:0; }
 .system-switch::after { content:''; position:absolute; left:3px; top:3px; width:16px; height:16px; border-radius:50%; background:var(--text); transition:transform .15s; }
 .system-switch:checked, .form-dialog input.system-switch:checked { background:var(--cyan); border-color:var(--cyan); }

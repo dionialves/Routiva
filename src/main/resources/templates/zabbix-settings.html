@@ -4,9 +4,9 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Integração Zabbix • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/zabbix-settings.css?v=20261112-heading-alignment">
+  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/zabbix-settings.css?v=20261124-shared-modal-frame">
   <script src="/shell.js?v=20261117-host-actions" defer></script><script src="/zabbix-import-results.js?v=20261115-ui-pagination" defer></script><script src="/zabbix-settings.js?v=20261115-ui-pagination" defer></script>
-<th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block></head>
+<th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{design-system :: dialogStyles}"></th:block></head>
 <body>
 <aside th:replace="~{shell :: sidebar('settings')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -69,5 +69,5 @@
     <div class="zabbix-actions"><div class="selection-action-summary"><svg th:replace="~{shell :: icon('monitor')}"></svg><div><strong id="selection-count" role="status"></strong><small id="selection-changes"></small></div></div><button id="cancel-selection" type="button" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar alterações</button><button id="save-selection" type="button" class="system-button system-button-primary button-primary"><svg th:replace="~{shell :: icon('download')}"></svg><span id="save-selection-text">Salvar e importar</span></button></div>
   </section>
 </main></div>
-<dialog id="import-details" class="import-details" aria-labelledby="import-details-title"><div class="import-detail-heading"><h2 id="import-details-title">Detalhes do resultado</h2><form method="dialog"><button type="submit" class="system-button system-button-icon-only" aria-label="Fechar detalhes"><svg th:replace="~{shell :: icon('close')}"></svg></button></form></div><dl id="import-detail-fields"></dl></dialog>
+<dialog th:replace="~{design-system :: modalDialog('import-details', 'import-details-title', null, ~{zabbix-settings :: import-details-modal-content}, 'import-details')}"><th:block th:fragment="import-details-modal-content"><div class="import-detail-heading"><h2 id="import-details-title">Detalhes do resultado</h2><form method="dialog"><button type="submit" class="system-button system-button-icon-only" aria-label="Fechar detalhes"><svg th:replace="~{shell :: icon('close')}"></svg></button></form></div><dl id="import-detail-fields"></dl></th:block></dialog>
 </body></html>

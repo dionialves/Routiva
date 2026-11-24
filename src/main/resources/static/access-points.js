@@ -124,32 +124,33 @@
       const children = visible.map(host => {
         const row = document.createElement('div'); row.className = 'ap-host-row';
         const label = document.createElement('label');
+        const fullText = `${host.name} · ${host.ip || 'Sem IP'}`;
+        label.title = fullText; label.setAttribute('aria-label', fullText);
         const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
         checkbox.checked = marked[side].has(host.id); checkbox.disabled = busy;
         checkbox.addEventListener('change', () => {
           if (checkbox.checked) marked[side].add(host.id); else marked[side].delete(host.id);
           controls();
         });
-        const text = document.createElement('span');
-        text.textContent = `${host.name} · ${host.ip || 'Sem IP'}`;
-        text.title = text.textContent;
-        label.append(checkbox, text); row.append(label);
-        if (side === 'selected') {
-          const remove = document.createElement('button'); remove.type = 'button';
-          remove.className = 'ap-host-delete'; remove.title = 'Remover da seleção';
-          remove.setAttribute('aria-label', 'Remover da seleção: ' + host.name);
-          remove.disabled = busy; remove.append(icon('trash-2'));
-          remove.addEventListener('click', () => {
-            if (busy) return;
-            selected.delete(host.id); marked.selected.delete(host.id); lists();
-          });
-          row.append(remove);
-        }
+        const name = document.createElement('span'); name.className = 'ap-host-name'; name.textContent = host.name;
+        const ip = document.createElement('span'); ip.className = 'ap-host-ip';
+        ip.textContent = host.ip ? `· ${host.ip}` : 'Sem IP';
+        label.append(checkbox, name, ip); row.append(label);
         return row;
       });
       if (!children.length) {
-        const empty = document.createElement('p'); empty.className = 'ap-list-empty';
-        empty.textContent = loading ? 'Carregando inventário…' : group.length ? 'Nenhum host encontrado.' : side === 'available' ? 'Nenhum host disponível para importação.' : 'Nenhum host selecionado.';
+        const empty = document.createElement(group.length || side === 'available' ? 'p' : 'div');
+        empty.className = 'ap-list-empty';
+        if (side === 'selected' && group.length === 0) {
+          empty.className = 'ap-list-empty ap-list-empty-selection';
+          empty.append(icon('wifi'));
+          const title = document.createElement('strong'); title.textContent = 'Nenhum host selecionado.';
+          const description = document.createElement('span');
+          description.textContent = 'Selecione hosts na lista ao lado e adicione à seleção.';
+          empty.append(title, description);
+        } else {
+          empty.textContent = loading ? 'Carregando inventário…' : group.length ? 'Nenhum host encontrado.' : 'Nenhum host disponível para importação.';
+        }
         children.push(empty);
       }
       $(side).replaceChildren(...children);
@@ -161,6 +162,8 @@
     $('remove').disabled = busy || marked.selected.size === 0;
     $('save').disabled = busy || selected.size === 0;
     $('save-label').textContent = busy && !loading ? 'Definindo como AP…' : 'Definir como AP';
+    $('save').className = `system-button system-button-primary${busy ? ' system-button-loading' : ''}`;
+    $('save').setAttribute('aria-busy', String(busy));
     $('dialog').setAttribute('aria-busy', String(busy));
     for (const id of ['available-search', 'selected-search', 'close', 'cancel']) $(id).disabled = busy;
   }

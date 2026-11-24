@@ -98,10 +98,10 @@
 .incident-message-button svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.7; }
 .incident-link:focus-visible, .incident-message-button:focus-visible { outline:2px solid var(--cyan); outline-offset:4px; }
 /* Incident editor: isolated from page filters and other dialogs. */
-#incident-dialog { --form-dialog-width:1300px; padding:0; overflow:hidden; max-height:90dvh; border-radius:12px; background:#0b2030; color:var(--text); }
-#incident-dialog .connection-form { display:flex; flex-direction:column; max-width:none; height:calc(90dvh - 2px); max-height:90dvh; gap:0; min-height:0; }
-#incident-dialog .incident-modal-header { width:100%; max-width:none; margin:0; display:flex; flex-direction:row; text-align:left; align-items:center; justify-content:space-between; gap:16px; padding:20px 26px; border-bottom:1px solid var(--border); flex-shrink:0; }
-#incident-dialog h2 { margin:0; font-size:24px; font-weight:600; }
+#incident-dialog { padding:0; overflow:hidden; border-radius:12px; background:#0f1b2a; color:var(--text); }
+#incident-dialog .connection-form { display:flex; flex:1 1 auto; flex-direction:column; max-width:none; min-height:0; max-height:100%; gap:0; }
+#incident-dialog .app-modal-header { border-bottom:1px solid var(--border); }
+#incident-dialog .incident-tabs { flex:0 0 auto; margin:0 24px; }
 #incident-dialog .incident-modal-summary { display:flex; justify-content:space-between; align-items:center; gap:20px; padding:22px 26px; border-bottom:1px solid var(--border); flex-shrink:0; }
 #incident-dialog-name { margin:0 0 8px; font-size:22px; font-weight:600; overflow-wrap:anywhere; }
 #incident-dialog-description { margin:0; color:#a9c1d2; font-size:14px; }
@@ -148,7 +148,7 @@
 #incident-dialog .incident-history-message { appearance:none; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; width:100%; border:0; background:none; padding:0; color:inherit; font:inherit; line-height:1.5; text-align:left; white-space:pre-wrap; overflow-wrap:anywhere; cursor:pointer; }
 #incident-dialog .incident-history-message[aria-expanded=true] { display:block; overflow:visible; }
 #incident-dialog .incident-history-message:focus-visible { outline:1px solid #14c5c3; outline-offset:3px; }
-#incident-dialog .incident-modal-footer { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px 20px; padding:18px 26px; border-top:1px solid var(--border); flex-shrink:0; background:#0b2030; }
+#incident-dialog .incident-modal-footer { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px 20px; padding:14px 24px; border-top:1px solid var(--border); flex-shrink:0; background:#0f1b2a; }
 #incident-dialog .incident-footer-note { display:flex; gap:12px; align-items:center; color:#b4cad9; font-size:11px; line-height:1.6; }
 #incident-dialog .incident-footer-note p { margin:0; }
 #incident-dialog .settings-actions { display:flex; gap:10px; padding:0; margin:0; border:0; grid-column:2; grid-row:1; }
@@ -167,7 +167,7 @@
 @media(max-width:480px) {
   #incident-dialog .incident-modal-summary { flex-direction:column; gap:12px; }
   #incident-dialog .incident-modal-identity { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-  #incident-dialog .incident-modal-header, #incident-dialog .incident-modal-summary, #incident-dialog fieldset, #incident-dialog .incident-modal-history, #incident-dialog .incident-modal-footer { padding:14px; }
+  #incident-dialog .form-dialog-header, #incident-dialog .incident-modal-summary, #incident-dialog fieldset, #incident-dialog .incident-modal-history, #incident-dialog .incident-modal-footer { padding:14px; }
   #incident-dialog h2 { font-size:20px; }
   #incident-dialog .incident-footer-note { font-size:10px; }
   #incident-dialog .incident-history-table :is(td,th) { padding:8px 5px; font-size:11px; }
@@ -208,6 +208,35 @@
 }
 
 #incident-dialog .incident-summary-grid { align-items:start; }
+#incident-dialog .incident-modal-scroll { display:flex; flex-direction:column; gap:16px; padding:18px 20px 24px; }
+#incident-dialog .incident-modal-summary { padding:0; }
+#incident-dialog-name { margin:0 0 10px; font-size:24px; line-height:1.25; }
+#incident-dialog .incident-modal-identity { gap:8px; }
+#incident-dialog .incident-modal-identity > span { min-height:28px; box-sizing:border-box; background:#102335; font-size:12px; }
+#incident-dialog #incident-status-badge { background:#db45451a; }
+#incident-dialog .incident-modal-status:empty,
+#incident-dialog .incident-modal-status:has(> p:empty):not(:has(> button:not([hidden]))) { display:none; }
+#incident-dialog .incident-modal-status p { margin:0; }
+#incident-dialog .incident-summary-grid { gap:14px; }
+#incident-dialog .incident-detail-section { padding:0 14px 14px; overflow:hidden; background:var(--panel-bg, #182a3b); }
+#incident-dialog .incident-detail-section > .incident-section-title { min-height:46px; box-sizing:border-box; margin:0 -14px 4px; padding:10px 14px; background:#24384b; border-bottom:1px solid var(--border); font-size:15px; }
+#incident-dialog .incident-section-title svg { color:#a8c6d8; }
+#incident-dialog .incident-properties { grid-template-columns:minmax(0, .9fr) minmax(0, 1.1fr); font-size:12px; }
+#incident-dialog .incident-properties dt,
+#incident-dialog .incident-properties dd { padding:9px 0; }
+#incident-dialog .incident-properties dt { color:#b2c4d2; }
+#incident-dialog .incident-event-tags { gap:5px; padding-top:9px !important; padding-bottom:9px !important; }
+#incident-dialog .incident-action-badge { margin:0; padding:4px 7px; }
+#incident-dialog .incident-latest-reading { padding:7px 0 12px; }
+#incident-dialog .incident-latest-reading strong { margin-top:4px; font-size:26px; }
+#incident-dialog .incident-expression { padding:5px 24px 5px 7px; border:1px solid #52667a; border-radius:6px; background:#0d1927; }
+#incident-dialog .incident-expression-copy { top:50%; transform:translateY(-50%); }
+#incident-dialog .incident-copy-status { bottom:-17px; }
+#incident-dialog .incident-modal-footer { min-height:66px; box-sizing:border-box; }
+@media(max-width:800px) {
+  #incident-dialog .incident-modal-scroll { padding:14px 14px 20px; }
+  #incident-dialog-name { font-size:20px; }
+}
 #incident-dialog .incident-expression { position:relative; padding-right:28px; min-width:0; }
 #incident-dialog .incident-expression code { font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
 #incident-dialog .incident-expression-copy { position:absolute; right:0; top:9px; display:flex; align-items:center; justify-content:center; width:26px; height:26px; padding:5px; border:0; border-radius:4px; background:transparent; color:#90b4cd; opacity:0; cursor:pointer; }
@@ -227,10 +256,16 @@
 #incident-trigger-state:empty { display:none; }
 #incident-panel-trigger .incident-trigger-grid { display:flex; flex-direction:column; min-height:0; min-width:0; border:1px solid var(--border); border-radius:7px; overflow:hidden; }
 #incident-trigger-scroll { min-height:0; padding-bottom:8px; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; border:0; border-radius:0; }
-#incident-dialog .incident-trigger-table { width:100%; margin:0; border-collapse:separate; border-spacing:0; }
-#incident-dialog .incident-trigger-table th { position:sticky; top:0; z-index:1; height:42px; padding:10px 12px; box-sizing:border-box; background:#112b3c; color:#b9cbdd; font-weight:600; text-align:left; }
-#incident-dialog .incident-trigger-table td { height:45px; padding:9px 12px; box-sizing:border-box; border-bottom:1px solid #173244; }
-#incident-trigger-pagination { flex-shrink:0; min-height:0; margin:0; padding:8px 12px; border-top:1px solid var(--border); background:#0b2030; }
+#incident-panel-trigger > .note { margin:0 0 2px; color:#b6c8d7; font-size:13px; }
+#incident-panel-trigger .incident-trigger-grid { background:var(--panel-bg, #182a3b); border-color:#294b61; border-radius:8px; }
+#incident-dialog .incident-trigger-table { width:100%; min-width:850px; margin:0; table-layout:fixed; border-collapse:separate; border-spacing:0; }
+#incident-dialog .incident-trigger-table th { position:sticky; top:0; z-index:1; height:42px; padding:10px 12px; box-sizing:border-box; background:#19374c; color:#c4d6e4; font-size:12px; font-weight:600; text-align:left; }
+#incident-dialog .incident-trigger-table td { height:45px; padding:8px 12px; box-sizing:border-box; border-bottom:1px solid #294b61; color:#edf4fa; font-size:12px; }
+#incident-dialog .incident-trigger-table tr:last-child td { border-bottom:0; }
+#incident-dialog .incident-trigger-table .incident-observations { text-align:center; }
+#incident-trigger-pagination { flex-shrink:0; min-height:0; margin:0; padding:8px 12px; border-top:1px solid #294b61; background:#102638; }
+#incident-trigger-pagination > button { min-height:36px; }
+#incident-trigger-pagination > .incident-trigger-page-status { color:var(--text); font-size:12px; }
 @media(max-width:480px) {
   #incident-trigger-pagination { gap:6px; padding:8px; }
   #incident-trigger-pagination > span:first-child { flex-basis:100%; }
@@ -246,9 +281,45 @@
 #incident-dialog #incident-panel-update .incident-actions-panel { gap:10px; padding:10px 12px; }
 #incident-dialog #incident-panel-update #incident-close-help:empty { display:none; }
 #incident-dialog #incident-panel-update .incident-modal-history { align-self:start; }
+#incident-dialog #incident-panel-update .incident-modal-history { padding:14px; background:#0f1b2a; }
+#incident-dialog #incident-panel-update .incident-history-heading { margin-bottom:12px; }
+#incident-dialog #incident-panel-update .incident-history-heading .incident-section-title { margin:0; }
+#incident-dialog #incident-panel-update #incident-history-count { border-radius:7px; background:#19384c; }
 #incident-dialog #incident-panel-update .incident-history-scroll { max-height:min(320px,40dvh); overflow-y:auto; overscroll-behavior:contain; }
+#incident-dialog #incident-panel-update .incident-history-scroll { border-color:#315368; border-radius:8px; background:#0d1927; }
+#incident-dialog #incident-panel-update .incident-history-table { min-width:0; font-size:12px; }
+#incident-dialog #incident-panel-update .incident-history-table th { padding:9px 6px; background:#19374c; color:#c4d6e4; text-align:left; }
+#incident-dialog #incident-panel-update .incident-history-table td { padding:7px 6px; color:#edf4fa; }
+#incident-dialog #incident-panel-update .incident-history-table tbody tr:not(.incident-history-details-row) > td { vertical-align:middle; }
+#incident-dialog #incident-panel-update .incident-history-table tbody tr:not(.incident-history-details-row) > td { height:42px; white-space:nowrap; }
+#incident-dialog #incident-panel-update .incident-history-table td:nth-child(2) { font-variant-numeric:tabular-nums; }
+#incident-dialog #incident-panel-update .incident-history-table td:nth-child(3) { font-weight:500; }
+#incident-dialog #incident-panel-update .incident-history-table td:last-child { overflow:hidden; font-size:12px; font-weight:600; text-overflow:ellipsis; }
+#incident-dialog .incident-history-expand { display:grid; place-items:center; width:26px; height:26px; margin-inline:auto; padding:4px; border:1px solid #176b89; border-radius:6px; background:#0d2433; color:#06b6d4; cursor:pointer; }
+#incident-dialog .incident-history-expand:hover { background:#12374a; }
+#incident-dialog .incident-history-expand:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+#incident-dialog .incident-history-expand svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; transition:transform .15s ease; }
+#incident-dialog .incident-history-expand[aria-expanded=true] svg { transform:rotate(180deg); }
+#incident-dialog .incident-history-details-row[hidden] { display:none !important; }
+#incident-dialog .incident-history-table .incident-history-details-row > td { padding:0 6px 9px; border-bottom:1px solid #294b61; white-space:normal; }
+#incident-dialog .incident-history-details { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; gap:6px 9px; padding:9px 11px; border:1px solid #294b61; border-radius:7px; background:#19374c; color:#b8cbd9; font-size:12px; line-height:1.5; }
+#incident-dialog .incident-history-details-icon { display:grid; place-items:center; color:#9fc1d5; }
+#incident-dialog .incident-history-details-icon svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+#incident-dialog .incident-history-details strong { color:#eaf3f9; white-space:nowrap; }
+#incident-dialog .incident-history-expanded-content { grid-column:2; display:flex; flex-direction:column; gap:3px; min-width:0; }
+#incident-dialog .incident-history-detail-line { min-width:0; overflow-wrap:anywhere; }
+#incident-dialog .incident-history-actions { min-width:0; }
+#incident-dialog .incident-history-message-line { padding-top:4px; border-top:1px solid #315368; }
+#incident-dialog .incident-history-full-message { color:#eaf3f9; white-space:pre-wrap; overflow-wrap:anywhere; }
+#incident-dialog #incident-panel-update .incident-history-table td:last-child .incident-history-message { display:block; width:100%; overflow:hidden; color:#f1f5f9; text-align:left; line-height:1.45; white-space:nowrap; text-overflow:ellipsis; overflow-wrap:normal; cursor:default; }
 #incident-dialog #incident-panel-update .incident-history-table th { position:sticky; top:0; z-index:1; }
 #incident-dialog #incident-history-empty { margin:0; padding:8px 0 4px; }
+@media(max-width:800px) {
+  #incident-dialog #incident-panel-update .incident-history-table { font-size:11px; }
+  #incident-dialog #incident-panel-update .incident-history-table th,
+  #incident-dialog #incident-panel-update .incident-history-table td { padding-right:4px; padding-left:4px; }
+  #incident-dialog .incident-history-expand { width:24px; height:24px; }
+}
 
 .incident-comments-tooltip { position:fixed; inset:auto; margin:0; padding:12px; width:max-content; max-width: min(720px, calc(100vw - 16px)); box-sizing:border-box; background:#0b2030; color:var(--text); border:1px solid #315368; border-radius:7px; box-shadow:0 8px 24px #0005; z-index:1000; font-size:12px; }
 .incident-comments-tooltip[hidden] { display:none; }

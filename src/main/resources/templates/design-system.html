@@ -1,10 +1,10 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org"><head>
-<th:block th:fragment="base"><link rel="stylesheet" href="/style.css?v=20261121-tabs-height"><script src="/modal-tabs.js?v=20261120" defer></script></th:block>
+<th:block th:fragment="base"><link rel="stylesheet" href="/style.css?v=20261124-shared-modal-frame"><script src="/modal-tabs.js?v=20261120" defer></script></th:block>
 <link th:fragment="actions" rel="stylesheet" href="/buttons.css?v=20261118-danger">
 <link th:fragment="filters" rel="stylesheet" href="/query-filters.css?v=20261115-ds1">
 <link th:fragment="layout" rel="stylesheet" href="/page-layout.css?v=20261115-ds1">
-<link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261120-observation">
+<link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261124-shared-modal-frame">
 <link th:fragment="picker" rel="stylesheet" href="/multi-picker.css?v=20261119-popover-position">
 <link th:fragment="analysisDialogStyles" rel="stylesheet" href="/analysis-dialog.css?v=20261120-modal-tabs">
 </head><body>
@@ -18,13 +18,22 @@
           th:value="${choice.minutes()}" th:text="${choice.label()}"
           th:selected="${choice.minutes() == selectedMinutes}"></option>
 </select>
+<dialog th:fragment="modalDialog(dialogId, titleId, descriptionId, content, modalClasses)"
+        class="settings-panel form-dialog app-modal" th:classappend="${modalClasses}" th:id="${dialogId}" th:attr="aria-labelledby=${titleId},aria-describedby=${descriptionId}">
+  <th:block th:replace="${content}"></th:block>
+</dialog>
+<dialog th:fragment="applicationDialog(dialogId, titleId, descriptionId, content)"
+        th:replace="~{design-system :: modalDialog(${dialogId}, ${titleId}, ${descriptionId}, ${content}, '')}"></dialog>
 <dialog th:fragment="formDialog(dialogId, titleId, descriptionId, content)"
-        class="settings-panel form-dialog" th:id="${dialogId}" th:attr="aria-labelledby=${titleId},aria-describedby=${descriptionId}">
-  <th:block th:replace="${content}"></th:block>
-</dialog>
-<dialog th:fragment="analysisDialog(dialogId, titleId, descriptionId, content)" class="settings-panel form-dialog analysis-dialog" th:id="${dialogId}" th:attr="aria-labelledby=${titleId},aria-describedby=${descriptionId}">
-  <th:block th:replace="${content}"></th:block>
-</dialog>
+        th:replace="~{design-system :: applicationDialog(${dialogId}, ${titleId}, ${descriptionId}, ${content})}"></dialog>
+<dialog th:fragment="analysisDialog(dialogId, titleId, descriptionId, content)"
+        th:replace="~{design-system :: modalDialog(${dialogId}, ${titleId}, ${descriptionId}, ${content}, 'analysis-dialog')}"></dialog>
+<header th:fragment="modalHeader(titleId, title, descriptionId, description, iconName, closeButtonId, closeLabel)" class="form-dialog-header app-modal-header">
+  <span class="app-modal-title-icon"><svg th:replace="~{shell :: icon(${iconName})}"></svg></span>
+  <div><h2 th:id="${titleId}" th:text="${title}"></h2><p th:if="${description != null}" th:id="${descriptionId}" th:text="${description}"></p></div>
+  <button th:id="${closeButtonId}" type="button" class="system-button system-button-icon-only" th:attr="aria-label=${closeLabel}"><svg th:replace="~{shell :: icon('close')}"></svg></button>
+</header>
+<footer th:fragment="modalFooter(content)" class="form-dialog-footer app-modal-footer"><th:block th:replace="${content}"></th:block></footer>
 <section th:fragment="formSection(titleId, title, iconName, content)" class="form-dialog-section" th:attr="aria-labelledby=${titleId}">
   <h3 class="form-dialog-section-title" th:id="${titleId}"><svg th:replace="~{shell :: icon(${iconName})}"></svg><span th:text="${title}"></span></h3>
   <div class="form-dialog-section-fields"><th:block th:replace="${content}"></th:block></div>

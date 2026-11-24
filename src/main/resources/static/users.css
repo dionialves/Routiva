@@ -1,5 +1,4 @@
 .users-page .query-filter-field { flex:1; }
-#user-dialog { --form-dialog-width:720px; }
 #user-form small, .user-profile-help { color:#b9c7d8; font-size:13px; line-height:1.6; }
 #user-error { color:#ffbec8; margin:0; }
 #user-reset-confirm { padding:16px; border:1px solid var(--border); border-radius:8px; background:#07131f; }
@@ -15,7 +14,6 @@
 #user-form .user-profile-help { display:flex; align-items:flex-start; gap:10px; margin:0; }
 #user-form .user-profile-help svg, .user-code-validity svg { flex-shrink:0; width:20px; height:20px; margin-top:2px; }
 .user-profile-help svg, .user-code-heading svg, .user-code-validity svg, #user-copy-code svg { fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
-#user-dialog.user-code-visible { --form-dialog-width:1040px; }
 .user-code-visible .user-dialog-content { grid-template-columns:minmax(0, 55fr) minmax(0, 45fr); gap:24px; align-items:center; }
 .user-code-visible .user-details { padding-right:24px; border-right:1px solid var(--border); }
 #user-code-panel { padding:20px; border:1px solid var(--border); border-radius:8px; background:#07131f; min-width:0; }

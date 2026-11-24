@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const flush = () => new Promise(resolve => setImmediate(resolve));
-async function surface(initialRows = []) {
+async function surface(initialRows = [], candidates = [{ id: '42', name: '<AP A>', ip: '192.0.2.42' }, { id: '43', name: 'AP B', ip: '192.0.2.43' }]) {
   class Element {
     constructor() { this.children = []; this.value = ''; this.handlers = {}; this.disabled = false; }
     addEventListener(type, handler) { this.handlers[type] = handler; }
@@ -27,7 +27,7 @@ async function surface(initialRows = []) {
     fetch: async (url, options) => {
       requests.push({ url, options });
       if (options.method === 'POST') return { ok: !fail, json: async () => fail ? { message: 'Inventário alterado' } : rows };
-      return { ok: true, json: async () => url.endsWith('/candidates') ? [{ id: '42', name: '<AP A>', ip: '192.0.2.42' }, { id: '43', name: 'AP B', ip: '192.0.2.43' }] : initialRows };
+      return { ok: true, json: async () => url.endsWith('/candidates') ? candidates : initialRows };
     }
   };
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/access-points.js', 'utf8'), context);
@@ -45,10 +45,13 @@ test('arrows physically transfer hosts and only the saved selection is posted', 
   await ui.click('import');
   assert.equal(e['ap-available'].children.length, 2);
   assert.equal(e['ap-save'].disabled, true);
+  assert.equal(e['ap-selected'].children[0].className, 'ap-list-empty ap-list-empty-selection');
+  assert.equal(e['ap-selected'].children[0].children[1].textContent, 'Nenhum host selecionado.');
   mark(e, 'available');
   await ui.click('select');
   assert.equal(e['ap-available'].children.length, 1);
-  assert.equal(e['ap-selected'].children[0].children[0].children[1].textContent, '<AP A> · 192.0.2.42');
+  assert.equal(e['ap-selected'].children[0].children[0].children[1].textContent, '<AP A>');
+  assert.equal(e['ap-selected'].children[0].children[0].children[2].textContent, '· 192.0.2.42');
   mark(e, 'selected');
   await ui.click('remove');
   assert.equal(hostRows(e, 'selected').length, 0);
@@ -97,7 +100,7 @@ test('host selection, numeric sorting and pagination compose without new request
 });
 
 
-test('search preserves marks, counts include hidden hosts, and individual removal stays local', async () => {
+test('search preserves marks, counts include hidden hosts, and removing selection stays local', async () => {
   const ui = await surface(), e = ui.elements;
   await ui.click('import');
   mark(e, 'available');
@@ -113,7 +116,8 @@ test('search preserves marks, counts include hidden hosts, and individual remova
   e['ap-selected-search'].handlers.input();
   assert.equal(hostRows(e, 'selected').length, 1);
   const count = ui.requests.length;
-  e['ap-selected'].children[0].children[1].handlers.click();
+  mark(e, 'selected');
+  await ui.click('remove');
   assert.equal(e['ap-selected-count'].textContent, '(1)');
   assert.equal(e['ap-available-count'].textContent, '(1)');
   assert.equal(ui.requests.length, count);
@@ -124,6 +128,15 @@ test('empty selection cannot submit', async () => {
   const ui = await surface();
   await ui.click('import'); await ui.click('save');
   assert.equal(ui.requests.filter(request => request.options.method === 'POST').length, 0);
+});
+
+test('host without an address stays identifiable and is labeled Sem IP', async () => {
+  const ui = await surface([], [{ id: 'no-ip', name: 'Host sem endereço', ip: null }]), e = ui.elements;
+  await ui.click('import');
+  assert.equal(e['ap-available'].children[0].children[0].children[1].textContent, 'Host sem endereço');
+  assert.equal(e['ap-available'].children[0].children[0].children[2].textContent, 'Sem IP');
+  mark(e, 'available'); await ui.click('select');
+  assert.equal(e['ap-selected'].children[0].children[0].children[2].textContent, 'Sem IP');
 });
 
 test('host groups filter APs before combining host selection and reset pagination', async () => {

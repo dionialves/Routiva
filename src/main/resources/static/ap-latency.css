@@ -13,7 +13,7 @@
 .latency-worst li::marker { color:#38bdf8; font-weight:600; }
 @media(max-width:1000px) { .latency-summary-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:600px) { .latency-summary-metrics { grid-template-columns:1fr; } }
-#ap-latency-modal { width:90vw; max-width:1440px; height:95dvh; max-height:95dvh; padding:18px; overflow:hidden; color:var(--text,#e2e8f0); background:#071a28; border:1px solid #315b72; border-radius:10px; font-family:inherit; font-size:13px; }
+#ap-latency-modal { padding:18px; overflow:hidden; color:var(--text,#e2e8f0); background:#071a28; border:1px solid #315b72; border-radius:10px; font-family:inherit; font-size:13px; }
 #ap-latency-modal::backdrop { background:rgb(0 7 14 / 75%); }
 #ap-latency-modal svg { flex-shrink:0; }
 .latency-dialog-layout { display:flex; flex-direction:column; height:100%; gap:14px; min-height:0; }
@@ -96,7 +96,7 @@
 .latency-footer p svg { width:18px; height:18px; }
 #latency-empty { padding:16px; color:#bdcede; }
 @media(max-width:1400px) { .latency-workspace { grid-template-columns:minmax(0,1fr); } .latency-table { min-width:850px; } }
-@media(max-width:1000px) { #ap-latency-modal { overflow:auto; } .latency-dialog-layout { height:auto; min-height:100%; } .latency-workspace { display:flex; flex-direction:column; flex:none; } .latency-sidebar { overflow:visible; } .latency-table-scroll { max-height:45vh; } .latency-execution { grid-template-columns:repeat(2,minmax(0,1fr)); } .latency-header,.latency-footer { position:sticky; z-index:3; background:#071a28; } .latency-header { top:-18px; } .latency-footer { bottom:-18px; } }
+@media(max-width:1000px) { #ap-latency-modal { overflow:hidden; } .latency-dialog-layout { height:100%; min-height:0; } .latency-workspace { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; } .latency-sidebar { overflow:auto; } .latency-table-scroll { max-height:45vh; } .latency-execution { grid-template-columns:repeat(2,minmax(0,1fr)); } .latency-header,.latency-footer { position:static; } }
 @media(max-width:600px) { .latency-header { align-items:flex-start; flex-direction:column; } #ap-latency-modal h2 { font-size:20px; } .latency-title-icon { display:none; } .latency-execution-card { gap:12px; padding:10px; } .latency-execution-card strong { font-size:14px; } .latency-footer { align-items:flex-start; } .latency-footer p { font-size:12px; } }
 .latency-tab-panel { flex:1; min-height:0; }
 .latency-tab-panel[hidden] { display:none; }

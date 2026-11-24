@@ -5,7 +5,7 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <title>Usuários • TraceOne</title><link rel="icon" href="/favicon.svg">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css">
-  <th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/users.css?v=3">
+  <th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/users.css?v=20261124-shared-modal-frame">
   <script src="/shell.js?v=20261117-host-actions" defer></script><script src="/users.js?v=3" defer></script>
 </head>
 <body class="availability-dashboard">
@@ -24,9 +24,9 @@
   </section>
 </main></div>
 <dialog th:replace="~{design-system :: formDialog('user-dialog', 'user-dialog-title', null, ~{users :: user-dialog-content})}"><th:block th:fragment="user-dialog-content">
-  <form id="user-form" class="connection-form">
-    <h2 id="user-dialog-title">Novo usuário</h2>
-    <div class="user-dialog-content">
+  <form id="user-form" class="connection-form form-dialog-frame">
+    <header th:replace="~{design-system :: modalHeader('user-dialog-title', 'Novo usuário', 'user-dialog-description', 'Cadastre o acesso e defina o perfil do usuário.', 'users-round', 'user-dialog-close', 'Fechar edição de usuário')}"></header>
+    <div class="form-dialog-content user-dialog-content">
     <div class="user-details">
       <label>Nome<input id="user-name" name="name" required maxlength="120" autocomplete="name" autofocus></label>
       <label>Usuário<input id="user-username" name="username" required minlength="3" maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9.@+_\-]{2,63}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="user-username-help"><small id="user-username-help">Use um e-mail ou nome de usuário de 3 a 64 caracteres: letras, números, ponto, @, +, hífen ou sublinhado.</small></label>
@@ -43,7 +43,8 @@
     </section>
     </div>
     <p id="user-error" role="alert"></p>
-    <div class="settings-actions"><button id="user-reset" class="system-button" type="button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg><span>Redefinir senha</span></button><button id="user-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg><span id="user-cancel-label">Cancelar</span></button><button id="user-save" class="system-button system-button-primary" type="submit"><svg th:replace="~{shell :: icon('check')}"></svg><span>Salvar</span></button></div>
+    </div>
+    <footer th:replace="~{design-system :: modalFooter(~{users :: userDialogFooter})}"><th:block th:fragment="userDialogFooter"><div class="settings-actions"><button id="user-reset" class="system-button" type="button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg><span>Redefinir senha</span></button><button id="user-cancel" class="system-button" type="button"><svg th:replace="~{shell :: icon('close')}"></svg><span id="user-cancel-label">Cancelar</span></button><button id="user-save" class="system-button system-button-primary" type="submit"><svg th:replace="~{shell :: icon('check')}"></svg><span>Salvar</span></button></div></th:block></footer>
   </form>
 </th:block></dialog>
 </body></html>

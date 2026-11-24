@@ -111,7 +111,7 @@
 #selection-count { display: block; font-size: 13px; }
 #selection-changes { display: block; font-size: 10px; color: var(--muted); }
 .zabbix-actions #save-selection { min-height: 38px; font-size: 13px; font-weight: 600; }
-.import-details { width: min(540px, calc(100vw - 32px)); color: var(--text); background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 22px; }
+.import-details { color: var(--text); background: var(--panel-bg); border: 1px solid var(--border-strong); border-radius: 10px; padding: 22px; }
 .import-details::backdrop { background: #0009; }
 .import-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .import-detail-heading h2 { margin: 0; font-size: 18px; }

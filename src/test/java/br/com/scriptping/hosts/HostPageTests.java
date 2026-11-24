@@ -48,7 +48,7 @@ class HostPageTests {
             .andExpect(content().string(containsString("id=\"incident-host-template-picker\"")))
             .andExpect(content().string(containsString("form-dialog-frame")))
             .andExpect(content().string(containsString("name=\"description\"")))
-            .andExpect(content().string(containsString("Salvar no Zabbix")))
+            .andExpect(content().string(containsString("id=\"host-save-label\">Salvar</span>")))
             .andExpect(content().string(containsString("host-auth-tab")))
             .andExpect(content().string(containsString("host-filter-connection")))
             .andExpect(content().string(containsString("data-host-sort=\"connection\"")))

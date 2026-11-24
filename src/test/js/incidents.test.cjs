@@ -14,6 +14,7 @@ async function surface(respond, options = {}) {
     getBoundingClientRect() { return { top:100, bottom:120, right:600, left:200, width:400, height:100 }; }
     addEventListener(k, fn) { this.listeners[k] = fn; }
     dispatchEvent(event) { this.listeners[event.type]?.(event); }
+    getAttribute(k) { return this.attributes[k] ?? null; }
     removeEventListener(k, fn) { if (this.listeners[k] === fn) delete this.listeners[k]; }
     emit(k) { this.listeners[k]?.({ preventDefault() {} }); }
     focus() {}
@@ -403,19 +404,39 @@ test('only changed severity is sent and confirmed update refreshes the open moda
   assert.equal(ui.elements['incident-dialog'].open, true);
 });
 
-test('history message expands without changing the original content and recognized state is checked', async () => {
+test('history disclosure expands action details and a long message in place', async () => {
   const message = 'Linha longa '.repeat(200) + '\nOutra linha';
-  const ui = await surface(response, { admin: true, api: async () => ({ ok: true, json: async () => ({
-    ...details, acknowledged: true, history: [{ ...details.history[0], message }],
-  }) }) });
+  const incidentDetails = { eventId: '1', name: 'Link', severity: 4, acknowledged: true,
+    closed: false, closing: false, writable: true, manualClose: true,
+    history: [{ timestamp: Date.now(), user: 'Operador', action: 6, message }] };
+  const ui = await surface(response, { api: async url => url.startsWith('/api/incidents/1')
+    ? ({ ok: true, json: async () => incidentDetails })
+    : response(new URL(url, 'http://localhost').searchParams) });
   ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
-  assert.equal(ui.elements['incident-recognize'].checked, true);
-  assert.equal(ui.elements['incident-recognize'].disabled, true);
   assert.equal(ui.elements['incident-history-count'].textContent, '1 registro');
-  const preview = ui.elements['incident-history'].children[0].children[3].children[0];
-  assert.equal(preview.attributes['aria-expanded'], 'false'); preview.emit('click');
-  assert.equal(preview.attributes['aria-expanded'], 'true'); assert.equal(preview.textContent, message);
-  preview.emit('click'); assert.equal(preview.attributes['aria-expanded'], 'false');
+  const rows = ui.elements['incident-history'].children;
+  const disclosure = rows[0].children[0].children[0];
+  assert.equal(disclosure.attributes['aria-expanded'], 'false');
+  assert.equal(rows[1].hidden, true);
+  disclosure.emit('click');
+  assert.equal(disclosure.attributes['aria-expanded'], 'true');
+  assert.equal(rows[1].hidden, false);
+  const details = rows[1].children[0].children[0];
+  const detailLines = details.children[1].children;
+  assert.equal(detailLines[0].children[0].textContent, 'Data: ');
+  assert.equal(detailLines[0].children[1].textContent, `${new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric',
+  }).format(incidentDetails.history[0].timestamp)} ${new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(incidentDetails.history[0].timestamp)}`);
+  assert.equal(detailLines[1].children[0].textContent, 'Usuário: ');
+  assert.equal(detailLines[1].children[1].textContent, 'Operador');
+  assert.equal(detailLines[2].children[0].textContent, 'Ações realizadas: ');
+  assert.equal(detailLines[3].children[0].textContent, 'Mensagem: ');
+  assert.equal(detailLines[3].children[1].textContent, message);
+  disclosure.emit('click');
+  assert.equal(disclosure.attributes['aria-expanded'], 'false');
+  assert.equal(rows[1].hidden, true);
 });
 
 
@@ -700,7 +721,7 @@ test('active trigger duration refreshes locally without resetting scroll or reso
 });
 
 
-test('update history hides empty table and shows compact dates with newest updates first', async () => {
+test('update history hides empty table and shows newest updates with message-first columns', async () => {
   let history = [];
   const ui = await surface(response, { api: async () => ({ ok: true, json: async () => ({
     ...details, history,
@@ -719,9 +740,13 @@ test('update history hides empty table and shows compact dates with newest updat
   assert.equal(ui.elements['incident-history-empty'].hidden, true);
   assert.equal(ui.elements['incident-history-count'].textContent, '2 registros');
   const rows = ui.elements['incident-history'].children;
-  assert.equal(rows[0].children[1].textContent, 'carlos');
-  assert.equal(rows[0].children[0].children[0].textContent, '13/11/2026 09:04');
-  assert.equal(rows[0].children[0].children[0].dateTime, '2026-11-13T12:04:59.000Z');
+  assert.equal(rows[0].children[1].textContent, '13/11/2026');
+  assert.equal(rows[0].children[2].textContent, 'carlos');
+  assert.equal(rows[0].children[3].children[0].textContent, 'Reconhecido');
+  const detailContent = rows[1].children[0].children[0];
+  assert.equal(detailContent.children[1].children[0].children[1].textContent, '13/11/2026 09:04');
+  assert.equal(detailContent.children[1].children[1].children[1].textContent, 'carlos');
+  assert.equal(rows[1].hidden, true);
 });
 
 

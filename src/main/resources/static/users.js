@@ -74,6 +74,7 @@
   }
   $('user-new').addEventListener('click', event => open(null, event.currentTarget));
   $('user-cancel').addEventListener('click', close);
+  $('user-dialog-close').addEventListener('click', close);
   dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
   dialog.addEventListener('close', () => {
     $('user-code').textContent = '';
