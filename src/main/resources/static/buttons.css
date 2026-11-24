@@ -78,13 +78,6 @@ button.system-button-icon-only {
 #maps .map-options button.system-button { width:100% !important; justify-content:flex-start !important; margin-block:3px; }
 @media(prefers-reduced-motion:reduce) { button.system-button { transition:none; } }
 
-#ap-dialog .ap-transfer { grid-template-columns:minmax(0,1fr) 112px minmax(0,1fr); }
-#ap-dialog .ap-arrows { align-items:stretch; }
-@media(max-width:760px) {
-  #ap-dialog .ap-transfer { grid-template-columns:minmax(0,1fr); }
-  #ap-dialog .ap-arrows { justify-content:center; }
-}
-
 button.system-button-label::after { content:attr(aria-label); }
 button.system-button > [data-ap-icon] svg { width:16px; height:16px; }
 
