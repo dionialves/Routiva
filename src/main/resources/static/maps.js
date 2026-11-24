@@ -1065,12 +1065,24 @@ createForm.onsubmit = async event => {
   }
 };
 
+const acknowledgedOptions = $('show-acknowledged').querySelectorAll('button');
+
+function selectAcknowledged(showAcknowledged) {
+  acknowledgedOptions.forEach(option => {
+    option.setAttribute('aria-pressed', String((option.dataset.acknowledged === 'true') === showAcknowledged));
+  });
+}
+
+acknowledgedOptions.forEach(option => {
+  option.onclick = () => selectAcknowledged(option.dataset.acknowledged === 'true');
+});
+
 function showProperties() {
   const layout = current?.layout;
   $('map-error').textContent = '';
   $('name').value = layout?.name || '';
   $('minimum-severity').value = String(layout?.minimumSeverity ?? 0);
-  $('show-acknowledged').checked = layout?.showAcknowledged ?? true;
+  selectAcknowledged(layout?.showAcknowledged ?? true);
   $('initial-view').querySelector('[value=saved]').hidden = !layout.camera;
   $('initial-view').value = followingFit ? 'fit' : 'current';
   $('map-dialog').showModal();
@@ -1079,14 +1091,16 @@ function showProperties() {
 $('properties').onclick = showProperties;
 $('close-map').onclick = () => $('map-dialog').close();
 $('close-map-header').onclick = () => $('map-dialog').close();
-$('map-form').onsubmit = async event => {
+$('map-form').onsubmit = event => {
   event.preventDefault();
+  if (!$('map-dialog').open) return;
   const name = $('name').value.trim();
   if (!name) { $('map-error').textContent = 'Informe o nome do mapa.'; return; }
   checkpoint();
   current.layout.name = name;
   current.layout.minimumSeverity = Number($('minimum-severity').value);
-  current.layout.showAcknowledged = $('show-acknowledged').checked;
+  current.layout.showAcknowledged =
+    $('show-acknowledged').querySelector('[aria-pressed="true"]').dataset.acknowledged === 'true';
   const mode = $('initial-view').value;
   if (mode === 'fit') {
     current.layout.camera = null;

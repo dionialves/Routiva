@@ -29,7 +29,7 @@
 <dialog th:fragment="analysisDialog(dialogId, titleId, descriptionId, content)"
         th:replace="~{design-system :: modalDialog(${dialogId}, ${titleId}, ${descriptionId}, ${content}, 'analysis-dialog')}"></dialog>
 <header th:fragment="modalHeader(titleId, title, descriptionId, description, iconName, closeButtonId, closeLabel)" class="form-dialog-header app-modal-header">
-  <span class="app-modal-title-icon"><svg th:replace="~{shell :: icon(${iconName})}"></svg></span>
+  <span class="app-modal-title-icon" th:if="${iconName != null}"><svg th:replace="~{shell :: icon(${iconName})}"></svg></span>
   <div><h2 th:id="${titleId}" th:text="${title}"></h2><p th:if="${description != null}" th:id="${descriptionId}" th:text="${description}"></p></div>
   <button th:id="${closeButtonId}" type="button" class="system-button system-button-icon-only" th:attr="aria-label=${closeLabel}"><svg th:replace="~{shell :: icon('close')}"></svg></button>
 </header>
