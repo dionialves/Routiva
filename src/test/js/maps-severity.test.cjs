@@ -60,9 +60,11 @@ test('draw paints POP circles using the map threshold rather than unclassified i
     $: id => elements.get(id), nodeHosts: () => hosts,
     svg: (tag, attributes) => ({tag, attributes, children: [], append(...children) { this.children.push(...children); }}),
     popSummary: {bind() {}},
+    MapSwitch:require('../../main/resources/static/map-switch.js'),
     drawNode: (element, name, position, fill) => { element.fill = fill; }
   });
   vm.runInContext(source.slice(source.indexOf('function hostLevel('), source.indexOf('function checkpoint(')), drawContext);
+  vm.runInContext(source.slice(source.indexOf('function drawMapElement('), source.indexOf('function alignDraggedNode(')), drawContext);
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')), drawContext);
   vm.runInContext('draw()', drawContext);
   assert.equal(canvas.children.find(child => child.attributes?.['aria-label']?.startsWith('POP')).fill, 'green');
@@ -111,8 +113,9 @@ test('equipment ports remain reachable while central anchors stay behind their e
     $:id=>id==='canvas'?canvas:{}, metricSummary:()=>null,groupLevel:()=>-1,nodeHosts:()=>[],
     svg:(tag,attributes)=>({tag,attributes,append(){}}),popSummary:{bind(){}},
     drawNode(){},drawTelecomSite(){},pingStateFor:()=> 'unknown',
-    MapSwitch:{draw(){},connectedPorts:()=>new Set()}
+    MapSwitch:{...require('../../main/resources/static/map-switch.js'),draw(){}}
   });
+  vm.runInContext(source.slice(source.indexOf('function drawMapElement('), source.indexOf('function alignDraggedNode(')),context);
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')),context);
   vm.runInContext('draw()',context);
   assert.equal(hostMenus.length, 2);

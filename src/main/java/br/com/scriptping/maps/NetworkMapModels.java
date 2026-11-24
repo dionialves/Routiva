@@ -65,7 +65,10 @@ public final class NetworkMapModels {
     }
     public record Connection(String id, String name, String hostA, String interfaceA, String hostB, String interfaceB) {}
     public record Bend(double x, double y) {}
-    public record Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId, Connection connection) {
+    public record Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId, Connection connection, String appearance) {
+        public Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId, Connection connection) {
+            this(from, to, fromPort, toPort, style, points, lineStyle, mappedConnectionId, connection, null);
+        }
         public Link(String from, String to, String fromPort, String toPort, String style, List<Bend> points, String lineStyle, String mappedConnectionId) {
             this(from, to, fromPort, toPort, style, points, lineStyle, mappedConnectionId, null);
         }

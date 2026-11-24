@@ -12,14 +12,22 @@ function setup() {
   };
   const link = {from:'a',to:'b',fromPort:'r1',style:'corners',points:[{x:10,y:80}]};
   const context = vm.createContext({$, link, editing:true, pendingLink:null, selectedLink:null, selected:null,
-    window:{}, Option:function(text,value){this.textContent=text;this.value=value;}, savingConnection:false, loadConnectionInterfaces(){}, lastConnectionClick:null,selection:new Set(),checkpoints:0,draw(){},svg:()=>({}),
+    window:{}, Option:function(text,value){this.textContent=text;this.value=value;}, savingConnection:false, loadConnectionInterfaces(){ context.updateLinkEndpoints(); }, lastConnectionClick:null,selection:new Set(),checkpoints:0,draw(){},svg(tag, attributes) {
+      return {tag, attributes, children: [], classList:{toggle(){}},
+        getAttribute(name){return this.attributes[name];}, setAttribute(name,value){this.attributes[name]=value;},
+        getTotalLength:()=>660, replaceChildren(){this.children=[];}, append(...items) {this.children.push(...items);},
+        getBBox:()=>({x:0,y:0,width:24,height:24})};
+    },
     current:{layout:{nodes:[{id:'a',hostId:'h1',name:'SW',ports:[{id:'r1',type:'rj45'}]},
       {id:'b',groupId:'g1',name:'Grupo'}],links:[link]}},
     inventory:[{id:'h1',name:'Switch Core'}],groups:[{id:'g1',name:'Datacenter'}],
     MapLinks:require('../../main/resources/static/map-links.js'),
+    colors:['gray', 'green'],
+    MapTraffic:require('../../main/resources/static/map-traffic.js'),
     MapSwitch:require('../../main/resources/static/map-switch.js')
   });
   vm.runInContext('function checkpoint(){checkpoints++;} function linkRoute(){return [{x:0,y:0},{x:200,y:0}];}', context);
+  vm.runInContext(source.slice(source.indexOf('const labelPositions'), source.indexOf('function alignDraggedNode(')), context);
   vm.runInContext(source.slice(source.indexOf('function connectionEndpointLabel('),source.indexOf('function switchDraft(')), context);
   return {context,$,run:code=>vm.runInContext(code,context)};
 }
@@ -30,21 +38,51 @@ test('modal shows endpoint bindings and ports; cancel leaves the connection unch
   assert.equal($('link-from').value, 'Switch Core');
   assert.equal($('link-from').title, 'Switch Core');
   assert.equal($('link-to').value, 'Datacenter');
-  $('link-dialog-style').value='curved';
+  $('link-dialog-style').value='dashed-pulses';
   $('cancel-link').onclick();
   assert.equal(context.link.lineStyle,undefined);
   assert.equal(context.checkpoints,0);
 });
-test('changing line appearance resets waypoints and supports undo', () => {
+test('endpoint thumbnails use the map renderer with the saved icon, tint and orientation', () => {
+  const {$, run} = setup();
+  run(`Object.assign(current.layout.nodes[0], {icon:'switch', rotation:15, switchColor:'#abcedf'});
+    Object.assign(current.layout.nodes[1], {icon:'sector-radio', flipX:true});
+    openLinkDialog(link);`);
+  const switchDrawing = $('link-from-art').options[0].children[0];
+  const radioDrawing = $('link-to-art').options[0].children[0];
+  assert.match(switchDrawing.attributes.transform, /rotate\(15\)/);
+  const switchImage = switchDrawing.children.find(item => item.tag === 'image');
+  assert.match(switchImage.attributes.href, /\/switch\.svg/);
+  assert.match(switchImage.attributes.filter, /switch-tint/);
+  assert.match(radioDrawing.attributes.transform, /scale\(-1 1\)/);
+  assert.match(radioDrawing.children.find(item => item.tag === 'image').attributes.href, /\/sector-radio\.webp/);
+});
+
+test('smooth geometry and dashed pulses preview independently and preserve waypoints', async () => {
   const {$,run,context} = setup();
   run('openLinkDialog(link)');
-  $('link-dialog-style').value='curved';
-  $('link-form').onsubmit({preventDefault(){}});
-  assert.equal(context.link.lineStyle,'curved');
-  assert.equal(context.link.style,'corners');
-  assert.equal(context.link.points.length,0);
-  assert.equal(context.checkpoints,1);
-  assert.equal($('link-dialog').open,false);
+  const previousPath = $('link-preview').options[0].attributes.d;
+  $('link-dialog-type').value = 'smooth';
+  $('link-dialog-type').onchange();
+  const smoothPath = $('link-preview').options[0].attributes.d;
+  assert.notEqual(smoothPath, previousPath);
+  assert.match(smoothPath, / Q /);
+  $('link-dialog-style').value = 'dashed-pulses';
+  $('link-dialog-style').onchange();
+  const [line, layer] = $('link-preview').options;
+  assert.equal(line.attributes.d, smoothPath);
+  assert.equal(line.attributes.class, 'link-preview-wireless');
+  assert.equal(layer.trafficPulses.attributes.visibility, 'visible');
+  await $('link-form').onsubmit({preventDefault(){}});
+  assert.equal(context.link.lineStyle, 'curved');
+  assert.equal(context.link.style, 'corners');
+  assert.equal(context.link.appearance, 'dashed-pulses');
+  assert.deepEqual(context.link.points, [{x:10,y:80}]);
+  assert.equal(context.checkpoints, 1);
+  assert.equal($('link-dialog').open, false);
+  run('openLinkDialog(link)');
+  assert.equal($('link-dialog-type').value, 'smooth');
+  assert.equal($('link-dialog-style').value, 'dashed-pulses');
 });
 
 test('connection settings only open in edit mode', () => {
@@ -83,8 +121,10 @@ test('endpoint summaries follow interface selection without changing the link', 
   $('connection-interface-a').value = 'sfp-sfpplus2';
   $('connection-interface-b').value = 'ether3';
   run('updateLinkEndpoints()');
-  assert.equal($('link-from-interface').textContent, 'sfp-sfpplus2 · ID h1');
-  assert.equal($('link-to-interface').textContent, 'ether3 · ID g1');
+  assert.equal($('link-from-interface').textContent, 'sfp-sfpplus2');
+  assert.equal($('link-to-interface').textContent, 'ether3');
+  assert.equal($('link-from-identity').textContent, ' · ID h1');
+  assert.equal($('link-to-identity').textContent, ' · ID g1');
   assert.match($('connection-host-a').textContent, /Switch Core/);
   assert.equal($('link-from-capacity').hidden, true);
   assert.equal(context.checkpoints, 0);
@@ -92,7 +132,7 @@ test('endpoint summaries follow interface selection without changing the link', 
 test('header close dismisses the dialog without applying draft appearance', () => {
   const {$, run, context} = setup();
   run('openLinkDialog(link)');
-  $('link-dialog-style').value = 'curved';
+  $('link-dialog-style').value = 'dashed';
   $('close-link').onclick();
   assert.equal($('link-dialog').open, false);
   assert.equal(context.link.lineStyle, undefined);

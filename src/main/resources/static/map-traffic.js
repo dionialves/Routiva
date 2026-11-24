@@ -48,6 +48,7 @@ const MapTraffic = (() => {
     const wireless = Boolean(layer.trafficContext?.wireless);
     const data = state(reading, now);
     const link = layer.trafficContext?.link;
+    const explicitPulses = link?.appearance?.endsWith('-pulses');
     const capacities = { '10m': 1e7, '100m': 1e8, '1g': 1e9, '10g': 1e10,
       '25g': 25e9, '40g': 40e9, '50g': 50e9, '100g': 100e9,
       '200g': 200e9, '400g': 400e9, '800g': 800e9 };
@@ -58,9 +59,9 @@ const MapTraffic = (() => {
     data.capacity = capacities[port?.capacity] || data.capacity;
     data.down = [reading?.a, reading?.b].some(endpoint => fresh(endpoint, now) && !endpoint.up);
     if (data.down) { data.tx = null; data.rx = null; }
-    path.classList.toggle('traffic-down', data.down);
+    path.classList.toggle('traffic-down', !explicitPulses && data.down);
     const d = path.getAttribute('d');
-    const color = data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity) || '#687486';
+    const color = explicitPulses ? '#22C55E' : data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity) || '#687486';
     path.style?.setProperty('--traffic-color', color);
     path.classList.toggle('traffic-measured', Boolean(color));
     // Geometry owns the animation. Metric updates only change visibility and color.
@@ -113,7 +114,7 @@ const MapTraffic = (() => {
       layer.append(pulses);
       layer.trafficPulses = pulses;
     }
-    layer.trafficPulses.setAttribute('visibility', enabled && (data.tx > 0 || data.rx > 0) ? 'visible' : 'hidden');
+    layer.trafficPulses.setAttribute('visibility', enabled && (explicitPulses || data.tx > 0 || data.rx > 0) ? 'visible' : 'hidden');
     if (wireless) {
       layer.style?.setProperty('--wireless-pulse-color', color);
     }

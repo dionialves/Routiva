@@ -359,6 +359,7 @@ const MapSwitch = (() => {
       }
       group.append(g);
     }
+    if (options.showLabel === false) return;
     const box = bounds(node);
     const positions = {ABOVE: {x: 0, y: box.top - 12, 'text-anchor': 'middle'},
       BELOW: {x: 0, y: box.bottom + 19, 'text-anchor': 'middle'},

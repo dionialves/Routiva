@@ -21,9 +21,10 @@ test('click and keyboard bring the selected connection above other routes withou
     $: id => id === 'canvas' ? canvas : {setAttribute() {}},
     current:{layout:{name:'Map',nodes:[{id:'a',name:'A'},{id:'b',name:'B'}],links}},
     editing:false, drag:null, marquee:null, selected:null, selectedLink:null, selection:new Set(),
-    MapSwitch:{endpoint:() => ({x:0,y:0})}, MapLinks:{path:link => link === links[0] ? 'first' : 'second'},
+    MapSwitch:{...require('../../main/resources/static/map-switch.js'),endpoint:() => ({x:0,y:0})}, MapLinks:{path:link => link === links[0] ? 'first' : 'second'},
     MapConnectionTooltip:{hide() {}}, updateTrafficLayer(layer) {layer.updated = true;},
     MapTraffic:{isWireless:() => false}, colors:['gray','green'], labels:['','OK'], drawNode() {}});
+  vm.runInContext(source.slice(source.indexOf('function drawMapElement('), source.indexOf('function alignDraggedNode(')), context);
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')), context);
   const routes = () => canvas.children.find(child => child.attributes.class === 'map-connectors').children;
   vm.runInContext('draw()', context);

@@ -385,17 +385,19 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
-    void persistsEditableRoutesAndRejectsInvalidGeometry() throws Exception {
+    void persistsEditableRoutesAndRejectsInvalidGeometryOrAppearance() throws Exception {
         var a = new Node("a", null, null, null, "A", 0, 0, null);
         var b = new Node("b", null, null, null, "B", 200, 0, null);
         var bends = List.of(new Bend(0, 80), new Bend(200, 80), new Bend(200, -60));
-        var link = new Link("a", "b", null, null, "corners", bends, "curved");
+        var link = new Link("a", "b", null, null, "corners", bends, "curved", null, null, "dashed-pulses");
         var saved = service.save(new Saved(null, 0,
             new Layout("Caminho", null, 0, List.of(a, b), List.of(link)), null));
         assertThat(service.maps()).contains(saved);
         assertThat(saved.layout().links().getFirst().points()).isEqualTo(bends);
         assertThat(saved.layout().links().getFirst().lineStyle()).isEqualTo("curved");
+        assertThat(saved.layout().links().getFirst().appearance()).isEqualTo("dashed-pulses");
         for (var invalid : List.of(new Link("a", "b", null, null, "corners", List.of(), "invalid"),
+                new Link("a", "b", null, null, "straight", List.of(), "straight", null, null, "invalid"),
                 new Link("a", "b", null, null, "unknown", List.of()),
                 new Link("a", "b", null, null, "corners", List.of(new Bend(Double.NaN, 0))))) {
             assertThatThrownBy(() -> service.save(new Saved(null, 0,

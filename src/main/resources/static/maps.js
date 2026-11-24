@@ -187,10 +187,12 @@ const labelPositions = {
 };
 
 function drawNode(group, name, position, fill, isSelected = false) {
+  group.append(svg('circle', {r:12, fill, stroke:isSelected ? 'var(--cyan)' : 'none',
+    'stroke-width':3}));
+  if (name == null) return;
   const label = svg('text', labelPositions[position] || labelPositions.BELOW);
   label.textContent = name;
-  group.append(svg('circle', {r:12, fill, stroke:isSelected ? 'var(--cyan)' : 'none',
-    'stroke-width':3}), label);
+  group.append(label);
 }
 
 function drawTelecomSite(group, name, position, fill, isSelected = false, node = {}) {
@@ -229,6 +231,7 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
     const title = svg('title', {}); title.textContent = status.label;
     led.append(title); group.append(led);
   } else if (!editing) group.append(svg('circle', {cx: 0, cy: cloud ? 30 : 48, r: 5, fill, stroke: 'var(--panel-bg)', 'stroke-width': 2}));
+  if (name == null) return;
   const box = MapSwitch.bounds({...node, icon: server ? node.icon : cloud ? 'cloud' : 'telecom-site'});
   const positions = {ABOVE: {x: 0, y: box.top - 8, 'text-anchor': 'middle'},
     BELOW: {x: 0, y: box.bottom + 17, 'text-anchor': 'middle'},
@@ -237,6 +240,16 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
   const label = svg('text', positions[position] || positions.BELOW);
   label.textContent = name;
   outer.append(label);
+}
+
+function drawMapElement(group, node, color, selected, options = {}) {
+  if (MapSwitch.isEquipment(node)) {
+    MapSwitch.draw(svg, group, node, color, selected, options);
+    return;
+  }
+  const renderer = ['telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(node.icon)
+    ? drawTelecomSite : drawNode;
+  renderer(group, options.showLabel === false ? null : node.name, node.labelPosition, color, selected, node);
 }
 
 function alignDraggedNode(node, x, y, nodes, scale) {
@@ -301,9 +314,11 @@ function draw() {
     if (!a || !b) continue;
     const start = MapSwitch.endpoint(a, link.fromPort), end = MapSwitch.endpoint(b, link.toPort);
     const d = MapLinks.path(link, start, end);
-    const wireless = MapTraffic.isWireless(link, nodes);
+    const wireless = link.appearance ? link.appearance.startsWith('dashed') : MapTraffic.isWireless(link, nodes);
+    const pulses = link.appearance?.endsWith('-pulses');
+    const legacyMapped = !link.appearance && link.mappedConnectionId;
     const line = svg('path', {d, class: 'map-connector' +
-      (link.mappedConnectionId ? ' map-connector-mapped' : '') +
+      (pulses || legacyMapped ? ' map-connector-mapped' : '') +
       (wireless ? ' map-connector-wireless' : '')});
     line.classList.toggle('selected-link', !editing && selectedLink === link);
     line.setAttribute('tabindex', 0);
@@ -383,7 +398,7 @@ function draw() {
         (wireless ? ' map-connector-wireless' : ''), 'aria-hidden': 'true'}));
     }
     connectors.append(line, hit);
-    if (link.mappedConnectionId && !editing) {
+    if ((pulses || legacyMapped) && !editing) {
       const layer = svg('g', {class: 'map-traffic', 'aria-hidden': 'true'});
       connectors.append(layer);
       layer.trafficContext = {line, link, wireless, route: MapLinks.points(link, start, end), nodes};
@@ -402,14 +417,16 @@ function draw() {
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
-    if (['switch', 'radio', 'sector-radio'].includes(n.icon)) MapSwitch.draw(svg, g, n, metric ? metric.color : colors[level], selection.has(n.id) || selected === n.id, {
+    const equipment = MapSwitch.isEquipment(n);
+    const color = metric ? metric.color : equipment ? colors[level]
+      : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0];
+    drawMapElement(g, n, color, selection.has(n.id) || selected === n.id, equipment ? {
       selectionFrame: editing && tool === 'select' && selection.size === 1,
       connectedPorts: MapSwitch.connectedPorts(n, links),
       pingState: editing ? 'unknown' : pingStateFor(n.hostId),
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
       onPort: portId => connectEndpoint(n, portId)
-    });
-    else (['telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(n.icon) ? drawTelecomSite : drawNode)(g, n.name, n.labelPosition, metric ? metric.color : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0], selection.has(n.id) || selected === n.id, n);
+    } : undefined);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -1261,6 +1278,19 @@ function swapLinkEndpoints() {
   updateLinkEndpoints();
 }
 $('swap-connection-endpoints').onclick = swapLinkEndpoints;
+function drawLinkEndpointArt(preview, node) {
+  preview.replaceChildren();
+  if (!node) return;
+  const group = svg('g', {});
+  preview.append(group);
+  const color = node.color || colors[1];
+  drawMapElement(group, node, color, false, {
+    showLabel: false,
+    connectedPorts: MapSwitch.connectedPorts(node, current.layout.links)
+  });
+  const {x, y, width, height} = group.getBBox();
+  preview.setAttribute('viewBox', [x - 3, y - 3, width + 6, height + 6].join(' '));
+}
 function updateLinkEndpoints() {
   if (!pendingLink) return;
   const draft = linkEndpointDraft();
@@ -1279,19 +1309,41 @@ function updateLinkEndpoints() {
     $('link-' + side).value = name;
     $('link-' + side).title = name;
     const interfaceName = (mapped ? selectedInterface : port?.name) || 'Interface não selecionada';
-    $('link-' + side + '-interface').textContent = interfaceName + (id ? ' · ID ' + id : '');
+    $('link-' + side + '-interface').textContent = interfaceName;
+    $('link-' + side + '-identity').textContent = id ? ' · ID ' + id : '';
+    drawLinkEndpointArt($('link-' + side + '-art'), node);
     const speed = (!mapped || selectedInterface === port?.name) && port?.speed;
     $('link-' + side + '-capacity').hidden = !speed || /^(unknown|auto|0(?:bps)?)$/i.test(speed);
     $('link-' + side + '-capacity').textContent = speed || '';
     $('connection-host-' + (index ? 'b' : 'a')).textContent = identity;
     $('connection-host-' + (index ? 'b' : 'a')).title = identity;
   });
+  drawLinkPreview();
+}
+function linkGeometry(type) {
+  return {style: type === 'straight' ? 'straight' : 'corners',
+    lineStyle: type === 'smooth' ? 'curved' : 'straight'};
 }
 function drawLinkPreview() {
-  const link = {style: $('link-dialog-type').value, lineStyle: $('link-dialog-style').value,
+  const appearance = $('link-dialog-style').value;
+  const link = {...linkGeometry($('link-dialog-type').value), appearance,
     points: [{x: 180, y: 110}, {x: 620, y: 110}, {x: 620, y: 30}]};
-  $('link-preview').replaceChildren(svg('path', {d: MapLinks.path(link, {x: 70, y: link.style === 'corners' ? 30 : 70}, {x: 730, y: link.style === 'corners' ? 30 : 70}),
-    fill: 'none', stroke: '#8995aa', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke'}));
+  const y = link.style === 'corners' ? 30 : 70;
+  const start = {x: 70, y}, end = {x: 730, y};
+  const wireless = appearance.startsWith('dashed');
+  const pulses = appearance.endsWith('-pulses');
+  const line = svg('path', {d: MapLinks.path(link, start, end),
+    stroke: pulses ? '#22C55E' : 'var(--muted)',
+    class: wireless ? 'link-preview-wireless' : '',
+    fill: 'none', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke'});
+  const preview = $('link-preview');
+  preview.replaceChildren(line);
+  if (pulses) {
+    const layer = svg('g', {'aria-hidden': 'true'});
+    preview.append(layer);
+    layer.trafficContext = {link, wireless};
+    MapTraffic.render(svg, layer, line, MapLinks.points(link, start, end), [], null, true);
+  }
 }
 function openLinkDialog(link) {
   if (!editing || $('link-dialog').open) return;
@@ -1300,17 +1352,19 @@ function openLinkDialog(link) {
   selectedLink = link; selected = null; selection.clear();
   $('link-from').value = connectionEndpointLabel(link, true);
   $('link-to').value = connectionEndpointLabel(link, false);
-  $('link-dialog-type').value = link.style || 'straight';
-  $('link-dialog-style').value = link.lineStyle || 'straight';
-  draw(); drawLinkPreview();
+  $('link-dialog-type').value = link.lineStyle === 'curved' ? 'smooth' : link.style || 'straight';
+  $('link-dialog-style').value = link.appearance || (
+    (MapTraffic.isWireless(link, current.layout.nodes) ? 'dashed' : 'solid') +
+    (link.mappedConnectionId ? '-pulses' : '')
+  );
+  draw();
   $('link-dialog').showModal();
   $('link-category').value = link.mappedConnectionId ? 'mapped' : 'simple';
   prepareConnectionHosts(true);
   $('connection-name').value = link.connection?.name || [link.from, link.to].map(id => current.layout.nodes.find(node => node.id === id)?.name || '').join(' ↔ ');
   loadConnectionInterfaces();
-  updateLinkEndpoints();
   $('delete-link').hidden = !current.layout.links.includes(link);
-  $('link-dialog-type').focus();
+  $('link-category').focus();
 }
 $('delete-link').onclick = () => {
   if (!editing || !pendingLink || !current.layout.links.includes(pendingLink)) return;
@@ -1358,8 +1412,10 @@ $('link-form').onsubmit = async event => {
       $('save-link-label').textContent = 'Salvar';
     }
   } else { mappedConnectionId = undefined; }
-  const style = $('link-dialog-type').value, lineStyle = $('link-dialog-style').value;
-  const appearanceChanged = target.style !== style || (target.lineStyle || 'straight') !== lineStyle;
+  const {style, lineStyle} = linkGeometry($('link-dialog-type').value);
+  const appearance = $('link-dialog-style').value;
+  const appearanceChanged = (target.style || 'straight') !== style ||
+    (target.lineStyle || 'straight') !== lineStyle || target.appearance !== appearance;
   if (linkEndpointsReversed || mappedConnectionId !== target.mappedConnectionId || appearanceChanged) checkpoint();
   if (mappedConnectionId) { target.mappedConnectionId = mappedConnectionId; target.connection = connection; }
   else { delete target.mappedConnectionId; delete target.connection; }
@@ -1369,11 +1425,8 @@ $('link-form').onsubmit = async event => {
     if (target.points) target.points = [...target.points].reverse();
   }
   if (appearanceChanged) {
-    const resetPoints = (pendingLink.lineStyle || 'straight') !== lineStyle;
-    pendingLink.style = style;
-    pendingLink.lineStyle = lineStyle;
-    if (resetPoints) pendingLink.points = [];
-    pendingLink.points ||= [];
+    Object.assign(target, {style, lineStyle, appearance});
+    target.points ||= [];
   }
   $('link-dialog').close(); draw();
 };
@@ -1851,7 +1904,7 @@ async function loadConnectionInterfaces() {
     $('swap-connection-endpoints').disabled = controls.some(control => control.disabled);
   } }
 }
-$('link-category').onchange = () => { drawLinkPreview(); loadConnectionInterfaces(); };
+$('link-category').onchange = loadConnectionInterfaces;
 $('connection-interface-a').onchange = $('connection-interface-b').onchange = () => updateLinkEndpoints();
 $('connection-retry').onclick = loadConnectionInterfaces;
 function connectionRate(value) { return MapTraffic.rate(value); }
@@ -1861,7 +1914,7 @@ function updateTrafficLayer(layer) {
   const from = nodes.find(n => n.id === link.from);
   const reference = connectionReadings.get(link.mappedConnectionId)?.hostA || definition?.hostA;
   MapTraffic.render(svg, layer, line, route, nodes, connectionReadings.get(link.mappedConnectionId),
-    $('traffic-animation').checked, Boolean(reference && reference !== (from?.hostId || definition?.hostA)),
+    $('traffic-animation').checked, Boolean(!link.appearance && reference && reference !== (from?.hostId || definition?.hostA)),
     connectionDisplayTime(link.mappedConnectionId));
 }
 try { $('traffic-animation').checked = localStorage.getItem('map-traffic-animation') !== 'false'; } catch {}

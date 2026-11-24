@@ -6,7 +6,7 @@
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
   <th:block th:replace="~{design-system :: picker}"></th:block>
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261124-element-footer-grid"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261120-hover-delay" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261123-sector" defer></script><script src="/map-links.js?v=20261120-wireless-selection" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261123-sector" defer></script><script src="/map-connection-tooltip.js?v=20261120-hover-delay" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/group-link-interfaces.js?v=20261120-progressive-editor" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261120-inline-settings" defer></script><script src="/maps.js?v=20261124-element-layout" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261124-line-appearance"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261120-hover-delay" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261124-link-layout" defer></script><script src="/map-links.js?v=20261124-line-appearance" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261124-line-appearance" defer></script><script src="/map-connection-tooltip.js?v=20261120-hover-delay" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/group-link-interfaces.js?v=20261120-progressive-editor" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261120-inline-settings" defer></script><script src="/maps.js?v=20261124-line-appearance" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{host-dialog :: resources}"></th:block></head>
 <body class="availability-dashboard">
@@ -160,20 +160,20 @@
   </form></th:block></dialog>
   <dialog th:replace="~{design-system :: formDialog('link-dialog', 'link-dialog-title', 'link-dialog-description', ~{maps :: link-dialog-content})}"><th:block th:fragment="link-dialog-content">
     <form id="link-form" class="connection-form form-dialog-frame">
-      <header class="form-dialog-header link-heading">
-        <div><h2 id="link-dialog-title">Configuração da conexão</h2><p id="link-dialog-description">Revise os equipamentos conectados, selecione as interfaces e defina o desenho visual da linha.</p></div>
-        <span class="link-heading-icon" aria-hidden="true"><svg th:replace="~{shell :: icon('connection-line')}"></svg></span>
-        <button type="button" id="close-link" class="system-button system-button-icon-only" aria-label="Fechar"><svg th:replace="~{shell :: icon('close')}"></svg></button>
-      </header>
+      <header th:replace="~{design-system :: modalHeader('link-dialog-title', 'Configuração da conexão', 'link-dialog-description', 'Revise os equipamentos conectados, selecione as interfaces e defina o desenho visual da linha.', 'connection-line', 'close-link', 'Fechar')}"></header>
       <div class="form-dialog-content link-config-content">
-        <section class="link-endpoints" aria-label="Equipamentos conectados"><article class="link-endpoint"><h3><svg th:replace="~{shell :: icon('play')}"></svg>Início</h3><div class="link-endpoint-details"><svg th:replace="~{shell :: icon('network-device')}"></svg><div><input id="link-from" readonly aria-label="Equipamento de início"><p id="link-from-interface">Interface não selecionada</p></div><span id="link-from-capacity" class="link-capacity" hidden></span></div></article><div class="link-endpoint-bridge" aria-hidden="true"><span></span></div><article class="link-endpoint"><h3><svg th:replace="~{shell :: icon('stop')}"></svg>Fim</h3><div class="link-endpoint-details"><svg th:replace="~{shell :: icon('network-device')}"></svg><div><input id="link-to" readonly aria-label="Equipamento de fim"><p id="link-to-interface">Interface não selecionada</p></div><span id="link-to-capacity" class="link-capacity" hidden></span></div></article></section>
-        <section class="form-dialog-section" aria-labelledby="link-visual-title">
+        <section class="link-endpoints" aria-label="Equipamentos conectados">
+          <article th:replace="~{maps :: linkEndpoint('from', 'Início', 'play')}"></article>
+          <div class="link-endpoint-bridge" aria-hidden="true"><span></span></div>
+          <article th:replace="~{maps :: linkEndpoint('to', 'Fim', 'stop')}"></article>
+        </section>
+        <section class="form-dialog-section link-visual-panel" aria-labelledby="link-visual-title">
           <h3 id="link-visual-title" class="form-dialog-section-title"><svg th:replace="~{shell :: icon('eye')}"></svg>Configuração visual</h3>
           <div class="form-dialog-section-fields link-visual-layout">
             <div class="link-visual-grid">
-              <label><span><svg th:replace="~{shell :: icon('layers')}"></svg>Categoria</span><select id="link-category"><option value="simple">Simples</option><option value="mapped">Mapeada · Ethernet MikroTik</option></select></label>
-              <label><span><svg th:replace="~{shell :: icon('connection-line')}"></svg>Tipo de linha</span><select id="link-dialog-type"><option value="straight">Direta</option><option value="corners">Com ponto</option></select></label>
-              <label><span><svg th:replace="~{shell :: icon('curved-line')}"></svg>Estilo</span><select id="link-dialog-style"><option value="straight">Reta</option><option value="curved">Curvada</option></select></label>
+              <label><span><svg th:replace="~{shell :: icon('layers')}"></svg>Categoria</span><select id="link-category"><option value="simple">Simples</option><option value="mapped">Interface Mapeada</option></select></label>
+              <label><span><svg th:replace="~{shell :: icon('connection-line')}"></svg>Tipo de linha</span><select id="link-dialog-type"><option value="straight">Linha reta</option><option value="corners">Linha reta com pontos</option><option value="smooth">Linha reta com pontos suavizados</option></select></label>
+              <label><span><svg th:replace="~{shell :: icon('curved-line')}"></svg>Estilo</span><select id="link-dialog-style"><option value="solid">Contínua simples</option><option value="dashed">Tracejada simples</option><option value="solid-pulses">Contínua com pulsos de luz</option><option value="dashed-pulses">Tracejada com pulsos de luz</option></select></label>
             </div>
             <svg id="link-preview" viewBox="0 0 800 140" role="img" aria-label="Pré-visualização da conexão"></svg>
           </div>
@@ -196,13 +196,28 @@
           </div>
         </section>
       </div>
-      <footer class="settings-actions form-dialog-footer link-footer">
+      <footer th:replace="~{design-system :: modalFooter(~{maps :: linkDialogActions})}"><div th:fragment="linkDialogActions" class="link-footer">
         <button type="button" id="delete-link" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir</button>
-        <button type="button" id="cancel-link" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
-        <button type="submit" id="save-link" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg><span id="save-link-label">Salvar</span></button>
-      </footer>
+        <div class="link-footer-actions">
+          <button type="button" id="cancel-link" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+          <button type="submit" id="save-link" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg><span id="save-link-label">Salvar</span></button>
+        </div>
+      </div></footer>
     </form>
   </th:block></dialog>
+  <th:block th:remove="all">
+    <article th:fragment="linkEndpoint(side, label, icon)" class="link-endpoint">
+      <h3><svg th:replace="~{shell :: icon(${icon})}"></svg><span th:text="${label}"></span></h3>
+      <div class="link-endpoint-details">
+        <svg class="link-endpoint-art" th:id="|link-${side}-art|" aria-hidden="true"></svg>
+        <div>
+          <input th:id="|link-${side}|" readonly th:attr="aria-label=${label}">
+          <p><span th:id="|link-${side}-interface|"></span><small th:id="|link-${side}-identity|"></small></p>
+          <span th:id="|link-${side}-capacity|" class="link-capacity" hidden></span>
+        </div>
+      </div>
+    </article>
+  </th:block>
   <dialog th:replace="~{design-system :: formDialog('element-dialog', 'element-title', 'element-description', ~{maps :: element-dialog-content})}"><th:block th:fragment="element-dialog-content">
     <form class="connection-form form-dialog-frame" id="element-form">
       <header th:replace="~{design-system :: modalHeader('element-title', 'Elemento do mapa', 'element-description', 'Configure as propriedades e a identificação do elemento na topologia.', null, 'close-element', 'Fechar')}"></header>

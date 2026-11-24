@@ -23,7 +23,7 @@ const MapLinks = (() => {
   function path(link, start, end) {
     const route = points(link, start, end);
     const move = `M ${start.x} ${start.y}`;
-    if (link.lineStyle !== 'curved') return move + route.slice(1).map(p => ` L ${p.x} ${p.y}`).join('');
+    if (link.lineStyle !== 'curved' || (route.length === 2 && link.appearance)) return move + route.slice(1).map(p => ` L ${p.x} ${p.y}`).join('');
     if (route.length === 2) {
       const x = (start.x + end.x) / 2;
       return `${move} C ${x} ${start.y} ${x} ${end.y} ${end.x} ${end.y}`;

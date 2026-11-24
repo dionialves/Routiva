@@ -181,7 +181,8 @@ public class NetworkMapService {
         for (var link : layout.links()) {
             if (link == null || !ids.contains(link.from()) || !ids.contains(link.to()) || link.from().equals(link.to())) throw invalid();
             if (!Set.of("straight", "corners").contains(link.style())
-                || !Set.of("straight", "curved").contains(link.lineStyle())) throw invalid();
+                || !Set.of("straight", "curved").contains(link.lineStyle())
+                || (link.appearance() != null && !Set.of("solid", "dashed", "solid-pulses", "dashed-pulses").contains(link.appearance()))) throw invalid();
             if ((link.mappedConnectionId() == null) != (link.connection() == null)) throw invalid();
             if (link.mappedConnectionId() != null) {
                 var c = link.connection();
