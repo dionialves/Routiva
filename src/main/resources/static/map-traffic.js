@@ -61,6 +61,7 @@ const MapTraffic = (() => {
     const data = state(reading, now);
     const link = layer.trafficContext?.link;
     const explicitPulses = link?.appearance?.endsWith('-pulses');
+    const solidPulses = link?.appearance === 'solid-pulses';
     const capacities = { '10m': 1e7, '100m': 1e8, '1g': 1e9, '10g': 1e10,
       '25g': 25e9, '40g': 40e9, '50g': 50e9, '100g': 100e9,
       '200g': 200e9, '400g': 400e9, '800g': 800e9 };
@@ -74,64 +75,83 @@ const MapTraffic = (() => {
       data.tx = null;
       data.rx = null;
     }
-    path.classList.toggle('traffic-down', !explicitPulses && data.down);
+    path.classList.toggle('traffic-down', (!explicitPulses || solidPulses) && data.down);
     const d = path.getAttribute('d');
-    const color = explicitPulses ? '#22C55E' : data.down ? '#EF4444' : utilizationColor(data.tx, data.capacity) || '#687486';
+    const utilization = utilizationColor(data.tx, data.capacity);
+    const color = solidPulses
+      ? data.down ? '#EF4444' : utilization && utilization !== '#22C55E' ? utilization : '#16A34A'
+      : explicitPulses ? '#22C55E' : data.down ? '#EF4444' : utilization || '#687486';
     path.style?.setProperty('--traffic-color', color);
     path.classList.toggle('traffic-measured', Boolean(color));
     // Geometry owns the animation. Metric updates only change visibility and color.
-    const signature = JSON.stringify([d, reverse, wireless]);
+    const signature = JSON.stringify([d, reverse, wireless, solidPulses]);
     if (layer.trafficGeometry !== signature) {
       layer.trafficGeometry = signature;
       layer.replaceChildren();
-      const length = path.getTotalLength();
-      const period = Math.max(1, length / count(length));
-      const width = Math.min(32, period * 0.38);
       const pulses = svg('g', {class: 'traffic-pulses'});
-      // Concentric dash lengths form a longitudinal light gradient on the actual path,
-      // including curves. All layers share a period and phase, with no moving objects.
-      if (wireless) {
-        const maskId = `wireless-pulse-mask-${++nextMask}`;
-        const gradientId = `${maskId}-fade`;
-        const first = route[0], last = route[route.length - 1];
-        const defs = svg('defs', {});
-        const gradient = svg('linearGradient', {id: gradientId, gradientUnits: 'userSpaceOnUse',
-          x1: first.x, y1: first.y, x2: last.x, y2: last.y});
-        for (const [offset, opacity] of [[0, 0], [Math.min(0.2, 12 / Math.max(length, 1)), 1],
-          [1 - Math.min(0.2, 12 / Math.max(length, 1)), 1], [1, 0]])
-          gradient.append(svg('stop', {offset, 'stop-color': 'white', 'stop-opacity': opacity}));
-        const mask = svg('mask', {id: maskId, maskUnits: 'userSpaceOnUse',
-          x: Math.min(...route.map(p => p.x)) - length, y: Math.min(...route.map(p => p.y)) - length,
-          width: length * 3, height: length * 3});
-        mask.append(svg('path', {d, fill: 'none', stroke: `url(#${gradientId})`, 'stroke-width': 24}));
-        defs.append(gradient, mask);
-        layer.append(defs);
-        pulses.setAttribute('mask', `url(#${maskId})`);
-        {
-          const group = svg('g', {});
-          const dash = Math.min(20, period * 0.38);
-          for (const [stroke, thickness, opacity, blur] of [
-            ['var(--wireless-pulse-color)', 10, 0.22, true],
-            ['var(--wireless-pulse-color)', 5, 0.9, false], ['#F0FFF9', 2.5, 1, false]]) {
-            group.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
-              'stroke-linecap': 'round', opacity, 'stroke-dasharray': `${dash} ${period - dash}`,
-              class: 'traffic-pulse', style: `${blur ? 'filter:blur(3px);' : ''}--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
-          }
-          pulses.append(group);
+      if (solidPulses) {
+        pulses.setAttribute('class', 'traffic-pulses traffic-pulses-solid');
+        for (const [className, stroke, thickness] of [
+          ['traffic-solid-glow', '#00FF88', 7], ['traffic-solid-core', '#D1FFE4', 3.5],
+        ]) {
+          pulses.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
+            'stroke-linecap': 'round', 'stroke-dasharray': '24 106',
+            class: `traffic-pulse ${className}`, style: reverse ? 'animation-direction:reverse' : ''}));
         }
-      } else for (let i = 0; i < 12; i++) {
-        const dash = width * (1 - i / 12);
-        pulses.append(svg('path', {d, fill: 'none', stroke: '#F0FCFF',
-          'stroke-width': 2.4, 'stroke-linecap': 'butt', opacity: 0.10 + i * 0.012,
-          'stroke-dasharray': `${dash} ${period - dash}`, class: 'traffic-pulse',
-          style: `--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
+      } else {
+        renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse);
       }
       layer.append(pulses);
       layer.trafficPulses = pulses;
     }
-    layer.trafficPulses.setAttribute('visibility', enabled && (explicitPulses || data.tx > 0 || data.rx > 0) ? 'visible' : 'hidden');
+    const animate = enabled && (!solidPulses || !data.down) && (explicitPulses || data.tx > 0 || data.rx > 0);
+    layer.trafficPulses.setAttribute('visibility', animate ? 'visible' : 'hidden');
     if (wireless) {
       layer.style?.setProperty('--wireless-pulse-color', color);
+    }
+  }
+
+  function renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse) {
+    const length = path.getTotalLength();
+    const period = Math.max(1, length / count(length));
+    const width = Math.min(32, period * 0.38);
+    // Concentric dash lengths form a longitudinal light gradient on the actual path,
+    // including curves. All layers share a period and phase, with no moving objects.
+    if (wireless) {
+      const maskId = `wireless-pulse-mask-${++nextMask}`;
+      const gradientId = `${maskId}-fade`;
+      const first = route[0], last = route[route.length - 1];
+      const defs = svg('defs', {});
+      const gradient = svg('linearGradient', {id: gradientId, gradientUnits: 'userSpaceOnUse',
+        x1: first.x, y1: first.y, x2: last.x, y2: last.y});
+      for (const [offset, opacity] of [[0, 0], [Math.min(0.2, 12 / Math.max(length, 1)), 1],
+        [1 - Math.min(0.2, 12 / Math.max(length, 1)), 1], [1, 0]])
+        gradient.append(svg('stop', {offset, 'stop-color': 'white', 'stop-opacity': opacity}));
+      const mask = svg('mask', {id: maskId, maskUnits: 'userSpaceOnUse',
+        x: Math.min(...route.map(p => p.x)) - length, y: Math.min(...route.map(p => p.y)) - length,
+        width: length * 3, height: length * 3});
+      mask.append(svg('path', {d, fill: 'none', stroke: `url(#${gradientId})`, 'stroke-width': 24}));
+      defs.append(gradient, mask);
+      layer.append(defs);
+      pulses.setAttribute('mask', `url(#${maskId})`);
+      {
+        const group = svg('g', {});
+        const dash = Math.min(20, period * 0.38);
+        for (const [stroke, thickness, opacity, blur] of [
+          ['var(--wireless-pulse-color)', 10, 0.22, true],
+          ['var(--wireless-pulse-color)', 5, 0.9, false], ['#F0FFF9', 2.5, 1, false]]) {
+          group.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
+            'stroke-linecap': 'round', opacity, 'stroke-dasharray': `${dash} ${period - dash}`,
+            class: 'traffic-pulse', style: `${blur ? 'filter:blur(3px);' : ''}--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
+        }
+        pulses.append(group);
+      }
+    } else for (let i = 0; i < 12; i++) {
+      const dash = width * (1 - i / 12);
+      pulses.append(svg('path', {d, fill: 'none', stroke: '#F0FCFF',
+        'stroke-width': 2.4, 'stroke-linecap': 'butt', opacity: 0.10 + i * 0.012,
+        'stroke-dasharray': `${dash} ${period - dash}`, class: 'traffic-pulse',
+        style: `--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
     }
   }
 

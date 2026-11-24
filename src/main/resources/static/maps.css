@@ -401,6 +401,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 
 #canvas .map-connector { fill: none; stroke: var(--muted); stroke-width: 3; pointer-events: stroke; }
 #canvas .map-connector.map-connector-mapped { stroke: #22C55E; }
+#canvas .map-connector.map-connector-solid-pulses { stroke: #16A34A; stroke-width: 2; }
 #canvas .map-connector.selected-link { stroke: var(--focus); }
 #canvas .map-connector[role=button] { cursor: pointer; }
 #canvas[data-tool="connect"] .map-connector { pointer-events: none; }
@@ -509,6 +510,14 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #canvas .map-connector.traffic-down { stroke: #EF4444; }
 .map-traffic { pointer-events: none; }
 .traffic-pulse { animation: traffic-flow 2s linear infinite; }
+.traffic-pulses-solid { pointer-events: none; }
+.traffic-pulses-solid[visibility="hidden"] { display: none; }
+.traffic-pulses-solid .traffic-pulse {
+  --pulse-from: 0px;
+  --pulse-to: -130px;
+  animation-duration: 2.166667s; /* 130px at 60px/s, compared with 55px/s for dashed pulses. */
+}
+.traffic-solid-glow { filter: blur(3px); }
 @keyframes traffic-flow {
   from { stroke-dashoffset: var(--pulse-from); }
   to { stroke-dashoffset: var(--pulse-to); }
@@ -762,6 +771,9 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #canvas .map-connectors .map-connector.selected-link {
   stroke: #CA8A04;
   stroke-width: 4;
+}
+#canvas .map-connectors .map-connector-solid-pulses.selected-link.traffic-down {
+  stroke: #EF4444;
 }
 #canvas .map-connector-selection-border {
   fill: none;

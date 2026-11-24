@@ -179,3 +179,35 @@ test('aggregate PON load does not drive branch color or traffic pulses', () => {
   assert.equal(path.attrs['--traffic-color'], '#687486');
   assert.equal(layer.trafficPulses.attrs.visibility, 'hidden');
 });
+
+test('solid pulses share geometry and phase, preserve saturation, and stop when down', () => {
+  const layer = element('g');
+  layer.trafficContext = {link: {appearance: 'solid-pulses'}};
+  const d = 'M 0 0 L 0 80 Q 0 100 20 100 L 450 100';
+  const path = element('path', {d});
+  path.getTotalLength = () => { throw new Error('Fixed spacing needs no path measurement'); };
+  const a = {up: true, measuredAt: 10000, txBps: 20, capacityBps: 100};
+  const render = (reading, enabled = true) =>
+    traffic.render(element, layer, path, [], [], reading, enabled, false, 11000);
+
+  render({a});
+  const pulses = layer.trafficPulses;
+  assert.equal(path.attrs['--traffic-color'], '#16A34A');
+  assert.equal(pulses.attrs.visibility, 'visible');
+  assert.deepEqual(pulses.children.map(({attrs}) =>
+    [attrs.d, attrs['stroke-dasharray'], attrs['stroke-width'], attrs.stroke]), [
+    [d, '24 106', 7, '#00FF88'],
+    [d, '24 106', 3.5, '#D1FFE4'],
+  ]);
+
+  render({a: {...a, txBps: 85}});
+  assert.equal(path.attrs['--traffic-color'], '#F97316');
+  assert.equal(layer.trafficPulses, pulses);
+  render({a, b: {...a, up: false}});
+  assert.equal(path.attrs['traffic-down'], true);
+  assert.equal(path.attrs['--traffic-color'], '#EF4444');
+  assert.equal(pulses.attrs.visibility, 'hidden');
+  render({a}, false);
+  assert.equal(path.attrs['traffic-down'], false);
+  assert.equal(pulses.attrs.visibility, 'hidden');
+});

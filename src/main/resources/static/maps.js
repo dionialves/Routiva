@@ -319,7 +319,8 @@ function draw() {
     const legacyMapped = !link.appearance && link.mappedConnectionId;
     const line = svg('path', {d, class: 'map-connector' +
       (pulses || legacyMapped ? ' map-connector-mapped' : '') +
-      (wireless ? ' map-connector-wireless' : '')});
+      (wireless ? ' map-connector-wireless' : '') +
+      (link.appearance === 'solid-pulses' ? ' map-connector-solid-pulses' : '')});
     line.classList.toggle('selected-link', !editing && selectedLink === link);
     line.setAttribute('tabindex', 0);
     line.setAttribute('role', 'button');
@@ -1332,7 +1333,7 @@ function drawLinkPreview() {
   const wireless = appearance.startsWith('dashed');
   const pulses = appearance.endsWith('-pulses');
   const line = svg('path', {d: MapLinks.path(link, start, end),
-    stroke: pulses ? '#22C55E' : 'var(--muted)',
+    stroke: appearance === 'solid-pulses' ? '#16A34A' : pulses ? '#22C55E' : 'var(--muted)',
     class: wireless ? 'link-preview-wireless' : '',
     fill: 'none', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke'});
   const preview = $('link-preview');
@@ -1341,7 +1342,7 @@ function drawLinkPreview() {
     const layer = svg('g', {'aria-hidden': 'true'});
     preview.append(layer);
     layer.trafficContext = {link, wireless};
-    MapTraffic.render(svg, layer, line, MapLinks.points(link, start, end), [], null, true);
+    MapTraffic.render(svg, layer, line, MapLinks.points(link, start, end), [], null, appearance !== 'solid-pulses' || $('traffic-animation').checked);
   }
 }
 function openLinkDialog(link) {
