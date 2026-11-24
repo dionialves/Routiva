@@ -5,8 +5,6 @@
 #radio-rows tr { cursor:pointer; }
 #radio-rows tr:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
 #radio-dialog [role=tabpanel]:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
-#radio-dialog dl { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0 24px; margin:0; }
-.radio-property { display:grid; grid-template-columns:minmax(100px, 2fr) minmax(0, 3fr); align-content:start; gap:12px; padding:14px 0; border-bottom:1px solid var(--border); font-size:13px; line-height:1.6; }
 #radio-dialog dd { margin:0; overflow-wrap:anywhere; font-weight:600; font-variant-numeric:tabular-nums; }
 #radio-dialog dt { color:var(--muted); }
 .radio-observation { padding:14px 16px; margin:0 0 18px; border:1px solid var(--border); border-radius:8px; background:var(--surface-bg); color:var(--muted); font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
@@ -24,8 +22,7 @@
 #radio-dialog :is(#radio-dialog-state, #radio-binding-preview, #radio-history-state):empty { display:none; }
 #radio-dialog .settings-actions { display:flex; margin-top:24px; }
 @media(max-width:700px) {
-  #radio-dialog dl, .radio-binding-fields { grid-template-columns:minmax(0, 1fr); }
-  .radio-property { grid-template-columns:minmax(0, 2fr) minmax(0, 3fr); }
+  .radio-binding-fields { grid-template-columns:minmax(0, 1fr); }
   #radio-binding, #radio-history article { padding:16px; }
 }
 
@@ -42,7 +39,8 @@
 #radio-history .hosts-table thead th:nth-child(n) { width:auto; }
 #radio-history .hosts-table tbody th small { display:block; max-width:360px; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font-size:11px; font-weight:400; margin-top:5px; }
 
-#radio-dialog #radio-dialog-state { color:var(--error); }
+#radio-dialog #radio-dialog-state.radio-copy-success { color:var(--success); }
+.radio-copy-buffer { position:absolute; inset:0 auto auto 0; width:1px; height:1px; opacity:0; pointer-events:none; }
 
 #radio-collection-description { color:var(--muted); font-size:13px; line-height:1.6; }
 #radio-collection-dialog .settings-actions { display:flex; }
@@ -54,26 +52,25 @@
 #radio-state:empty { display:none; }
 
 /* Compact client analysis: changes stay scoped to this modal. */
-#radio-dialog { padding:20px 24px; }
+#radio-dialog { --radio-dialog-gutter:24px; padding:20px 0 0; }
 #radio-dialog > .analysis-dialog-layout { height:100%; min-height:0; max-height:100%; gap:16px; }
-#radio-dialog .analysis-header {
-  border-bottom:0;
-  align-items:flex-start;
-  justify-content:space-between;
-}
-#radio-dialog .analysis-title { flex:1; min-width:0; }
-#radio-dialog #radio-close { margin-left:auto; flex-shrink:0; align-self:flex-start; }
-#radio-dialog .analysis-title { justify-content:flex-start; text-align:left; }
-#radio-dialog .analysis-title h2 { font-size:22px; font-weight:600; }
-#radio-dialog .analysis-title-icon { width:44px; height:44px; }
-#radio-dialog .analysis-tabs { margin:0; }
-#radio-dialog .analysis-body { flex:1 1 auto; min-height:0; padding:0; border:0; border-radius:0; background:transparent; overflow:auto; }
-#radio-dialog #radio-dialog-state { flex-shrink:0; margin:0; }
-.radio-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:16px; }
-.radio-summary-card { display:flex; align-items:center; gap:12px; padding:12px 16px; min-width:0; border:1px solid var(--analysis-border); border-radius:8px; background:var(--panel-bg); }
+#radio-dialog .app-modal-header { padding:0; border:0; width:auto; }
+#radio-dialog :is(.app-modal-header, .analysis-tabs, .analysis-body, #radio-dialog-state) { margin-inline:var(--radio-dialog-gutter); }
+#radio-dialog .app-modal-header h2 { overflow-wrap:anywhere; }
+#radio-dialog .app-modal-title-icon { width:52px; height:52px; flex-basis:52px; }
+#radio-dialog #radio-close { align-self:flex-start; }
+#radio-dialog .analysis-tabs { margin-block:0; }
+#radio-dialog .analysis-body { flex:1 1 auto; min-height:0; padding:0; border:0; border-radius:0; background:transparent; overflow:auto; padding-bottom:8px; }
+#radio-dialog #radio-dialog-state { flex-shrink:0; margin-block:0; }
+:is(#radio-dialog, #radio-collection-dialog) .app-modal-footer { min-height:66px; box-sizing:border-box; padding:14px var(--radio-dialog-gutter); background:var(--modal-bg, #0f1b2a); }
+:is(#radio-dialog, #radio-collection-dialog) .app-modal-footer .settings-actions { display:flex; flex:1 1 auto; align-items:center; justify-content:space-between; margin:0; padding:0; border:0; gap:8px; }
+#radio-collection-dialog .app-modal-footer .settings-actions { justify-content:flex-end; }
+.radio-summary-grid { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin-bottom:12px; }
+.radio-summary-card { display:flex; align-items:center; gap:8px; min-height:64px; padding:10px 12px; min-width:0; box-sizing:border-box; border:1px solid var(--analysis-border); border-radius:10px; background:var(--panel-bg); }
 .radio-summary-card > div { min-width:0; }
-.radio-summary-card > div > span { display:block; color:var(--muted); font-size:12px; margin-bottom:4px; }
-.radio-summary-card strong { display:block; font-size:20px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+.radio-summary-card > div > span { display:block; color:var(--muted); font-size:12px; line-height:16px; margin-bottom:2px; }
+.radio-summary-card strong { display:block; font-size:18px; font-weight:600; line-height:22px; font-variant-numeric:tabular-nums; }
+.radio-summary-card strong:not(#radio-summary-status) { white-space:nowrap; }
 /* Preserve the independent signal and connection diagnoses from the last collection. */
 .radio-summary-card[data-severity] { --summary-state-color:var(--muted); }
 .radio-summary-card[data-severity="0"] { --summary-state-color:var(--success); }
@@ -81,42 +78,43 @@
 .radio-summary-card[data-severity="2"] { --summary-state-color:var(--warning); }
 .radio-summary-card[data-severity="3"] { --summary-state-color:var(--error); }
 .radio-summary-card[data-severity] :is(strong, .radio-summary-icon) { color:var(--summary-state-color); }
-.radio-summary-icon { display:grid; place-items:center; width:40px; height:40px; flex:0 0 40px; border-radius:7px; background:var(--surface-bg); color:var(--cyan); }
-.radio-summary-icon svg { width:22px; height:22px; }
-.radio-identity-panel { padding:12px 20px; border:1px solid var(--analysis-border); border-radius:8px; background:var(--panel-bg); }
-.radio-identity-panel h3 { display:flex; align-items:center; gap:12px; margin:0; padding-bottom:10px; border-bottom:1px solid var(--border); font-size:15px; font-weight:600; }
-.radio-identity-panel h3 svg { width:20px; height:20px; color:var(--cyan); }
-#radio-dialog #radio-details dl { display:block; width:100%; }
+.radio-summary-icon { display:grid; place-items:center; width:32px; height:32px; flex:0 0 32px; border-radius:7px; background:var(--surface-bg); color:var(--cyan); }
+.radio-summary-icon svg { width:18px; height:18px; }
+.radio-identity-panel { border:1px solid var(--analysis-border); border-radius:10px; background:var(--panel-bg); overflow:hidden; }
+.radio-identity-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 12px; min-height:46px; padding:5px 20px; box-sizing:border-box; border-bottom:1px solid var(--border); background:var(--surface-bg); }
+.radio-identity-header h3 { display:flex; align-items:center; gap:10px; margin:0; font-size:15px; font-weight:600; }
+.radio-identity-header h3 svg { width:20px; height:20px; color:var(--cyan); }
+#radio-details { padding:0 20px; }
+#radio-details dl { margin:0; }
 #radio-details dd { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
 #radio-details dd > span { min-width:0; overflow-wrap:anywhere; }
-#radio-details dd button { flex-shrink:0; }
-#radio-details .radio-property { padding:6px 0; min-height:38px; box-sizing:border-box; align-items:center; grid-template-columns:minmax(0, 2fr) minmax(0, 3fr); }
+#radio-details dd .system-button { flex-shrink:0; --button-height:32px; }
+.radio-property { display:grid; grid-template-columns:minmax(0, 3fr) minmax(0, 7fr); gap:12px; align-items:center; min-height:40px; padding:4px; box-sizing:border-box; font-size:13px; line-height:1.6; }
+.radio-property + .radio-property { border-top:1px solid var(--border); }
+.radio-property dt { overflow-wrap:anywhere; }
 #radio-history .hosts-table { min-width:1180px; }
 #radio-history .hosts-table :is(th, td) { padding:10px 12px; }
 #radio-history .hosts-table thead th { font-size:12px; }
 #radio-history .hosts-table tbody tr:hover { background:var(--hover-bg); }
 #radio-history-items [data-severity="2"] { color:#fb923c; }
 #radio-history .system-pagination { margin-top:14px; }
-@media(max-width:760px) { .radio-summary-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+@media(max-width:820px) { .radio-summary-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
 @media(max-width:600px) {
-  #radio-dialog { padding:16px; }
+  #radio-dialog { --radio-dialog-gutter:14px; padding-top:16px; }
+  :is(#radio-dialog, #radio-collection-dialog) .app-modal-footer { padding-block:12px; }
   #radio-dialog > .analysis-dialog-layout { max-height:100%; }
-  #radio-dialog .analysis-title h2 { font-size:20px; }
-  .radio-summary-card { padding:12px; gap:8px; }
-  .radio-summary-icon { width:32px; height:32px; flex-basis:32px; }
-  .radio-identity-panel { padding:12px; }
+  #radio-dialog .app-modal-header h2 { font-size:20px; }
+  .radio-identity-header, #radio-details { padding-inline:12px; }
 }
 
+@media(max-width:440px) { .radio-summary-grid { grid-template-columns:minmax(0, 1fr); } }
+
 /* Read-only technical details, scoped independently from the client dialog. */
-#radio-collection-dialog { --collection-status-color:var(--muted); display:none; flex-direction:column; gap:16px; padding:24px; overflow:hidden; background:var(--analysis-bg); }
-#radio-collection-dialog[open] { display:flex; }
-#radio-collection-dialog .collection-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; width:100%; max-width:none; padding:0; margin:0; border:0; flex-shrink:0; }
-.collection-title { display:flex; align-items:center; gap:16px; min-width:0; }
-#radio-collection-dialog h2 { font-size:24px; font-weight:600; margin:0 0 4px; }
-#radio-collection-dialog #radio-collection-description { margin:0; }
-.collection-header-icon { display:grid; place-items:center; width:56px; height:56px; flex:0 0 56px; border:1px solid var(--analysis-border); border-radius:10px; color:var(--cyan); background:var(--surface-bg); }
-.collection-header-icon svg { width:30px; height:30px; }
-#radio-collection-dialog .collection-content { overflow:auto; min-height:0; display:grid; gap:16px; padding-right:4px; }
+#radio-collection-dialog { --collection-status-color:var(--muted); --radio-dialog-gutter:24px; }
+#radio-collection-dialog .app-modal-header { padding:16px var(--radio-dialog-gutter); align-items:center; }
+#radio-collection-dialog .app-modal-header h2 { overflow-wrap:anywhere; }
+#radio-collection-dialog .app-modal-title-icon { width:52px; height:52px; flex-basis:52px; }
+#radio-collection-dialog .collection-content { display:grid; align-content:start; gap:12px; padding:12px var(--radio-dialog-gutter) 16px; }
 .collection-identity { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:12px; border:1px solid var(--border-strong); border-radius:8px; background:var(--panel-bg); }
 .collection-identity > div { display:flex; align-items:center; gap:12px; padding:0 14px; min-width:0; }
 .collection-identity > div + div { border-left:1px solid var(--border); }
@@ -127,7 +125,7 @@
 .collection-icon { display:grid; place-items:center; width:40px; height:40px; flex:0 0 40px; color:var(--cyan); border-radius:7px; background:var(--surface-bg); }
 .collection-icon svg { width:23px; height:23px; }
 .collection-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
-.collection-summary-card { display:flex; align-items:center; gap:10px; min-width:0; padding:10px 12px; background:var(--panel-bg); border:1px solid var(--border-strong); border-radius:8px; }
+.collection-summary-card { display:flex; align-items:center; gap:10px; min-width:0; min-height:72px; box-sizing:border-box; padding:10px 12px; background:var(--panel-bg); border:1px solid var(--border-strong); border-radius:8px; }
 .collection-summary-card strong { display:block; margin-top:5px; font-size:13px; line-height:1.5; }
 .collection-summary-card > div { min-width:0; }
 .collection-status-dot { width:16px; height:16px; border-radius:50%; background:var(--collection-status-color); }
@@ -136,18 +134,19 @@
 #radio-collection-dialog[data-severity="2"] { --collection-status-color:#fb923c; }
 #radio-collection-dialog[data-severity="3"] { --collection-status-color:var(--error); }
 .collection-status strong { color:var(--collection-status-color); }
-.collection-technical-grid { display:grid; align-items:start; grid-template-columns:minmax(0, 2fr) minmax(0, 3fr); gap:16px; }
+.collection-technical-grid { display:grid; align-items:stretch; grid-template-columns:minmax(0, 1fr) minmax(0, 1.15fr); gap:12px; }
 .collection-panel { min-width:0; padding:14px 16px; background:var(--panel-bg); border:1px solid var(--border-strong); border-radius:8px; }
-.collection-panel h3 { display:flex; align-items:center; gap:12px; margin:0 0 12px; padding-bottom:10px; border-bottom:1px solid var(--analysis-border); font-size:15px; font-weight:600; }
+.collection-panel h3 { display:flex; align-items:center; gap:10px; margin:0 0 8px; padding-bottom:8px; border-bottom:1px solid var(--analysis-border); font-size:15px; font-weight:600; }
 .collection-panel h3 svg { width:22px; height:22px; color:var(--cyan); }
 #radio-collection-dialog .collection-properties { margin:0; }
-#radio-collection-dialog .collection-properties > div { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:12px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; line-height:1.5; }
+#radio-collection-dialog .collection-properties > div { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:10px; padding:5px 0; border-bottom:1px solid var(--border); font-size:13px; line-height:1.5; }
 .collection-properties dt { color:var(--muted); }
 .collection-properties dd { margin:0; font-weight:600; overflow-wrap:anywhere; }
-.collection-quality { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.collection-quality { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
 .collection-metric { display:flex; align-items:center; gap:10px; min-width:0; padding:10px 12px; border:1px solid var(--border-strong); border-radius:8px; background:var(--surface-bg); }
 .collection-metric > div { min-width:0; }
 .collection-metric strong { display:block; margin-top:4px; font-size:18px; line-height:1.5; font-variant-numeric:tabular-nums; }
+.collection-quality strong { font-size:20px; }
 .collection-metric > svg { width:24px; height:24px; color:var(--cyan); flex-shrink:0; }
 .collection-rates { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
 .collection-samples { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
@@ -159,9 +158,9 @@
 #radio-collection-icmp { padding-left:24px; border-left:1px solid var(--analysis-border); }
 #radio-collection-icmp p { color:var(--muted); font-size:13px; line-height:1.6; margin:0; }
 #radio-collection-icmp dl + p { margin-top:12px; }
-@media(max-width:1000px) { .collection-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:820px) { .collection-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:760px) {
-  #radio-collection-dialog { padding:16px; gap:16px; }
+  #radio-collection-dialog { --radio-dialog-gutter:14px; }
   .collection-technical-grid, .collection-diagnosis-columns { grid-template-columns:minmax(0,1fr); }
   #radio-collection-icmp { padding-left:0; padding-top:16px; border-left:0; border-top:1px solid var(--analysis-border); }
   .collection-identity { grid-template-columns:minmax(0,1fr); gap:12px; }
@@ -169,7 +168,7 @@
   .collection-identity > div + div { border-left:0; padding-top:12px; border-top:1px solid var(--border); }
 }
 @media(max-width:480px) {
-  .collection-header-icon { display:none; }
+  #radio-collection-dialog .app-modal-title-icon { width:40px; height:40px; flex-basis:40px; }
   #radio-collection-dialog h2 { font-size:20px; }
   .collection-summary, .collection-quality, .collection-rates, .collection-samples { grid-template-columns:minmax(0,1fr); }
 }
@@ -182,7 +181,6 @@
 #radio-collection-dialog .collection-identity .collection-icon { width:36px; height:36px; flex-basis:36px; }
 #radio-collection-dialog .collection-summary .collection-icon { width:32px; height:32px; flex-basis:32px; }
 #radio-collection-dialog .collection-summary .collection-icon svg { width:21px; height:21px; }
-#radio-collection-dialog .collection-samples .collection-properties > div { padding:8px 0; }
 #radio-collection-dialog .collection-panel h3 svg { stroke-width:1.75; }
 #radio-collection-dialog [data-collection-field="Motivo da conexão"],
 #radio-collection-dialog [data-collection-field="Horário do diagnóstico"] { font-weight:400; }

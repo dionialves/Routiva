@@ -104,6 +104,35 @@
     }
     return data;
   }
+  async function copyDetails(value, message) {
+    const state = $('radio-dialog-state');
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        // The local dashboard can also be served over HTTP.
+        const field = document.createElement('textarea');
+        const previousFocus = document.activeElement;
+        field.className = 'radio-copy-buffer';
+        field.readOnly = true;
+        field.value = value;
+        $('radio-dialog').append(field);
+        try {
+          field.select();
+          if (!document.execCommand('copy')) throw new Error('Clipboard unavailable');
+        } finally {
+          field.remove();
+          previousFocus?.focus({ preventScroll: true });
+        }
+      }
+      state.textContent = message;
+      state.classList.add('radio-copy-success');
+    } catch {
+      state.textContent = 'Não foi possível copiar. Selecione e copie o valor.';
+      state.classList.remove('radio-copy-success');
+    }
+  }
+  const hasFieldValue = value => value != null && !['', '-', '—'].includes(String(value).trim());
   function description(client) {
     const dl = document.createElement('dl');
     for (const [label, value] of overviewFields(client)) {
@@ -113,20 +142,13 @@
       const text = document.createElement('span'); text.textContent = value; dd.append(text);
       if (['MAC', 'Login'].includes(label)) {
         const copy = document.createElement('button'); copy.type = 'button';
-        copy.className = 'system-button system-button-icon-only'; copy.title = 'Copiar';
-        copy.setAttribute('aria-label', `Copiar ${label}`); copy.disabled = value === '-';
+        copy.className = 'system-button system-button-icon-only'; copy.title = label === 'Login' ? 'Copiar login' : 'Copiar MAC';
+        copy.setAttribute('aria-label', copy.title); copy.disabled = !hasFieldValue(value);
         const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         icon.setAttribute('class', 'ui-icon'); icon.setAttribute('aria-hidden', 'true');
         const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
         use.setAttribute('href', '/icons.svg#copy'); icon.append(use); copy.append(icon);
-        copy.onclick = async () => {
-          try {
-            await navigator.clipboard.writeText(value);
-            use.setAttribute('href', '/icons.svg#check'); copy.title = 'Copiado';
-            copy.setAttribute('aria-label', `${label} copiado`);
-            $('radio-dialog-state').textContent = `${label} copiado.`;
-          } catch { $('radio-dialog-state').textContent = 'Não foi possível copiar. Selecione e copie o valor.'; }
-        };
+        copy.onclick = () => copyDetails(value, `${label} copiado.`);
         dd.append(copy);
       }
       property.append(dt, dd); dl.append(property);
@@ -198,7 +220,9 @@
   function tab(history) {
     for (const name of ['overview', 'history']) {
       const active = history === (name === 'history');
-      $('radio-' + name).hidden = !active;
+      const panel = $('radio-' + name);
+      panel.hidden = !active;
+      if (active) panel.scrollTop = 0;
       $('radio-' + name + '-tab').setAttribute('aria-selected', String(active));
       $('radio-' + name + '-tab').tabIndex = active ? 0 : -1;
     }
@@ -206,7 +230,7 @@
   }
   function open(client, source) {
     selected = client; trigger = source; page = 0; generation++; pending = null;
-    $('radio-title').textContent = client.login || client.provisional_mac;
+    $('radio-title').textContent = client.login || client.provisional_mac || 'Cliente Rádio';
     $('radio-details').replaceChildren(description(client));
     const connection = tableValues(client);
     $('radio-summary-status').textContent = connection.statusLabel;
@@ -269,7 +293,8 @@
             content.append(dl);
             if (test.unavailable.length) { const note = document.createElement('p'); note.textContent = 'Indisponíveis: ' + test.unavailable.join(', ') + '.'; content.append(note); }
           }
-          $('radio-collection-dialog').showModal();
+          modal.showModal();
+          $('radio-collection-details').scrollTop = 0;
         };
         heading.append(link); row.append(heading);
         for (const value of historyValues(item).slice(1)) { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); }
@@ -298,7 +323,10 @@
     if (!pending) return;
     $('radio-binding-confirm').disabled = true;
     try { await request('/' + selected.id + '/binding', { ...pending, confirm: true }); $('radio-dialog').close(); await load(); }
-    catch (error) { $('radio-dialog-state').textContent = error.message; }
+    catch (error) {
+      $('radio-dialog-state').classList.remove('radio-copy-success');
+      $('radio-dialog-state').textContent = error.message;
+    }
     finally { $('radio-binding-confirm').disabled = false; }
   };
   $('radio-overview-tab').onclick = () => tab(false); $('radio-history-tab').onclick = () => tab(true);
@@ -311,9 +339,9 @@
   $('radio-history-previous').onclick = () => { page--; loadHistory(); };
   $('radio-history-next').onclick = () => { page++; loadHistory(); };
   let collectionTrigger;
-  $('radio-collection-close-top').onclick = () => $('radio-collection-dialog').close();
+  $('radio-collection-close-top').onclick = $('radio-collection-cancel').onclick = () => $('radio-collection-dialog').close();
   $('radio-collection-dialog').addEventListener('close', () => collectionTrigger?.focus());
-  $('radio-close').onclick = () => $('radio-dialog').close();
+  $('radio-close').onclick = $('radio-cancel').onclick = () => $('radio-dialog').close();
   $('radio-dialog').addEventListener('close', () => { generation++; if ($('radio-collection-dialog').open) $('radio-collection-dialog').close(); trigger?.focus(); });
   document.querySelectorAll('[data-radio-sort]').forEach(button => { button.onclick = () => { const key = button.dataset.radioSort; direction = key === sortKey ? -direction : 1; sortKey = key; clientPage = 1; render(); }; });
   $('radio-clients-previous').onclick = () => { clientPage--; render(); };
