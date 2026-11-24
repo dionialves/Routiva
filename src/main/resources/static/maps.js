@@ -1547,9 +1547,10 @@ function connectEndpoint(node, portId) {
 }
 function syncInterfaceControls() {
   const isGroup = $('type').value === 'group';
-  $('element-interface-toggle').hidden = isGroup;
+  $('element-interfaces').hidden = isGroup;
   $('interfaces-enabled').disabled = isGroup;
   const enabled = !isGroup && $('interfaces-enabled').checked;
+  $('element-slot-actions').hidden = !enabled;
   $('switch-config').hidden = !enabled;
   $('switch-config').disabled = !enabled;
   return enabled;

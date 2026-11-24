@@ -227,17 +227,24 @@ test('group binding hides and disables interface controls without discarding the
   $('interfaces-enabled').checked = true;
   $('type').value = 'group';
   assert.equal(run('syncInterfaceControls()'), false);
-  assert.equal($('element-interface-toggle').hidden, true);
+  assert.equal($('element-interfaces').hidden, true);
   assert.equal($('interfaces-enabled').disabled, true);
+  assert.equal($('element-slot-actions').hidden, true);
   assert.equal($('switch-config').hidden, true);
   assert.equal($('switch-config').disabled, true);
   for (const binding of ['host', '']) {
     $('type').value = binding;
     assert.equal(run('syncInterfaceControls()'), true);
-    assert.equal($('element-interface-toggle').hidden, false);
+    assert.equal($('element-interfaces').hidden, false);
     assert.equal($('interfaces-enabled').disabled, false);
+    assert.equal($('element-slot-actions').hidden, false);
     assert.equal($('switch-config').hidden, false);
   }
+  $('interfaces-enabled').checked = false;
+  assert.equal(run('syncInterfaceControls()'), false);
+  assert.equal($('element-interfaces').hidden, false);
+  assert.equal($('element-slot-actions').hidden, true);
+  assert.equal($('switch-config').disabled, true);
 });
 
 test('Mimosa Zabbix discovery keeps both wireless candidates for explicit review', async () => {

@@ -6,7 +6,7 @@
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
   <th:block th:replace="~{design-system :: picker}"></th:block>
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261124-properties-footer"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261120-hover-delay" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261123-sector" defer></script><script src="/map-links.js?v=20261120-wireless-selection" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261123-sector" defer></script><script src="/map-connection-tooltip.js?v=20261120-hover-delay" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/group-link-interfaces.js?v=20261120-progressive-editor" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261120-inline-settings" defer></script><script src="/maps.js?v=20261124-map-properties-segments" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261124-element-footer-grid"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261120-hover-delay" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261123-sector" defer></script><script src="/map-links.js?v=20261120-wireless-selection" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261123-sector" defer></script><script src="/map-connection-tooltip.js?v=20261120-hover-delay" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/group-link-interfaces.js?v=20261120-progressive-editor" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261120-inline-settings" defer></script><script src="/maps.js?v=20261124-element-layout" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{host-dialog :: resources}"></th:block></head>
 <body class="availability-dashboard">
@@ -205,60 +205,69 @@
   </th:block></dialog>
   <dialog th:replace="~{design-system :: formDialog('element-dialog', 'element-title', 'element-description', ~{maps :: element-dialog-content})}"><th:block th:fragment="element-dialog-content">
     <form class="connection-form form-dialog-frame" id="element-form">
-      <header class="element-heading form-dialog-header">
-        <h2 id="element-title">Elemento do mapa</h2>
-        <button type="button" id="close-element" aria-label="Fechar" title="Fechar" class="system-button system-button-icon-only"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"/></svg></button>
-        <p id="element-description">Configure as propriedades e a identificação do elemento na topologia.</p>
-      </header>
+      <header th:replace="~{design-system :: modalHeader('element-title', 'Elemento do mapa', 'element-description', 'Configure as propriedades e a identificação do elemento na topologia.', null, 'close-element', 'Fechar')}"></header>
       <div class="form-dialog-content element-config-content">
-        <section class="element-identification" aria-label="Identificação do elemento">
-          <label>Nome *<input id="element-name" required></label>
-          <div class="map-dimensions">
-            <label>Tipo *<select id="type"><option value="">Elemento livre</option><option value="host">Host</option><option value="group">Grupo de hosts</option></select></label>
+        <section class="form-dialog-section element-panel element-identification" aria-labelledby="element-identification-title">
+          <h3 id="element-identification-title">Identificação</h3>
+          <div class="element-name-row">
+            <label>Nome *<input id="element-name" required></label>
             <label>Posição do nome<select id="label-position"><option value="BELOW">Abaixo</option><option value="ABOVE">Acima</option><option value="LEFT">Esquerda</option><option value="RIGHT">Direita</option></select></label>
           </div>
-          <div class="map-dimensions element-binding-row"><div id="group-field" hidden><span id="group-label">Selecionar grupo de hosts</span><select id="group" aria-labelledby="group-label"></select></div>
-          <label id="sub-map-field" hidden>Submapa<select id="sub-map"><option value="">Nenhum submapa</option></select></label></div>
+          <div class="element-binding-row">
+            <label>Tipo *<select id="type"><option value="">Elemento livre</option><option value="host">Host</option><option value="group">Grupo de hosts</option></select></label>
+            <div id="group-field" hidden><span id="group-label">Selecionar grupo de hosts</span><select id="group" aria-labelledby="group-label"></select></div>
+            <label id="sub-map-field" hidden>Submapa<select id="sub-map"><option value="">Nenhum submapa</option></select></label>
+          </div>
         </section>
-        <section class="element-visual-config" aria-labelledby="element-icon-title">
-          <div class="element-section-heading"><div><h3 id="element-icon-title">Ícone do elemento</h3><p>Selecione como o elemento será representado no mapa.</p></div></div>
+        <section class="form-dialog-section element-panel element-visual-config" aria-labelledby="element-icon-title">
           <div class="element-icon-row">
-          <label><span class="sr-only">Ícone</span><select id="element-icon" aria-label="Ícone do elemento">
-            <option value="circle" data-bindings="group free" data-shape="circle" data-description="Representação simples.">Círculo</option>
-            <option value="tower-server" data-bindings="host group free" data-image="/map-assets/tower-server.webp?v=20261120-server-cutouts" data-description="Servidor em torre.">Servidor em torre</option>
-            <option value="battery" data-bindings="host group free" data-image="/map-assets/battery.webp?v=20261120-battery" data-description="Bateria com indicador de ping.">Bateria</option>
-            <option value="vm-server" data-bindings="host group free" data-image="/map-assets/vm-server.webp?v=20261120-server-cutouts" data-description="VM Server.">VM Server</option>
-            <option value="cloud" data-bindings="host group free" data-image="/map-assets/cloud.webp?v=20261120-optimized" data-description="Nuvem de rede.">Nuvem</option>
-            <option value="telecom-site" data-bindings="group" data-image="/map-assets/telecom-site.webp?v=20261120-optimized" data-description="Estação de telecomunicações exclusiva para Grupo de Hosts.">Estação de telecomunicações</option>
-            <option value="switch" data-bindings="host free" data-image="/map-assets/switch.svg?v=20261120-optimized" data-description="Equipamento com representação de interfaces.">Switch</option>
-            <option value="sector-radio" data-bindings="host" data-image="/map-assets/sector-radio.webp?v=20261123-sector" data-description="Antena setorial com rádio, LED de ping e conexão Wireless invisível.">Antena setorial</option>
-            <option value="radio" data-bindings="host" data-image="/map-assets/radio.svg?v=20261120-optimized" data-description="Rádio com LED de ping e até 4 interfaces, sendo uma Wireless.">Rádio</option>
-          </select></label>
-          <div id="switch-color-field" hidden>
-            <label for="switch-color">Cor do switch</label>
-            <div class="element-switch-color-controls">
-              <input id="switch-color" type="color" value="#e0e3e8" aria-label="Cor do switch">
-              <button id="reset-switch-color" type="button" class="system-button" title="Restaurar cor original">Original</button>
+            <div>
+              <h3 id="element-icon-title">Ícone do elemento</h3>
+              <p>Selecione como o elemento será representado no mapa.</p>
+              <label><span class="sr-only">Ícone</span><select id="element-icon" aria-label="Ícone do elemento">
+                <option value="circle" data-bindings="group free" data-shape="circle" data-description="Representação simples.">Círculo</option>
+                <option value="tower-server" data-bindings="host group free" data-image="/map-assets/tower-server.webp?v=20261120-server-cutouts" data-description="Servidor em torre.">Servidor em torre</option>
+                <option value="battery" data-bindings="host group free" data-image="/map-assets/battery.webp?v=20261120-battery" data-description="Bateria com indicador de ping.">Bateria</option>
+                <option value="vm-server" data-bindings="host group free" data-image="/map-assets/vm-server.webp?v=20261120-server-cutouts" data-description="VM Server.">VM Server</option>
+                <option value="cloud" data-bindings="host group free" data-image="/map-assets/cloud.webp?v=20261120-optimized" data-description="Nuvem de rede.">Nuvem</option>
+                <option value="telecom-site" data-bindings="group" data-image="/map-assets/telecom-site.webp?v=20261120-optimized" data-description="Estação de telecomunicações exclusiva para Grupo de Hosts.">Estação de telecomunicações</option>
+                <option value="switch" data-bindings="host free" data-image="/map-assets/switch.svg?v=20261120-optimized" data-description="Equipamento com representação de interfaces.">Switch</option>
+                <option value="sector-radio" data-bindings="host" data-image="/map-assets/sector-radio.webp?v=20261123-sector" data-description="Antena setorial com rádio, LED de ping e conexão Wireless invisível.">Antena setorial</option>
+                <option value="radio" data-bindings="host" data-image="/map-assets/radio.svg?v=20261120-optimized" data-description="Rádio com LED de ping e até 4 interfaces, sendo uma Wireless.">Rádio</option>
+              </select></label>
+            </div>
+            <div id="switch-color-field" hidden>
+              <label for="switch-color">Cor do switch</label>
+              <div class="element-switch-color-controls">
+                <input id="switch-color" type="color" value="#e0e3e8" aria-label="Cor do switch">
+                <button id="reset-switch-color" type="button" class="system-button" title="Restaurar cor original">Original</button>
+              </div>
             </div>
           </div>
-          </div>
-          <div id="element-interface-toggle" class="element-interface-toggle">
-            <div><label for="interfaces-enabled">Habilitar interfaces</label><p id="interfaces-enabled-description">Permite configurar slots e portas do elemento.</p></div>
-            <input id="interfaces-enabled" type="checkbox" role="switch" class="system-switch" aria-describedby="interfaces-enabled-description" aria-controls="switch-config">
-          </div>
-          <p id="element-color-note" class="element-color-note">A cor do elemento acompanha o estado de monitoramento e os incidentes do Zabbix.</p>
+          <p id="element-color-note">A cor do elemento acompanha o estado de monitoramento e os incidentes do Zabbix.</p>
         </section>
-        <fieldset id="switch-config" hidden>
-          <legend class="sr-only">Interfaces</legend>
-          <div class="element-section-heading"><div><h3>Interfaces</h3><p>Carregue as interfaces do Zabbix e revise conectores e capacidades.</p></div>
-            <div class="element-interface-actions"><button type="button" id="load-switch-interfaces" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#refresh"/></svg>Carregar interfaces</button>
-            <button type="button" id="add-switch-slot" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>Adicionar slot</button></div>
+        <section id="element-interfaces" class="form-dialog-section element-panel" aria-labelledby="element-interfaces-title">
+          <div class="element-section-heading element-interfaces-heading">
+            <div><h3 id="element-interfaces-title">Interfaces</h3><p id="interfaces-enabled-description">Carregue as interfaces do Zabbix e revise conectores e capacidades.</p></div>
+            <div class="element-interface-actions">
+              <div id="element-interface-toggle" class="element-interface-toggle">
+                <label for="interfaces-enabled">Habilitar interfaces</label>
+                <input id="interfaces-enabled" type="checkbox" role="switch" class="system-switch" aria-describedby="interfaces-enabled-description" aria-controls="switch-config">
+              </div>
+              <div id="element-slot-actions" class="element-interface-actions" hidden>
+                <button type="button" id="load-switch-interfaces" class="system-button" title="Carregar as interfaces descobertas no Zabbix"><svg th:replace="~{shell :: icon('refresh')}"></svg>Carregar interfaces</button>
+                <button type="button" id="add-switch-slot" class="system-button"><svg th:replace="~{shell :: icon('plus')}"></svg>Adicionar slot</button>
+              </div>
+            </div>
           </div>
-          <div class="element-slot-table-scroll" role="region" aria-label="Slots de interfaces" tabindex="0">
-            <table class="element-slot-table"><thead><tr><th scope="col">Slot</th><th scope="col">Nome</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col">Portas</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="switch-slots"></tbody></table>
-          </div>
-          <p id="interface-load-status" role="status" aria-live="polite"></p>
-        </fieldset>
+          <fieldset id="switch-config" hidden>
+            <legend class="sr-only">Slots de interfaces</legend>
+            <div class="element-slot-table-scroll" role="region" aria-label="Slots de interfaces" tabindex="0">
+              <table class="element-slot-table"><thead><tr><th scope="col">Slot</th><th scope="col">Nome</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col">Portas</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="switch-slots"></tbody></table>
+            </div>
+            <p id="interface-load-status" role="status" aria-live="polite"></p>
+          </fieldset>
+        </section>
         <section id="group-link-interfaces" class="form-dialog-section" hidden aria-labelledby="group-link-title">
           <div class="element-section-heading"><div>
             <h3 id="group-link-title" class="form-dialog-section-title">Interfaces habilitadas para enlaces</h3>
@@ -282,16 +291,25 @@
           <p id="group-link-status" role="status" aria-live="polite"></p>
         </section>
         <p id="port-error" role="alert"></p>
-        <section class="element-preview" aria-labelledby="preview-heading">
-          <div><h3 id="preview-heading">Pré-visualização</h3><p>Como o elemento será exibido no mapa.</p></div>
-          <svg id="node-preview" role="img" aria-label="Pré-visualização do elemento"></svg>
-        </section>
-        <label for="element-observation">Observação<textarea id="element-observation" rows="4"></textarea></label>
+        <div class="element-detail-row">
+          <section class="form-dialog-section element-panel element-preview" aria-labelledby="preview-heading">
+            <div><h3 id="preview-heading">Pré-visualização</h3><p>Como o elemento será exibido no mapa.</p></div>
+            <svg id="node-preview" role="img" aria-label="Pré-visualização do elemento"></svg>
+          </section>
+          <section class="form-dialog-section element-panel element-observation" aria-labelledby="element-observation-title">
+            <h3><label id="element-observation-title" for="element-observation">Observação</label></h3>
+            <textarea id="element-observation" rows="4"></textarea>
+          </section>
+        </div>
       </div>
-      <footer class="settings-actions form-dialog-footer">
-        <button type="button" id="remove" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#trash-2"/></svg>Excluir</button>
-        <button type="button" id="cancel-element" class="system-button"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#close"/></svg>Cancelar</button>
-        <button type="submit" class="system-button system-button-primary"><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#check"/></svg>Salvar</button>
+      <footer th:replace="~{design-system :: modalFooter(~{maps :: elementDialogFooter})}">
+        <th:block th:fragment="elementDialogFooter">
+          <button type="button" id="remove" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash-2')}"></svg>Excluir</button>
+          <div class="element-footer-confirm">
+            <button type="button" id="cancel-element" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+            <button type="submit" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg>Salvar</button>
+          </div>
+        </th:block>
       </footer>
     </form>
   </th:block></dialog>
