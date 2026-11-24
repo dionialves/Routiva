@@ -1033,6 +1033,7 @@ function cancelCreate() {
   $('create').focus();
 }
 $('cancel-create').onclick = cancelCreate;
+$('close-create-header').onclick = () => { if (!$('submit-create').disabled) cancelCreate(); };
 createDialog.oncancel = event => {
   event.preventDefault();
   if (!$('submit-create').disabled) cancelCreate();
@@ -1077,6 +1078,7 @@ function showProperties() {
 }
 $('properties').onclick = showProperties;
 $('close-map').onclick = () => $('map-dialog').close();
+$('close-map-header').onclick = () => $('map-dialog').close();
 $('map-form').onsubmit = async event => {
   event.preventDefault();
   const name = $('name').value.trim();
@@ -1414,7 +1416,22 @@ function renderSwitchSlots() {
     field('Capacidade', capacity);
     const count = document.createElement('input');
     count.type = 'number'; count.min = 1; count.max = slot.connector === 'wireless' ? 1 : 96; count.required = true; count.value = slot.count;
-    count.oninput = () => { slot.count = Number(count.value); drawPreview(); };
+    count.oninput = () => {
+      slot.count = Number(count.value);
+      if (Array.isArray(slot.interfaceNames) && Number.isInteger(slot.count) && slot.count >= 0 && slot.count <= 96) {
+        const names = slot.interfaceNames.slice(0, slot.count);
+        const used = new Set(names);
+        let suffix = 1;
+        while (names.length < slot.count) {
+          const candidate = slot.name.trim() + suffix++;
+          if (used.has(candidate)) continue;
+          names.push(candidate);
+          used.add(candidate);
+        }
+        slot.interfaceNames = names;
+      }
+      drawPreview();
+    };
     field('Portas', count);
     const remove = document.createElement('button');
     remove.type = 'button'; remove.className = 'system-button system-button-icon-only';

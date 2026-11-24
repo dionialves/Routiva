@@ -6,7 +6,7 @@
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
   <th:block th:replace="~{design-system :: picker}"></th:block>
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261120-wireless-selection"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261120-hover-delay" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261123-sector" defer></script><script src="/map-links.js?v=20261120-wireless-selection" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261123-sector" defer></script><script src="/map-connection-tooltip.js?v=20261120-hover-delay" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/group-link-interfaces.js?v=20261120-progressive-editor" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261120-inline-settings" defer></script><script src="/maps.js?v=20261123-sector" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261124-shared-modal-frame"><script src="/shell.js?v=20261117-host-actions" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261120-hover-delay" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261123-sector" defer></script><script src="/map-links.js?v=20261120-wireless-selection" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261123-sector" defer></script><script src="/map-connection-tooltip.js?v=20261120-hover-delay" defer></script><script src="/map-element-controls.js?v=20261119-reset-orientation" defer></script><script src="/group-link-interfaces.js?v=20261120-progressive-editor" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261120-inline-settings" defer></script><script src="/maps.js?v=20261124-slot-count-names" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{host-dialog :: resources}"></th:block></head>
 <body class="availability-dashboard">
@@ -107,19 +107,21 @@
   </section>
   <div id="page-status"><p id="status" role="status">Carregando mapas…</p></div>
   <dialog th:replace="~{design-system :: formDialog('create-dialog', 'create-title', 'create-description', ~{maps :: create-dialog-content})}"><th:block th:fragment="create-dialog-content">
-    <form id="create-form" class="connection-form" novalidate>
-      <div><h2 id="create-title">Novo mapa</h2>
-        <p id="create-description">Dê um nome ao mapa para começar a organizar sua topologia.</p>
-      </div>
+    <form id="create-form" class="connection-form form-dialog-frame" novalidate>
+      <header th:replace="~{design-system :: modalHeader('create-title', 'Novo mapa', 'create-description', 'Dê um nome ao mapa para começar a organizar sua topologia.', 'map', 'close-create-header', 'Fechar criação do mapa')}"></header>
+      <div class="form-dialog-content">
       <label>Nome do mapa<input id="create-name" placeholder="Ex.: Backbone Oeste" required maxlength="120" autofocus aria-describedby="create-name-error">
         <small id="create-name-error"></small></label>
       <p id="create-error" role="alert"></p>
-      <div class="settings-actions"><button type="button" id="cancel-create" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button>
+      </div>
+      <footer th:replace="~{design-system :: modalFooter(~{maps :: createDialogFooter})}"><th:block th:fragment="createDialogFooter"><div class="settings-actions"><button type="button" id="cancel-create" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button>
         <button type="submit" id="submit-create" class="system-button system-button-primary"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#plus"></use></svg><span id="submit-create-label">Criar mapa</span></button></div>
+      </th:block></footer>
     </form>
   </th:block></dialog>
-  <dialog th:replace="~{design-system :: formDialog('map-dialog', 'map-dialog-title', null, ~{maps :: map-dialog-content})}"><th:block th:fragment="map-dialog-content"><form class="connection-form" id="map-form">
-    <h2 id="map-dialog-title">Propriedades do mapa</h2>
+  <dialog th:replace="~{design-system :: formDialog('map-dialog', 'map-dialog-title', null, ~{maps :: map-dialog-content})}"><th:block th:fragment="map-dialog-content"><form class="connection-form form-dialog-frame" id="map-form">
+    <header th:replace="~{design-system :: modalHeader('map-dialog-title', 'Propriedades do mapa', null, null, 'settings', 'close-map-header', 'Fechar propriedades do mapa')}"></header>
+    <div class="form-dialog-content">
     <label>Nome do mapa<input id="name" required maxlength="120"></label>
     <label>Severidade mínima dos incidentes<select id="minimum-severity">
       <option value="0">Não classificado</option>
@@ -135,8 +137,9 @@
       <option value="saved">Manter visualização salva</option>
       <option value="current">Usar posição e zoom atuais</option>
     </select></label>
-    <div class="settings-actions"><button type="button" id="close-map" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button type="submit" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Aplicar alterações</span></button></div>
     <p id="map-error" role="alert"></p>
+    </div>
+    <footer th:replace="~{design-system :: modalFooter(~{maps :: mapDialogFooter})}"><th:block th:fragment="mapDialogFooter"><div class="settings-actions"><button type="button" id="close-map" class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#close"></use></svg>Cancelar</button><button type="submit" class="system-button system-button-primary map-primary"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#map-save-icon"/></svg><span>Aplicar alterações</span></button></div></th:block></footer>
   </form></th:block></dialog>
   <dialog th:replace="~{design-system :: formDialog('link-dialog', 'link-dialog-title', 'link-dialog-description', ~{maps :: link-dialog-content})}"><th:block th:fragment="link-dialog-content">
     <form id="link-form" class="connection-form form-dialog-frame">
