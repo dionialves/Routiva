@@ -88,6 +88,42 @@ class NetworkMapPersistenceTests {
         } finally { org.mockito.Mockito.reset(inventory); }
     }
 
+    @Test void groupLinksAllowDistinctMappedPairsButRejectReversedDuplicates(
+            @Autowired br.com.scriptping.zabbix.ZabbixService inventory) throws Exception {
+        org.mockito.Mockito.when(inventory.hosts()).thenReturn(List.of(
+            new br.com.scriptping.zabbix.Host("ha", "Host A", "10.0.0.1", List.of(new br.com.scriptping.zabbix.Host.Group("ga", "A"))),
+            new br.com.scriptping.zabbix.Host("hb", "Host B", "10.0.0.2", List.of(new br.com.scriptping.zabbix.Host.Group("gb", "B")))));
+        try {
+            var a = groupWithInterfaces(List.of(new LinkInterface("ha", "ether1", "electrical", "1g"),
+                new LinkInterface("ha", "ether2", "electrical", "1g")));
+            var b = new Node("b", "gb", null, null, "B", 100, 0, null, "circle", List.of(), List.of(), false,
+                null, null, 0.0, 1.0, false, null, List.of(new LinkInterface("hb", "ether1", "electrical", "1g"),
+                    new LinkInterface("hb", "ether2", "electrical", "1g")));
+            var c1 = new Connection("c1", "Principal", "ha", "ether1", "hb", "ether1");
+            var c2 = new Connection("c2", "Secundário", "ha", "ether2", "hb", "ether2");
+            var first = new Link("group", "b", null, null, "straight", List.of(), "straight", "c1", c1);
+            var second = new Link("group", "b", null, null, "corners", List.of(new Bend(50, 32)), "straight", "c2", c2);
+            var saved = service.save(new Saved(null, 0, new Layout("Paralelos", null, 0, List.of(a, b), List.of(first, second)), null));
+            assertThat(service.maps().stream().filter(map -> map.id().equals(saved.id())).findFirst().orElseThrow()
+                .layout().links()).containsExactly(first, second);
+            var c3 = new Connection("c3", "Duplicado", "hb", "ether1", "ha", "ether1");
+            var duplicate = new Link("b", "group", null, null, "straight", List.of(), "straight", "c3", c3);
+            assertThatThrownBy(() -> service.save(new Saved(null, 0, new Layout("Duplicado", null, 0,
+                List.of(a, b), List.of(first, second, duplicate)), null))).isInstanceOf(ResponseStatusException.class);
+            var shared = new Connection("c4", "Porta já usada", "ha", "ether1", "hb", "ether2");
+            var reused = new Link("group", "b", null, null, "straight", List.of(), "straight", "c4", shared);
+            assertThatThrownBy(() -> service.save(new Saved(null, 0, new Layout("Porta ocupada", null, 0,
+                List.of(a, b), List.of(first, reused)), null))).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("já está em uso");
+            var pon = groupWithInterfaces(List.of(new LinkInterface("ha", "ether1", "pon", "unknown")));
+            assertThat(service.save(new Saved(null, 0, new Layout("PON compartilhada", null, 0,
+                List.of(pon, b), List.of(first, reused)), null)).layout().links()).containsExactly(first, reused);
+            var simple = new Link("group", "b");
+            assertThatThrownBy(() -> service.save(new Saved(null, 0, new Layout("Simples duplicado", null, 0,
+                List.of(a, b), List.of(simple, new Link("b", "group"))), null))).isInstanceOf(ResponseStatusException.class);
+        } finally { org.mockito.Mockito.reset(inventory); }
+    }
+
     @Test void ponPortsAllowMultipleLinksButRejectDuplicateEndpointPairs() throws Exception {
         var a = new Node("a", null, null, null, "OLT", 0, 0, null, "switch",
             List.of(new Port("pa", "sfp", "sa", "gpon-1", "unknown", null, null, null, null, "pon")),

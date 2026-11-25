@@ -1458,11 +1458,47 @@ function drawLinkPreview() {
     MapTraffic.render(svg, layer, line, MapLinks.points(link, start, end), [], null, appearance !== 'solid-pulses' || $('traffic-animation').checked);
   }
 }
-function openLinkDialog(link) {
+function mappedInterfaceRows(node, hostId) {
+  if (node.groupId && node.linkInterfaces != null) return node.linkInterfaces.filter(entry => entry.hostId === hostId);
+  const element = node.hostId === hostId ? node : current.layout.nodes.find(candidate => candidate.hostId === hostId);
+  return element?.interfacesEnabled === false ? [] : [...new Map((element?.ports || [])
+    .filter(port => port.name).map(port => [port.name, port])).values()]
+    .sort((a, b) => a.name.localeCompare(b.name, 'en', {numeric: true, sensitivity: 'base'}));
+}
+function interfaceAlreadyUsed(node, hostId, name, target, connector = mappedInterfaceRows(node, hostId).find(row => row.name === name)?.connector) {
+  if (connector === 'pon') return false;
+  return current.layout.links.some(link => {
+    if (link === target) return false;
+    const c = link.connection;
+    if (c && ((c.hostA === hostId && c.interfaceA === name) || (c.hostB === hostId && c.interfaceB === name))) return true;
+    return ['from', 'to'].some(side => {
+      const element = current.layout.nodes.find(candidate => candidate.id === link[side]);
+      const port = element?.ports?.find(port => port.id === link[side + 'Port']);
+      return element?.hostId === hostId && port?.name === name;
+    });
+  });
+}
+function duplicateGroupLink(draft, connection, target) {
+  const nodes = [draft.from, draft.to].map(id => current.layout.nodes.find(node => node.id === id));
+  if (draft.fromPort || draft.toPort || !nodes.every(node => node?.groupId)) return false;
+  return current.layout.links.some(link => {
+    if (link === target || link.fromPort || link.toPort) return false;
+    const forward = link.from === draft.from && link.to === draft.to;
+    const reverse = link.from === draft.to && link.to === draft.from;
+    if (!forward && !reverse) return false;
+    const existing = link.connection;
+    if (!connection || !existing) return !connection && !existing;
+    return connection.hostA === (forward ? existing.hostA : existing.hostB)
+      && connection.interfaceA === (forward ? existing.interfaceA : existing.interfaceB)
+      && connection.hostB === (forward ? existing.hostB : existing.hostA)
+      && connection.interfaceB === (forward ? existing.interfaceB : existing.interfaceA);
+  });
+}
+function openLinkDialog(link, newParallel = false) {
   if (!editing || $('link-dialog').open) return;
   pendingLink = link;
   linkEndpointsReversed = false;
-  selectedLink = link; selected = null; selection.clear();
+  selectedLink = newParallel ? null : link; selected = null; selection.clear();
   $('link-from').value = connectionEndpointLabel(link, true);
   $('link-to').value = connectionEndpointLabel(link, false);
   $('link-dialog-type').value = link.lineStyle === 'curved' ? 'smooth' : link.style || 'straight';
@@ -1472,8 +1508,10 @@ function openLinkDialog(link) {
   );
   draw();
   $('link-dialog').showModal();
-  $('link-category').value = link.mappedConnectionId ? 'mapped' : 'simple';
+  $('link-category').value = newParallel || link.mappedConnectionId ? 'mapped' : 'simple';
+  $('link-category').disabled = newParallel;
   prepareConnectionHosts(true);
+  $('connection-message').textContent = '';
   $('connection-name').value = link.connection?.name || [link.from, link.to].map(id => current.layout.nodes.find(node => node.id === id)?.name || '').join(' ↔ ');
   loadConnectionInterfaces();
   $('delete-link').hidden = !current.layout.links.includes(link);
@@ -1491,9 +1529,10 @@ $('cancel-link').onclick = () => $('link-dialog').close();
 $('link-dialog').onclose = () => { pendingLink = null; lastConnectionClick = null; };
 $('link-form').onsubmit = async event => {
   event.preventDefault();
-  if (!pendingLink || !current.layout.links.includes(pendingLink)) return;
-  if (savingConnection) return;
+  if (!pendingLink || savingConnection) return;
   const target = pendingLink;
+  const newParallel = !current.layout.links.includes(target);
+  if (newParallel && !$('link-category').disabled) return;
   let mappedConnectionId = target.mappedConnectionId;
   let connection = target.connection;
   if ($('link-category').value === 'mapped') {
@@ -1505,6 +1544,10 @@ $('link-form').onsubmit = async event => {
       const name = $('connection-name').value.trim();
       const interfaceA = $('connection-interface-a').value, interfaceB = $('connection-interface-b').value;
       if (!name || !interfaceA || !interfaceB) throw new Error('Preencha o nome e as duas interfaces.');
+      if (duplicateGroupLink(linkEndpointDraft(), {hostA, hostB, interfaceA, interfaceB}, target))
+        throw new Error('Já existe uma conexão entre essas mesmas interfaces.');
+      if (interfaceAlreadyUsed(a, hostA, interfaceA, target) || interfaceAlreadyUsed(b, hostB, interfaceB, target))
+        throw new Error('Uma das interfaces já está em uso em outra conexão do mapa.');
       const existing = connectionDefinitions.find(c => c.id === target.mappedConnectionId);
       if (!existing || existing.name !== name || existing.interfaceA !== interfaceA || existing.interfaceB !== interfaceB || existing.hostA !== hostA || existing.hostB !== hostB) {
         savingConnection = true;
@@ -1513,7 +1556,7 @@ $('link-form').onsubmit = async event => {
         $('save-link').setAttribute('class', 'system-button system-button-primary system-button-loading');
         $('save-link-label').textContent = 'Salvando';
         const saved = await connectionRequest('/api/maps/connections/validate', {name, hostA, hostB, interfaceA, interfaceB});
-        if (pendingLink !== target || !current.layout.links.includes(target)) return;
+        if (pendingLink !== target || (!newParallel && !current.layout.links.includes(target))) return;
         mappedConnectionId = saved.id; connection = saved;
       }
     } catch (error) { $('connection-message').textContent = error.message; return; }
@@ -1524,12 +1567,18 @@ $('link-form').onsubmit = async event => {
       $('save-link').setAttribute('class', 'system-button system-button-primary');
       $('save-link-label').textContent = 'Salvar';
     }
-  } else { mappedConnectionId = undefined; }
+  } else {
+    if (newParallel || duplicateGroupLink(linkEndpointDraft(), null, target)) {
+      $('connection-message').textContent = 'Já existe uma conexão simples entre esses grupos. Selecione interfaces mapeadas.';
+      return;
+    }
+    mappedConnectionId = undefined;
+  }
   const {style, lineStyle} = linkGeometry($('link-dialog-type').value);
   const appearance = $('link-dialog-style').value;
   const appearanceChanged = (target.style || 'straight') !== style ||
     (target.lineStyle || 'straight') !== lineStyle || target.appearance !== appearance;
-  if (linkEndpointsReversed || mappedConnectionId !== target.mappedConnectionId || appearanceChanged) checkpoint();
+  if (newParallel || linkEndpointsReversed || mappedConnectionId !== target.mappedConnectionId || appearanceChanged) checkpoint();
   if (mappedConnectionId) { target.mappedConnectionId = mappedConnectionId; target.connection = connection; }
   else { delete target.mappedConnectionId; delete target.connection; }
   if (linkEndpointsReversed) {
@@ -1540,6 +1589,10 @@ $('link-form').onsubmit = async event => {
   if (appearanceChanged) {
     Object.assign(target, {style, lineStyle, appearance});
     target.points ||= [];
+  }
+  if (newParallel) {
+    current.layout.links.push(target);
+    selectedLink = target;
   }
   $('link-dialog').close(); draw();
 };
@@ -1705,9 +1758,32 @@ function connectEndpoint(node, portId) {
   const duplicate = current.layout.links.some(link =>
     (link.from === origin.nodeId && link.to === node.id && (link.fromPort || null) === origin.portId && (link.toPort || null) === portId) ||
     (link.to === origin.nodeId && link.from === node.id && (link.toPort || null) === origin.portId && (link.fromPort || null) === portId));
+  const link = {from: origin.nodeId, to: node.id, fromPort: origin.portId, toPort: portId};
   if (!duplicate) {
     checkpoint();
-    current.layout.links.push({from: origin.nodeId, to: node.id, fromPort: origin.portId, toPort: portId});
+    current.layout.links.push(link);
+  } else if (!origin.portId && !portId && node.groupId) {
+    const source = current.layout.nodes.find(candidate => candidate.id === origin.nodeId);
+    if (source?.groupId) {
+      // Separate the new route so both links remain individually selectable.
+      const peers = current.layout.links.filter(peer =>
+        (peer.from === source.id && peer.to === node.id) || (peer.to === source.id && peer.from === node.id));
+      const dx = node.x - source.x, dy = node.y - source.y;
+      const length = Math.hypot(dx, dy);
+      const normalX = length ? -dy / length : 1, normalY = length ? dx / length : 0;
+      const sign = source.id < node.id ? 1 : -1;
+      let offset = 32;
+      let point;
+      do {
+        point = {x: (source.x + node.x) / 2 + normalX * offset * sign,
+          y: (source.y + node.y) / 2 + normalY * offset * sign};
+        offset += 32;
+      } while (peers.some(peer => peer.points?.some(p => Math.hypot(p.x - point.x, p.y - point.y) < 1)));
+      Object.assign(link, {style: 'corners', points: [point], appearance: 'solid-pulses'});
+      setTool('select');
+      openLinkDialog(link, true);
+      return;
+    }
   }
   setTool('select');
   draw();
@@ -1992,6 +2068,7 @@ async function loadConnectionInterfaces() {
   $('link-mapping').hidden = !mapped;
   updateLinkEndpoints();
   if (!mapped || !link) {
+    $('connection-message').textContent = '';
     $('connection-retry').removeAttribute('aria-busy');
     return;
   }
@@ -2008,20 +2085,19 @@ async function loadConnectionInterfaces() {
     if (hostIds[0] === hostIds[1]) throw new Error('Selecione hosts diferentes para os lados A e B.');
     connectionDefinitions = current.layout.links.map(link => link.connection).filter(Boolean);
     const existing = connectionDefinitions.find(c => c.id === link.mappedConnectionId);
-    const interfaces = nodes.map((node, index) => {
-      if (node.groupId && node.linkInterfaces != null) return node.linkInterfaces.filter(entry => entry.hostId === hostIds[index]);
-      const element = node.hostId === hostIds[index] ? node
-        : current.layout.nodes.find(candidate => candidate.hostId === hostIds[index]);
-      return element?.interfacesEnabled === false ? [] : [...new Map((element?.ports || [])
-        .filter(port => port.name).map(port => [port.name, port])).values()]
-        .sort((a, b) => a.name.localeCompare(b.name, 'en', {numeric: true, sensitivity: 'base'}));
-    });
+    const interfaces = nodes.map((node, index) => mappedInterfaceRows(node, hostIds[index]));
     if (sequence !== interfaceLoad || pendingLink !== link) return;
     interfaces.forEach((rows, i) => {
       controls[i].append(new Option('Selecione a interface', ''));
-      rows.forEach(row => controls[i].append(new Option(row.comment?.trim() ? row.name + ' - ' + row.comment.trim() : row.name, row.name)));
+      rows.forEach(row => {
+        const used = interfaceAlreadyUsed(nodes[i], hostIds[i], row.name, link, row.connector || null);
+        const label = row.comment?.trim() ? row.name + ' - ' + row.comment.trim() : row.name;
+        const option = new Option(label + (used ? ' (Já usada)' : ''), row.name);
+        option.disabled = used;
+        controls[i].append(option);
+      });
       const selected = (existing && (hostIds[i] === existing.hostA ? existing.interfaceA : hostIds[i] === existing.hostB ? existing.interfaceB : '')) || '';
-      controls[i].value = rows.some(row => row.name === selected) ? selected : '';
+      controls[i].value = [...controls[i].options].some(option => option.value === selected && !option.disabled) ? selected : '';
       controls[i].disabled = false;
     });
     updateLinkEndpoints();

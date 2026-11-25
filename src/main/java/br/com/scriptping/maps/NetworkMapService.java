@@ -39,6 +39,16 @@ public class NetworkMapService {
         }).toList();
     }
 
+    private boolean mappedInterfaceIsPon(Node node, String hostId, String name, Map<String, Node> nodes) {
+        if (node.groupId() != null && node.linkInterfaces() != null)
+            return node.linkInterfaces().stream().anyMatch(entry -> hostId.equals(entry.hostId())
+                && name.equals(entry.name()) && "pon".equals(entry.connector()));
+        var element = hostId.equals(node.hostId()) ? node : nodes.values().stream()
+            .filter(candidate -> hostId.equals(candidate.hostId())).findFirst().orElse(null);
+        return element != null && !Boolean.FALSE.equals(element.interfacesEnabled())
+            && element.ports().stream().anyMatch(port -> name.equals(port.name()) && "pon".equals(port.connector()));
+    }
+
     private boolean connectionHostMatches(Node node, String hostId) {
         if (hostId == null || hostId.isBlank()) return false;
         if (node.hostId() != null) return Objects.equals(node.hostId(), hostId);
@@ -178,6 +188,7 @@ public class NetworkMapService {
         }
         var pairs = new HashSet<Set<List<String>>>();
         var occupied = new HashSet<List<String>>();
+        var occupiedInterfaces = new HashSet<List<String>>();
         for (var link : layout.links()) {
             if (link == null || !ids.contains(link.from()) || !ids.contains(link.to()) || link.from().equals(link.to())) throw invalid();
             if (!Set.of("straight", "corners").contains(link.style())
@@ -208,18 +219,43 @@ public class NetworkMapService {
                         throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A interface da conexão não está cadastrada no elemento do mapa.");
                 }
             }
+            var usedInterfaces = new HashSet<List<String>>();
+            if (link.connection() != null) {
+                var c = link.connection();
+                if (!mappedInterfaceIsPon(nodes.get(link.from()), c.hostA(), c.interfaceA(), nodes))
+                    usedInterfaces.add(List.of(c.hostA(), c.interfaceA()));
+                if (!mappedInterfaceIsPon(nodes.get(link.to()), c.hostB(), c.interfaceB(), nodes))
+                    usedInterfaces.add(List.of(c.hostB(), c.interfaceB()));
+            }
             for (var point : link.points()) {
                 if (point == null || !Double.isFinite(point.x()) || !Double.isFinite(point.y())) throw invalid();
             }
             var endpoints = List.of(List.of(link.from(), link.fromPort() == null ? "" : link.fromPort()),
                 List.of(link.to(), link.toPort() == null ? "" : link.toPort()));
-            if (!pairs.add(Set.copyOf(endpoints))) throw invalid();
+            var pair = Set.copyOf(endpoints);
+            if (nodes.get(link.from()).groupId() != null && nodes.get(link.to()).groupId() != null
+                && link.fromPort() == null && link.toPort() == null && link.connection() != null) {
+                var c = link.connection();
+                pair = Set.of(List.of(link.from(), "", c.hostA(), c.interfaceA()),
+                    List.of(link.to(), "", c.hostB(), c.interfaceB()));
+            }
+            if (!pairs.add(pair))
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Já existe uma conexão entre essas mesmas extremidades.");
             for (var endpoint : endpoints) {
                 if (endpoint.get(1).isEmpty()) continue;
                 var port = nodes.get(endpoint.get(0)).ports().stream()
                     .filter(candidate -> candidate.id().equals(endpoint.get(1))).findFirst()
                     .orElseThrow(this::invalid);
-                if (!"pon".equals(port.connector()) && !occupied.add(endpoint)) throw invalid();
+                if (!"pon".equals(port.connector())) {
+                    if (!occupied.add(endpoint)) throw invalid();
+                    var element = nodes.get(endpoint.get(0));
+                    if (element.hostId() != null && port.name() != null && !port.name().isBlank())
+                        usedInterfaces.add(List.of(element.hostId(), port.name()));
+                }
+            }
+            for (var iface : usedInterfaces) {
+                if (!occupiedInterfaces.add(iface))
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Uma das interfaces já está em uso em outra conexão do mapa.");
             }
         }
         long now = System.currentTimeMillis();

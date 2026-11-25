@@ -332,3 +332,60 @@ test('group connections use the enabled registry without individual host element
   assert.deepEqual($('connection-interface-a').options.map(o=>o.value),['','wifi0','eth1_emac1']);
   assert.deepEqual($('connection-interface-b').options.map(o=>o.value),['','wlan0']);
 });
+
+test('parallel group links save distinct interface pairs, reject reversed duplicates and cancel cleanly', async () => {
+  const {$,context,run}=groupedConnectionSetup();
+  run("link.fromPort=null; link.connection={id:'first',name:'Principal',hostA:'h1',hostB:'h2',interfaceA:'ether1',interfaceB:'ether1'}; link.mappedConnectionId='first'; $('link-dialog').close();");
+  run("const parallel={from:'a',to:'b',style:'corners',points:[{x:50,y:32}],appearance:'solid-pulses'}; openLinkDialog(parallel,true)");
+  assert.equal($('link-category').value,'mapped');
+  assert.equal($('link-category').disabled,true);
+  assert.equal($('delete-link').hidden,true);
+  $('cancel-link').onclick();
+  assert.equal(context.current.layout.links.length,1);
+  assert.equal(context.checkpoints,0);
+  run('openLinkDialog(parallel,true)');
+  $('connection-host-select-a').value='h1';
+  $('connection-host-select-b').value='h2';
+  await run('loadConnectionInterfaces()');
+  for (const side of ['a','b']) {
+    const options = $('connection-interface-' + side).options;
+    assert.equal(options.find(o=>o.value==='ether1').disabled,true);
+    assert.match(options.find(o=>o.value==='ether1').textContent,/Já usada/);
+    assert.equal(options.find(o=>o.value==='ether2').disabled,false);
+  }
+  $('connection-interface-a').value='ether1';
+  $('connection-interface-b').value='ether1';
+  $('swap-connection-endpoints').onclick();
+  context.connectionRequest=()=>assert.fail('duplicate must be rejected before validating');
+  await $('link-form').onsubmit({preventDefault(){}});
+  assert.match($('connection-message').textContent,/mesmas interfaces/);
+  assert.equal(context.current.layout.links.length,1);
+  $('connection-interface-a').value='ether2';
+  await $('link-form').onsubmit({preventDefault(){}});
+  assert.match($('connection-message').textContent,/já está em uso/);
+  $('connection-interface-b').value='ether2';
+  context.connectionRequest=async (url, body)=>({...body,id:'second'});
+  await $('link-form').onsubmit({preventDefault(){}});
+  assert.equal(context.current.layout.links.length,2);
+  assert.equal(context.checkpoints,1);
+  assert.equal(context.current.layout.links[1].connection.interfaceA,'ether2');
+  assert.equal(context.current.layout.links[1].from,'b');
+  assert.equal($('link-dialog').open,false);
+});
+
+test('current mapping remains selectable, PON is reusable, and other links mark their occupied interfaces', async () => {
+  const {$,run}=groupedConnectionSetup();
+  run(`link.fromPort=null; link.connection={id:'first',name:'Principal',hostA:'h1',hostB:'h2',interfaceA:'ether1',interfaceB:'ether1'}; link.mappedConnectionId='first';
+    current.layout.nodes[0].linkInterfaces=[{hostId:'h1',name:'ether1',connector:'electrical'},{hostId:'h1',name:'ether2',connector:'electrical'},{hostId:'h1',name:'pon1',connector:'pon'}];
+    current.layout.nodes[1].linkInterfaces=[{hostId:'h2',name:'ether1',connector:'electrical'},{hostId:'h2',name:'ether2',connector:'electrical'}];
+    current.layout.links.push({from:'other',to:'a',connection:{hostA:'h3',hostB:'h1',interfaceA:'ether1',interfaceB:'ether2'}},{from:'a',to:'other',connection:{hostA:'h1',hostB:'h3',interfaceA:'pon1',interfaceB:'ether3'}});
+    prepareConnectionHosts(true)`);
+  $('link-category').value='mapped';
+  await run('loadConnectionInterfaces()');
+  const a=$('connection-interface-a');
+  assert.equal(a.value,'ether1');
+  assert.equal(a.options.find(o=>o.value==='ether1').disabled,false);
+  assert.equal(a.options.find(o=>o.value==='ether2').disabled,true);
+  assert.equal(a.options.find(o=>o.value==='pon1').disabled,false);
+  assert.equal($('connection-interface-b').options.find(o=>o.value==='ether2').disabled,false);
+});
