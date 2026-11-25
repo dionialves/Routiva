@@ -2,6 +2,10 @@
 
 const MapTraffic = (() => {
   let nextMask = 0;
+  const pulseSpacingFactor = 1.5;
+  const solidPulsePeriod = 130 * pulseSpacingFactor;
+  const solidPulseLength = 24;
+  const solidPulseDuration = solidPulsePeriod / 60;
   function isWireless(link, nodes) {
     const endpoints = [['from', 'fromPort'], ['to', 'toPort']].map(([nodeKey, portKey]) => {
       const node = nodes.find(node => node.id === link[nodeKey]);
@@ -21,6 +25,46 @@ const MapTraffic = (() => {
   }
   function count(length) {
     return Math.max(1, Math.round(length / 110));
+  }
+  // Assign different phases to links incident on the same element, using saved
+  // order (not paint order). Unrelated links reuse the slots in rotation.
+  function pulsePhases(links) {
+    const used = new Map();
+    const degrees = new Map();
+    const endpoints = link => [...new Set([link.from, link.to])];
+    let slots = Math.min(4, links.length);
+    for (const link of links) for (const endpoint of endpoints(link)) {
+      const degree = (degrees.get(endpoint) || 0) + 1;
+      degrees.set(endpoint, degree);
+      slots = Math.max(slots, degree);
+    }
+    const assignments = new Map();
+    links.forEach((link, index) => {
+      const ends = endpoints(link);
+      const incident = ends.map(endpoint => {
+        if (!used.has(endpoint)) used.set(endpoint, new Set());
+        return used.get(endpoint);
+      });
+      // Spread even a smaller hub across the full cycle when another hub has
+      // many more connections. Prefer its saved local order, then avoid clashes.
+      const hub = degrees.get(ends[0]) >= (degrees.get(ends[1]) || 0) ? 0 : 1;
+      const degree = degrees.get(ends[hub]);
+      let slot = degree > 1 ? Math.floor(incident[hub].size * slots / degree) : index % slots;
+      let attempts = 0;
+      while (attempts < slots && incident.some(values => values.has(slot))) {
+        slot = (slot + 1) % slots;
+        attempts++;
+      }
+      if (attempts === slots) slot = slots++;
+      incident.forEach(values => values.add(slot));
+      assignments.set(link, slot);
+    });
+    return new Map([...assignments].map(([link, slot]) => [link, slot / slots]));
+  }
+  // Negative delay keeps every animation already running, while slot fractions
+  // specify the next departure time within one pulse cycle.
+  function pulseDelay(phase, duration) {
+    return phase ? (phase - 1) * duration : 0;
   }
   function utilizationColor(bps, capacity) {
     if (bps == null || !(capacity > 0)) return null;
@@ -62,6 +106,7 @@ const MapTraffic = (() => {
     const link = layer.trafficContext?.link;
     const explicitPulses = link?.appearance?.endsWith('-pulses');
     const solidPulses = link?.appearance === 'solid-pulses';
+    const phase = layer.trafficContext?.phase || 0;
     const capacities = { '10m': 1e7, '100m': 1e8, '1g': 1e9, '10g': 1e10,
       '25g': 25e9, '40g': 40e9, '50g': 50e9, '100g': 100e9,
       '200g': 200e9, '400g': 400e9, '800g': 800e9 };
@@ -84,7 +129,7 @@ const MapTraffic = (() => {
     path.style?.setProperty('--traffic-color', color);
     path.classList.toggle('traffic-measured', Boolean(color));
     // Geometry owns the animation. Metric updates only change visibility and color.
-    const signature = JSON.stringify([d, reverse, wireless, solidPulses]);
+    const signature = JSON.stringify([d, reverse, wireless, solidPulses, phase]);
     if (layer.trafficGeometry !== signature) {
       layer.trafficGeometry = signature;
       layer.replaceChildren();
@@ -95,26 +140,99 @@ const MapTraffic = (() => {
           ['traffic-solid-glow', '#00FF88', 7], ['traffic-solid-core', '#D1FFE4', 3.5],
         ]) {
           pulses.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
-            'stroke-linecap': 'round', 'stroke-dasharray': '24 106',
-            class: `traffic-pulse ${className}`, style: reverse ? 'animation-direction:reverse' : ''}));
+            'stroke-linecap': 'round', 'stroke-dasharray': `${solidPulseLength} ${solidPulsePeriod - solidPulseLength}`,
+            class: `traffic-pulse ${className}`, style: `--pulse-from:0px;--pulse-to:${-solidPulsePeriod}px;animation-duration:${solidPulseDuration}s;animation-delay:${pulseDelay(phase, solidPulseDuration)}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
         }
       } else {
-        renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse);
+        renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse, phase);
       }
       layer.append(pulses);
       layer.trafficPulses = pulses;
     }
-    const animate = enabled && (!solidPulses || !data.down) && (explicitPulses || data.tx > 0 || data.rx > 0);
+    const animate = enabled && !layer.trafficContext?.selected && (!solidPulses || !data.down) && (explicitPulses || data.tx > 0 || data.rx > 0);
     layer.trafficPulses.setAttribute('visibility', animate ? 'visible' : 'hidden');
     if (wireless) {
       layer.style?.setProperty('--wireless-pulse-color', color);
     }
   }
 
-  function renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse) {
+  // MapLinks emits absolute M/L/Q/C commands; use the actual painted geometry,
+  // not waypoint corners, so rounded branches and crossing cables remain distinct.
+  function pathSegments(d) {
+    let start;
+    const segments = [];
+    for (const command of d.matchAll(/([MLQC])\s+([^MLQC]+)/g)) {
+      const values = command[2].trim().split(/\s+/).map(Number);
+      const points = [];
+      for (let i = 0; i < values.length; i += 2) points.push({x: values[i], y: values[i + 1]});
+      if (command[1] !== 'M') segments.push({type: command[1], points: [start, ...points]});
+      start = points.at(-1);
+    }
+    return segments;
+  }
+
+  function sharedSegment(a, b) {
+    if (a.type !== b.type) return '';
+    const [p, q] = a.points, [r, s] = b.points;
+    if (a.type !== 'L') {
+      const equal = (x, y) => Math.hypot(x.x - y.x, x.y - y.y) < 0.001;
+      if (!a.points.every((point, i) => equal(point, b.points[i])) &&
+          !a.points.every((point, i) => equal(point, b.points.at(-1 - i)))) return '';
+      return `M ${p.x} ${p.y} ${a.type} ${a.points.slice(1).map(point => `${point.x} ${point.y}`).join(' ')}`;
+    }
+    const dx = q.x - p.x, dy = q.y - p.y, length = Math.hypot(dx, dy);
+    if (!length) return '';
+    const distance = point => Math.abs(dx * (point.y - p.y) - dy * (point.x - p.x)) / length;
+    if (distance(r) > 0.001 || distance(s) > 0.001) return '';
+    const along = point => ((point.x - p.x) * dx + (point.y - p.y) * dy) / length;
+    const lo = Math.max(0, Math.min(along(r), along(s)));
+    const hi = Math.min(length, Math.max(along(r), along(s)));
+    if (hi - lo < 0.001) return '';
+    const at = t => `${p.x + dx * t / length} ${p.y + dy * t / length}`;
+    return `M ${at(lo)} L ${at(hi)}`;
+  }
+
+  // Mask only the shared centerlines of lower cables, including the glow.
+  // Keep masks outside animated groups so readings refresh without rebuilding them.
+  function maskOverlaps(svg, connectors, layers, selectedRoute = null) {
+    const padding = 16;
+    const entries = layers.filter(layer => !layer.trafficContext.selected &&
+      (selectedRoute || layer.trafficContext.link?.appearance === 'solid-pulses')).map(layer => {
+      const {line, route, link} = layer.trafficContext;
+      const xs = route.map(p => p.x), ys = route.map(p => p.y);
+      return {layer, solid: link?.appearance === 'solid-pulses', segments: pathSegments(line.getAttribute('d')), left: Math.min(...xs), right: Math.max(...xs),
+        top: Math.min(...ys), bottom: Math.max(...ys)};
+    });
+    const selectedSegments = selectedRoute ? pathSegments(selectedRoute) : [];
+    const defs = svg('defs', {});
+    let masked = false;
+    entries.forEach((entry, index) => {
+      const above = entries.slice(index + 1).filter(other =>
+        entry.solid && other.solid && entry.left <= other.right && entry.right >= other.left &&
+        entry.top <= other.bottom && entry.bottom >= other.top);
+      const occluders = [...above.flatMap(other => other.segments), ...selectedSegments];
+      const shared = entry.segments.flatMap(segment =>
+        occluders.map(candidate => sharedSegment(segment, candidate)).filter(Boolean));
+      if (!shared.length) return;
+      const id = `traffic-overlap-mask-${++nextMask}`;
+      const bounds = {x: entry.left - padding, y: entry.top - padding,
+        width: entry.right - entry.left + 2 * padding, height: entry.bottom - entry.top + 2 * padding};
+      const mask = svg('mask', {id, maskUnits: 'userSpaceOnUse', maskContentUnits: 'userSpaceOnUse', ...bounds});
+      mask.append(svg('rect', {...bounds, fill: 'white'}));
+      mask.append(svg('path', {d: shared.join(' '), fill: 'none', stroke: 'black',
+        'stroke-width': 24, 'stroke-linecap': 'butt', 'stroke-linejoin': 'round'}));
+      defs.append(mask);
+      entry.layer.setAttribute('mask', `url(#${id})`);
+      masked = true;
+    });
+    if (masked) connectors.append(defs);
+  }
+
+  function renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse, phase) {
     const length = path.getTotalLength();
-    const period = Math.max(1, length / count(length));
-    const width = Math.min(32, period * 0.38);
+    const originalPeriod = Math.max(1, length / count(length));
+    const period = originalPeriod * pulseSpacingFactor;
+    const width = Math.min(32, originalPeriod * 0.38);
     // Concentric dash lengths form a longitudinal light gradient on the actual path,
     // including curves. All layers share a period and phase, with no moving objects.
     if (wireless) {
@@ -136,13 +254,13 @@ const MapTraffic = (() => {
       pulses.setAttribute('mask', `url(#${maskId})`);
       {
         const group = svg('g', {});
-        const dash = Math.min(20, period * 0.38);
+        const dash = Math.min(20, originalPeriod * 0.38);
         for (const [stroke, thickness, opacity, blur] of [
           ['var(--wireless-pulse-color)', 10, 0.22, true],
           ['var(--wireless-pulse-color)', 5, 0.9, false], ['#F0FFF9', 2.5, 1, false]]) {
           group.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
             'stroke-linecap': 'round', opacity, 'stroke-dasharray': `${dash} ${period - dash}`,
-            class: 'traffic-pulse', style: `${blur ? 'filter:blur(3px);' : ''}--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
+            class: 'traffic-pulse', style: `${blur ? 'filter:blur(3px);' : ''}--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-delay:${pulseDelay(phase, period / 55)}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
         }
         pulses.append(group);
       }
@@ -151,10 +269,10 @@ const MapTraffic = (() => {
       pulses.append(svg('path', {d, fill: 'none', stroke: '#F0FCFF',
         'stroke-width': 2.4, 'stroke-linecap': 'butt', opacity: 0.10 + i * 0.012,
         'stroke-dasharray': `${dash} ${period - dash}`, class: 'traffic-pulse',
-        style: `--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
+        style: `--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-delay:${pulseDelay(phase, period / 55)}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
     }
   }
 
-  return {fresh, isWireless, mappedSourcePort, number, count, utilizationColor, rate, state, render};
+  return {fresh, isWireless, mappedSourcePort, number, count, utilizationColor, rate, state, render, maskOverlaps, pulsePhases};
 })();
 if (typeof module !== 'undefined') module.exports = MapTraffic;

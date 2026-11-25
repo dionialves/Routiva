@@ -512,11 +512,6 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .traffic-pulse { animation: traffic-flow 2s linear infinite; }
 .traffic-pulses-solid { pointer-events: none; }
 .traffic-pulses-solid[visibility="hidden"] { display: none; }
-.traffic-pulses-solid .traffic-pulse {
-  --pulse-from: 0px;
-  --pulse-to: -130px;
-  animation-duration: 2.166667s; /* 130px at 60px/s, compared with 55px/s for dashed pulses. */
-}
 .traffic-solid-glow { filter: blur(3px); }
 @keyframes traffic-flow {
   from { stroke-dashoffset: var(--pulse-from); }
@@ -769,7 +764,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
   .pop-host-summary .host-incident-status { white-space:normal; }
 }
 
-/* Outline the selected route while keeping live traffic pulses above it. */
+/* Outline the selected route without traffic pulses. */
 #canvas .map-connectors .map-connector.selected-link {
   stroke: #CA8A04;
   stroke-width: 4;

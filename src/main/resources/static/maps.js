@@ -352,6 +352,11 @@ function draw() {
   }
   const connectors = svg('g', {class: 'map-connectors'});
   const byId = new Map(nodes.map(n => [n.id, n]));
+  const trafficLayers = [];
+  const animatedLinks = !editing ? links.filter(link => link.appearance?.endsWith('-pulses') ||
+    (!link.appearance && link.mappedConnectionId)) : [];
+  const pulsePhases = animatedLinks.length ? MapTraffic.pulsePhases(animatedLinks) : new Map();
+  let selectedRoute = null;
   const linkLayer = link => link === selectedLink ? 2 : link.mappedConnectionId ? 1 : 0;
   for (const link of [...links].sort((a, b) => linkLayer(a) - linkLayer(b))) {
     const a = byId.get(link.from), b = byId.get(link.to);
@@ -372,8 +377,8 @@ function draw() {
     line.setAttribute('aria-pressed', String(selectedLink === link));
     line.onclick = event => {
       event?.stopPropagation();
-      if (selectedLink === link) return;
-      selectedLink = link; selected = null; selection.clear(); draw();
+      selectedLink = selectedLink === link ? null : link;
+      selected = null; selection.clear(); draw();
     };
     line.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); line.onclick(event); }
@@ -396,8 +401,9 @@ function draw() {
           lastConnectionClick = null; openLinkDialog(link); return;
         }
         lastConnectionClick = {link, at: now};
-        if (!editing || selectedLink === link) return;
-        selectedLink = link; selected = null; selection.clear(); draw();
+        if (!editing) return;
+        selectedLink = selectedLink === link ? null : link;
+        selected = null; selection.clear(); draw();
       };
       line.onkeydown = event => {
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openLinkDialog(link); }
@@ -426,18 +432,9 @@ function draw() {
         };
         path.onblur = () => MapConnectionTooltip.hide();
       }
-      if (!editing) {
-        line.setAttribute('tabindex', 0);
-        line.setAttribute('role', 'button');
-        line.setAttribute('aria-label', 'Abrir conexão mapeada entre ' + a.name + ' e ' + b.name);
-        const selectConnection = line.onclick;
-        line.onclick = hit.onclick = event => {
-          if (selectedLink === link) line.onfocus();
-          else selectConnection(event);
-        };
-      }
     }
     if (!editing && selectedLink === link) {
+      selectedRoute = d;
       connectors.append(svg('path', {d, class: 'map-connector-selection-border' +
         (wireless ? ' map-connector-wireless' : ''), 'aria-hidden': 'true'}));
     }
@@ -445,10 +442,13 @@ function draw() {
     if ((pulses || legacyMapped) && !editing) {
       const layer = svg('g', {class: 'map-traffic', 'aria-hidden': 'true'});
       connectors.append(layer);
-      layer.trafficContext = {line, link, wireless, route: MapLinks.points(link, start, end), nodes};
+      layer.trafficContext = {line, link, wireless, selected: selectedLink === link, phase: pulsePhases.get(link), route: MapLinks.points(link, start, end), nodes};
       updateTrafficLayer(layer);
+      trafficLayers.push(layer);
     }
   }
+  if (trafficLayers.length > 1 || (selectedRoute && trafficLayers.length))
+    MapTraffic.maskOverlaps(svg, connectors, trafficLayers, selectedRoute);
   // Keep central anchors hidden, but leave cables visible over equipment with ports.
   const foregroundElements = [];
   for (const n of nodes) {

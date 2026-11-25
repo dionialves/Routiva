@@ -85,7 +85,9 @@ test('different lengths retain the same path speed without crowding short links'
     const period = from - to;
     const duration = Number(style.match(/animation-duration:([^s]+)/)[1]);
     assert.ok(Math.abs(period / duration - 55) < 0.0001);
-    assert.equal(Math.round(length / period), traffic.count(length));
+    assert.ok(Math.abs(period - 1.5 * length / traffic.count(length)) < 0.0001);
+    const dash = Number(layer.trafficPulses.children[0].attrs['stroke-dasharray'].split(' ')[0]);
+    assert.equal(dash, Math.min(32, length / traffic.count(length) * 0.38));
   }
 });
 
@@ -196,8 +198,8 @@ test('solid pulses share geometry and phase, preserve saturation, and stop when 
   assert.equal(pulses.attrs.visibility, 'visible');
   assert.deepEqual(pulses.children.map(({attrs}) =>
     [attrs.d, attrs['stroke-dasharray'], attrs['stroke-width'], attrs.stroke]), [
-    [d, '24 106', 7, '#00FF88'],
-    [d, '24 106', 3.5, '#D1FFE4'],
+    [d, '24 171', 7, '#00FF88'],
+    [d, '24 171', 3.5, '#D1FFE4'],
   ]);
 
   render({a: {...a, txBps: 85}});
@@ -210,4 +212,115 @@ test('solid pulses share geometry and phase, preserve saturation, and stop when 
   render({a}, false);
   assert.equal(path.attrs['traffic-down'], false);
   assert.equal(pulses.attrs.visibility, 'hidden');
+});
+
+
+test('solid pulses mask only shared geometry in visual stacking order', () => {
+  const connectors = element('g');
+  const layer = (d, points) => {
+    const item = element('g');
+    item.trafficContext = {link: {appearance:'solid-pulses'}, line: element('path', {d}), route: points.map(([x,y]) => ({x,y}))};
+    return item;
+  };
+  const lower = layer('M 0 0 L 100 0 L 100 100', [[0,0],[100,0],[100,100]]);
+  const upper = layer('M 150 0 L 30 0', [[150,0],[30,0]]);
+  const crossing = layer('M 60 -20 L 60 20', [[60,-20],[60,20]]);
+  const parallel = layer('M 0 2 L 100 2', [[0,2],[100,2]]);
+  traffic.maskOverlaps(element, connectors, [lower, upper, crossing, parallel]);
+  assert.match(lower.attrs.mask, /^url\(#traffic-overlap-mask-/);
+  const masks = connectors.children[0].children;
+  assert.equal(masks.length, 1);
+  assert.equal(masks[0].children[1].attrs.d, 'M 30 0 L 100 0');
+  assert.equal(upper.attrs.mask, undefined);
+  assert.equal(crossing.attrs.mask, undefined);
+  assert.equal(parallel.attrs.mask, undefined);
+});
+
+test('identical rounded paths share a mask even in reverse direction', () => {
+  const connectors = element('g');
+  const layer = d => {
+    const item = element('g');
+    item.trafficContext = {link: {appearance:'solid-pulses'}, line: element('path', {d}), route: [{x:0,y:0},{x:100,y:0},{x:100,y:100}]};
+    return item;
+  };
+  const lower = layer('M 0 0 L 82 0 Q 100 0 100 18 L 100 100');
+  const upper = layer('M 100 100 L 100 18 Q 100 0 82 0 L 0 0');
+  traffic.maskOverlaps(element, connectors, [lower, upper]);
+  assert.equal(connectors.children[0].children[0].children[1].attrs.d,
+    'M 0 0 L 82 0 M 82 0 Q 100 0 100 18 M 100 18 L 100 100');
+  assert.equal(upper.attrs.mask, undefined);
+});
+
+
+test('selection hides its own pulses through periodic updates and restores them on deselection', () => {
+  for (const appearance of ['solid-pulses', 'dashed-pulses', undefined]) {
+    const layer = element('g');
+    const path = element('path', {d:'M 0 0 L 100 0'});
+    const route = [{x:0,y:0},{x:100,y:0}];
+    const reading = {a:{up:true, measuredAt:Date.now(), txBps:50, capacityBps:100}};
+    layer.trafficContext = {link:{appearance}, wireless:appearance === 'dashed-pulses', selected:true};
+    traffic.render(element, layer, path, route, [], reading, true);
+    assert.equal(layer.trafficPulses.attrs.visibility, 'hidden');
+    traffic.render(element, layer, path, route, [], reading, true);
+    assert.equal(layer.trafficPulses.attrs.visibility, 'hidden');
+    layer.trafficContext.selected = false;
+    traffic.render(element, layer, path, route, [], reading, true);
+    assert.equal(layer.trafficPulses.attrs.visibility, 'visible');
+  }
+});
+
+test('a selected simple cable masks shared pulses of every underlying style', () => {
+  const connectors = element('g');
+  const layers = ['solid-pulses', 'dashed-pulses', undefined].map(appearance => {
+    const layer = element('g');
+    layer.trafficContext = {link:{appearance}, line:element('path', {d:'M 0 0 L 100 0'}),
+      route:[{x:0,y:0},{x:100,y:0}]};
+    return layer;
+  });
+  traffic.maskOverlaps(element, connectors, layers, 'M 30 0 L 70 0');
+  assert.equal(connectors.children[0].children.length, 3);
+  for (const mask of connectors.children[0].children) {
+    assert.equal(mask.children[1].attrs.d, 'M 30 0 L 70 0');
+  }
+  assert.ok(layers.every(layer => layer.attrs.mask));
+});
+
+test('pulse phases are sequential around a shared element and stable across rendering order', () => {
+  const links = Array.from({length:6}, (_, index) => ({from:'hub', to:`spoke-${index}`}));
+  const phases = traffic.pulsePhases(links);
+  assert.deepEqual(links.map(link => phases.get(link)), [0, 1/6, 2/6, 3/6, 4/6, 5/6]);
+  assert.deepEqual(traffic.pulsePhases(links), phases);
+  const bigHub = Array.from({length:24}, (_, i) => ({from:'big', to:`big-${i}`}));
+  const mixed = traffic.pulsePhases([...bigHub, ...links]);
+  assert.deepEqual(links.map(link => mixed.get(link)), links.map(link => phases.get(link)));
+  const triangle = [{from:'a',to:'b'}, {from:'b',to:'c'}, {from:'c',to:'a'}];
+  assert.equal(new Set(traffic.pulsePhases(triangle).values()).size, 3);
+  const detached = [{from:'a',to:'b'}, {from:'c',to:'d'}, {from:'e',to:'f'}];
+  assert.equal(new Set(traffic.pulsePhases(detached).values()).size, 3);
+  assert.equal(traffic.pulsePhases([]).size, 0);
+});
+
+test('staggered pulses keep their component paths in phase and retain the speed on refresh', () => {
+  const route = [{x:0,y:0},{x:300,y:0}];
+  for (const appearance of ['solid-pulses', 'dashed-pulses', undefined]) {
+    const layer = element('g');
+    const path = element('path', {d:'M 0 0 L 300 0'});
+    layer.trafficContext = {link:{appearance}, wireless:appearance === 'dashed-pulses', phase:0.25};
+    const reading = {a:{up:true, measuredAt:Date.now(), txBps:50, capacityBps:100}};
+    traffic.render(element, layer, path, route, [], reading, true);
+    const pulses = layer.trafficPulses;
+    const children = appearance === 'dashed-pulses' ? pulses.children[0].children : pulses.children;
+    const delays = children.map(node => Number(node.attrs.style.match(/animation-delay:([^s]+)/)[1]));
+    const duration = appearance === 'solid-pulses' ? 195 / 60 : (300 / traffic.count(300)) * 1.5 / 55;
+    assert.ok(delays.every(delay => Math.abs(delay + 0.75 * duration) < 1e-9));
+    for (const child of children) {
+      const [dash, gap] = child.attrs['stroke-dasharray'].split(' ').map(Number);
+      const actualDuration = Number(child.attrs.style.match(/animation-duration:([^s]+)/)[1]);
+      assert.ok(Math.abs(actualDuration - duration) < 1e-9);
+      assert.ok(Math.abs((dash + gap) / actualDuration - (appearance === 'solid-pulses' ? 60 : 55)) < 1e-9);
+      if (appearance === 'dashed-pulses') assert.equal(dash, 20);
+    }
+    traffic.render(element, layer, path, route, [], reading, true);
+    assert.equal(layer.trafficPulses, pulses);
+  }
 });

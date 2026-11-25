@@ -149,11 +149,15 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - O conector PON reutiliza a arte SFP. A descoberta Zabbix reconhece nomes nativos de portas PON e tags de conector. Quando a origem do enlace mapeado é uma PON, o tooltip identifica TX/RX como totais da porta e a utilização agregada não colore nem anima os ramais.
 
+- As conexões animadas distribuem fases de partida ao longo do ciclo. A distância entre pulsos é 50% maior que a original (195px no contínuo, 1,5 vezes o período anterior no tracejado/legado), preservando o comprimento e as velocidades de 60px/s e 55px/s. `MapTraffic.pulsePhases` atribui fases distintas aos enlaces incidentes no mesmo elemento em ordem persistida, independente da seleção e da ordem de desenho.
+
+- Pulsos de linhas contínuas sobrepostas usam máscaras SVG nos trechos geometricamente compartilhados: somente a conexão mais acima anima o trecho, e selecionar uma conexão oculta os pulsos próprios e dos trechos compartilhados inferiores, sem modificar o JSON.
+
 - Conexões simples cinzas são desenhadas abaixo dos enlaces mapeados, independentemente da ordem de cadastro; a conexão selecionada mantém prioridade acima de todas. A ordenação visual não modifica o JSON persistido.
 
 - Legendas de hosts, grupos e conexões aguardam 1s de hover; sair antes cancela a abertura. Movimentos na mesma conexão não reiniciam o prazo. Acesso por foco/teclado permanece imediato.
 
-- Clicar em um enlace na visualização destaca o trajeto em amarelo queimado acima dos outros enlaces, sem alterar a ordem persistida. O destaque tem borda amarelo-clara, prevalece sobre as cores de tráfego e preserva os feixes de luz animados e o tracejado Wireless, inclusive na borda clara; oferece seleção por teclado. Na edição, selecionar preserva a cor original da linha e não desenha a borda amarela.
+- Clicar em um enlace na visualização destaca o trajeto em amarelo queimado acima dos outros enlaces, sem alterar a ordem persistida. O destaque tem borda amarelo-clara, prevalece sobre as cores de tráfego, oculta os pulsos no trajeto selecionado e preserva o tracejado Wireless, inclusive na borda clara; oferece seleção por teclado. Um novo clique no enlace selecionado remove o destaque. Na edição, selecionar preserva a cor original da linha e não desenha a borda amarela.
 
 - Ao arrastar cantos, `MapLinks.snap` atrai para trechos horizontais/verticais próximos de outros enlaces com alcance de 8px na tela e sobreposição de extensão, preservando âncoras e os demais enlaces.
 
