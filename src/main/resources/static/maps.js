@@ -662,8 +662,13 @@ function fitToView(smooth = false) {
   frame(since);
 }
 $('fit').onclick = () => fitToView(!matchMedia('(prefers-reduced-motion: reduce)').matches);
-function changeZoom(scale) {
+function changeZoom(scale, anchor = null) {
   stopMotion();
+  if (anchor) {
+    const ratio = camera.scale / scale;
+    camera.x = anchor.x + (camera.x - anchor.x) * ratio;
+    camera.y = anchor.y + (camera.y - anchor.y) * ratio;
+  }
   camera.scale = scale;
   syncZoom();
   resizeCanvas();
@@ -674,6 +679,21 @@ function stepZoom(delta) {
 }
 $('zoom-in').onclick = () => stepZoom(0.1);
 $('zoom-out').onclick = () => stepZoom(-0.1);
+function wheelZoom(event) {
+  if (!current) return;
+  event.preventDefault();
+  if (drag || pan || marquee || !event.deltaY) return;
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1;
+  const delta = event.deltaY * unit;
+  const lowerLimit = Math.min(minZoom, camera.scale);
+  const scale = Math.max(lowerLimit, Math.min(maxZoom, camera.scale * Math.exp(-delta * 0.002)));
+  if (scale === camera.scale) return;
+  const anchor = canvasPoint(event);
+  popSummary.close();
+  MapConnectionTooltip.hide();
+  changeZoom(scale, anchor);
+}
+viewport.addEventListener('wheel', wheelZoom, {passive: false});
 new ResizeObserver(() => {
   if (current && viewport.clientWidth) {
     if (followingFit) fitToView(); else resizeCanvas();

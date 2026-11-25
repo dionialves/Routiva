@@ -145,6 +145,8 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 ## Switches no mapa
 
+- A rolagem sobre o mapa aproxima/afasta em edição e visualização, preservando a coordenada sob o cursor. Os botões de zoom mantêm o centro da câmera; a rolagem não altera elementos ou conexões e não interfere em gestos de arraste ativos.
+
 - `map-switch.js` compartilha composição SVG, geometria e pontos de conexão entre o mapa e a prévia. Reutilize `MapSwitch` para equipamentos com portas; imagens em `static/map-assets/`. Portas têm IDs estáveis e coordenadas locais. Uma porta PON permite vários enlaces, com âncora compartilhada e caminhos independentes; as demais permitem um enlace por porta. Enlaces duplicados entre as mesmas extremidades continuam inválidos.
 
 - O conector PON reutiliza a arte SFP. A descoberta Zabbix reconhece nomes nativos de portas PON e tags de conector. Quando a origem do enlace mapeado é uma PON, o tooltip identifica TX/RX como totais da porta e a utilização agregada não colore nem anima os ramais.
