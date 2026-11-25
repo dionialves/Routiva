@@ -66,6 +66,19 @@ const MapTraffic = (() => {
   function pulseDelay(phase, duration) {
     return phase ? (phase - 1) * duration : 0;
   }
+  // CSS animations are recreated whenever the SVG is redrawn. Anchor their
+  // start to a common clock instead of the instant each new path is painted.
+  // timeOrigin also makes a browser reload resume the same cycle.
+  function synchronizePulses(root, timeOrigin = globalThis.performance?.timeOrigin) {
+    if (!Number.isFinite(timeOrigin)) return;
+    for (const animation of root.getAnimations?.({subtree: true}) || []) {
+      if (animation.animationName !== 'traffic-flow') continue;
+      const duration = animation.effect?.getTiming().duration;
+      if (Number.isFinite(duration) && duration > 0) {
+        animation.startTime = -(timeOrigin % duration);
+      }
+    }
+  }
   function utilizationColor(bps, capacity) {
     if (bps == null || !(capacity > 0)) return null;
     const usage = bps / capacity * 100;
@@ -148,6 +161,7 @@ const MapTraffic = (() => {
       }
       layer.append(pulses);
       layer.trafficPulses = pulses;
+      if (layer.isConnected) synchronizePulses(layer);
     }
     const animate = enabled && !layer.trafficContext?.selected && (!solidPulses || !data.down) && (explicitPulses || data.tx > 0 || data.rx > 0);
     layer.trafficPulses.setAttribute('visibility', animate ? 'visible' : 'hidden');
@@ -273,6 +287,6 @@ const MapTraffic = (() => {
     }
   }
 
-  return {fresh, isWireless, mappedSourcePort, number, count, utilizationColor, rate, state, render, maskOverlaps, pulsePhases};
+  return {fresh, isWireless, mappedSourcePort, number, count, utilizationColor, rate, state, render, maskOverlaps, pulsePhases, synchronizePulses};
 })();
 if (typeof module !== 'undefined') module.exports = MapTraffic;

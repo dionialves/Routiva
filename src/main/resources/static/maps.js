@@ -522,6 +522,7 @@ function draw() {
   }
   canvas.append(connectors);
   for (const element of foregroundElements) canvas.append(element);
+  if (trafficLayers.length) MapTraffic.synchronizePulses(connectors);
   if (editing && tool === 'select') for (const [linkIndex, link] of links.entries()) {
     if (link.style !== 'corners') continue;
     const route = linkRoute(link);

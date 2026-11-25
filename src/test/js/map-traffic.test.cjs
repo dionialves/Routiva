@@ -324,3 +324,21 @@ test('staggered pulses keep their component paths in phase and retain the speed 
     assert.equal(layer.trafficPulses, pulses);
   }
 });
+
+test('new SVG animations retain the same clock phase after redraw and navigation', () => {
+  const animation = (duration, animationName = 'traffic-flow') => ({
+    animationName, startTime: null, effect: {getTiming: () => ({duration})},
+  });
+  const origin = 1795600000123.5;
+  for (const duration of [3250, 300 / traffic.count(300) * 1.5 / 55 * 1000]) {
+    const first = animation(duration), redraw = animation(duration), reload = animation(duration);
+    const unrelated = animation(duration, 'other');
+    traffic.synchronizePulses({getAnimations: () => [first]}, origin);
+    traffic.synchronizePulses({getAnimations: () => [redraw, unrelated]}, origin);
+    const elapsed = 4237;
+    traffic.synchronizePulses({getAnimations: () => [reload]}, origin + elapsed);
+    assert.equal(first.startTime, redraw.startTime);
+    assert.ok(Math.abs((elapsed - first.startTime) % duration - (-reload.startTime) % duration) < 1e-6);
+    assert.equal(unrelated.startTime, null);
+  }
+});

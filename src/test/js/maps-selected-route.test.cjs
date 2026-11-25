@@ -23,7 +23,7 @@ test('click and keyboard bring the selected connection above other routes withou
     editing:false, drag:null, marquee:null, selected:null, selectedLink:null, selection:new Set(),
     MapSwitch:{...require('../../main/resources/static/map-switch.js'),endpoint:() => ({x:0,y:0})}, MapLinks:{path:link => link === links[0] ? 'first' : 'second'},
     MapConnectionTooltip:{hide() {}}, updateTrafficLayer(layer) {layer.updated = true;},
-    MapTraffic:{pulsePhases:require('../../main/resources/static/map-traffic.js').pulsePhases, isWireless:() => false, maskOverlaps(svg, connectors, layers, selectedRoute) { context.maskedRoute = selectedRoute; }}, colors:['gray','green'], labels:['','OK'], drawNode() {}});
+    MapTraffic:{synchronizePulses(root) { context.synchronized = root; }, pulsePhases:require('../../main/resources/static/map-traffic.js').pulsePhases, isWireless:() => false, maskOverlaps(svg, connectors, layers, selectedRoute) { context.maskedRoute = selectedRoute; }}, colors:['gray','green'], labels:['','OK'], drawNode() {}});
   vm.runInContext(source.slice(source.indexOf('function drawMapElement('), source.indexOf('function alignDraggedNode(')), context);
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')), context);
   const routes = () => canvas.children.find(child => child.attributes.class === 'map-connectors').children;
@@ -42,6 +42,7 @@ test('click and keyboard bring the selected connection above other routes withou
   vm.runInContext('draw()', context);
   assert.equal(routes().at(-1).attributes.class, 'map-traffic');
   assert.equal(routes().at(-1).updated, true);
+  assert.equal(context.synchronized, canvas.children.find(child => child.attributes.class === 'map-connectors'));
   assert.equal(routes().at(-1).trafficContext.link, links[1]);
   assert.equal(routes().at(-1).trafficContext.selected, true);
   assert.equal(context.maskedRoute, 'second');

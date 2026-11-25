@@ -511,14 +511,14 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .map-traffic { pointer-events: none; }
 .traffic-pulse { animation: traffic-flow 2s linear infinite; }
 .traffic-pulses-solid { pointer-events: none; }
-.traffic-pulses-solid[visibility="hidden"] { display: none; }
+.traffic-pulses[visibility="hidden"] { visibility: hidden; }
 .traffic-solid-glow { filter: blur(3px); }
 @keyframes traffic-flow {
   from { stroke-dashoffset: var(--pulse-from); }
   to { stroke-dashoffset: var(--pulse-to); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .traffic-pulses { display: none; }
+  .traffic-pulses { visibility: hidden !important; }
 }
 
 .element-interface-actions { display:flex; flex-wrap:wrap; gap:8px; }
