@@ -131,3 +131,30 @@ test('terminal actions reject URL credentials, malformed hosts and invalid ports
   assert.equal(context.location.href, undefined);
   assert.equal(errors.length, 3);
 });
+
+test('group menu offers only group actions and opens configured submap explicitly', () => {
+  for (const configured of [false, true]) {
+    const { api, link, container } = surface();
+    let opened = 0, navigated = 0;
+    api.attach(link, container, { groupId: 'g/42', onOpen: () => opened++,
+      onSubmap: configured ? () => navigated++ : undefined });
+    const menu = container.children[0];
+    assert.equal(menu.attributes['aria-label'], 'Ações do grupo de hosts');
+    assert.equal(menu.children.length, 1);
+    const items = menu.children[0].children.slice(1);
+    assert.deepEqual(items.map(item => item.children[0].textContent),
+      ['Incidentes', 'Hosts do Grupo', 'Submapa']);
+    assert.equal(items[2].disabled, !configured);
+    assert.equal(items[0].href, '/incidentes?groupId=g%2F42');
+    assert.equal(items[1].href, '/diagnostico/grupos/g%2F42');
+    link.listeners.click({ preventDefault() {} });
+    assert.equal(opened, 1);
+    assert.equal(navigated, 0);
+    assert.equal(items[0].focused, true);
+    if (configured) {
+      items[2].listeners.click();
+      assert.equal(navigated, 1);
+      assert.equal(menu.open, false);
+    }
+  }
+});

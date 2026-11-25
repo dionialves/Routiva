@@ -80,6 +80,10 @@ test('hover waits 1000ms, allows transfer to the card and cancels quick passes',
   subject.scheduleClose();
   callbacks.get(subject.closeTimer).fn();
   assert.equal(box.open, false);
+  anchor.getAttribute = name => name === 'aria-expanded' ? 'true' : null;
+  subject.scheduleOpen(anchor, {id: 'a', groupId: 'g'});
+  assert.equal(callbacks.has(subject.openTimer), false);
+  assert.equal(box.open, false);
 });
 
 test('disabled and unconfirmed hosts with active problems overlap affected but never operational', () => {
@@ -211,16 +215,11 @@ test('six enabled hosts remain incident-free when unclassified incidents are exc
   assert.equal(context.summarizePop(hosts, 0).affected, 1);
 });
 
-test('POP details link opens the encoded group diagnosis in a separate tab', () => {
+test('POP tooltip keeps freshness without a group details link', () => {
   const preview = renderPreview([host('a', [])]);
-  preview.subject.node.groupId = 'POP /006';
   preview.subject.render();
-  const link = preview.box.querySelector('.pop-details');
-  assert.equal(link.textContent, 'Ver detalhes do POP ↗');
-  assert.equal(link.attributes.href, '/diagnostico/grupos/POP%20%2F006');
-  assert.equal(link.attributes.target, '_blank');
-  assert.equal(link.attributes.rel, 'noopener noreferrer');
-  assert.ok(link.attributes['aria-label'].includes('nova aba'));
+  assert.equal(preview.box.querySelector('.pop-details'), null);
+  assert.ok(preview.box.querySelector('.pop-freshness'));
 });
 
 test('hides acknowledged incidents from the list, counts and worst severity', () => {
@@ -266,7 +265,7 @@ test('monitoring cards reuse the summary layout, format readings once and preser
     assert.equal(list.children[0].querySelector('.pop-reading').textContent, view === 'loss' ? '8,5%' : '8,5 ms');
     assert.equal(list.children[0].querySelector('small').textContent, view === 'loss' ? 'Perda de pacotes' : 'Latência atual');
     assert.equal(list.children[1].querySelector('.pop-reading').textContent, 'Sem dados');
-    assert.equal(preview.box.querySelector('.pop-details').attributes.href, '/disponibilidade?minutes=60&groupId=g');
+    assert.equal(preview.box.querySelector('.pop-details'), null);
     preview.subject.metric = () => ({view});
     preview.subject.render();
     assert.ok(preview.box.querySelector('.pop-metrics').textContent.includes('Sem dados'));

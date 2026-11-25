@@ -52,6 +52,7 @@ test('draw paints POP circles using the map threshold rather than unclassified i
   const hosts = [{incidents: [{severity: 0}], monitoring: 'monitored'}];
   const drawContext = vm.createContext({
     document: {activeElement: null},
+    window: {HostMenu: {attach: () => ({remove(){}})}},
     metricSummary: () => null,
     current: {layout: {name: 'Map', minimumSeverity: 1, nodes: [node], links: []}},
     editing: false, drag: null, marquee: null, selection: new Set(), selected: null,
@@ -118,11 +119,18 @@ test('equipment ports remain reachable while central anchors stay behind their e
   vm.runInContext(source.slice(source.indexOf('function drawMapElement('), source.indexOf('function alignDraggedNode(')),context);
   vm.runInContext(source.slice(source.indexOf('function draw()'), source.indexOf('\nfunction choose(')),context);
   vm.runInContext('draw()',context);
-  assert.equal(hostMenus.length, 2);
-  assert.equal(hostMenus[1].options.hostId, 'h');
-  assert.equal(hostMenus[1].options.ip, '192.0.2.1');
-  assert.equal(hostMenus[1].element.attributes.role, 'button');
-  assert.equal(hostMenus[1].element.attributes.tabindex, 0);
+  assert.equal(hostMenus.length, 3);
+  assert.equal(hostMenus[0].options.groupId, 'g');
+  assert.equal(hostMenus[0].options.onSubmap, undefined);
+  assert.equal(hostMenus[0].element.attributes.role, 'button');
+  assert.equal(hostMenus[0].element.attributes.tabindex, 0);
+  nodes[0].subMapId = 'child';
+  vm.runInContext('draw()', context);
+  assert.equal(typeof hostMenus[3].options.onSubmap, 'function');
+  assert.equal(hostMenus[2].options.hostId, 'h');
+  assert.equal(hostMenus[2].options.ip, '192.0.2.1');
+  assert.equal(hostMenus[2].element.attributes.role, 'button');
+  assert.equal(hostMenus[2].element.attributes.tabindex, 0);
   assert.equal(canvas.children[0].attributes['aria-label'],'Host · Healthy');
   assert.equal(canvas.children[1].attributes.class,'map-connectors');
   assert.equal(canvas.children[2].attributes['aria-label'],'Group · Healthy');

@@ -75,7 +75,7 @@ class PopSummary {
   scheduleOpen(element, node, delay = 1000) {
     clearTimeout(this.openTimer);
     clearTimeout(this.closeTimer);
-    if (this.node?.id === node.id) return;
+    if (this.node?.id === node.id || (node.groupId && element.getAttribute?.('aria-expanded') === 'true')) return;
     this.close();
     this.openTimer = setTimeout(() => {
       this.node = node;
@@ -249,12 +249,7 @@ class PopSummary {
     refresh.setAttribute('stroke-width', '1.5');
     const updated = el('span', undefined, 'pop-updated');
     updated.append(refresh, el('span', undefined, 'pop-freshness'));
-    const details = el('a', this.node.hostId ? 'Ver detalhes do host ↗' : 'Ver detalhes do POP ↗', 'pop-details');
-    details.setAttribute('href', this.node.hostId ? `/ap/${encodeURIComponent(this.node.hostId)}` : `/diagnostico/grupos/${encodeURIComponent(this.node.groupId)}`);
-    details.setAttribute('target', '_blank');
-    details.setAttribute('rel', 'noopener noreferrer');
-    details.setAttribute('aria-label', `Ver detalhes ${this.node.hostId ? 'do host' : 'do POP'} ${this.node.name} (abre em nova aba)`);
-    footer.append(updated, details);
+    footer.append(updated);
     this.box.append(footer);
     this.updateFooter();
   }
@@ -457,11 +452,14 @@ class PopSummary {
     const footer = el('footer');
     const updated = el('span', undefined, 'pop-updated');
     updated.append(popIcon('refresh', 12), el('span', undefined, 'pop-freshness'));
-    const details = el('a', this.node.hostId ? 'Ver detalhes do host ↗' : 'Ver detalhes do POP ↗', 'pop-details');
-    details.setAttribute('href', metric.detailsUrl);
-    details.setAttribute('target', '_blank');
-    details.setAttribute('rel', 'noopener noreferrer');
-    footer.append(updated, details);
+    footer.append(updated);
+    if (this.node.hostId) {
+      const details = el('a', 'Ver detalhes do host ↗', 'pop-details');
+      details.setAttribute('href', metric.detailsUrl);
+      details.setAttribute('target', '_blank');
+      details.setAttribute('rel', 'noopener noreferrer');
+      footer.append(details);
+    }
     this.box.append(footer);
     this.monitoringUpdatedAt = summary?.updatedAt ?? null;
     this.updateFooter();

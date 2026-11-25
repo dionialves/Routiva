@@ -457,7 +457,7 @@ function draw() {
     const metric = monitored ? metricSummary(n) : null;
     const description = metric ? `${n.name} · ${metric.label}: ${metric.formatted} · ${metric.state}` : monitored ? n.name + ' · ' + labels[level] : n.name;
     const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
-      ...(!editing && n.hostId ? {tabindex:0, role:'button'} : !editing && n.groupId && n.subMapId ? {tabindex:0, role:'link'} : editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
+      ...(!editing && (n.hostId || n.groupId) ? {tabindex:0, role:'button'} : editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
     const title = svg('title', {});
     title.textContent = description;
     g.append(title);
@@ -474,13 +474,13 @@ function draw() {
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        if (!editing && n.hostId) g.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        if (!editing && (n.hostId || n.groupId)) g.dispatchEvent(new MouseEvent('click', {bubbles: true}));
         else choose(n, event.shiftKey || event.ctrlKey || event.metaKey);
       }
     };
     g.onpointerdown = event => {
       if (event.button !== 0 || (editing && tool === 'pan')) return;
-      if (!editing && n.groupId && n.subMapId) { event.stopPropagation(); return; }
+      if (!editing && n.groupId) { event.stopPropagation(); return; }
       if (editing && tool === 'select') {
         const additive = event.shiftKey || event.ctrlKey || event.metaKey;
         const wasSingle = selection.size === 1 && selection.has(n.id);
@@ -504,10 +504,16 @@ function draw() {
       }
       choose(n);
     };
-    if (!editing && n.groupId && n.subMapId) g.onclick = event => { event.stopPropagation(); choose(n); };
     if (!editing && n.hostId) {
       const host = inventory.find(host => host.id === n.hostId);
       draw.hostMenus.push(window.HostMenu.attach(g, $('workspace'), {ip: host?.ip, hostId: n.hostId}));
+    }
+    if (!editing && n.groupId) {
+      draw.hostMenus.push(window.HostMenu.attach(g, $('workspace'), {
+        groupId: n.groupId,
+        onSubmap: n.subMapId ? () => choose(n) : undefined,
+        onOpen: () => popSummary.close()
+      }));
     }
     if (monitored) popSummary.bind(g, n);
     if (['switch', 'radio', 'sector-radio'].includes(n.icon) && n.interfacesEnabled !== false && n.ports?.length)

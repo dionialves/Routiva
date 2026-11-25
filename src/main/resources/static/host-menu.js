@@ -30,12 +30,12 @@ window.HostMenu = (() => {
     }
   }
 
-  function attach(link, container, { ip, groupUrl, hostId } = {}) {
+  function attach(link, container, { ip, groupUrl, hostId, groupId, onSubmap, onOpen } = {}) {
     const menu = document.createElement('div');
     menu.className = 'host-action-menu equipment-action-menu';
     menu.setAttribute('popover', 'auto');
     menu.setAttribute('role', 'menu');
-    menu.setAttribute('aria-label', 'Ações do host');
+    menu.setAttribute('aria-label', groupId ? 'Ações do grupo de hosts' : 'Ações do host');
     const actions = [];
     function section(label) {
       const group = document.createElement('div');
@@ -55,6 +55,7 @@ window.HostMenu = (() => {
       copy: '<rect x="8" y="7" width="12" height="15" rx="2"/><path d="M16 7V4H4v13h4"/>',
       inventory: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
       settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>',
+      map: '<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3ZM9 3v15m6-12v15"/>',
       pulse: '<path d="M2 12h5l3-9 4 18 3-9h5"/>'
     };
     function action(group, label, href, icon, handler) {
@@ -76,40 +77,49 @@ window.HostMenu = (() => {
       });
       return item;
     }
-    const access = section('Acesso');
-    const url = winboxUrl(ip);
-    const browser = action(access, 'Navegador', url?.replace(/^winbox:/, 'http:'), 'browser');
-    if (url) { browser.target = '_blank'; browser.rel = 'noopener noreferrer'; }
-    const winbox = action(access, 'WinBox', url, 'window');
-    for (const [label, protocol] of [['SSH', 'ssh'], ['Telnet', 'telnet']]) {
-      const item = action(access, label, null, 'terminal', () => openTerminal(protocol, hostId));
-      item.disabled = !hostId;
-      item.title = hostId ? `Requer um cliente local associado ao protocolo ${protocol}.` : 'Ação disponível para hosts cadastrados.';
-    }
-    const copy = action(access, 'Copiar IP do equipamento', null, 'copy', async () => {
-      try { await navigator.clipboard.writeText(String(ip).trim()); window.notify?.('IP copiado'); }
-      catch { window.notify?.('Não foi possível copiar o IP. Verifique a permissão da área de transferência.', 'error'); }
-    });
-    for (const item of [browser, winbox, copy]) item.disabled = !url;
-    if (hostId && window.AccessPointLinks) {
-      const ap = section('Access Point');
-      ap.hidden = true;
-      const details = action(ap, 'Abrir painel', '#', 'window');
-      const latency = action(ap, 'Executar avaliação de latência', '#', 'pulse');
-      window.AccessPointLinks.attach(details, hostId, href => {
-        latency.href = href + '#avaliacao-latencia';
-        ap.hidden = false;
-      });
-    }
-    if (hostId) {
-      const host = section('HOST');
-      for (const [label, icon] of [['Inventário', 'inventory'], ['Dados Recentes', 'pulse']]) {
-        const item = action(host, label, null, icon);
-        item.disabled = true;
-        item.title = 'Será implementado em breve.';
+    if (groupId) {
+      const group = section('Grupo de hosts');
+      action(group, 'Incidentes', `/incidentes?groupId=${encodeURIComponent(groupId)}`, 'pulse');
+      action(group, 'Hosts do Grupo', `/diagnostico/grupos/${encodeURIComponent(groupId)}`, 'inventory');
+      const submap = action(group, 'Submapa', null, 'map', onSubmap);
+      submap.disabled = !onSubmap;
+      if (!onSubmap) submap.title = 'Nenhum submapa configurado.';
+    } else {
+      const access = section('Acesso');
+      const url = winboxUrl(ip);
+      const browser = action(access, 'Navegador', url?.replace(/^winbox:/, 'http:'), 'browser');
+      if (url) { browser.target = '_blank'; browser.rel = 'noopener noreferrer'; }
+      const winbox = action(access, 'WinBox', url, 'window');
+      for (const [label, protocol] of [['SSH', 'ssh'], ['Telnet', 'telnet']]) {
+        const item = action(access, label, null, 'terminal', () => openTerminal(protocol, hostId));
+        item.disabled = !hostId;
+        item.title = hostId ? `Requer um cliente local associado ao protocolo ${protocol}.` : 'Ação disponível para hosts cadastrados.';
       }
-      action(host, 'Incidentes', `/incidentes?hostId=${encodeURIComponent(hostId)}`, 'pulse');
-      action(host, 'Configurações', null, 'settings', () => window.HostConfiguration.open(hostId, link));
+      const copy = action(access, 'Copiar IP do equipamento', null, 'copy', async () => {
+        try { await navigator.clipboard.writeText(String(ip).trim()); window.notify?.('IP copiado'); }
+        catch { window.notify?.('Não foi possível copiar o IP. Verifique a permissão da área de transferência.', 'error'); }
+      });
+      for (const item of [browser, winbox, copy]) item.disabled = !url;
+      if (hostId && window.AccessPointLinks) {
+        const ap = section('Access Point');
+        ap.hidden = true;
+        const details = action(ap, 'Abrir painel', '#', 'window');
+        const latency = action(ap, 'Executar avaliação de latência', '#', 'pulse');
+        window.AccessPointLinks.attach(details, hostId, href => {
+          latency.href = href + '#avaliacao-latencia';
+          ap.hidden = false;
+        });
+      }
+      if (hostId) {
+        const host = section('HOST');
+        for (const [label, icon] of [['Inventário', 'inventory'], ['Dados Recentes', 'pulse']]) {
+          const item = action(host, label, null, icon);
+          item.disabled = true;
+          item.title = 'Será implementado em breve.';
+        }
+        action(host, 'Incidentes', `/incidentes?hostId=${encodeURIComponent(hostId)}`, 'pulse');
+        action(host, 'Configurações', null, 'settings', () => window.HostConfiguration.open(hostId, link));
+      }
     }
     const enabled = () => actions.filter(item => !item.disabled && !item.hidden && !item.actionGroup.hidden);
     menu.addEventListener('keydown', event => {
@@ -136,6 +146,7 @@ window.HostMenu = (() => {
       menu.style.left = `${Math.max(8, Math.min(bounds.left, window.innerWidth - 306))}px`;
       menu.style.top = `${bounds.bottom + 6}px`;
       menu.style.maxHeight = `${Math.max(0, window.innerHeight - 16)}px`;
+      onOpen?.();
       menu.showPopover();
       if (menu.getBoundingClientRect().bottom > window.innerHeight) {
         menu.style.top = `${Math.max(8, bounds.top - menu.offsetHeight - 6)}px`;
