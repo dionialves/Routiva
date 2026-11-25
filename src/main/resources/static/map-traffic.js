@@ -133,12 +133,12 @@ const MapTraffic = (() => {
       data.tx = null;
       data.rx = null;
     }
-    path.classList.toggle('traffic-down', (!explicitPulses || solidPulses) && data.down);
+    path.classList.toggle('traffic-down', data.down);
     const d = path.getAttribute('d');
     const utilization = utilizationColor(data.tx, data.capacity);
-    const color = solidPulses
-      ? data.down ? '#EF4444' : utilization && utilization !== '#22C55E' ? utilization : '#16A34A'
-      : explicitPulses ? '#22C55E' : data.down ? '#EF4444' : utilization || '#687486';
+    const color = data.down ? '#EF4444' : solidPulses
+      ? utilization && utilization !== '#22C55E' ? utilization : '#16A34A'
+      : explicitPulses ? '#22C55E' : utilization || '#687486';
     path.style?.setProperty('--traffic-color', color);
     path.classList.toggle('traffic-measured', Boolean(color));
     // Geometry owns the animation. Metric updates only change visibility and color.
@@ -158,7 +158,7 @@ const MapTraffic = (() => {
       layer.trafficPulses = pulses;
       if (layer.isConnected) synchronizePulses(layer);
     }
-    const animate = enabled && !layer.trafficContext?.selected && (!solidPulses || !data.down) && (explicitPulses || data.tx > 0 || data.rx > 0);
+    const animate = enabled && !layer.trafficContext?.selected && !data.down && (explicitPulses || data.tx > 0 || data.rx > 0);
     layer.trafficPulses.setAttribute('visibility', animate ? 'visible' : 'hidden');
     if (wireless) {
       layer.style?.setProperty('--wireless-pulse-color', color);

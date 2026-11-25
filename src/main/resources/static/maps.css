@@ -767,7 +767,8 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
   stroke: #CA8A04;
   stroke-width: 4;
 }
-#canvas .map-connectors .map-connector-solid-pulses.selected-link.traffic-down {
+#canvas .map-connectors .map-connector-solid-pulses.selected-link.traffic-down,
+#canvas .map-connectors .map-connector-wireless.selected-link.traffic-down {
   stroke: #EF4444;
 }
 #canvas .map-connector-selection-border {

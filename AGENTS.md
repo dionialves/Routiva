@@ -155,6 +155,8 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - As conexões animadas distribuem fases de partida ao longo do ciclo. A distância entre pulsos é 50% maior que a original (195px no contínuo, 1,5 vezes o período anterior no tracejado/legado), preservando as velocidades de 60px/s e 55px/s. Ambas reutilizam a cápsula luminosa do tracejado (até 20px, núcleo de 2,5px e halo suave), com o mesmo estilo visual. `MapTraffic.pulsePhases` atribui fases distintas aos enlaces incidentes no mesmo elemento em ordem persistida, independente da seleção e da ordem de desenho.
 
+- Conexões animadas contínuas e tracejadas ficam vermelhas, sem pulsos, quando qualquer extremidade possui leitura DOWN válida e recente. O tracejado é preservado, inclusive na seleção; leituras ausentes ou vencidas não indicam DOWN.
+
 - `MapTraffic.synchronizePulses` ancora as animações CSS no relógio compartilhado após anexar a geometria SVG. Redesenhos, seleção, atualização de status e recarga da página conservam a fase dos pulsos; ocultar pulsos usa visibilidade, sem reiniciar o ciclo.
 
 - Pulsos de linhas contínuas sobrepostas usam máscaras SVG nos trechos geometricamente compartilhados: somente a conexão mais acima anima o trecho, e selecionar uma conexão oculta os pulsos próprios e dos trechos compartilhados inferiores, sem modificar o JSON.

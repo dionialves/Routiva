@@ -359,3 +359,30 @@ test('solid and dashed capsules share the same visual layers', () => {
   });
   assert.deepEqual(styles[0], styles[1]);
 });
+
+test('dashed pulses turn red and stop on valid DOWN at either endpoint, then recover', () => {
+  const layer = element('g');
+  layer.trafficContext = {wireless:true, link:{appearance:'dashed-pulses'}};
+  const path = element('path', {d:'M 0 0 L 300 0'});
+  const route = [{x:0,y:0},{x:300,y:0}];
+  const up = {up:true, measuredAt:10000, txBps:50, capacityBps:100};
+  const down = {...up, up:false};
+  const render = reading => traffic.render(element, layer, path, route, [], reading, true, false, 11000);
+  render({a:up, b:up});
+  const pulses = layer.trafficPulses;
+  for (const reading of [{a:down, b:up}, {a:up, b:down}]) {
+    render(reading);
+    assert.equal(path.attrs['traffic-down'], true);
+    assert.equal(path.attrs['--traffic-color'], '#EF4444');
+    assert.equal(pulses.attrs.visibility, 'hidden');
+    assert.equal(layer.trafficPulses, pulses);
+  }
+  for (const reading of [{a:up, b:up}, {a:up, b:{...down, validUntil:10500}},
+    {a:up, b:{...down, error:'API'}}, undefined]) {
+    render(reading);
+    assert.equal(path.attrs['traffic-down'], false);
+    assert.equal(path.attrs['--traffic-color'], '#22C55E');
+    assert.equal(pulses.attrs.visibility, 'visible');
+    assert.equal(layer.trafficPulses, pulses);
+  }
+});
