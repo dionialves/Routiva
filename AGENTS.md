@@ -151,7 +151,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - O conector PON reutiliza a arte SFP. A descoberta Zabbix reconhece nomes nativos de portas PON e tags de conector. Quando a origem do enlace mapeado é uma PON, o tooltip identifica TX/RX como totais da porta e a utilização agregada não colore nem anima os ramais.
 
-- As conexões animadas distribuem fases de partida ao longo do ciclo. A distância entre pulsos é 50% maior que a original (195px no contínuo, 1,5 vezes o período anterior no tracejado/legado), preservando o comprimento e as velocidades de 60px/s e 55px/s. `MapTraffic.pulsePhases` atribui fases distintas aos enlaces incidentes no mesmo elemento em ordem persistida, independente da seleção e da ordem de desenho.
+- As conexões animadas distribuem fases de partida ao longo do ciclo. A distância entre pulsos é 50% maior que a original (195px no contínuo, 1,5 vezes o período anterior no tracejado/legado), preservando as velocidades de 60px/s e 55px/s. Ambas reutilizam a cápsula luminosa do tracejado (até 20px, núcleo de 2,5px e halo suave), com o mesmo estilo visual. `MapTraffic.pulsePhases` atribui fases distintas aos enlaces incidentes no mesmo elemento em ordem persistida, independente da seleção e da ordem de desenho.
 
 - `MapTraffic.synchronizePulses` ancora as animações CSS no relógio compartilhado após anexar a geometria SVG. Redesenhos, seleção, atualização de status e recarga da página conservam a fase dos pulsos; ocultar pulsos usa visibilidade, sem reiniciar o ciclo.
 

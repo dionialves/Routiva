@@ -100,7 +100,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #workspace:not(.viewing).map-expanded .map-viewport {
   height:100%; border-radius:0;
 }
-#canvas[data-tool=pan], #canvas[data-tool=pan] g { cursor:grab; }
+#canvas[data-panning="true"], #canvas[data-panning="true"] * { cursor:grabbing; }
 #canvas[data-tool=connect], #canvas[data-tool=connect] g { cursor:crosshair; }
 #canvas .selected-link { stroke:var(--cyan); }
 #canvas line[role=button] { cursor:pointer; }
@@ -413,8 +413,7 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #canvas .map-bend-mark:has(+ .map-link-handle:focus-visible) { stroke-width:5; }
 
 #canvas .map-connector-hit { pointer-events: stroke; cursor: pointer; }
-#canvas[data-tool="connect"] .map-connector-hit,
-#canvas[data-tool="pan"] .map-connector-hit { pointer-events: none; }
+#canvas[data-tool="connect"] .map-connector-hit { pointer-events: none; }
 
 
 .element-config-content { display:grid; grid-template-columns:minmax(0, 1fr); align-content:start; gap:16px; }
@@ -512,7 +511,6 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .traffic-pulse { animation: traffic-flow 2s linear infinite; }
 .traffic-pulses-solid { pointer-events: none; }
 .traffic-pulses[visibility="hidden"] { visibility: hidden; }
-.traffic-solid-glow { filter: blur(3px); }
 @keyframes traffic-flow {
   from { stroke-dashoffset: var(--pulse-from); }
   to { stroke-dashoffset: var(--pulse-to); }

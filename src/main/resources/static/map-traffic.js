@@ -4,7 +4,7 @@ const MapTraffic = (() => {
   let nextMask = 0;
   const pulseSpacingFactor = 1.5;
   const solidPulsePeriod = 130 * pulseSpacingFactor;
-  const solidPulseLength = 24;
+  const capsulePulseLength = 20;
   const solidPulseDuration = solidPulsePeriod / 60;
   function isWireless(link, nodes) {
     const endpoints = [['from', 'fromPort'], ['to', 'toPort']].map(([nodeKey, portKey]) => {
@@ -149,13 +149,8 @@ const MapTraffic = (() => {
       const pulses = svg('g', {class: 'traffic-pulses'});
       if (solidPulses) {
         pulses.setAttribute('class', 'traffic-pulses traffic-pulses-solid');
-        for (const [className, stroke, thickness] of [
-          ['traffic-solid-glow', '#00FF88', 7], ['traffic-solid-core', '#D1FFE4', 3.5],
-        ]) {
-          pulses.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
-            'stroke-linecap': 'round', 'stroke-dasharray': `${solidPulseLength} ${solidPulsePeriod - solidPulseLength}`,
-            class: `traffic-pulse ${className}`, style: `--pulse-from:0px;--pulse-to:${-solidPulsePeriod}px;animation-duration:${solidPulseDuration}s;animation-delay:${pulseDelay(phase, solidPulseDuration)}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
-        }
+        renderCapsulePulse(svg, pulses, d, '#22C55E', capsulePulseLength,
+          solidPulsePeriod, solidPulseDuration, reverse, phase);
       } else {
         renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse, phase);
       }
@@ -242,6 +237,17 @@ const MapTraffic = (() => {
     if (masked) connectors.append(defs);
   }
 
+  // Both explicit line styles share the same subtle capsule and halo.
+  function renderCapsulePulse(svg, group, d, color, dash, period, duration, reverse, phase) {
+    for (const [stroke, thickness, opacity, blur] of [
+      [color, 10, 0.22, true], [color, 5, 0.9, false], ['#F0FFF9', 2.5, 1, false],
+    ]) {
+      group.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
+        'stroke-linecap': 'round', opacity, 'stroke-dasharray': `${dash} ${period - dash}`,
+        class: 'traffic-pulse', style: `${blur ? 'filter:blur(3px);' : ''}--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${duration}s;animation-delay:${pulseDelay(phase, duration)}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
+    }
+  }
+
   function renderLegacyPulses(svg, layer, pulses, path, route, d, wireless, reverse, phase) {
     const length = path.getTotalLength();
     const originalPeriod = Math.max(1, length / count(length));
@@ -266,18 +272,10 @@ const MapTraffic = (() => {
       defs.append(gradient, mask);
       layer.append(defs);
       pulses.setAttribute('mask', `url(#${maskId})`);
-      {
-        const group = svg('g', {});
-        const dash = Math.min(20, originalPeriod * 0.38);
-        for (const [stroke, thickness, opacity, blur] of [
-          ['var(--wireless-pulse-color)', 10, 0.22, true],
-          ['var(--wireless-pulse-color)', 5, 0.9, false], ['#F0FFF9', 2.5, 1, false]]) {
-          group.append(svg('path', {d, fill: 'none', stroke, 'stroke-width': thickness,
-            'stroke-linecap': 'round', opacity, 'stroke-dasharray': `${dash} ${period - dash}`,
-            class: 'traffic-pulse', style: `${blur ? 'filter:blur(3px);' : ''}--pulse-from:${dash / 2}px;--pulse-to:${dash / 2 - period}px;animation-duration:${period / 55}s;animation-delay:${pulseDelay(phase, period / 55)}s;animation-direction:${reverse ? 'reverse' : 'normal'}`}));
-        }
-        pulses.append(group);
-      }
+      const group = svg('g', {});
+      renderCapsulePulse(svg, group, d, 'var(--wireless-pulse-color)',
+        Math.min(capsulePulseLength, originalPeriod * 0.38), period, period / 55, reverse, phase);
+      pulses.append(group);
     } else for (let i = 0; i < 12; i++) {
       const dash = width * (1 - i / 12);
       pulses.append(svg('path', {d, fill: 'none', stroke: '#F0FCFF',

@@ -197,9 +197,10 @@ test('solid pulses share geometry and phase, preserve saturation, and stop when 
   assert.equal(path.attrs['--traffic-color'], '#16A34A');
   assert.equal(pulses.attrs.visibility, 'visible');
   assert.deepEqual(pulses.children.map(({attrs}) =>
-    [attrs.d, attrs['stroke-dasharray'], attrs['stroke-width'], attrs.stroke]), [
-    [d, '24 171', 7, '#00FF88'],
-    [d, '24 171', 3.5, '#D1FFE4'],
+    [attrs.d, attrs['stroke-dasharray'], attrs['stroke-width'], attrs.stroke, attrs.opacity]), [
+    [d, '20 175', 10, '#22C55E', 0.22],
+    [d, '20 175', 5, '#22C55E', 0.9],
+    [d, '20 175', 2.5, '#F0FFF9', 1],
   ]);
 
   render({a: {...a, txBps: 85}});
@@ -318,7 +319,7 @@ test('staggered pulses keep their component paths in phase and retain the speed 
       const actualDuration = Number(child.attrs.style.match(/animation-duration:([^s]+)/)[1]);
       assert.ok(Math.abs(actualDuration - duration) < 1e-9);
       assert.ok(Math.abs((dash + gap) / actualDuration - (appearance === 'solid-pulses' ? 60 : 55)) < 1e-9);
-      if (appearance === 'dashed-pulses') assert.equal(dash, 20);
+      if (appearance) assert.equal(dash, 20);
     }
     traffic.render(element, layer, path, route, [], reading, true);
     assert.equal(layer.trafficPulses, pulses);
@@ -341,4 +342,20 @@ test('new SVG animations retain the same clock phase after redraw and navigation
     assert.ok(Math.abs((elapsed - first.startTime) % duration - (-reload.startTime) % duration) < 1e-6);
     assert.equal(unrelated.startTime, null);
   }
+});
+
+test('solid and dashed capsules share the same visual layers', () => {
+  const route = [{x:0,y:0},{x:300,y:0}];
+  const styles = ['solid-pulses', 'dashed-pulses'].map(appearance => {
+    const layer = element('g');
+    layer.trafficContext = {link:{appearance}, wireless:appearance === 'dashed-pulses'};
+    traffic.render(element, layer, element('path', {d:'M 0 0 L 300 0'}), route, [], null, true);
+    const paths = appearance === 'solid-pulses' ? layer.trafficPulses.children : layer.trafficPulses.children[0].children;
+    return paths.map(({attrs}) => [
+      attrs.stroke === 'var(--wireless-pulse-color)' ? layer.attrs['--wireless-pulse-color'] : attrs.stroke,
+      attrs['stroke-width'], attrs['stroke-linecap'], attrs.opacity,
+      attrs.style.includes('filter:blur(3px);'), Number(attrs['stroke-dasharray'].split(' ')[0]),
+    ]);
+  });
+  assert.deepEqual(styles[0], styles[1]);
 });
