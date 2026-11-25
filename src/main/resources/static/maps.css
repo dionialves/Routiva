@@ -246,6 +246,17 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #library .map-library-filters #create { height:38px; }
 @media(max-width:650px) { #library .map-library-filters .host-search { flex-basis:100%; } }
 
+#library .hosts-table .map-favorite-cell { width:1%; min-width:0; padding-inline:8px; text-align:center; }
+#library .map-favorite {
+  display:grid; place-items:center; width:24px; height:19px; margin:0 auto; padding:0;
+  background:transparent; border:0; border-radius:4px; color:var(--muted); cursor:pointer;
+}
+#library .map-favorite svg { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linejoin:round; }
+#library .map-favorite:hover, #library .map-favorite[aria-pressed="true"] { color:var(--warning); }
+#library .map-favorite[aria-pressed="true"] svg { fill:currentColor; }
+#library .map-favorite:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }
+#library .map-favorite:disabled { cursor:default; opacity:.65; }
+
 #library .map-name-link,
 #library .map-name-link:visited { display:inline-block; color:#00d3fd; font-weight:700; text-decoration:none; }
 #library .map-name-link:hover,

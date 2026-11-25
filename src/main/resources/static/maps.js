@@ -89,7 +89,8 @@ const popSummary = new PopSummary({
   minimumSeverity: () => current?.layout.minimumSeverity ?? 0,
   showAcknowledged: () => current?.layout.showAcknowledged ?? true,
   groupName: id => groups.find(group => group.id === id)?.name || id,
-  freshness: () => ({updatedAt: summaryUpdatedAt, failed: summaryFailed}), colors, labels
+  freshness: () => ({updatedAt: summaryUpdatedAt, failed: summaryFailed}), colors, labels,
+  menuOpen: () => (draw.hostMenus || []).some(menu => menu.matches(':popover-open'))
 });
 
 async function api(path, body) {
@@ -458,9 +459,11 @@ function draw() {
     const description = metric ? `${n.name} · ${metric.label}: ${metric.formatted} · ${metric.state}` : monitored ? n.name + ' · ' + labels[level] : n.name;
     const g = svg('g', {transform:'translate(' + n.x + ' ' + n.y + ')',
       ...(!editing && (n.hostId || n.groupId) ? {tabindex:0, role:'button'} : editing ? {tabindex:0, role:'button', 'aria-pressed':String(selection.has(n.id) || selected === n.id)} : {role:'img'}), 'aria-label':description});
-    const title = svg('title', {});
-    title.textContent = description;
-    g.append(title);
+    if (!monitored) {
+      const title = svg('title', {});
+      title.textContent = description;
+      g.append(title);
+    }
     const equipment = MapSwitch.isEquipment(n);
     const color = metric ? metric.color : equipment ? colors[level]
       : !monitored && n.color ? n.color : editing || monitored ? colors[level] : colors[0];
@@ -507,7 +510,8 @@ function draw() {
     };
     if (!editing && n.hostId) {
       const host = inventory.find(host => host.id === n.hostId);
-      draw.hostMenus.push(window.HostMenu.attach(g, $('workspace'), {ip: host?.ip, hostId: n.hostId}));
+      draw.hostMenus.push(window.HostMenu.attach(g, $('workspace'), {ip: host?.ip, hostId: n.hostId,
+        onOpen: () => popSummary.close()}));
     }
     if (!editing && n.groupId) {
       draw.hostMenus.push(window.HostMenu.attach(g, $('workspace'), {
@@ -1108,10 +1112,28 @@ $('parent-map').onclick = event => {
 
 const pageSize = 10;
 let page = 0;
-function renderList() {
+let favoriteMaps = [], favoriteSaving = false;
+async function toggleMapFavorite(map) {
+  if (favoriteSaving) return;
+  const favorite = !favoriteMaps.includes(map.id);
+  favoriteSaving = true;
+  renderList();
+  try {
+    favoriteMaps = await api('/favorites/' + encodeURIComponent(map.id), {favorite});
+    if (favorite) page = 0;
+  } catch (error) {
+    window.notify('Não foi possível atualizar o favorito. ' + error.message, 'error');
+  } finally {
+    favoriteSaving = false;
+    renderList(map.id);
+  }
+}
+function renderList(focusFavoriteId) {
   const query = $('map-search').value.trim().toLocaleLowerCase('pt-BR');
+  const favoriteOrder = new Map(favoriteMaps.map((id, index) => [id, index]));
   const filtered = maps.filter(m => m.layout.name.toLocaleLowerCase('pt-BR').includes(query))
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    .sort((a, b) => (favoriteOrder.get(a.id) ?? favoriteMaps.length) - (favoriteOrder.get(b.id) ?? favoriteMaps.length)
+      || (b.updatedAt || 0) - (a.updatedAt || 0));
   page = Math.min(page, Math.max(0, Math.ceil(filtered.length / pageSize) - 1));
   const start = page * pageSize;
   const rows = filtered.slice(start, start + pageSize);
@@ -1119,6 +1141,22 @@ function renderList() {
   for (const map of rows) {
     const row = $('maps').insertRow();
     const layout = map.layout;
+    const favorite = favoriteOrder.has(map.id);
+    const star = document.createElement('button');
+    star.type = 'button';
+    star.className = 'map-favorite';
+    star.disabled = favoriteSaving;
+    star.setAttribute('aria-pressed', String(favorite));
+    star.setAttribute('aria-label', `${favorite ? 'Remover dos favoritos' : 'Favoritar'}: ${layout.name}`);
+    star.title = favorite ? 'Remover dos favoritos' : 'Favoritar mapa';
+    const icon = svg('svg', {viewBox:'0 0 24 24', 'aria-hidden':'true'});
+    icon.append(svg('path', {d:'m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z'}));
+    star.append(icon);
+    star.addEventListener('click', () => toggleMapFavorite(map));
+    const favoriteCell = row.insertCell();
+    favoriteCell.className = 'map-favorite-cell';
+    favoriteCell.append(star);
+    if (focusFavoriteId === map.id) star.focus({preventScroll:true});
     const title = document.createElement('a');
     title.className = 'map-name-link';
     title.href = '#workspace';
@@ -2040,7 +2078,7 @@ $('save').onclick = async () => {
 
 (async () => {
   try {
-    [maps, groups, inventory] = await Promise.all([api(''), api('/groups'), api('/hosts')]);
+    [maps, groups, inventory, favoriteMaps] = await Promise.all([api(''), api('/groups'), api('/hosts'), api('/favorites')]);
     renderList();
     $('create').disabled = !canManageMaps;
     openMap(null);

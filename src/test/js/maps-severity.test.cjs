@@ -96,6 +96,7 @@ test('acknowledged incidents affect host and group colors only when enabled', ()
 test('equipment ports remain reachable while central anchors stay behind their elements', () => {
   const canvas = {children:[], dataset:{}, replaceChildren(){this.children=[];}, append(child){this.children.push(child);}};
   const hostMenus = [];
+  let summariesClosed = 0;
   const nodes = [
     {id:'group',groupId:'g',icon:'circle',name:'Group',x:0,y:0},
     {id:'cloud',icon:'cloud',name:'Cloud',x:50,y:0},
@@ -112,7 +113,7 @@ test('equipment ports remain reachable while central anchors stay behind their e
     editing:false,tool:'select',connectionOrigin:null,drag:null,marquee:null,selection:new Set(),selected:null,
     colors:['gray','green'],labels:['No data','Healthy'],
     $:id=>id==='canvas'?canvas:{}, metricSummary:()=>null,groupLevel:()=>-1,nodeHosts:()=>[],
-    svg:(tag,attributes)=>({tag,attributes,append(){}}),popSummary:{bind(){}},
+    svg:(tag,attributes)=>({tag,attributes,append(){}}),popSummary:{bind(){},close(){summariesClosed++;}},
     drawNode(){},drawTelecomSite(){},pingStateFor:()=> 'unknown',
     MapSwitch:{...require('../../main/resources/static/map-switch.js'),draw(){}}
   });
@@ -129,6 +130,9 @@ test('equipment ports remain reachable while central anchors stay behind their e
   assert.equal(typeof hostMenus[3].options.onSubmap, 'function');
   assert.equal(hostMenus[2].options.hostId, 'h');
   assert.equal(hostMenus[2].options.ip, '192.0.2.1');
+  hostMenus[0].options.onOpen();
+  hostMenus[2].options.onOpen();
+  assert.equal(summariesClosed, 2);
   assert.equal(hostMenus[2].element.attributes.role, 'button');
   assert.equal(hostMenus[2].element.attributes.tabindex, 0);
   assert.equal(canvas.children[0].attributes['aria-label'],'Host · Healthy');

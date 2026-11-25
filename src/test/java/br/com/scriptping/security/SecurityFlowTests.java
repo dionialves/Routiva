@@ -202,6 +202,49 @@ class SecurityFlowTests {
         mvc.perform(post("/api/maps/states").session(session).with(csrf()).contentType("application/json").content("{\"groups\":[],\"hosts\":[]}"))
             .andExpect(status().isOk());
     }
+    @Test void mapFavoritesArePersonalAndDoNotChangeSharedMaps() throws Exception {
+        var admin = activate(create(AppUser.Role.ADMIN));
+        var first = activate(create(AppUser.Role.USER));
+        var second = activate(create(AppUser.Role.USER));
+        var draft = """
+            {"layout":{"name":"Mapa favorito","nodes":[],"links":[]}}
+            """;
+        var saved = mvc.perform(post("/api/maps").session(admin).with(csrf()).contentType("application/json").content(draft))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        var mapId = json.readTree(saved).get("id").asText();
+        var path = "/api/maps/favorites/" + mapId;
+        mvc.perform(get("/api/maps/favorites").session(first)).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        mvc.perform(post(path).session(first).contentType("application/json").content("{\"favorite\":true}"))
+            .andExpect(status().isForbidden());
+        for (int retry = 0; retry < 2; retry++)
+            mvc.perform(post(path).session(first).with(csrf()).contentType("application/json").content("{\"favorite\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", contains(mapId)));
+        mvc.perform(get("/api/maps/favorites").session(first)).andExpect(status().isOk()).andExpect(jsonPath("$", contains(mapId)));
+        mvc.perform(get("/api/maps/favorites").session(second)).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        var another = mvc.perform(post("/api/maps").session(admin).with(csrf()).contentType("application/json").content(draft.replace("Mapa favorito", "Outro mapa")))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        var anotherId = json.readTree(another).get("id").asText();
+        var anotherPath = "/api/maps/favorites/" + anotherId;
+        mvc.perform(post(anotherPath).session(first).with(csrf()).contentType("application/json").content("{\"favorite\":true}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$", contains(anotherId, mapId)));
+        mvc.perform(post(path).session(first).with(csrf()).contentType("application/json").content("{\"favorite\":true}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$", contains(anotherId, mapId)));
+        mvc.perform(get("/api/maps/favorites").session(first)).andExpect(status().isOk()).andExpect(jsonPath("$", contains(anotherId, mapId)));
+        mvc.perform(post(anotherPath).session(first).with(csrf()).contentType("application/json").content("{\"favorite\":false}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$", contains(mapId)));
+        mvc.perform(post(path).session(second).with(csrf()).contentType("application/json").content("{\"favorite\":true}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$", contains(mapId)));
+        mvc.perform(post(path).session(first).with(csrf()).contentType("application/json").content("{\"favorite\":false}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        mvc.perform(get("/api/maps/favorites").session(second)).andExpect(status().isOk()).andExpect(jsonPath("$", contains(mapId)));
+        mvc.perform(get("/api/maps").session(admin)).andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == '" + mapId + "')].revision", contains(1)));
+        mvc.perform(post("/api/maps/favorites/missing").session(first).with(csrf()).contentType("application/json").content("{\"favorite\":true}"))
+            .andExpect(status().isNotFound());
+        mvc.perform(get("/api/maps/favorites")).andExpect(status().isUnauthorized());
+    }
+
     @Test void resetRevokesSessionAndOldCodeAndPassword() throws Exception {
         var saved = create(AppUser.Role.USER); var session = activate(saved);
         var reset = users.reset(saved.user().id());

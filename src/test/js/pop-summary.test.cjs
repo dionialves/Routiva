@@ -86,6 +86,57 @@ test('hover waits 1000ms, allows transfer to the card and cancels quick passes',
   assert.equal(box.open, false);
 });
 
+test('host and group clicks cancel hover and focus summaries until a new hover after closing the menu', () => {
+  for (const node of [{id:'a', hostId:'h'}, {id:'b', groupId:'g'}]) {
+    const callbacks = new Map();
+    let counter = 0, menuOpen = false, focusVisible = false;
+    context.setTimeout = (fn, delay) => { callbacks.set(++counter, {fn, delay}); return counter; };
+    context.clearTimeout = id => callbacks.delete(id);
+    context.cancelAnimationFrame = () => {};
+    context.requestAnimationFrame = () => 1;
+    context.document = {activeElement:null};
+    const listeners = {};
+    const anchor = {dataset:{}, setAttribute() {}, getBoundingClientRect:() => ({}),
+      matches:() => focusVisible, addEventListener:(type, fn) => { listeners[type] = fn; }};
+    const box = {showPopover() { this.open = true; }, hidePopover() { this.open = false; },
+      contains:() => false};
+    context.clickSubject = {box, stage:{}, menuOpen:() => menuOpen, render() {}, position() {}, updateFooter() {},
+      hostCache:new Map([['h', {pending:true}]])};
+    vm.runInContext('Object.setPrototypeOf(clickSubject, PopSummary.prototype)', context);
+    const subject = context.clickSubject;
+    subject.bind(anchor, node);
+    anchor.onfocus();
+    assert.equal(callbacks.size, 0);
+    focusVisible = true;
+    anchor.onfocus();
+    assert.equal(callbacks.get(subject.openTimer).delay, 0);
+    anchor.onpointerenter();
+    assert.equal(callbacks.get(subject.openTimer).delay, 1000);
+    listeners.pointerdown();
+    anchor.onfocus();
+    listeners.click();
+    assert.equal(callbacks.has(subject.openTimer), false);
+    assert.equal(box.open, false);
+    menuOpen = true;
+    anchor.onpointerenter();
+    anchor.onfocus();
+    assert.equal(callbacks.has(subject.openTimer), false);
+    menuOpen = false;
+    anchor.onfocus();
+    assert.equal(callbacks.has(subject.openTimer), false);
+    anchor.onpointerenter();
+    callbacks.get(subject.openTimer).fn();
+    assert.equal(box.open, true);
+    listeners.pointerdown();
+    assert.equal(box.open, false);
+    anchor.onpointerenter();
+    const pending = callbacks.get(subject.openTimer);
+    menuOpen = true;
+    pending.fn();
+    assert.equal(box.open, false);
+  }
+});
+
 test('disabled and unconfirmed hosts with active problems overlap affected but never operational', () => {
   const result = summarize([host('a', [issue('a', 4, 100)], 'disabled'),
     host('b', [issue('b', 2, 100)], 'unknown'), host('c', [])]);

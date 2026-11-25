@@ -45,8 +45,8 @@ function popIcon(name, size = 16) {
 }
 
 class PopSummary {
-  constructor({stage, hosts, metric = () => null, groupName, freshness, colors, labels, minimumSeverity = () => 0, showAcknowledged = () => true}) {
-    Object.assign(this, {stage, hosts, metric, groupName, freshness, colors, labels, minimumSeverity, showAcknowledged});
+  constructor({stage, hosts, metric = () => null, groupName, freshness, colors, labels, minimumSeverity = () => 0, showAcknowledged = () => true, menuOpen = () => false}) {
+    Object.assign(this, {stage, hosts, metric, groupName, freshness, colors, labels, minimumSeverity, showAcknowledged, menuOpen});
     this.box = document.createElement('section');
     this.box.className = 'pop-summary';
     this.box.id = 'map-pop-summary';
@@ -64,20 +64,35 @@ class PopSummary {
     element.setAttribute('aria-details', this.box.id);
     if (this.node?.id === node.id) this.anchor = element;
     element.setAttribute('tabindex', '0');
-    element.onpointerenter = () => this.scheduleOpen(element, node);
+    let activated = false;
+    const suppress = () => {
+      activated = true;
+      this.close();
+    };
+    element.onpointerenter = () => {
+      if (this.menuOpen?.()) return;
+      activated = false;
+      this.scheduleOpen(element, node);
+    };
     element.onpointerleave = () => this.scheduleClose();
-    element.onfocus = () => this.scheduleOpen(element, node, 0);
+    element.onfocus = () => {
+      if (!activated && element.matches(':focus-visible')) this.scheduleOpen(element, node, 0);
+    };
     element.onblur = () => this.scheduleClose();
-    element.addEventListener('pointerdown', () => {
-      if (this.node?.id !== node.id) this.close();
+    element.addEventListener('pointerdown', suppress);
+    element.addEventListener('click', suppress, true);
+    element.addEventListener('keydown', event => {
+      if (event.key === 'Tab') activated = false;
     });
   }
   scheduleOpen(element, node, delay = 1000) {
     clearTimeout(this.openTimer);
     clearTimeout(this.closeTimer);
-    if (this.node?.id === node.id || (node.groupId && element.getAttribute?.('aria-expanded') === 'true')) return;
+    const menuOpen = () => this.menuOpen?.() || element.getAttribute?.('aria-expanded') === 'true';
+    if (this.node?.id === node.id || menuOpen()) return;
     this.close();
     this.openTimer = setTimeout(() => {
+      if (menuOpen() || element.isConnected === false) return;
       this.node = node;
       this.anchor = element;
       this.expanded = false;

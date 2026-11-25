@@ -211,6 +211,15 @@ CREATE TABLE IF NOT EXISTS app_user (
     version BIGINT NOT NULL DEFAULT 0
 );
 
+-- Personal map favorites are independent of the shared map layout and revision.
+CREATE TABLE IF NOT EXISTS network_map_favorite (
+    user_id BIGINT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    map_id VARCHAR(36) NOT NULL REFERENCES network_map(id) ON DELETE CASCADE,
+    favorited_at_ms BIGINT NOT NULL,
+    PRIMARY KEY (user_id, map_id)
+);
+CREATE INDEX IF NOT EXISTS idx_network_map_favorite_map ON network_map_favorite(map_id);
+
 -- Radio identity and immutable source observations. Millisecond UTC timestamps.
 CREATE TABLE IF NOT EXISTS radio_client (
     id VARCHAR(36) PRIMARY KEY,
