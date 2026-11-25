@@ -16,6 +16,7 @@ public class HostConnections {
         var c = repository.credentials(host.id());
         if (c == null || !"ACTIVE".equals(c.status()) || !java.util.Objects.equals(c.verifiedIp(), host.ip()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Configure e valide a autenticação nas configurações do host.");
-        return new Connection(c.login(), secrets.decrypt(c.encryptedPassword()), c.port(), c.tls());
+        int port = HostAuthentication.usesSsh(c.manufacturer()) ? repository.terminalPorts(host.id()).sshPort() : c.port();
+        return new Connection(c.login(), secrets.decrypt(c.encryptedPassword()), port, c.tls());
     }
 }

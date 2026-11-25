@@ -27,8 +27,7 @@ public class HostRepository {
     }
     public ManagedHost require(String id) {
         return jdbc.query("SELECT payload FROM app_host WHERE host_id=?", (rs,n) -> read(rs.getString(1)), id)
-            .stream().findFirst().orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.NOT_FOUND, "Host não encontrado no app."));
+            .stream().findFirst().orElseThrow(HostRepository::hostNotFound);
     }
     public Host target(String id) {
         var h = require(id);
@@ -39,9 +38,34 @@ public class HostRepository {
         try {
             String payload = secrets.encrypt(json.writeValueAsString(host));
             if (jdbc.update("UPDATE app_host SET payload=?, synced_at=?, description=? WHERE host_id=?", payload, System.currentTimeMillis(), Objects.requireNonNullElse(host.description(), ""), host.id()) == 0)
-                jdbc.update("INSERT INTO app_host(host_id,payload,synced_at,description) VALUES (?,?,?,?)", host.id(), payload, System.currentTimeMillis(), Objects.requireNonNullElse(host.description(), ""));
+                jdbc.update("INSERT INTO app_host(host_id,payload,synced_at,description,ssh_port) VALUES (?,?,?,?,COALESCE((SELECT api_port FROM host_authentication WHERE host_id=? AND manufacturer IN ('Ubiquiti','Datacom','Cisco') AND api_port BETWEEN 1 AND 65535),22))",
+                    host.id(), payload, System.currentTimeMillis(), Objects.requireNonNullElse(host.description(), ""), host.id());
         } catch (Exception ex) { throw new IllegalStateException("Não foi possível persistir o host."); }
     }
+    public record TerminalPorts(int sshPort, int telnetPort) {}
+
+    public TerminalPorts terminalPorts(String id) {
+        return jdbc.query("SELECT ssh_port, telnet_port FROM app_host WHERE host_id=?",
+            (rs, n) -> new TerminalPorts(rs.getInt("ssh_port"), rs.getInt("telnet_port")), id)
+            .stream().findFirst().orElseThrow(HostRepository::hostNotFound);
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public void updateTerminalPorts(String id, TerminalPorts ports) {
+        var previous = terminalPorts(id);
+        if (jdbc.update("UPDATE app_host SET ssh_port=?, telnet_port=? WHERE host_id=?",
+            ports.sshPort(), ports.telnetPort(), id) == 0) throw hostNotFound();
+        if (previous.sshPort() != ports.sshPort()) {
+            jdbc.update("UPDATE host_authentication SET api_port=NULL, connection_status='CONNECTION_FAILED', connection_message=?, verified_ip=NULL WHERE host_id=? AND manufacturer IN ('Ubiquiti','Datacom','Cisco')",
+                "Porta SSH alterada. Teste e salve novamente a autenticação.", id);
+        }
+    }
+
+    private static org.springframework.web.server.ResponseStatusException hostNotFound() {
+        return new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.NOT_FOUND, "Host não encontrado no app.");
+    }
+
     private Credentials credentials(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Credentials(rs.getString("manufacturer"), rs.getString("api_login"), rs.getString("api_password"),
             (Integer) rs.getObject("api_port"), rs.getBoolean("enabled"), rs.getString("connection_status"),
@@ -59,8 +83,15 @@ public class HostRepository {
     }
     @org.springframework.transaction.annotation.Transactional
     public void configure(String id, Credentials c) {
+        configure(id, c, null);
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public void configure(String id, Credentials c, TerminalPorts ports) {
         if (jdbc.queryForList("SELECT host_id FROM app_host WHERE host_id=? FOR UPDATE", String.class, id).isEmpty())
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Host excluído durante a configuração.");
+        if (ports != null)
+            jdbc.update("UPDATE app_host SET ssh_port=?, telnet_port=? WHERE host_id=?", ports.sshPort(), ports.telnetPort(), id);
         jdbc.update("DELETE FROM host_authentication WHERE host_id=?", id);
         jdbc.update("INSERT INTO host_authentication(host_id,manufacturer,api_login,api_password,api_port,enabled,connection_status,connection_message,verified_ip,api_tls,tested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             id, c.manufacturer(), c.login(), c.encryptedPassword(), c.port(), c.enabled(), c.status(), c.message(), c.verifiedIp(), c.tls(), c.testedAt());

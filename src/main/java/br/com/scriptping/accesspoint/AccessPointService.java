@@ -85,7 +85,7 @@ public class AccessPointService {
     public ConfigurationView configuration(String id) {
         pageHost(id);
         var c = authentication.view(id);
-        return new ConfigurationView(id, c.name(), c.ip(), c.manufacturer(), c.login(), c.port(), c.enabled(), c.passwordConfigured(), c.status(), c.message(), c.tls());
+        return new ConfigurationView(id, c.name(), c.ip(), c.manufacturer(), c.login(), br.com.scriptping.hosts.HostAuthentication.usesSsh(c.manufacturer()) ? Integer.valueOf(c.sshPort()) : c.port(), c.enabled(), c.passwordConfigured(), c.status(), c.message(), c.tls());
     }
     private br.com.scriptping.hosts.HostAuthentication.Input hostInput(ConfigurationInput input) {
         return new br.com.scriptping.hosts.HostAuthentication.Input(input.manufacturer(), input.login(), input.password(), input.port(), input.enabled(), input.tls());

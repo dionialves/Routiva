@@ -5,7 +5,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title th:text="${'Resumo de latência • ' + host.name()}">Resumo de latência</title>
 <th:block th:replace="~{design-system :: base}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><link rel="stylesheet" href="/ap-latency.css?v=20261120-modal-tabs">
-<script src="/shell.js?v=20261117-host-actions" defer></script><script src="/ap-latency.js?v=20261117-host-actions" defer></script><script src="/ap-latency-summary.js?v=20261113-8" defer></script>
+<script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/ap-latency.js?v=20261117-host-actions" defer></script><script src="/ap-latency-summary.js?v=20261113-8" defer></script>
 </head>
 <body><aside th:replace="~{shell :: sidebar('ap')}"></aside><div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
 <main class="page-content latency-summary" th:attr="data-host-id=${host.id()},data-assessment-id=${assessment}">

@@ -381,3 +381,21 @@ ALTER TABLE app_host ADD COLUMN IF NOT EXISTS zabbix_payload TEXT;
 UPDATE access_point SET api_password=NULL, api_login=NULL, verified_ip=NULL;
 
 ALTER TABLE app_host ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+ALTER TABLE app_host ADD COLUMN IF NOT EXISTS ssh_port INTEGER NOT NULL DEFAULT 22;
+ALTER TABLE app_host ADD COLUMN IF NOT EXISTS telnet_port INTEGER NOT NULL DEFAULT 23;
+
+-- Move legacy SSH integration ports to the shared terminal field once.
+UPDATE app_host SET ssh_port=(SELECT api_port FROM host_authentication h WHERE h.host_id=app_host.host_id)
+WHERE ssh_port=22 AND EXISTS (
+    SELECT 1 FROM host_authentication h WHERE h.host_id=app_host.host_id
+    AND h.manufacturer IN ('Ubiquiti','Datacom','Cisco') AND h.api_port BETWEEN 1 AND 65535
+);
+UPDATE host_authentication SET connection_status='CONNECTION_FAILED',
+    connection_message='Porta SSH alterada. Teste e salve novamente a autenticação.', verified_ip=NULL
+WHERE manufacturer IN ('Ubiquiti','Datacom','Cisco') AND api_port IS NOT NULL AND EXISTS (
+    SELECT 1 FROM app_host h WHERE h.host_id=host_authentication.host_id AND h.ssh_port<>host_authentication.api_port
+);
+UPDATE host_authentication SET api_port=NULL
+WHERE manufacturer IN ('Ubiquiti','Datacom','Cisco') AND EXISTS (
+    SELECT 1 FROM app_host h WHERE h.host_id=host_authentication.host_id
+);

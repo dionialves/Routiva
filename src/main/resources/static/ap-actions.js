@@ -79,6 +79,10 @@
     if (url) window.location.href = url;
     else window.notify('IP inválido para abrir o WinBox.', 'error');
   });
+  for (const protocol of ['ssh', 'telnet']) {
+    document.getElementById(`ap-${protocol}`).addEventListener('click', () =>
+      window.HostMenu.openTerminal(protocol, root.dataset.hostId));
+  }
   document.getElementById('ap-webfig').addEventListener('click', () => {
     const url = window.HostMenu.winboxUrl(root.dataset.managementIp);
     if (url) window.open(url.replace(/^winbox:/, 'http:'), '_blank', 'noopener,noreferrer');

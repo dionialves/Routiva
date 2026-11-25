@@ -99,6 +99,56 @@ class HostCatalogTests {
         doNothing().when(client).deleteManagedHost("42", "revision"); catalog.delete("42", "revision");
         assertThat(hosts.all()).isEmpty(); verify(client, times(2)).deleteManagedHost("42", "revision");
     }
+    @Test void terminalPortsPersistIndependentlyOfEquipmentCredentialsAndInventorySync() {
+        var host = host("42");
+        hosts.put(host);
+        var auth = new HostAuthentication(hosts, secrets, List.of());
+        assertThat(auth.terminalAccess(host.id())).isEqualTo(new HostAuthentication.TerminalAccess(host.ip(), 22, 23));
+
+        auth.saveTerminalPorts(host.id(), new HostRepository.TerminalPorts(2222, 2323));
+        catalog.reconcile();
+        assertThat(hosts.credentials(host.id())).isNull();
+        assertThat(auth.terminalAccess(host.id())).isEqualTo(new HostAuthentication.TerminalAccess(host.ip(), 2222, 2323));
+        assertThatThrownBy(() -> auth.saveTerminalPorts(host.id(), new HostRepository.TerminalPorts(0, 23)))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        assertThat(auth.view(host.id()).sshPort()).isEqualTo(2222);
+        assertThat(auth.view(host.id()).telnetPort()).isEqualTo(2323);
+    }
+
+    @Test void sshIntegrationUsesSharedPortForTestSaveAndSubsequentConnections() {
+        catalog.reconcile();
+        var provider = mock(EquipmentProvider.class);
+        when(provider.manufacturer()).thenReturn("Cisco");
+        var auth = new HostAuthentication(hosts, secrets, List.of(provider));
+        var input = new HostAuthentication.Input("Cisco", "reader", "secret", 8728, true, false, 2222, 2323);
+        assertThat(auth.test("42", input).success()).isTrue();
+        assertThat(auth.terminalAccess("42").sshPort()).isEqualTo(22);
+        var view = auth.save("42", input);
+        assertThat(view.port()).isNull();
+        assertThat(view.sshPort()).isEqualTo(2222);
+        assertThat(view.telnetPort()).isEqualTo(2323);
+        verify(provider, times(2)).testConnection(any(), argThat(connection -> connection.port() == 2222));
+        var connections = new HostConnections(hosts, secrets);
+        assertThat(connections.require(hosts.target("42")).port()).isEqualTo(2222);
+        auth.saveTerminalPorts("42", new HostRepository.TerminalPorts(2223, 2323));
+        assertThat(auth.view("42").status()).isEqualTo("CONNECTION_FAILED");
+        auth.validateSaved("42");
+        assertThat(connections.require(hosts.target("42")).port()).isEqualTo(2223);
+    }
+
+    @Test void legacySshIntegrationPortIsMigratedWithoutOverwritingLaterTerminalEdits() {
+        catalog.reconcile();
+        hosts.configure("42", new HostRepository.Credentials("Cisco", "reader", secrets.encrypt("secret"),
+            2222, true, "ACTIVE", "", "192.0.2.42", false, 1L));
+        var populator = new ResourceDatabasePopulator(new ClassPathResource("schema.sql"));
+        populator.execute(jdbc.getDataSource());
+        assertThat(hosts.terminalPorts("42").sshPort()).isEqualTo(2222);
+        assertThat(hosts.credentials("42").port()).isNull();
+        hosts.updateTerminalPorts("42", new HostRepository.TerminalPorts(22, 23));
+        populator.execute(jdbc.getDataSource());
+        assertThat(hosts.terminalPorts("42").sshPort()).isEqualTo(22);
+    }
+
     @Test void authenticationWorksWithoutApAndRejectsChangedAddress() {
         catalog.reconcile();
         var provider = mock(EquipmentProvider.class); when(provider.manufacturer()).thenReturn("MikroTik");

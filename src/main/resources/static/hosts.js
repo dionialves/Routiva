@@ -85,7 +85,7 @@
   }
 
   const discardDialog = $('host-discard-dialog'), deleteDialog = $('host-delete-dialog');
-  let baseline = '', closeTrigger, authBaseline = '', authLoaded = false, activeTab = 'general';
+  let baseline = '', closeTrigger, authBaseline = '', terminalBaseline = '', authLoaded = false, activeTab = 'general';
   let hosts = [], options, current, opener, busy = false, loading = false, page = 0;
   let sortKey = 'name', direction = 1;
   const pickers = {};
@@ -205,7 +205,6 @@
     const groups = kind === 'host-group';
     pickers[kind] = window.setupMultiPicker(kind, select, groups ? 'Selecione os grupos' : 'Selecione os templates', () => {
       if (groups && select.selectedOptions.length) {
-        $('host-groups-error').textContent = '';
         menu.querySelector('summary').removeAttribute('aria-invalid');
       }
     }, {
@@ -219,11 +218,25 @@
     return Object.assign(input, { useIp: field('useIp').value === 'true', snmpVersion: Number(field('snmpVersion').value),
       active: field('active').checked, groupIds: selected('host-group'), templateIds: selected('host-template') });
   }
-  function updateAuthLogin() {
+  function updateAuthFields() {
+    const mikrotik = $('host-auth-manufacturer').value === 'MikroTik';
     const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
-    document.querySelector('label[for="host-auth-port"]').textContent = mimosa ? 'Porta HTTPS' : 'Porta API / SSH';
+    $('host-auth-ports').classList.toggle('host-auth-ports-mikrotik', mikrotik);
+    $('host-auth-port-label').textContent = mimosa ? 'Porta HTTPS' : 'Porta API';
+    $('host-auth-port-row').hidden = !mikrotik && !mimosa;
+    $('host-auth-port').disabled = !mikrotik && !mimosa;
+    $('host-auth-tls-row').hidden = !mikrotik;
+    $('host-auth-tls').disabled = !mikrotik;
+    for (const protocol of ['ssh', 'telnet']) {
+      $(`host-${protocol}-port-row`).hidden = mimosa;
+      $(`host-${protocol}-port`).disabled = mimosa;
+    }
     $('host-auth-login-field').hidden = mimosa;
     if (mimosa) $('host-auth-login').value = 'configure';
+  }
+  function updatePasswordPlaceholder(configured) {
+    $('host-auth-password').placeholder = configured ? '*'.repeat(22) : '';
+    $('host-auth-password-help').textContent = configured ? 'Senha cadastrada. Deixe em branco para preservar.' : 'Informe a senha do equipamento.';
   }
   function hideAuthPassword() {
     $('host-auth-password').type = 'password';
@@ -232,9 +245,11 @@
     $('host-auth-password-toggle').querySelector('use').setAttribute('href', '/icons.svg#eye');
   }
   function authInput() {
-    return { manufacturer: $('host-auth-manufacturer').value, login: $('host-auth-login').value,
-      password: $('host-auth-password').value, port: Number($('host-auth-port').value),
-      tls: $('host-auth-tls').checked };
+    const manufacturer = $('host-auth-manufacturer').value;
+    return { manufacturer, login: $('host-auth-login').value,
+      password: $('host-auth-password').value,
+      port: ['MikroTik', 'Mimosa'].includes(manufacturer) ? Number($('host-auth-port').value) : null,
+      tls: manufacturer === 'Mimosa' || (manufacturer === 'MikroTik' && $('host-auth-tls').checked) };
   }
   function tab(name, focus = false) {
     $('host-edit-content').scrollTop = 0;
@@ -247,7 +262,8 @@
       if (focus && key === name) button.focus();
     }
     $('host-save').disabled = busy || (name === 'auth' ? !authLoaded : current && !current.editable);
-    $('host-save-label').textContent = name === 'auth' ? 'Salvar autenticação' : 'Salvar';
+    $('host-save-label').textContent = 'Salvar';
+    if (name === 'auth' && !current) window.notify?.('Salve o host para cadastrar a autenticação.', 'error');
   }
   for (const name of ['general', 'auth']) {
     $(`host-${name}-tab`).addEventListener('click', () => tab(name));
@@ -258,30 +274,29 @@
     });
   }
   async function loadAuth(host) {
-    authLoaded = false; $('host-auth-fields').disabled = true; $('host-auth-test').disabled = true;
-    $('host-auth-state').textContent = host ? 'Carregando autenticação…' : 'Salve o host para cadastrar a autenticação.';
+    authLoaded = false;
+    $('host-auth-fields').disabled = true; $('host-auth-test').disabled = true;
     if (!host) return;
     try {
       const c = await request('/' + host.id + '/authentication');
       if (current !== host || !dialog.open) return;
       for (const name of ['manufacturer', 'login']) $(`host-auth-${name}`).value = c[name] || '';
-      $('host-auth-password').value = ''; $('host-auth-port').value = c.port || 8728;
+      $('host-auth-password').value = ''; $('host-auth-port').value = c.port || (c.manufacturer === 'Mimosa' ? 443 : 8728);
       $('host-auth-tls').checked = c.tls;
-      $('host-auth-tls-row').hidden = ['Ubiquiti', 'Datacom', 'Cisco', 'Mimosa'].includes(c.manufacturer);
-      $('host-auth-password-help').textContent = c.passwordConfigured ? 'Senha cadastrada. Deixe em branco para preservar.' : 'Informe a senha do equipamento.';
-      $('host-auth-state').textContent = '';
-      updateAuthLogin();
+      updatePasswordPlaceholder(c.passwordConfigured);
+      updateAuthFields();
+      $('host-ssh-port').value = c.sshPort;
+      $('host-telnet-port').value = c.telnetPort;
+      terminalBaseline = JSON.stringify(terminalPorts());
       authBaseline = JSON.stringify(authInput()); authLoaded = true;
       $('host-auth-fields').disabled = false; $('host-auth-test').disabled = false; tab(activeTab);
-    } catch (error) { if (current === host) $('host-auth-state').textContent = error.message; }
+    } catch (error) { if (current === host && dialog.open) window.notify?.(error.message, 'error'); }
   }
   $('host-auth-manufacturer').addEventListener('change', () => {
-    const ssh = ['Ubiquiti', 'Datacom', 'Cisco'].includes($('host-auth-manufacturer').value);
     const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
-    updateAuthLogin();
-    $('host-auth-port').value = mimosa ? 443 : ssh ? 22 : $('host-auth-tls').checked ? 8729 : 8728;
-    $('host-auth-tls-row').hidden = ssh || mimosa;
-    if (ssh || mimosa) $('host-auth-tls').checked = mimosa;
+    $('host-auth-tls').checked = mimosa;
+    $('host-auth-port').value = mimosa ? 443 : 8728;
+    updateAuthFields();
   });
   $('host-auth-password-toggle').addEventListener('click', event => {
     const button = event.currentTarget, password = $('host-auth-password');
@@ -296,27 +311,53 @@
   });
   async function saveAuth(testOnly) {
     if (busy || !authLoaded || !current) return;
-    setBusy(true, testOnly ? 'test' : 'save'); $('host-auth-state').textContent = testOnly ? 'Testando conexão…' : '';
+    for (const id of ['host-auth-port', 'host-ssh-port', 'host-telnet-port']) {
+      const control = $(id);
+      if (!control.disabled && !control.checkValidity()) {
+        control.setAttribute('aria-invalid', 'true');
+        control.focus();
+        window.notify?.(`${control.labels[0].textContent}: informe uma porta inteira entre 1 e 65535.`, 'error');
+        return;
+      }
+    }
+    const auth = authInput();
+    const ports = auth.manufacturer === 'Mimosa' ? {} : terminalPorts();
+    const terminalOnly = !testOnly && !auth.manufacturer && JSON.stringify(auth) === authBaseline;
+    const input = { ...auth, ...ports };
+    setBusy(true, testOnly ? 'test' : 'save');
     try {
-      const result = await request('/' + current.id + '/authentication' + (testOnly ? '/test' : ''), testOnly ? 'POST' : 'PUT', authInput());
+      if (terminalOnly) {
+        await request('/' + current.id + '/authentication/terminal-ports', 'PUT', ports);
+        terminalBaseline = JSON.stringify(ports);
+        window.notify?.('Portas do terminal salvas.');
+        return;
+      }
+      const result = await request('/' + current.id + '/authentication' + (testOnly ? '/test' : ''), testOnly ? 'POST' : 'PUT', input);
       if (!testOnly) {
-        $('host-auth-password').value = ''; hideAuthPassword(); authBaseline = JSON.stringify(authInput());
+        $('host-auth-password').value = '';
+        updatePasswordPlaceholder(result.passwordConfigured);
+        $('host-ssh-port').value = result.sshPort;
+        $('host-telnet-port').value = result.telnetPort;
+        hideAuthPassword(); authBaseline = JSON.stringify(authInput()); terminalBaseline = JSON.stringify(terminalPorts());
         current.connectionStatus = result.status === 'ACTIVE' ? 'ACTIVE' : 'ERROR';
         const row = hosts.find(host => host.id === current.id);
         if (row) row.connectionStatus = current.connectionStatus;
         render();
       }
-      $('host-auth-state').textContent = '';
       const success = testOnly ? result.success : result.status === 'ACTIVE';
       window.notify?.(testOnly ? result.message : 'Autenticação salva. ' + result.message, success ? 'success' : 'error');
-    } catch (error) { $('host-auth-state').textContent = error.message; }
+    } catch (error) { window.notify?.(error.message, 'error'); }
     finally { setBusy(false); }
   }
   $('host-auth-test').addEventListener('click', () => saveAuth(true));
-  const isDirty = () => JSON.stringify(readInput()) !== baseline || (authLoaded && JSON.stringify(authInput()) !== authBaseline);
+  function terminalPorts() {
+    return { sshPort: $('host-ssh-port').valueAsNumber, telnetPort: $('host-telnet-port').valueAsNumber };
+  }
+  function pendingAuthChanges() {
+    return authLoaded && (JSON.stringify(authInput()) !== authBaseline || JSON.stringify(terminalPorts()) !== terminalBaseline);
+  }
+  const isDirty = () => JSON.stringify(readInput()) !== baseline || pendingAuthChanges();
   function clearErrors() {
-    $('host-error').textContent = ''; $('host-groups-error').textContent = '';
-    form.querySelectorAll('.host-field-error').forEach(error => { error.textContent = ''; });
     form.querySelectorAll('[aria-invalid]').forEach(control => control.removeAttribute('aria-invalid'));
   }
   function endpointRequired() {
@@ -331,12 +372,12 @@
     });
     for (const name of ['ip', 'dns']) {
       field(name).removeAttribute('aria-invalid');
-      $(`host-${name}-error`).textContent = '';
     }
   }
   function validate() {
     clearErrors();
     let firstInvalid = null;
+    const messages = [];
     for (const control of $('host-general').querySelectorAll('input, select')) {
       if (!control.willValidate) continue;
       let message = '';
@@ -351,19 +392,18 @@
       }
       if (message) {
         control.setAttribute('aria-invalid', 'true');
-        const error = form.querySelector(`[data-error-for="${control.name}"]`);
-        if (error) error.textContent = message;
+        messages.push(`${control.labels[0]?.textContent.replace('*', '').trim() || control.name}: ${message}`);
         firstInvalid ||= control;
       }
     }
     const groupSummary = $('incident-host-group-picker').querySelector('summary');
     groupSummary.removeAttribute('aria-invalid');
-    groupSummary.setAttribute('aria-describedby', 'host-groups-error');
     if (!selected('host-group').length) {
-      $('host-groups-error').textContent = 'Selecione pelo menos um grupo.';
+      messages.push('Selecione pelo menos um grupo.');
       groupSummary.setAttribute('aria-invalid', 'true'); firstInvalid ||= groupSummary;
     }
     firstInvalid?.focus();
+    if (messages.length) window.notify?.(messages.join(' '), 'error');
     return !firstInvalid;
   }
   function open(host, trigger) {
@@ -382,7 +422,7 @@
     picker('host-template', options.templates, host?.templates || []);
     endpointRequired(); baseline = JSON.stringify(readInput()); $('host-edit-content').scrollTop = 0; dialog.showModal(); tab('general'); loadAuth(host); field('hostname').focus();
   }
-  function closeNow() { dialog.close(); $('host-auth-password').value = ''; hideAuthPassword(); authLoaded = false; opener?.focus(); }
+  function closeNow() { dialog.close(); $('host-auth-password').value = ''; updatePasswordPlaceholder(false); hideAuthPassword(); authLoaded = false; opener?.focus(); }
   function requestClose() {
     if (busy) return;
     if (isDirty()) {
@@ -394,11 +434,13 @@
     for (const control of form.querySelectorAll('input, select, textarea, button')) control.disabled = value;
     for (const details of form.querySelectorAll('details')) { details.inert = value; if (value) details.open = false; }
     for (const control of deleteDialog.querySelectorAll('button')) control.disabled = value;
-    $('host-save-label').textContent = value && operation === 'save' ? 'Salvando…' : 'Salvar';
-    $('host-save').classList.toggle('system-button-loading', value && operation === 'save');
-    $('host-save').setAttribute('aria-busy', String(value && operation === 'save'));
-    $('host-delete-label').textContent = value && operation === 'delete' ? 'Excluindo…' : 'Excluir no Zabbix';
-    if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; tab(activeTab); }
+    for (const [id, action] of [['host-save', 'save'], ['host-auth-test', 'test'], ['host-delete-confirm', 'delete']]) {
+      const button = $(id);
+      const waiting = value && operation === action;
+      button.classList.toggle('system-button-loading', waiting);
+      button.setAttribute('aria-busy', String(waiting));
+    }
+    if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; updateAuthFields(); tab(activeTab); }
   }
   document.querySelectorAll('[data-host-sort]').forEach(button => {
     button.addEventListener('click', () => {
@@ -429,10 +471,7 @@
     });
   });
   form.addEventListener('input', event => {
-    const name = event.target.name;
     event.target.removeAttribute('aria-invalid');
-    const error = form.querySelector(`[data-error-for="${name}"]`);
-    if (error) error.textContent = '';
   });
   window.addEventListener('beforeunload', event => {
     if (dialog.open && (busy || isDirty())) { event.preventDefault(); event.returnValue = ''; }
@@ -443,7 +482,7 @@
   $('host-discard-confirm').addEventListener('click', () => { discardDialog.close(); closeNow(); });
   $('host-delete').addEventListener('click', () => {
     if (busy || !current) return;
-    $('host-delete-name').textContent = nameOf(current); $('host-delete-error').textContent = '';
+    $('host-delete-name').textContent = nameOf(current);
     deleteDialog.showModal(); $('host-delete-cancel').focus();
   });
   const cancelDelete = () => { if (!busy) { deleteDialog.close(); $('host-delete').focus(); } };
@@ -451,12 +490,12 @@
   deleteDialog.addEventListener('cancel', event => { event.preventDefault(); cancelDelete(); });
   $('host-delete-confirm').addEventListener('click', async () => {
     if (busy || !current) return;
-    const id = current.id; $('host-delete-error').textContent = ''; setBusy(true, 'delete');
+    const id = current.id; setBusy(true, 'delete');
     let deleted = false;
     try {
       await request('/' + id, 'DELETE', { revision: current.revision, confirmed: true });
       deleted = true;
-    } catch (error) { $('host-delete-error').textContent = error.message; window.notify?.(error.message, 'error'); }
+    } catch (error) { window.notify?.(error.message, 'error'); }
     finally { setBusy(false); }
     if (deleted) {
       deleteDialog.close(); closeNow(); hosts = hosts.filter(host => host.id !== id); render();
@@ -469,19 +508,19 @@
     const input = { ...readInput(), revision: current?.revision };
     setBusy(true);
     let saved = false, createdId;
-    const pendingAuth = authLoaded && JSON.stringify(authInput()) !== authBaseline;
+    const pendingAuth = pendingAuthChanges();
     try {
       const result = await request(current ? '/' + current.id : '', current ? 'PUT' : 'POST', input);
       if (!current) createdId = result.id;
       saved = true;
-    } catch (error) { $('host-error').textContent = error.message; window.notify?.(error.message, 'error'); }
+    } catch (error) { window.notify?.(error.message, 'error'); }
     finally { setBusy(false); }
     if (saved) {
       window.notify?.('Host salvo no app e no Zabbix.');
       if (pendingAuth && current) {
         const id = current.id; baseline = JSON.stringify(readInput()); await load();
         current = hosts.find(h => h.id === id) || current; tab('auth');
-        $('host-auth-state').textContent = 'Cadastro salvo. Salve também as alterações de autenticação.';
+        window.notify?.('Salve também as alterações de autenticação.');
       } else {
         closeNow(); await load();
         if (createdId) { const created = hosts.find(h => h.id === createdId); if (created) { open(created, $('host-new')); tab('auth'); } }

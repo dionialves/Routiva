@@ -25,9 +25,7 @@
 #host-dialog .query-filter-label { color:var(--text); font-size:13px; }
 #host-dialog small { color:var(--muted); font-size:12px; line-height:1.6; }
 #host-dialog .form-dialog-section-fields > label.host-active { display:flex; flex-direction:row; align-items:center; gap:10px; margin:16px 0 0; }
-.host-required, .host-field-error, #host-error { color:var(--error); }
-.host-field-error { font-size:12px; margin:0; line-height:1.6; }
-.host-field-error:empty { display:none; }
+.host-required { color:var(--error); }
 #host-dialog [aria-invalid=true] { border-color:var(--error); }
 #host-delete { margin-right:auto; }
 #host-delete-description, #host-discard-description { margin:0; line-height:1.7; overflow-wrap:anywhere; }
@@ -139,7 +137,6 @@
 #host-dialog .host-association-grid .query-filter-label { display:block; min-height:18px; margin:0; color:var(--text); font:600 13px/18px var(--font-ui); }
 #host-dialog .incident-picker summary { height:40px; padding:8px 12px; background:#22384a; }
 #host-dialog .incident-picker-panel { background:#0c2030; border-color:var(--host-control-border); }
-#host-dialog #host-groups-error { grid-column:1 / -1; }
 #host-dialog #host-snmp-title + .form-dialog-section-fields { gap:18px; }
 #host-dialog .host-endpoint-row { grid-template-columns:minmax(140px,1fr) minmax(0,2.2fr) minmax(100px,.8fr); align-items:start; gap:16px; min-width:0; }
 #host-dialog .host-endpoint-mode, #host-dialog .host-endpoint-field { gap:7px; }
@@ -152,7 +149,6 @@
 #host-dialog .form-dialog-footer { flex:0 0 auto; padding:14px 24px; background:var(--host-modal-bg); }
 #host-dialog .form-dialog-footer.settings-actions { padding-top:14px; }
 #host-dialog #host-delete { margin-right:auto; }
-#host-dialog #host-error { margin:0; }
 #host-dialog .host-auth-fields { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px 20px; }
 #host-dialog .host-auth-field { display:grid; align-content:start; min-width:0; }
 #host-dialog .host-auth-field small { margin-top:6px; }
@@ -184,13 +180,6 @@
 
 /* Authentication tab follows the shared host form sections. */
 #host-auth .form-dialog-section-fields { padding:20px; gap:18px; }
-#host-auth .host-auth-info {
-  display:flex; align-items:center; gap:12px; min-width:0; box-sizing:border-box;
-  padding:12px 16px; border:1px solid #176b89; border-radius:8px;
-  background:#19374c; color:var(--host-secondary);
-}
-#host-auth .host-auth-info svg { flex:0 0 20px; width:20px; height:20px; color:var(--cyan); }
-#host-auth .host-auth-info p { margin:0; font-size:13px; line-height:1.5; }
 #host-dialog .host-auth-fields {
   display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px 24px;
   border:0; padding:0; margin:0; min-width:0;
@@ -213,8 +202,15 @@
 #host-dialog .host-auth-tls { align-content:start; }
 #host-dialog .host-auth-tls-control { display:flex; align-items:center; min-height:40px; }
 #host-dialog .host-auth-tls-control .system-switch { margin:0; }
-#host-dialog #host-auth-state:empty { display:none; }
-#host-dialog #host-auth-state { grid-column:1 / -1; margin:0; color:var(--host-secondary); font-size:13px; }
+#host-dialog .host-auth-ports { grid-column:1 / -1; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px 24px; }
+#host-dialog .host-auth-ports-mikrotik { grid-template-columns:repeat(4,minmax(0,1fr)); }
+#host-dialog .host-auth-ports .host-auth-tls { grid-column:auto; }
+@media(max-width:700px) {
+  #host-dialog .host-auth-ports { grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+}
+@media(max-width:480px) {
+  #host-dialog .host-auth-ports { grid-template-columns:minmax(0,1fr); }
+}
 @media(max-width:600px) {
   #host-dialog .host-auth-fields { grid-template-columns:minmax(0,1fr); gap:16px; }
   #host-dialog .host-auth-manufacturer { grid-column:auto; }

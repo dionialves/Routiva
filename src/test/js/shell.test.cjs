@@ -15,13 +15,14 @@ function setup(withDialog = false) {
     }
     setAttribute() {}
     addEventListener(type, fn) { this.listeners[type] = fn; }
-    emit(type) { this.listeners[type]?.(); }
+    emit(type) { if (type === 'close') this.open = false; this.listeners[type]?.(); }
     remove() { this.removed = true; }
     removeAttribute(name) { if (name === 'open') this.open = false; }
     contains(target) { return target === this; }
   }
   const ready = [], listeners = {}, timers = new Map();
-  const body = new Element(), menu = new Element(), dialog = new Element();
+  const body = new Element(), menu = new Element(), dialog = new Element(), confirmation = new Element();
+  dialog.open = withDialog;
   let stack;
   menu.open = true;
   let serial = 0;
@@ -32,11 +33,10 @@ function setup(withDialog = false) {
       body,
       createElement: () => new Element(),
       querySelector: selector => {
-        if (selector === 'dialog[open]') return withDialog ? dialog : null;
-        stack ||= body.children[0] || dialog.children[0];
+        stack ||= body.children[0] || dialog.children[0] || confirmation.children[0];
         return stack;
       },
-      querySelectorAll: selector => selector === '.utility-menu[open]' ? [menu] : [],
+      querySelectorAll: selector => selector === '.utility-menu[open]' ? [menu] : selector === 'dialog[open]' ? [dialog, confirmation].filter(item => item.open) : [],
       addEventListener(type, fn) { if (type === 'DOMContentLoaded') ready.push(fn); else listeners[type] = fn; },
     },
     setTimeout(fn, ms) { const id = ++serial; timers.set(id, { fn, ms }); return id; },
@@ -44,7 +44,7 @@ function setup(withDialog = false) {
     },
   );
   ready.forEach(fn => fn());
-  return { window, body, menu, dialog, listeners, timers, run(ms) {
+  return { window, body, menu, dialog, confirmation, listeners, timers, run(ms) {
     const entry = [...timers].find(([, timer]) => timer.ms === ms);
     assert.ok(entry, `Expected a ${ms}ms timer`);
     timers.delete(entry[0]);
@@ -95,6 +95,20 @@ test('system notifications remain visible inside open dialogs and return to shel
   assert.equal(ui.body.children.length, 0);
   ui.window.notify('Conexão validada');
   assert.equal(stack.children.length, 2);
+  ui.dialog.emit('close');
+  assert.equal(ui.body.children[0], stack);
+});
+
+test('notification appears above a nested confirmation and returns to the host dialog when it closes', () => {
+  const ui = setup(true);
+  ui.window.notify('Host aberto');
+  ui.confirmation.open = true;
+  ui.window.notify('Erro de exclusão', 'error');
+  const stack = ui.confirmation.children[0];
+  assert.equal(stack.children[1].children[0].textContent, 'Erro de exclusão');
+  assert.equal(ui.dialog.children.length, 0);
+  ui.confirmation.emit('close');
+  assert.equal(ui.dialog.children[0], stack);
   ui.dialog.emit('close');
   assert.equal(ui.body.children[0], stack);
 });

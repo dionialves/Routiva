@@ -16,11 +16,49 @@ public class HostAuthentication {
     }
     public record Input(String manufacturer, String login,
         @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY) String password,
-        Integer port, boolean enabled, boolean tls) {
+        Integer port, boolean enabled, boolean tls, Integer sshPort, Integer telnetPort) {
+        public Input(String manufacturer, String login, String password, Integer port, boolean enabled, boolean tls) {
+            this(manufacturer, login, password, port, enabled, tls, null, null);
+        }
         @Override public String toString() { return "Host authentication input [redacted]"; }
     }
     public record View(String hostId, String name, String ip, String manufacturer, String login, Integer port,
-                       boolean enabled, boolean passwordConfigured, String status, String message, boolean tls, Long testedAt) {}
+                       boolean enabled, boolean passwordConfigured, String status, String message, boolean tls, Long testedAt, int sshPort, int telnetPort) {}
+    public record TerminalAccess(String address, int sshPort, int telnetPort) {}
+
+    public TerminalAccess terminalAccess(String id) {
+        var host = repository.require(id);
+        var ports = repository.terminalPorts(id);
+        String address = host.ip();
+        if (address == null || address.isBlank()) address = host.dns();
+        return new TerminalAccess(address, ports.sshPort(), ports.telnetPort());
+    }
+
+    public synchronized HostRepository.TerminalPorts saveTerminalPorts(String id, HostRepository.TerminalPorts ports) {
+        if (!validPort(ports.sshPort()) || !validPort(ports.telnetPort()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe portas entre 1 e 65535.");
+        repository.updateTerminalPorts(id, ports);
+        return ports;
+    }
+
+    public static boolean usesSsh(String manufacturer) {
+        return "Ubiquiti".equals(manufacturer) || "Datacom".equals(manufacturer) || "Cisco".equals(manufacturer);
+    }
+
+    private HostRepository.TerminalPorts requestedPorts(String id, Input input) {
+        var saved = repository.terminalPorts(id);
+        Integer ssh = input.sshPort();
+        // Compatibility with older clients that put the SSH port in the API port field.
+        if (ssh == null && usesSsh(input.manufacturer())) ssh = input.port();
+        var ports = new HostRepository.TerminalPorts(ssh == null ? saved.sshPort() : ssh,
+            input.telnetPort() == null ? saved.telnetPort() : input.telnetPort());
+        if (!validPort(ports.sshPort()) || !validPort(ports.telnetPort()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe portas entre 1 e 65535.");
+        return ports;
+    }
+
+    private static boolean validPort(int port) { return port >= 1 && port <= 65535; }
+
     public record Result(boolean success, String message) {}
     public Map<String, String> connectionStatuses(List<ManagedHost> hosts) {
         var credentials = repository.credentials();
@@ -42,19 +80,21 @@ public class HostAuthentication {
     }
     public View view(String id) {
         var h = repository.target(id); var c = repository.credentials(id);
+        var ports = repository.terminalPorts(id);
         boolean stale = c != null && "ACTIVE".equals(c.status()) && !Objects.equals(c.verifiedIp(), h.ip());
         return new View(id, h.name(), h.ip(), c == null ? null : c.manufacturer(), c == null ? null : c.login(),
-            c == null ? null : c.port(), c != null, c != null && c.encryptedPassword() != null,
+            c == null || usesSsh(c.manufacturer()) ? null : c.port(), c != null, c != null && c.encryptedPassword() != null,
             c == null ? "PENDING" : stale ? "CONNECTION_FAILED" : c.status(),
             c == null ? "Configure a autenticação do host." : stale ? "Endereço alterado. Teste e salve novamente a autenticação." : c.message(),
-            c != null && c.tls(), c == null ? null : c.testedAt());
+            c != null && c.tls(), c == null ? null : c.testedAt(), ports.sshPort(), ports.telnetPort());
     }
-    private EquipmentProvider.Connection connection(String id, Input input) {
+    private EquipmentProvider.Connection connection(String id, Input input, HostRepository.TerminalPorts ports) {
         repository.require(id);
         provider(input.manufacturer());
         String login = "Mimosa".equals(input.manufacturer()) ? "configure" : input.login();
-        if (login == null || login.isBlank() || login.length() > 255 || input.port() == null
-            || input.port() < 1 || input.port() > 65535 || (input.password() != null && input.password().length() > 4096))
+        Integer port = usesSsh(input.manufacturer()) ? Integer.valueOf(ports.sshPort()) : input.port();
+        if (login == null || login.isBlank() || login.length() > 255 || port == null
+            || !validPort(port) || (input.password() != null && input.password().length() > 4096))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe usuário e porta válida (1–65535).");
         String password = input.password();
         if (password == null || password.isEmpty()) {
@@ -63,7 +103,7 @@ public class HostAuthentication {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha do equipamento.");
             password = secrets.decrypt(saved.encryptedPassword());
         }
-        return new EquipmentProvider.Connection(login.trim(), password, input.port(), ("Mimosa".equals(input.manufacturer()) || "MikroTik".equals(input.manufacturer()) && input.tls()));
+        return new EquipmentProvider.Connection(login.trim(), password, port, ("Mimosa".equals(input.manufacturer()) || "MikroTik".equals(input.manufacturer()) && input.tls()));
     }
     private Result attempt(String id, String manufacturer, EquipmentProvider.Connection connection) {
         try {
@@ -75,20 +115,21 @@ public class HostAuthentication {
             return new Result(false, "Falha na conexão. Confira endereço, credenciais e permissões do equipamento.");
         }
     }
-    public synchronized Result test(String id, Input input) { return attempt(id, input.manufacturer(), connection(id, input)); }
+    public synchronized Result test(String id, Input input) { return attempt(id, input.manufacturer(), connection(id, input, requestedPorts(id, input))); }
     public synchronized View save(String id, Input input) {
-        var connection = connection(id, input);
+        var ports = requestedPorts(id, input);
+        var connection = connection(id, input, ports);
         var target = repository.target(id);
         var result = attempt(id, input.manufacturer(), connection);
         repository.configure(id, new HostRepository.Credentials(input.manufacturer(), connection.login(), secrets.encrypt(connection.password()),
-            connection.port(), true, result.success() ? "ACTIVE" : "CONNECTION_FAILED",
-            result.message(), result.success() ? target.ip() : null, connection.tls(), System.currentTimeMillis()));
+            usesSsh(input.manufacturer()) ? null : connection.port(), true, result.success() ? "ACTIVE" : "CONNECTION_FAILED",
+            result.message(), result.success() ? target.ip() : null, connection.tls(), System.currentTimeMillis()), ports);
         return view(id);
     }
     public synchronized void validateSaved(String id) {
         var c = repository.credentials(id);
         if (c != null) {
-            try { save(id, new Input(c.manufacturer(), c.login(), null, c.port(), true, c.tls())); }
+            try { save(id, new Input(c.manufacturer(), c.login(), null, c.port(), true, c.tls(), repository.terminalPorts(id).sshPort(), null)); }
             catch (ResponseStatusException | IllegalStateException ex) {
                 repository.configure(id, new HostRepository.Credentials(c.manufacturer(), c.login(), c.encryptedPassword(), c.port(),
                     true, "CONNECTION_FAILED", "Autenticação inválida. Revise e salve o acesso nas configurações do host.", null, c.tls(), System.currentTimeMillis()));

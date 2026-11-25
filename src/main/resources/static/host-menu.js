@@ -6,6 +6,30 @@ window.HostMenu = (() => {
     if (!address || !/^[a-zA-Z0-9:.%-]+$/.test(address)) return null;
     return `winbox://${address.includes(':') ? `[${address}]` : address}`;
   }
+  function terminalUrl(protocol, address, port) {
+    if (!['ssh', 'telnet'].includes(protocol) || !Number.isInteger(port) || port < 1 || port > 65535) return null;
+    const host = String(address || '').trim();
+    const ipv6 = host.includes(':');
+    if (!(ipv6 ? /^[a-f0-9:.]+$/i : /^[a-z0-9][a-z0-9.-]*$/i).test(host)) return null;
+    const authority = ipv6 ? `[${host}]` : host;
+    try { new URL(`http://${authority}`); }
+    catch { return null; }
+    return `${protocol}://${authority}:${port}`;
+  }
+
+  async function openTerminal(protocol, hostId) {
+    try {
+      const response = await fetch(`/api/hosts/${encodeURIComponent(hostId)}/terminal-access`);
+      if (!response.ok) throw new Error('Não foi possível carregar o endereço e as portas do host.');
+      const access = await response.json();
+      const url = terminalUrl(protocol, access.address, protocol === 'ssh' ? access.sshPort : access.telnetPort);
+      if (!url) throw new Error('Endereço ou porta inválidos para abrir o terminal.');
+      window.location.href = url;
+    } catch (error) {
+      window.notify?.(error.message, 'error');
+    }
+  }
+
   function attach(link, container, { ip, groupUrl, hostId } = {}) {
     const menu = document.createElement('div');
     menu.className = 'host-action-menu equipment-action-menu';
@@ -57,9 +81,11 @@ window.HostMenu = (() => {
     const browser = action(access, 'Navegador', url?.replace(/^winbox:/, 'http:'), 'browser');
     if (url) { browser.target = '_blank'; browser.rel = 'noopener noreferrer'; }
     const winbox = action(access, 'WinBox', url, 'window');
-    const ssh = action(access, 'SSH', null, 'terminal');
-    ssh.disabled = true;
-    ssh.title = 'Acesso SSH ainda não implementado.';
+    for (const [label, protocol] of [['SSH', 'ssh'], ['Telnet', 'telnet']]) {
+      const item = action(access, label, null, 'terminal', () => openTerminal(protocol, hostId));
+      item.disabled = !hostId;
+      item.title = hostId ? `Requer um cliente local associado ao protocolo ${protocol}.` : 'Ação disponível para hosts cadastrados.';
+    }
     const copy = action(access, 'Copiar IP do equipamento', null, 'copy', async () => {
       try { await navigator.clipboard.writeText(String(ip).trim()); window.notify?.('IP copiado'); }
       catch { window.notify?.('Não foi possível copiar o IP. Verifique a permissão da área de transferência.', 'error'); }
@@ -122,5 +148,5 @@ window.HostMenu = (() => {
     container.append(menu);
     return menu;
   }
-  return { attach, winboxUrl };
+  return { attach, winboxUrl, openTerminal };
 })();

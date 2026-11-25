@@ -13,7 +13,7 @@ function surface() {
     hidePopover() { this.open = false; }
     focus() { this.focused = true; }
   }
-  const context = { document: { createElement: () => new Element() }, innerWidth: 1000, innerHeight: 700 };
+  const context = { document: { createElement: () => new Element() }, innerWidth: 1000, innerHeight: 700, URL, location: {} };
   context.window = context;
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   return { context, api: context.HostMenu, link: new Element(), container: new Element() };
@@ -28,8 +28,8 @@ test('host menu offers access actions and launches WinBox only on explicit actio
   assert.equal(access.children[3].href, undefined);
   assert.equal(access.children[3].type, 'button');
   assert.equal(access.children[3].disabled, true);
-  assert.match(access.children[3].title, /não implementado/);
-  assert.equal(access.children[4].disabled, false);
+  assert.equal(access.children[4].disabled, true);
+  assert.equal(access.children[5].disabled, false);
   let prevented = false;
   link.listeners.click({ preventDefault() { prevented = true; } });
   assert.equal(prevented, true);
@@ -92,4 +92,42 @@ test('host section disables future features and links to host incidents and sett
   host.children[4].listeners.click();
   assert.equal(opened.id, 'host/42');
   assert.equal(opened.trigger, link);
+});
+
+test('SSH and Telnet launch separate local protocols using only the configured address and port', async () => {
+  const { context, api, link, container } = surface();
+  let requests = 0;
+  context.fetch = async path => {
+    assert.equal(path, '/api/hosts/42/terminal-access');
+    requests++;
+    return { ok: true, json: async () => ({ address: '2001:db8::42', sshPort: 2222, telnetPort: 2323, login: 'ignored' }) };
+  };
+  api.attach(link, container, { ip: '192.0.2.42', hostId: '42' });
+  assert.equal(requests, 0);
+  const [, , , ssh, telnet] = container.children[0].children[0].children;
+  assert.equal(ssh.disabled, false);
+  assert.equal(telnet.disabled, false);
+  ssh.listeners.click();
+  await new Promise(setImmediate);
+  assert.equal(context.location.href, 'ssh://[2001:db8::42]:2222');
+  telnet.listeners.click();
+  await new Promise(setImmediate);
+  assert.equal(context.location.href, 'telnet://[2001:db8::42]:2323');
+  assert.equal(requests, 2);
+});
+
+test('terminal actions reject URL credentials, malformed hosts and invalid ports', async () => {
+  const { context, api } = surface();
+  const errors = [];
+  context.notify = message => errors.push(message);
+  for (const access of [
+    { address: 'admin@router.example', sshPort: 22 },
+    { address: 'a:b', sshPort: 22 },
+    { address: 'router.example', sshPort: 65536 }
+  ]) {
+    context.fetch = async () => ({ ok: true, json: async () => access });
+    await api.openTerminal('ssh', '42');
+  }
+  assert.equal(context.location.href, undefined);
+  assert.equal(errors.length, 3);
 });

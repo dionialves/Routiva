@@ -46,6 +46,14 @@ public class HostController {
     public HostAuthentication.View authentication(@PathVariable String id, @RequestBody HostAuthentication.Input input) { return authentication.save(id, input); }
     @PostMapping("/api/host-configurations/{id}/authentication/test") @ResponseBody
     public HostAuthentication.Result test(@PathVariable String id, @RequestBody HostAuthentication.Input input) { return authentication.test(id, input); }
+    @GetMapping("/api/hosts/{id}/terminal-access") @ResponseBody
+    public HostAuthentication.TerminalAccess terminalAccess(@PathVariable String id) {
+        return authentication.terminalAccess(id);
+    }
+    @PutMapping("/api/host-configurations/{id}/authentication/terminal-ports") @ResponseBody
+    public HostRepository.TerminalPorts terminalPorts(@PathVariable String id, @RequestBody HostRepository.TerminalPorts ports) {
+        return authentication.saveTerminalPorts(id, ports);
+    }
     @ModelAttribute
     public void noCache(jakarta.servlet.http.HttpServletResponse response) { response.setHeader("Cache-Control", "no-store"); }
     public record DeleteInput(String revision, boolean confirmed) {}
