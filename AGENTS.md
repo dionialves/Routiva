@@ -145,6 +145,8 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 ## Switches no mapa
 
+- Na edição, seleção e movimentação são gestos padrão, sem botão próprio: arrastar no fundo seleciona em área; clicar e arrastar no segundo clique consecutivo move a câmera; clique simples seleciona o elemento e arrastar move a seleção; duplo clique no elemento ou conexão abre suas configurações. Arrastar não conta como clique duplo. O modo Conectar elementos permanece separado e pode ser desativado pelo próprio botão ou Escape.
+
 - A rolagem sobre o mapa aproxima/afasta em edição e visualização, preservando a coordenada sob o cursor. Os botões de zoom mantêm o centro da câmera; a rolagem não altera elementos ou conexões e não interfere em gestos de arraste ativos.
 
 - `map-switch.js` compartilha composição SVG, geometria e pontos de conexão entre o mapa e a prévia. Reutilize `MapSwitch` para equipamentos com portas; imagens em `static/map-assets/`. Portas têm IDs estáveis e coordenadas locais. Uma porta PON permite vários enlaces, com âncora compartilhada e caminhos independentes; as demais permitem um enlace por porta. Enlaces duplicados entre as mesmas extremidades continuam inválidos.

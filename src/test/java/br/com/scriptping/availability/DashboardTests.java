@@ -48,6 +48,14 @@ class DashboardTests {
     }
 
     @Test
+    void mapEditorUsesDefaultSelectionWithoutSeparateToolButtons() throws Exception {
+        var html = mvc.perform(get("/mapas")).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(html).contains("id=\"connect\"", "id=\"delete-item\"")
+            .doesNotContain("id=\"select-tool\"", "id=\"pan-tool\"");
+    }
+
+    @Test
     void rendersDiagnosticsAndSharedAvailabilityComponents() throws Exception {
         mvc.perform(get("/diagnostico/grupos")).andExpect(status().isOk())
             .andExpect(view().name("diagnostics"))

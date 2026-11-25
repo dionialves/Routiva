@@ -9,6 +9,7 @@ let inventory = [], pendingNode, baseline;
 const past = [], future = [];
 const selection = new Set();
 let marquee;
+let lastBackgroundClick = null, lastNodeClick = null;
 let connectionOrigin = null;
 let configuredPorts = [];
 let configuredSlots = [];
@@ -337,15 +338,14 @@ function draw() {
   $('map-title').textContent = (editing ? 'Editar mapa — ' : '') + current.layout.name;
   canvas.dataset.tool = editing ? tool : '';
   if (editing) {
-    for (const [id, mode] of [['connect','connect'], ['select-tool','select'], ['pan-tool','pan']])
-      $(id).setAttribute('aria-pressed', String(tool === mode));
+    $('connect').setAttribute('aria-pressed', String(tool === 'connect'));
     $('undo').disabled = !past.length;
     $('redo').disabled = !future.length;
     $('delete-item').disabled = !selection.size && !selected && !selectedLink;
     $('editor-node-count').textContent = nodes.length + ' elementos';
     $('editor-link-count').textContent = links.length + ' conexões';
-    $('hint').textContent = tool === 'connect' ? (connectionOrigin ? 'Selecione a porta de destino. Esc cancela.' : 'Selecione uma porta ou elemento de origem. Esc cancela.')
-      : tool === 'pan' ? 'Arraste para mover o mapa.' : 'Arraste no fundo para selecionar vários. Shift, Ctrl ou ⌘ + clique adiciona ou remove. Arraste a seleção para mover.';
+    $('hint').textContent = tool === 'connect' ? (connectionOrigin ? 'Selecione a porta de destino. Esc ou Conectar elementos cancela.' : 'Selecione uma porta ou elemento de origem. Esc ou Conectar elementos cancela.')
+      : 'Arraste no fundo para selecionar vários. Clique duas vezes e arraste no fundo para mover o mapa. Arraste elementos para movê-los. Duplo clique em um elemento ou conexão para configurar. Shift, Ctrl ou ⌘ + clique altera a seleção.';
   }
   for (const guide of drag?.guides || []) {
     canvas.append(svg('line', {...guide, class:'alignment-guide', 'aria-hidden':'true'}));
@@ -479,12 +479,13 @@ function draw() {
       }
     };
     g.onpointerdown = event => {
-      if (event.button !== 0 || (editing && tool === 'pan')) return;
+      if (event.button !== 0) return;
       if (!editing && n.groupId) { event.stopPropagation(); return; }
       if (editing && tool === 'select') {
         const additive = event.shiftKey || event.ctrlKey || event.metaKey;
-        const wasSingle = selection.size === 1 && selection.has(n.id);
+        lastBackgroundClick = lastConnectionClick = null;
         if (additive) {
+          lastNodeClick = null;
           choose(n, true);
           return;
         }
@@ -496,7 +497,7 @@ function draw() {
         selectedLink = null;
         canvas.setPointerCapture(event.pointerId);
         const point = new DOMPoint(event.clientX,event.clientY).matrixTransform(canvas.getScreenCTM().inverse());
-        drag = {node:n, dx:n.x-point.x, dy:n.y-point.y, pointer:event.pointerId, x:event.clientX, y:event.clientY, moved:false, wasSingle,
+        drag = {node:n, dx:n.x-point.x, dy:n.y-point.y, pointer:event.pointerId, x:event.clientX, y:event.clientY, moved:false,
           positions:current.layout.nodes.filter(node => selection.has(node.id))
             .map(node => ({node, x:node.x, y:node.y}))};
         draw();
@@ -582,7 +583,7 @@ function choose(node, additive = false) {
     fitToView();
     return;
   }
-  if (!editing || tool === 'pan') return;
+  if (!editing) return;
   if (tool === 'connect') {
     if (!['switch', 'radio', 'sector-radio'].includes(node.icon) || node.interfacesEnabled === false || !node.ports?.length) connectEndpoint(node, null);
     return;
@@ -745,8 +746,13 @@ document.addEventListener('fullscreenchange', () => {
   $('fullscreen-map').title = mapLabel;
   $('fullscreen-map').setAttribute('aria-label', mapLabel);
 });
+$('canvas').addEventListener('pointerdown', event => {
+  if (!editing || event.button !== 0) return;
+  if (event.target !== $('canvas')) lastBackgroundClick = null;
+  if (event.target.closest('.map-connector, .map-connector-hit, .map-link-handle, .map-transform-handle')) lastNodeClick = null;
+}, true);
 viewport.onpointerdown = event => {
-  if (event.button !== 0 || (editing ? tool !== 'pan' : event.target.closest('g'))) return;
+  if (event.button !== 0 || editing || event.target.closest('g')) return;
   stopMotion();
   pan = {id:event.pointerId, x:event.clientX, y:event.clientY, start:{...camera}};
   viewport.setPointerCapture(event.pointerId);
@@ -757,11 +763,28 @@ viewport.onpointermove = event => {
   camera.y = pan.start.y - (event.clientY - pan.y) / camera.scale;
   resizeCanvas();
 };
-viewport.onlostpointercapture = () => { pan = null; };
+viewport.onlostpointercapture = event => { if (event.target === viewport) pan = null; };
+function nearbyClick(click, event) {
+  return click && Date.now() - click.at < 400 &&
+    Math.hypot(event.clientX - click.x, event.clientY - click.y) <= 8;
+}
+function clickPosition(event) {
+  return {at: Date.now(), x: event.clientX, y: event.clientY};
+}
 $('canvas').onpointerdown = event => {
   if (!editing || tool !== 'select' || event.button !== 0 || event.target !== $('canvas')) return;
+  lastNodeClick = lastConnectionClick = null;
+  const secondClick = nearbyClick(lastBackgroundClick, event);
+  lastBackgroundClick = null;
+  if (secondClick) {
+    stopMotion();
+    pan = {id:event.pointerId, x:event.clientX, y:event.clientY, start:{...camera}};
+    $('canvas').dataset.panning = 'true';
+    $('canvas').setPointerCapture(event.pointerId);
+    return;
+  }
   const point = new DOMPoint(event.clientX, event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());
-  marquee = {pointer:event.pointerId, start:point, end:point,
+  marquee = {pointer:event.pointerId, start:point, end:point, x:event.clientX, y:event.clientY, moved:false,
     initial:new Set(event.shiftKey || event.ctrlKey || event.metaKey ? selection : [])};
   selectedLink = null;
   $('canvas').setPointerCapture(event.pointerId);
@@ -771,7 +794,10 @@ $('canvas').onpointerdown = event => {
   draw();
 };
 $('canvas').onpointermove = event => {
+  if (pan?.id === event.pointerId) return; // The viewport handles camera movement.
   if (marquee?.pointer === event.pointerId) {
+    if (!marquee.moved && Math.hypot(event.clientX - marquee.x, event.clientY - marquee.y) < 4) return;
+    marquee.moved = true;
     marquee.end = new DOMPoint(event.clientX, event.clientY).matrixTransform($('canvas').getScreenCTM().inverse());
     selection.clear();
     for (const id of marquee.initial) selection.add(id);
@@ -846,7 +872,13 @@ $('canvas').onpointermove = event => {
   draw();
 };
 $('canvas').onpointerup = event => {
+  if (pan?.id === event.pointerId) {
+    pan = null;
+    delete $('canvas').dataset.panning;
+    return;
+  }
   if (marquee?.pointer === event.pointerId) {
+    if (!marquee.moved) lastBackgroundClick = {at: Date.now(), x: marquee.x, y: marquee.y};
     marquee = null;
     draw();
     return;
@@ -856,14 +888,22 @@ $('canvas').onpointerup = event => {
   if (drag.kind === 'new-bend') { drag = null; return; }
   if (drag.kind === 'bend' && drag.moved) suppressConnectionUntil = Date.now() + 400;
   if (drag.kind === 'bend') { const redraw = drag.moved || drag.guides?.length; drag = null; if (redraw) draw(); return; }
-  const {node, moved, wasSingle} = drag;
+  const {node, moved, x, y} = drag;
   drag = null;
-  if (!moved && wasSingle) openElement(node);
+  const click = {clientX:x, clientY:y};
+  if (!moved && lastNodeClick?.id === node.id && nearbyClick(lastNodeClick, click)) {
+    lastNodeClick = null;
+    openElement(node);
+  } else {
+    lastNodeClick = moved ? null : {...clickPosition(click), id:node.id};
+  }
   draw();
 };
 function endDrag() {
+  if (pan) { pan = null; delete $('canvas').dataset.panning; }
   if (cancelTransform()) return;
   if (!drag && !marquee) return;
+  lastBackgroundClick = lastNodeClick = null;
   drag = null;
   marquee = null;
   draw();
@@ -999,6 +1039,8 @@ function openMap(map, edit = false, parents = []) {
   editing = edit;
   selection.clear();
   marquee = null;
+  lastBackgroundClick = lastNodeClick = lastConnectionClick = null;
+  delete $('canvas').dataset.panning;
   connectionOrigin = null;
   selected = drag = null;
   tool = 'select';
@@ -1215,15 +1257,15 @@ $('cancel').onclick = () => { if (mayLeave()) openMap(maps.find(m => m.id === cu
 
 function setTool(mode) {
   connectionOrigin = null;
-  drag = marquee = null;
+  drag = marquee = pan = null;
+  lastBackgroundClick = lastNodeClick = lastConnectionClick = null;
+  delete $('canvas').dataset.panning;
   tool = mode;
   selection.clear();
   selected = selectedLink = null;
   draw();
 }
 $('connect').onclick = () => setTool(tool === 'connect' ? 'select' : 'connect');
-$('pan-tool').onclick = () => setTool('pan');
-$('select-tool').onclick = () => setTool('select');
 $('undo').onclick = () => restore(past, future);
 $('redo').onclick = () => restore(future, past);
 document.addEventListener('keydown', event => {
