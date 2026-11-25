@@ -136,7 +136,7 @@ const MapConnectionTooltip = (() => {
     openTimer = setTimeout(() => {
       const next = pending;
       if (next) show(next.id, next.source, next.point, next.data);
-    }, 2000);
+    }, 1000);
   }
   function hide() {
     cancelOpen();

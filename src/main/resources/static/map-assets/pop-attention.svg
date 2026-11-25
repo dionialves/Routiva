@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" color="#ffd318">
+  <defs>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+    <radialGradient id="body"><stop stop-color="#302302"/><stop offset="1" stop-color="#08151e"/></radialGradient>
+  </defs>
+  <path d="M44 8Q50 4 56 8L87 26Q94 30 94 38V70Q94 78 87 82L56 100H44L13 82Q6 78 6 70V38Q6 30 13 26Z" transform="translate(0 -3)" fill="none" stroke="currentColor" stroke-width="5" opacity=".7" filter="url(#glow)"/>
+  <path d="M44 8Q50 4 56 8L87 26Q94 30 94 38V70Q94 78 87 82L56 100H44L13 82Q6 78 6 70V38Q6 30 13 26Z" transform="translate(0 -3)" fill="url(#body)" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M46 29Q50 23 54 29L72 62Q75 69 67 69H33Q25 69 28 62Z" fill="currentColor"/><path d="M50 36v15" stroke="#302302" stroke-width="5" stroke-linecap="round"/><circle cx="50" cy="59" r="3" fill="#302302"/>
+</svg>

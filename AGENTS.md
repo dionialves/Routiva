@@ -151,7 +151,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - Conexões simples cinzas são desenhadas abaixo dos enlaces mapeados, independentemente da ordem de cadastro; a conexão selecionada mantém prioridade acima de todas. A ordenação visual não modifica o JSON persistido.
 
-- Legendas de hosts, grupos e conexões aguardam 2s de hover; sair antes cancela a abertura. Movimentos na mesma conexão não reiniciam o prazo. Acesso por foco/teclado permanece imediato.
+- Legendas de hosts, grupos e conexões aguardam 1s de hover; sair antes cancela a abertura. Movimentos na mesma conexão não reiniciam o prazo. Acesso por foco/teclado permanece imediato.
 
 - Clicar em um enlace na visualização destaca o trajeto em amarelo queimado acima dos outros enlaces, sem alterar a ordem persistida. O destaque tem borda amarelo-clara, prevalece sobre as cores de tráfego e preserva os feixes de luz animados e o tracejado Wireless, inclusive na borda clara; oferece seleção por teclado. Na edição, selecionar preserva a cor original da linha e não desenha a borda amarela.
 
@@ -206,7 +206,7 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - Transformações de Switch/Rádio usam `rotation` (0–360°, exclusivo), `scale` (0.25–3) e `flipX`, com padrões 0/1/false. `MapSwitch.transformPoint` e `bounds` compartilham espelhamento → escala → rotação entre desenho, portas e conexões. Rótulos permanecem horizontais. Alças aparecem apenas na seleção individual em edição; Escape cancela o gesto e cada arraste gera uma etapa de desfazer.
 
-- `map-element-controls.js` desenha borda de seleção e quatro controles vetoriais de 24px integrados à borda (girar, redimensionar, inverter por clique, restaurar por clique), com tooltip de hover/foco e tamanho estável no zoom. Restaurar aplica `scale=1`, `rotation=0` e `flipX=false`, como um equipamento recém-inserido, preservando a posição atual, propriedades técnicas e vínculos. `origin` mantém compatibilidade com mapas já salvos, mas não define o tamanho ou a orientação padrão.
+- `map-element-controls.js` desenha borda de seleção e quatro controles vetoriais de 24px integrados à borda (girar, redimensionar, inverter por clique, restaurar por clique), com tooltip de hover/foco e tamanho estável no zoom. Durante o gesto de redimensionamento, uma legenda acima do elemento mostra a escala em porcentagem (100% original, passos de 1%), desaparecendo ao soltar ou cancelar. Restaurar aplica `scale=1`, `rotation=0` e `flipX=false`, como um equipamento recém-inserido, preservando a posição atual, propriedades técnicas e vínculos. `origin` mantém compatibilidade com mapas já salvos, mas não define o tamanho ou a orientação padrão.
 
 - O ícone `telecom-site` (Estação de telecomunicações) usa `map-assets/telecom-site.webp` e é exclusivo de Grupo de Hosts, com restrição no seletor e no servidor. Compartilha prévia e desenho do mapa, indicador de estado agregado, rótulo e navegação para submapas.
 
@@ -225,6 +225,8 @@ Ao introduzir um padrão novo, implemente-o na camada compartilhada, migre as oc
 
 - O editor de interfaces habilitadas de grupos usa formulário expansível em `group-link-interfaces.js`: tabela sempre visível, descoberta automática ao selecionar host, cancelamento local e proteção de pares usados em enlaces. Seletores pesquisáveis via `setupGroupPicker` respeitam `disabled` no select e nas opções; chame `sync()` após atualizar opções ou estado.
 - A descoberta para `linkInterfaces` de grupos usa `includeLogical=true` no endpoint existente, compartilhando o cache; a descoberta padrão de portas físicas continua excluindo tipos virtuais conhecidos.
+
+- O ícone `pop` (POP Status Node) tem uma única opção verde no seletor e na prévia. Na visualização, usa o estado agregado e os filtros do mapa: normal verde, informação azul, atenção/média amarelo, alta/desastre vermelho e sem dados/não classificado cinza. O nome configurado é desenhado em cápsula abaixo da arte, com a mesma cor de contorno; texto e cápsula mantêm tamanho fixo ao redimensionar a arte. Não persista a variante de estado.
 
 - O ícone `cloud` (Nuvem) usa a imagem fornecida em `map-assets/cloud.webp`, disponível para hosts, grupos e elementos livres. Reutiliza prévia, indicador de estado e transformações compartilhadas; rótulos permanecem horizontais.
 

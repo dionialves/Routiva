@@ -166,6 +166,7 @@ function drawTransformHandles(canvas, node) {
         initial: transformState(node), future: [...future], start: canvasPoint(event),
         x: event.clientX, y: event.clientY, moved: false};
       canvas.setPointerCapture(event.pointerId);
+      if (action === 'scale') draw();
     },
     onAdjust: (action, direction, snap) => {
       ensureElementOrigin(node); checkpoint();
@@ -242,7 +243,50 @@ function drawTelecomSite(group, name, position, fill, isSelected = false, node =
   outer.append(label);
 }
 
+const popStyles = {
+  normal: '#00efab', attention: '#ffd318', critical: '#ff515c',
+  information: '#00cfee', unclassified: '#b5c6d7'
+};
+
+function popStatus(level, metric, preview = false) {
+  if (preview) return 'normal';
+  if (metric) return ({Normal: 'normal', Atenção: 'attention', Crítico: 'critical'})[metric.state] || 'unclassified';
+  if (level === -1) return 'normal';
+  if (level === 1) return 'information';
+  if (level >= 4) return 'critical';
+  if (level >= 2) return 'attention';
+  return 'unclassified';
+}
+
+function drawPop(group, node, status = 'normal', selected = false, showLabel = true) {
+  const scale = node.scale || 1;
+  const color = popStyles[status];
+  const art = svg('g', {transform: `rotate(${node.rotation || 0}) scale(${node.flipX ? -scale : scale} ${scale})`});
+  art.append(svg('image', {href: '/map-assets/pop-' + status + '.svg?v=20261125-pop',
+    x: -50, y: -50, width: 100, height: 100, 'aria-hidden': 'true'}));
+  if (selected) art.append(svg('rect', {x: -50, y: -50, width: 100, height: 100,
+    rx: 6, fill: 'none', stroke: 'var(--cyan)', 'stroke-width': 1.5}));
+  group.append(art);
+  if (!showLabel || !node.name) return;
+  const box = MapSwitch.bounds(node);
+  const width = Math.max(92, Array.from(node.name).length * 9 + 20);
+  const y = box.bottom - 3 * scale;
+  const height = 26;
+  group.append(svg('rect', {x: -width / 2, y, width, height, rx: height / 2,
+    fill: color, opacity: .18, stroke: color, 'stroke-width': 5}));
+  group.append(svg('rect', {x: -width / 2, y, width, height, rx: height / 2,
+    fill: '#08151e', stroke: color, 'stroke-width': 2}));
+  const label = svg('text', {x: 0, y: y + height / 2, 'text-anchor': 'middle',
+    'dominant-baseline': 'central', style: 'font-size:14px;font-weight:700'});
+  label.textContent = node.name;
+  group.append(label);
+}
+
 function drawMapElement(group, node, color, selected, options = {}) {
+  if (node.icon === 'pop') {
+    drawPop(group, node, options.popStatus, selected, options.showLabel !== false);
+    return;
+  }
   if (MapSwitch.isEquipment(node)) {
     MapSwitch.draw(svg, group, node, color, selected, options);
     return;
@@ -426,7 +470,7 @@ function draw() {
       pingState: editing ? 'unknown' : pingStateFor(n.hostId),
       interactive: editing, connect: tool === 'connect', origin: connectionOrigin?.nodeId === n.id ? connectionOrigin.portId : null,
       onPort: portId => connectEndpoint(n, portId)
-    } : undefined);
+    } : n.icon === 'pop' ? {popStatus: popStatus(monitored ? level - 2 : -2, metric, editing)} : undefined);
     g.onkeydown = event => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -512,7 +556,7 @@ function draw() {
   if (focusedPort) canvas.querySelector('[data-port-id="' + CSS.escape(focusedPort) + '"]')?.focus();
   if (editing && tool === 'select' && selection.size === 1) {
     const node = nodes.find(n => selection.has(n.id));
-    if (node && ['switch', 'radio', 'sector-radio', 'telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(node.icon)) drawTransformHandles(canvas, node);
+    if (node && ['switch', 'radio', 'sector-radio', 'telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery', 'pop'].includes(node.icon)) drawTransformHandles(canvas, node);
   }
   if (marquee) {
     canvas.append(svg('rect', {x:Math.min(marquee.start.x, marquee.end.x),
@@ -572,7 +616,7 @@ function resizeCanvas() {
   canvas.style.height = height * scale + 'px';
   if (editing && current && canvas.querySelector('.map-transform-handle')) {
     MapElementControls.hideTooltip();
-    canvas.querySelectorAll('.map-transform-handle, .map-selection-border').forEach(handle => handle.remove());
+    canvas.querySelectorAll('.map-transform-handle, .map-selection-border, .map-scale-indicator').forEach(handle => handle.remove());
     const node = current.layout.nodes.find(n => selection.has(n.id));
     if (node) drawTransformHandles(canvas, node);
   }
@@ -728,7 +772,7 @@ $('canvas').onpointermove = event => {
       node.rotation = (angle % 360 + 360) % 360;
     } else if (drag.action === 'scale') {
       const distance = Math.hypot(drag.start.x - node.x, drag.start.y - node.y);
-      node.scale = Math.max(.25, Math.min(3, initial.scale * Math.hypot(point.x - node.x, point.y - node.y) / Math.max(1, distance)));
+      node.scale = Math.max(.25, Math.min(3, Math.round(100 * initial.scale * Math.hypot(point.x - node.x, point.y - node.y) / Math.max(1, distance)) / 100));
     }
     draw(); return;
   }
@@ -1615,6 +1659,8 @@ function drawPreview() {
   preview.replaceChildren(group);
   const name = $('element-name').value.trim() || 'Nome do elemento';
   const icon = $('element-icon').value;
+  $('label-position').disabled = icon === 'pop';
+  if (icon === 'pop') $('label-position').value = 'BELOW';
   const isRadio = ['radio', 'sector-radio'].includes(icon);
   const isSwitch = ['switch', 'radio', 'sector-radio'].includes(icon);
   $('element-color-note').hidden = isSwitch;
@@ -1633,11 +1679,12 @@ function drawPreview() {
   if (isSwitch) MapSwitch.draw(svg, group, {...transformState(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon, name, labelPosition: $('label-position').value,
     ports: ports || [], interfacesEnabled, switchColor: configuredSwitchColor}, color, false,
     {connectedPorts: MapSwitch.connectedPorts({id: configuredNodeId}, current.layout.links)});
+  else if (icon === 'pop') drawPop(group, {...(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon, name}, 'normal');
   else (['telecom-site', 'cloud', 'tower-server', 'vm-server', 'battery'].includes(icon) ? drawTelecomSite : drawNode)(group, name, $('label-position').value, color, false, {...(current.layout.nodes.find(n => n.id === configuredNodeId) || {}), icon});
   const box = group.getBBox();
   const w = Math.max(140, box.width + 20), h = Math.max(66, box.height + 12);
   preview.setAttribute('viewBox', [box.x + (box.width-w)/2, box.y + (box.height-h)/2, w, h].join(' '));
-  preview.setAttribute('aria-label', (MapSwitch.serverImages?.[icon]?.label || (icon === 'cloud' ? 'Nuvem' : icon === 'telecom-site' ? 'Estação de telecomunicações' : isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo')) + ' · ' + name);
+  preview.setAttribute('aria-label', (MapSwitch.serverImages?.[icon]?.label || (icon === 'pop' ? 'POP Status Node' : icon === 'cloud' ? 'Nuvem' : icon === 'telecom-site' ? 'Estação de telecomunicações' : isRadio ? 'Rádio' : isSwitch ? 'Switch' : 'Círculo')) + ' · ' + name);
 }
 
 function openElement(node, type = node.hostId ? 'host' : node.groupId ? 'group' : '') {

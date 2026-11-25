@@ -687,6 +687,8 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .map-transform-handle:hover circle, .map-transform-handle:focus-visible circle { fill:var(--hover-bg); stroke:var(--cyan); }
 .map-transform-handle.is-active circle { fill:var(--selected-bg); stroke:var(--cyan); stroke-width:1.5; }
 .map-transform-handle.is-active { cursor:grabbing; }
+.map-scale-indicator rect { fill:var(--panel-bg); stroke:var(--cyan); stroke-width:1; }
+#canvas .map-scale-indicator text { fill:var(--text); font:600 12px var(--font-ui); }
 .map-control-tooltip { position:fixed; z-index:1000; pointer-events:none; padding:5px 8px; border:1px solid var(--border-strong); border-radius:5px; background:var(--panel-bg); color:var(--text); font:12px var(--font-ui); box-shadow:0 2px 6px #0003; }
 @media (prefers-reduced-motion:reduce) { .map-transform-handle circle { transition:none; } }
 

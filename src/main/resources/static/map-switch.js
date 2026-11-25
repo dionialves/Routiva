@@ -255,9 +255,10 @@ const MapSwitch = (() => {
   };
   function bounds(node) {
     const shape = serverImages[node.icon] || (node.icon === 'cloud' ? {width: 152, height: 76}
+      : node.icon === 'pop' ? {width: 100, height: 100}
       : node.icon === 'telecom-site' ? {width: 112, height: 106}
       : geometry(node.interfacesEnabled === false ? {...node, ports: []} : node));
-    const top = serverImages[node.icon] ? -shape.height / 2 : node.icon === 'cloud' ? -38 : node.icon === 'telecom-site' ? -53 : node.icon === 'sector-radio' ? -92 : node.icon === 'radio' ? -90 : -55;
+    const top = serverImages[node.icon] ? -shape.height / 2 : node.icon === 'pop' ? -50 : node.icon === 'cloud' ? -38 : node.icon === 'telecom-site' ? -53 : node.icon === 'sector-radio' ? -92 : node.icon === 'radio' ? -90 : -55;
     const corners = [-shape.width / 2, shape.width / 2].flatMap(x =>
       [top, top + shape.height].map(y => transformPoint(node, x, y)));
     return {left: Math.min(...corners.map(p => p.x)), right: Math.max(...corners.map(p => p.x)),

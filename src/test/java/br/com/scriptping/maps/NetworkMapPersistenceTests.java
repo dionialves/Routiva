@@ -165,6 +165,17 @@ class NetworkMapPersistenceTests {
     }
 
     @Test
+    void persistsPopStatusNodeWithConfiguredName() throws Exception {
+        var node = new Node("pop", "g1", null, null, "POP Centro", 10, 20, null, "pop", List.of());
+        var saved = service.save(new Saved(null, 0,
+            new Layout("POP", null, 0, List.of(node), List.of()), null));
+        var restored = service.maps().stream().filter(map -> map.id().equals(saved.id()))
+            .findFirst().orElseThrow().layout().nodes().getFirst();
+        assertThat(restored.icon()).isEqualTo("pop");
+        assertThat(restored.name()).isEqualTo("POP Centro");
+    }
+
+    @Test
     void telecomSiteRequiresGroupBindingAndPersistsItsIcon() throws Exception {
         var node = new Node("site", "g1", null, null, "POP", 10, 20, null, "telecom-site", List.of());
         var saved = service.save(new Saved(null, 0,

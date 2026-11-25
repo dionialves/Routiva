@@ -78,7 +78,7 @@ test('tooltip clamps position to the viewport and renders host text safely', () 
   const tooltip = context.module.exports;
   tooltip.scheduleShow('connection', source, {x:400,y:595}, data);
   assert.equal(panel.hidden, true);
-  assert.equal(callbacks.get(counter).delay, 2000);
+  assert.equal(callbacks.get(counter).delay, 1000);
   const timer = counter;
   tooltip.scheduleShow('connection', source, {x:500,y:595}, data);
   assert.equal(counter, timer);

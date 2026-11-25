@@ -25,6 +25,7 @@ test('rotation drag follows pointer, supports snapping and records one undo step
 test('resizing remains proportional and bounded', () => {
   const c = setup('scale');
   c.move({clientX: 200, clientY: 0}); assert.equal(c.drag.node.scale, 2);
+  c.move({clientX: 137.4, clientY: 0}); assert.equal(c.drag.node.scale, 1.37);
   c.move({clientX: 900, clientY: 0}); assert.equal(c.drag.node.scale, 3);
   c.move({clientX: 0, clientY: 0}); assert.equal(c.drag.node.scale, .25);
 });

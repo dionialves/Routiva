@@ -72,6 +72,15 @@ const MapElementControls = (() => {
       handle.onpointerleave = handle.onblur = hideTooltip;
       canvas.append(handle);
     }
+    if (active === 'scale') {
+      const badge = svg('g', {class: 'map-scale-indicator', 'pointer-events': 'none',
+        transform: `translate(${node.x + (box.left + box.right) / 2} ${node.y + box.top - 30 * unit}) scale(${unit})`});
+      badge.append(svg('rect', {x: -30, y: -12, width: 60, height: 24, rx: 5}));
+      const label = svg('text', {x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'central'});
+      label.textContent = Math.round((node.scale || 1) * 100) + '%';
+      badge.append(label);
+      canvas.append(badge);
+    }
   }
   return {draw, positions, hideTooltip};
 })();

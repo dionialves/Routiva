@@ -72,7 +72,7 @@ class PopSummary {
       if (this.node?.id !== node.id) this.close();
     });
   }
-  scheduleOpen(element, node, delay = 2000) {
+  scheduleOpen(element, node, delay = 1000) {
     clearTimeout(this.openTimer);
     clearTimeout(this.closeTimer);
     if (this.node?.id === node.id) return;

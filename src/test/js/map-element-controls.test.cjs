@@ -4,11 +4,11 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
 const controls = require('../../main/resources/static/map-element-controls.js');
-function fixture(scale = 1) {
+function fixture(scale = 1, active = 'rotation', nodeScale = 1) {
   const svg = (tag, attributes) => ({tag, attributes, children: [], append(...items) {this.children.push(...items);}});
   const canvas = svg('svg', {}), calls = [];
-  controls.draw({canvas, node: {x: 10, y: 20}, box: {left: -100, right: 100, top: -60, bottom: 60},
-    scale, svg, active: 'rotation', onAction: action => calls.push(action),
+  controls.draw({canvas, node: {x: 10, y: 20, scale: nodeScale}, box: {left: -100, right: 100, top: -60, bottom: 60},
+    scale, svg, active, onAction: action => calls.push(action),
     onStart: action => calls.push('start:' + action), onAdjust: (...args) => calls.push(args)});
   return {canvas, calls, handles: canvas.children.slice(1)};
 }
@@ -52,4 +52,20 @@ test('restore returns to fresh equipment size and orientation while preserving c
   context.applyElementAction(node, 'reset'); assert.equal(node.x, 800); assert.equal(node.scale, 1);
   context.applyElementAction(node, 'flipX'); assert.equal(node.flipX, true);
   context.applyElementAction(node, 'flipX'); assert.equal(node.flipX, false);
+});
+
+test('resize badge displays the node scale above the element only during resizing', () => {
+  for (const zoom of [.1, 1, 3]) {
+    for (const nodeScale of [.25, 1, 1.37, 3]) {
+      const {canvas} = fixture(zoom, 'scale', nodeScale);
+      const badge = canvas.children.at(-1);
+      assert.equal(badge.attributes.class, 'map-scale-indicator');
+      assert.equal(badge.attributes['pointer-events'], 'none');
+      assert.equal(badge.attributes.transform, `translate(10 ${-40 - 30 * (1 / zoom)}) scale(${1 / zoom})`);
+      assert.equal(badge.children[1].textContent, Math.round(nodeScale * 100) + '%');
+    }
+    for (const active of [null, 'rotation']) {
+      assert.ok(!fixture(zoom, active).canvas.children.some(child => child.attributes.class === 'map-scale-indicator'));
+    }
+  }
 });

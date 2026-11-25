@@ -49,7 +49,7 @@ test('position flips at viewport edges and retains fixed screen dimensions', () 
   assert.equal(context.subject.box.style.top, '120px');
 });
 
-test('hover waits 2000ms, allows transfer to the card and cancels quick passes', () => {
+test('hover waits 1000ms, allows transfer to the card and cancels quick passes', () => {
   const callbacks = new Map();
   let counter = 0;
   context.setTimeout = (fn, delay) => { callbacks.set(++counter, {fn, delay}); return counter; };
@@ -66,7 +66,7 @@ test('hover waits 2000ms, allows transfer to the card and cancels quick passes',
   const subject = context.hoverSubject;
   subject.scheduleOpen(anchor, {id: 'a'});
   assert.equal(box.open, false);
-  assert.equal(callbacks.get(subject.openTimer).delay, 2000);
+  assert.equal(callbacks.get(subject.openTimer).delay, 1000);
   subject.scheduleClose();
   assert.equal(callbacks.has(subject.openTimer), false);
   subject.scheduleOpen(anchor, {id: 'a'});

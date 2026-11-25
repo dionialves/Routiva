@@ -137,3 +137,60 @@ test('equipment ports remain reachable while central anchors stay behind their e
   assert.equal(canvas.children[0].attributes.class, 'map-connectors');
   assert.equal(canvas.children[4].attributes['aria-label'], 'Host · Healthy');
 });
+
+
+test('POP Status Node uses five states and always previews normal', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext(source.slice(source.indexOf('const popStyles ='), source.indexOf('function drawPop(')), ctx);
+  for (const [severity, expected] of [[-2, 'unclassified'], [-1, 'normal'], [0, 'unclassified'],
+    [1, 'information'], [2, 'attention'], [3, 'attention'], [4, 'critical'], [5, 'critical']]) {
+    assert.equal(vm.runInContext(`popStatus(${severity})`, ctx), expected);
+    assert.equal(vm.runInContext(`popStatus(${severity}, null, true)`, ctx), 'normal');
+  }
+  assert.equal(vm.runInContext("popStatus(-2, {state: 'Crítico'})", ctx), 'critical');
+  assert.equal(vm.runInContext("popStatus(-2, {state: 'Sem dados'})", ctx), 'unclassified');
+});
+
+test('POP Status Node renders the configured name and a matching status asset', () => {
+  const ctx = vm.createContext({
+    MapSwitch: require('../../main/resources/static/map-switch.js'),
+    svg: (tag, attributes) => ({tag, attributes, children: [], append(...items) { this.children.push(...items); }})
+  });
+  vm.runInContext(source.slice(source.indexOf('const popStyles ='), source.indexOf('function drawMapElement(')), ctx);
+  const group = ctx.svg('g', {});
+  ctx.group = group;
+  vm.runInContext("drawPop(group, {icon:'pop', name:'POP Centro'}, 'critical')", ctx);
+  assert.match(group.children[0].children[0].attributes.href, /pop-critical\.svg/);
+  assert.equal(group.children[2].attributes.stroke, '#ff515c');
+  assert.equal(group.children[3].textContent, 'POP Centro');
+  const template = fs.readFileSync(path.join(__dirname, '../../main/resources/templates/maps.html'), 'utf8');
+  assert.equal((template.match(/<option value="pop"/g) || []).length, 1);
+  assert.match(template, /value="pop"[^>]+pop-normal\.svg[^>]+>POP Status Node<\/option>/);
+});
+
+test('POP Status Node scales artwork without resizing its name or capsule', () => {
+  const ctx = vm.createContext({
+    MapSwitch: require('../../main/resources/static/map-switch.js'),
+    svg: (tag, attributes) => ({tag, attributes, children: [], append(...items) { this.children.push(...items); }})
+  });
+  vm.runInContext(source.slice(source.indexOf('const popStyles ='), source.indexOf('function drawMapElement(')), ctx);
+  const render = scale => {
+    ctx.group = ctx.svg('g', {});
+    ctx.scale = scale;
+    vm.runInContext("drawPop(group, {icon:'pop', name:'POP Centro', scale}, 'normal')", ctx);
+    return ctx.group.children;
+  };
+  const original = render(1);
+  for (const scale of [.25, 1.5, 3]) {
+    const resized = render(scale);
+    assert.equal(resized[0].attributes.transform, `rotate(0) scale(${scale} ${scale})`);
+    for (const i of [1, 2]) {
+      for (const attribute of ['width', 'height', 'rx', 'stroke-width']) {
+        assert.equal(resized[i].attributes[attribute], original[i].attributes[attribute]);
+      }
+      assert.notEqual(resized[i].attributes.y, original[i].attributes.y);
+    }
+    assert.equal(resized[3].attributes.style, original[3].attributes.style);
+    assert.equal(resized[3].textContent, original[3].textContent);
+  }
+});
