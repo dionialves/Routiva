@@ -106,6 +106,7 @@ public class HostRepository {
         if (ports != null)
             jdbc.update("UPDATE app_host SET ssh_port=?, telnet_port=? WHERE host_id=?", ports.sshPort(), ports.telnetPort(), id);
         jdbc.update("DELETE FROM host_authentication WHERE host_id=?", id);
+        if (c == null) return;
         jdbc.update("INSERT INTO host_authentication(host_id,manufacturer,api_login,api_password,api_port,enabled,connection_status,connection_message,verified_ip,api_tls,tested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             id, c.manufacturer(), c.login(), c.encryptedPassword(), c.port(), c.enabled(), c.status(), c.message(), c.verifiedIp(), c.tls(), c.testedAt());
     }

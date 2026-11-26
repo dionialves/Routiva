@@ -178,6 +178,26 @@ class HostCatalogTests {
         assertThat(hosts.credentials("42").login()).isEqualTo("new-reader");
         assertThat(secrets.decrypt(hosts.credentials("42").encryptedPassword())).isEqualTo("new-secret");
     }
+    @Test void savingWithoutManufacturerRemovesCredentialsWithoutTestingConnection() {
+        catalog.reconcile();
+        var provider = mock(EquipmentProvider.class);
+        when(provider.manufacturer()).thenReturn("MikroTik");
+        var auth = new HostAuthentication(hosts, secrets, List.of(provider));
+        auth.save("42", new HostAuthentication.Input("MikroTik", "reader", "secret", 8728, true, false));
+        clearInvocations(provider);
+
+        var view = auth.save("42", new HostAuthentication.Input("", "", null, null, false, false, 2222, 2323));
+
+        verifyNoInteractions(provider);
+        assertThat(hosts.credentials("42")).isNull();
+        assertThat(view.manufacturer()).isNull();
+        assertThat(view.login()).isNull();
+        assertThat(view.passwordConfigured()).isFalse();
+        assertThat(view.sshPort()).isEqualTo(2222);
+        assertThat(view.telnetPort()).isEqualTo(2323);
+        assertThat(auth.connectionStatuses(hosts.all())).containsEntry("42", "NOT_CONFIGURED");
+    }
+
     @Test void unreadableSavedPasswordAllowsSavingOtherFieldsAndExplicitPasswordCanReplaceIt() {
         catalog.reconcile();
         var provider = mock(EquipmentProvider.class);

@@ -142,6 +142,10 @@ public class HostAuthentication {
     }
     public synchronized View save(String id, Input input) {
         var ports = requestedPorts(id, input);
+        if (input.manufacturer() == null || input.manufacturer().isEmpty()) {
+            repository.configure(id, null, ports);
+            return view(id);
+        }
         var connection = connection(id, input, ports);
         var target = repository.target(id);
         var saved = repository.credentials(id);

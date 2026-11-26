@@ -234,8 +234,13 @@
       active: field('active').checked, groupIds: selected('host-group'), templateIds: selected('host-template') });
   }
   function updateAuthFields() {
-    const mikrotik = $('host-auth-manufacturer').value === 'MikroTik';
-    const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
+    const manufacturer = $('host-auth-manufacturer').value;
+    const mikrotik = manufacturer === 'MikroTik';
+    const mimosa = manufacturer === 'Mimosa';
+    $('host-auth-login').disabled = !manufacturer;
+    $('host-auth-password').disabled = !manufacturer;
+    $('host-auth-password-toggle').disabled = !manufacturer;
+    $('host-auth-test').disabled = !authLoaded || !manufacturer;
     $('host-auth-ports').classList.toggle('host-auth-ports-mikrotik', mikrotik);
     $('host-auth-port-label').textContent = mimosa ? 'Porta HTTPS' : 'Porta API';
     $('host-auth-port-row').hidden = !mikrotik && !mimosa;
@@ -302,20 +307,27 @@
       $('host-auth-password').value = ''; $('host-auth-port').value = c.port || (c.manufacturer === 'Mimosa' ? 443 : 8728);
       $('host-auth-tls').checked = c.tls;
       updatePasswordPlaceholder(c.passwordConfigured);
-      updateAuthFields();
       $('host-ssh-port').value = c.sshPort;
       $('host-telnet-port').value = c.telnetPort;
       $('host-backup-enabled').checked = backup.enabled;
       $('host-backup-retention').value = backup.retention;
       backupBaseline = JSON.stringify(backupInput());
       terminalBaseline = JSON.stringify(terminalPorts());
-      authBaseline = JSON.stringify(authInput()); authLoaded = true;
-      $('host-auth-fields').disabled = false; $('host-auth-test').disabled = false;
+      authLoaded = true;
+      $('host-auth-fields').disabled = false; updateAuthFields();
+      authBaseline = JSON.stringify(authInput());
       $('host-backup-fields').disabled = false; tab(activeTab);
     } catch (error) { if (current === host && dialog.open) window.notify?.(error.message, 'error'); }
   }
   $('host-auth-manufacturer').addEventListener('change', () => {
-    const mimosa = $('host-auth-manufacturer').value === 'Mimosa';
+    const manufacturer = $('host-auth-manufacturer').value;
+    const mimosa = manufacturer === 'Mimosa';
+    if (!manufacturer) {
+      $('host-auth-login').value = '';
+      $('host-auth-password').value = '';
+      updatePasswordPlaceholder(false);
+      hideAuthPassword();
+    }
     $('host-auth-tls').checked = mimosa;
     $('host-auth-port').value = mimosa ? 443 : 8728;
     updateAuthFields();
@@ -386,15 +398,17 @@
         $('host-ssh-port').value = result.sshPort;
         $('host-telnet-port').value = result.telnetPort;
         hideAuthPassword(); authBaseline = JSON.stringify(authInput()); terminalBaseline = JSON.stringify(terminalPorts());
-        current.connectionStatus = result.status === 'ACTIVE' ? 'ACTIVE' : 'ERROR';
+        current.connectionStatus = !result.manufacturer ? 'NOT_CONFIGURED' : result.status === 'ACTIVE' ? 'ACTIVE' : 'ERROR';
         const row = hosts.find(host => host.id === current.id);
         if (row) row.connectionStatus = current.connectionStatus;
         render();
       }
       if (backupChanged) await saveBackup(host, backup);
-      const success = testOnly ? result.success : result.status === 'ACTIVE';
+      const success = testOnly ? result.success : !result.manufacturer || result.status === 'ACTIVE';
       const savedMessage = backupChanged ? 'Autenticação e configuração de backup salvas. ' : 'Autenticação salva. ';
-      window.notify?.(testOnly ? result.message : savedMessage + result.message, success ? 'success' : 'error');
+      const message = testOnly ? result.message : result.manufacturer ? savedMessage + result.message :
+        backupChanged ? 'Autenticação removida e configuração de backup salva.' : 'Autenticação removida.';
+      window.notify?.(message, success ? 'success' : 'error');
       if (testOnly && !success) await refreshConnectionStatus(host);
     } catch (error) {
       window.notify?.(error.message, 'error');
