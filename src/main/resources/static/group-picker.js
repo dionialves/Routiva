@@ -64,12 +64,14 @@
       if (option) { input.setAttribute('aria-activedescendant', option.id); option.scrollIntoView({block: 'nearest'}); }
       else input.removeAttribute('aria-activedescendant');
     }
+    const visibleGroups = () => matches.filter(option => option.value && !option.disabled);
     function choose(index) {
       if (select.disabled || !matches[index] || matches[index].disabled) return;
       if (multiple) {
         const option = matches[index];
-        const groups = Array.from(select.options).filter(item => item.value);
         if (!option.value) {
+          const groups = visibleGroups();
+          if (!groups.length) return;
           const all = groups.every(item => item.selected);
           groups.forEach(item => item.selected = !all);
         } else option.selected = !option.selected;
@@ -83,25 +85,27 @@
     }
     function render() {
       const query = normalize(input.value.trim());
-      matches = Array.from(select.options).filter(option => normalize(option.textContent).includes(query));
+      matches = Array.from(select.options).filter(option =>
+        (multiple && !option.value) || normalize(option.textContent).includes(query));
       if (multiple) {
         matches.sort((a, b) => {
           if (!a.value || !b.value) return Number(!!a.value) - Number(!!b.value);
           return Number(!!b.selected) - Number(!!a.selected);
         });
       }
+      const visible = multiple ? visibleGroups() : matches;
       list.replaceChildren();
       matches.forEach((option, index) => {
         const result = document.createElement('button'); result.type = 'button'; result.tabIndex = -1;
-        result.disabled = option.disabled;
-        result.id = select.id + '-result-' + index; result.setAttribute('role', 'option'); result.setAttribute('aria-selected', String(multiple ? (option.value ? option.selected : Array.from(select.options).filter(item => item.value).every(item => item.selected)) : option.value === select.value));
+        result.disabled = option.disabled || (multiple && !option.value && !visible.length);
+        result.id = select.id + '-result-' + index; result.setAttribute('role', 'option'); result.setAttribute('aria-selected', String(multiple ? (option.value ? option.selected : visible.length > 0 && visible.every(item => item.selected)) : option.value === select.value));
         if (multiple) {
           const check = document.createElement('span'); check.className = 'group-picker-check'; check.setAttribute('aria-hidden', 'true');
           check.textContent = result.getAttribute('aria-selected') === 'true' ? '✓' : '';
-          result.append(check, document.createTextNode(option.value ? option.textContent : 'Todos os grupos de hosts'));
+          result.append(check, document.createTextNode(option.value ? option.textContent : (query ? 'Selecionar resultados da busca' : 'Selecionar todos os grupos de hosts')));
         } else result.textContent = option.textContent; result.addEventListener('click', () => choose(index)); list.append(result);
       });
-      empty.hidden = matches.length !== 0; highlight(-1);
+      empty.hidden = visible.length !== 0; highlight(-1);
     }
     function open() {
       if (select.disabled) return;
@@ -128,7 +132,7 @@
       } else if (event.key === 'Enter' && !event.isComposing) {
         event.preventDefault(); event.stopPropagation();
         if (multiple && input.value.trim() && active < 0) {
-          const found = matches.filter(option => option.value);
+          const found = visibleGroups();
           if (!found.length) return;
           let changed = false;
           for (const option of select.options) {

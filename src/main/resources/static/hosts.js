@@ -188,9 +188,7 @@
   }
   function setupFilters() {
     const groups = [...new Map(hosts.flatMap(host => host.groups).map(group => [group.id, group])).values()];
-    const hostChoices = hosts.map(host => ({ id: host.id,
-      name: host.visibleName && host.visibleName !== host.hostname
-        ? `${host.visibleName} (${host.hostname})` : host.hostname }));
+    const hostChoices = hosts.map(host => ({ id: host.id, name: nameOf(host) }));
     for (const [kind, choices, allLabel, selectedLabel] of [
       ['filter-group', groups, 'Todos os grupos', 'grupos selecionados'],
       ['filter-host', hostChoices, 'Todos os hosts', 'hosts selecionados']

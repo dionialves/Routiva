@@ -211,23 +211,31 @@ test('searchable pickers allow multiple groups and hosts and persist selections'
   assert.equal(JSON.parse(ui.storage.get('routiva.incidents.filters')).hostId, '1');
 });
 
-test('first picker option selects every available group or host even with a search term', async () => {
+test('first picker option acts on filtered groups and hosts, or on all options when the search is empty', async () => {
   const ui = await surface(response, {
     extraGroups: [{ value: 'other', textContent: 'Other group', dataset: {} }],
     extraHosts: [{ value: '2', textContent: 'Other router', dataset: { groups: 'other' } }],
   });
   const groupAll = ui.elements['incident-group-options'].children[0];
-  assert.equal(groupAll.children[1].textContent, 'Todos os grupos de hosts');
+  assert.equal(groupAll.children[1].textContent, 'Selecionar todos os grupos de hosts');
   assert.equal(groupAll.children[0].indeterminate, true);
   ui.elements['incident-group-search'].value = 'POP'; ui.elements['incident-group-search'].emit('input');
+  assert.equal(groupAll.children[1].textContent, 'Selecionar resultados da busca');
+  groupAll.children[0].checked = true; groupAll.children[0].emit('change');
+  assert.equal(ui.elements['incident-group'].options.find(option => option.value === 'other').selected, false);
+  ui.elements['incident-group-search'].value = ''; ui.elements['incident-group-search'].emit('input');
   groupAll.children[0].checked = true; groupAll.children[0].emit('change');
   assert.ok(ui.elements['incident-group'].options.every(option => option.selected));
   assert.equal(groupAll.children[0].indeterminate, false);
   const hostAll = ui.elements['incident-host-options'].children[0];
-  assert.equal(hostAll.children[1].textContent, 'Todos os Hosts');
+  assert.equal(hostAll.children[1].textContent, 'Selecionar todos os hosts');
   hostAll.children[0].checked = true; hostAll.children[0].emit('change');
   assert.ok(ui.elements['incident-host'].options.every(option => option.selected));
   assert.equal(JSON.parse(ui.storage.get('routiva.incidents.filters')).hostId, '1,2');
+  ui.elements['incident-host-search'].value = 'Other'; ui.elements['incident-host-search'].emit('input');
+  assert.equal(hostAll.children[0].checked, true);
+  hostAll.children[0].checked = false; hostAll.children[0].emit('change');
+  assert.equal(JSON.parse(ui.storage.get('routiva.incidents.filters')).hostId, '1');
 });
 
 test('shows acknowledged incidents in the rightmost column', async () => {

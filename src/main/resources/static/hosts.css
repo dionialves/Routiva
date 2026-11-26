@@ -1,16 +1,19 @@
-/* Fixed column proportions keep the layout stable regardless of content. */
-.hosts-page .hosts-table { width:100%; min-width:1200px; table-layout:fixed; font-size:13px; }
-.hosts-page .hosts-table :is(th, td) { padding:9px 16px; text-align:left; white-space:normal; overflow-wrap:anywhere; }
-.hosts-page .hosts-table thead th { padding-top:12px; padding-bottom:12px; }
-.hosts-page .hosts-table thead th:nth-child(1) { width:19%; }
-.hosts-page .hosts-table thead th:nth-child(2) { width:5%; }
-.hosts-page .hosts-table thead th:nth-child(3) { width:6%; }
-.hosts-page .hosts-table thead th:nth-child(4) { width:13%; }
-.hosts-page .hosts-table thead th:nth-child(5) { width:19%; }
-.hosts-page .hosts-table thead th:nth-child(6) { width:8%; }
-.hosts-page .hosts-table thead th:nth-child(7) { width:12%; }
-.hosts-page .hosts-table thead th:nth-child(8) { width:6%; }
-.hosts-page .hosts-table :is(th:nth-child(8), td[data-backup-enabled]) { text-align:center; }
+.hosts-page .hosts-table { width:100%; min-width:0; table-layout:fixed; font-size:13px; }
+.hosts-page .hosts-table :is(th, td) { padding:9px clamp(2px, 1vw, 12px); text-align:left; white-space:normal; overflow-wrap:anywhere; }
+.hosts-page .hosts-table thead th { min-width:0; padding-top:12px; padding-bottom:12px; }
+.hosts-page .hosts-table thead th:nth-child(1) { width:29%; }
+.hosts-page .hosts-table thead th:nth-child(2) { width:4%; }
+.hosts-page .hosts-table thead th:nth-child(3) { width:5%; }
+.hosts-page .hosts-table thead th:nth-child(4) { width:8%; }
+.hosts-page .hosts-table :is(th, td):nth-child(n+2):nth-child(-n+4) { padding-inline:clamp(2px, .6vw, 8px); }
+.hosts-page .hosts-table thead th:nth-child(5) { width:24%; }
+.hosts-page .hosts-table thead th:nth-child(6) { width:7%; }
+.hosts-page .hosts-table thead th:nth-child(7) { width:9%; }
+.hosts-page .hosts-table :is(th, td):nth-child(7) { padding-inline:clamp(2px, .6vw, 8px); }
+.hosts-page .hosts-table thead th:nth-child(8) { width:4%; }
+.hosts-page .hosts-table thead th:nth-child(9) { width:10%; }
+.hosts-page .hosts-table thead button { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.hosts-page .hosts-table :is(th:nth-child(8), td[data-backup-enabled]) { padding-inline:2px; text-align:center; }
 .hosts-page [data-backup-enabled="true"] { color:var(--success); }
 .hosts-page [data-backup-enabled="false"] { color:var(--error); }
 .hosts-page [data-backup-enabled] .ui-icon { width:16px; height:16px; vertical-align:middle; }
@@ -61,8 +64,6 @@
 #host-dialog .host-auth-fields { display:grid; gap:10px; border:0; padding:0; margin:0; min-width:0; }
 #host-dialog .host-auth-fields label { font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
 #host-dialog .host-auth-fields :is(input:not([type=checkbox]),select) { width:100%; box-sizing:border-box; }
-
-.hosts-page .hosts-table thead th:nth-child(8) { width:12%; }
 
 .hosts-page [data-connection-status=NOT_CONFIGURED] { color:var(--muted); }
 .hosts-page [data-connection-status=ACTIVE] { color:var(--success); }

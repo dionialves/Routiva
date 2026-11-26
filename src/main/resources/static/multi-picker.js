@@ -10,16 +10,17 @@
     const menu = $(`incident-${kind}-picker`);
     const search = $(`incident-${kind}-search`);
     const container = $(`incident-${kind}-options`);
+    const panel = container.parentElement;
     const summary = $(`incident-${kind}-summary`);
     const allRow = document.createElement('label');
     allRow.className = 'incident-picker-all';
     const allCheckbox = document.createElement('input'); allCheckbox.type = 'checkbox';
     const allText = document.createElement('span');
-    allText.textContent = labels.allText || (kind === 'group' ? 'Todos os grupos de hosts' : kind === 'name' ? 'Todos os incidentes' : 'Todos os Hosts');
+    const selectAllText = labels.allText || (kind === 'group' ? 'Selecionar todos os grupos de hosts' : kind === 'name' ? 'Selecionar todos os incidentes' : 'Selecionar todos os hosts');
     allRow.append(allCheckbox, allText); container.append(allRow);
     listen(allCheckbox, 'change', () => {
-      for (const option of select.options) {
-        if (!option.disabled) option.selected = allCheckbox.checked;
+      for (const { option, label } of entries) {
+        if (!label.hidden) option.selected = allCheckbox.checked;
       }
       onChange();
       refresh();
@@ -27,7 +28,7 @@
     const entries = [...select.options].map(option => {
       const label = document.createElement('label');
       const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
-      const text = document.createElement('span'); text.textContent = option.textContent;
+      const text = document.createElement('span'); text.textContent = option.textContent; text.title = option.textContent;
       label.append(checkbox, text); container.append(label);
       listen(checkbox, 'change', () => {
         option.selected = checkbox.checked;
@@ -37,13 +38,19 @@
       return { option, checkbox, label };
     });
     const normalize = value => value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('pt-BR');
+    function fitPanel() {
+      if (!menu.open || !panel?.getBoundingClientRect) return;
+      panel.style.left = '';
+      const overflow = panel.getBoundingClientRect().right - document.documentElement.clientWidth + 12;
+      if (overflow > 0) panel.style.left = `-${overflow}px`;
+    }
     function refresh() {
       const query = normalize(search.value.trim());
-      let visible = 0;
+      const visible = [];
       for (const { option, checkbox, label } of entries) {
         checkbox.checked = option.selected;
         label.hidden = option.disabled || !normalize(option.textContent).includes(query);
-        if (!label.hidden) visible++;
+        if (!label.hidden) visible.push(option);
       }
       const focused = document.activeElement;
       const ordered = [...entries].sort((a, b) => Number(b.option.selected) - Number(a.option.selected));
@@ -51,13 +58,17 @@
       if (entries.some(entry => entry.checkbox === focused)) focused.focus();
       const available = entries.filter(entry => !entry.option.disabled);
       const selected = available.filter(entry => entry.option.selected);
-      allCheckbox.disabled = available.length === 0;
-      allCheckbox.checked = available.length > 0 && selected.length === available.length;
-      allCheckbox.indeterminate = selected.length > 0 && selected.length < available.length;
+      const visibleSelected = visible.filter(option => option.selected).length;
+      allText.textContent = query ? 'Selecionar resultados da busca' : selectAllText;
+      allCheckbox.disabled = visible.length === 0;
+      allCheckbox.checked = visible.length > 0 && visibleSelected === visible.length;
+      allCheckbox.indeterminate = visibleSelected > 0 && visibleSelected < visible.length;
       summary.textContent = !selected.length ? allLabel : selected.length === 1
         ? selected[0].option.textContent : `${selected.length} ${labels.selectedLabel || (kind === 'group' ? 'grupos selecionados' : kind === 'name' ? 'incidentes selecionados' : 'hosts selecionados')}`;
-      $(`incident-${kind}-empty`).hidden = visible !== 0;
+      $(`incident-${kind}-empty`).hidden = visible.length !== 0;
+      fitPanel();
     }
+    if (panel?.getBoundingClientRect) listen(window, 'resize', fitPanel);
     listen(search, 'input', refresh);
     listen(search, 'keydown', event => {
       if (event.key !== 'Enter' || event.isComposing) return;
