@@ -8,6 +8,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class HostAuthentication {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(HostAuthentication.class);
+    private static final String UNREADABLE_PASSWORD =
+        "Não foi possível ler a senha cadastrada do equipamento. Confira a chave de proteção do app ou informe a senha novamente.";
     private final HostRepository repository;
     private final HostSecrets secrets;
     private final List<EquipmentProvider> providers;
@@ -42,7 +45,7 @@ public class HostAuthentication {
     }
 
     public static boolean usesSsh(String manufacturer) {
-        return "Ubiquiti".equals(manufacturer) || "Datacom".equals(manufacturer) || "Cisco".equals(manufacturer);
+        return "Ubiquiti".equals(manufacturer) || "Datacom".equals(manufacturer) || "Cisco".equals(manufacturer) || "Digistar".equals(manufacturer);
     }
 
     private HostRepository.TerminalPorts requestedPorts(String id, Input input) {
@@ -73,7 +76,7 @@ public class HostAuthentication {
         return "ACTIVE".equals(credentials.status()) && Objects.equals(credentials.verifiedIp(), address) ? "ACTIVE" : "ERROR";
     }
     private EquipmentProvider provider(String name) {
-        if (!Set.of("MikroTik", "Ubiquiti", "Datacom", "Mimosa", "Cisco").contains(Objects.toString(name, "")))
+        if (!Set.of("MikroTik", "Ubiquiti", "Datacom", "Mimosa", "Cisco", "Digistar").contains(Objects.toString(name, "")))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione um Fabricante");
         return providers.stream().filter(p -> p.manufacturer().equals(name)).findFirst().orElseThrow(() ->
             new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fabricante não suportado."));
@@ -96,15 +99,27 @@ public class HostAuthentication {
         if (login == null || login.isBlank() || login.length() > 255 || port == null
             || !validPort(port) || (input.password() != null && input.password().length() > 4096))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe usuário e porta válida (1–65535).");
-        String password = input.password();
-        if (password == null || password.isEmpty()) {
-            var saved = repository.credentials(id);
-            if (saved == null || saved.encryptedPassword() == null)
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha do equipamento.");
-            password = secrets.decrypt(saved.encryptedPassword());
-        }
-        return new EquipmentProvider.Connection(login.trim(), password, port, ("Mimosa".equals(input.manufacturer()) || "MikroTik".equals(input.manufacturer()) && input.tls()));
+        return new EquipmentProvider.Connection(login.trim(), input.password(), port,
+            "Mimosa".equals(input.manufacturer()) || "MikroTik".equals(input.manufacturer()) && input.tls());
     }
+
+    private Result validateConnection(String id, String manufacturer, EquipmentProvider.Connection connection,
+                                      HostRepository.Credentials saved) {
+        if (connection.password() != null && !connection.password().isEmpty())
+            return attempt(id, manufacturer, connection);
+        if (saved == null || saved.encryptedPassword() == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a senha do equipamento.");
+
+        String password;
+        try {
+            password = secrets.decrypt(saved.encryptedPassword());
+        } catch (IllegalStateException ex) {
+            return new Result(false, UNREADABLE_PASSWORD);
+        }
+        return attempt(id, manufacturer,
+            new EquipmentProvider.Connection(connection.login(), password, connection.port(), connection.tls()));
+    }
+
     private Result attempt(String id, String manufacturer, EquipmentProvider.Connection connection) {
         try {
             provider(manufacturer).testConnection(repository.target(id), connection);
@@ -115,15 +130,32 @@ public class HostAuthentication {
             return new Result(false, "Falha na conexão. Confira endereço, credenciais e permissões do equipamento.");
         }
     }
-    public synchronized Result test(String id, Input input) { return attempt(id, input.manufacturer(), connection(id, input, requestedPorts(id, input))); }
+    public synchronized Result test(String id, Input input) {
+        var connection = connection(id, input, requestedPorts(id, input));
+        var saved = repository.credentials(id);
+        var result = validateConnection(id, input.manufacturer(), connection, saved);
+        if (!result.success() && saved != null)
+            repository.markAuthenticationRejected(id, saved, null, result.message());
+        if (UNREADABLE_PASSWORD.equals(result.message()))
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, UNREADABLE_PASSWORD);
+        return result;
+    }
     public synchronized View save(String id, Input input) {
         var ports = requestedPorts(id, input);
         var connection = connection(id, input, ports);
         var target = repository.target(id);
-        var result = attempt(id, input.manufacturer(), connection);
-        repository.configure(id, new HostRepository.Credentials(input.manufacturer(), connection.login(), secrets.encrypt(connection.password()),
+        var saved = repository.credentials(id);
+        var result = validateConnection(id, input.manufacturer(), connection, saved);
+        String encryptedPassword = connection.password() == null || connection.password().isEmpty()
+            ? saved.encryptedPassword() : secrets.encrypt(connection.password());
+        repository.configure(id, new HostRepository.Credentials(input.manufacturer(), connection.login(), encryptedPassword,
             usesSsh(input.manufacturer()) ? null : connection.port(), true, result.success() ? "ACTIVE" : "CONNECTION_FAILED",
             result.message(), result.success() ? target.ip() : null, connection.tls(), System.currentTimeMillis()), ports);
+        if (!result.success()) {
+            LOGGER.warn("Host {} ({}) salvo com erro de conexão. {}",
+                id, input.manufacturer(), UNREADABLE_PASSWORD.equals(result.message()) ? UNREADABLE_PASSWORD
+                    : "Falha ao validar o acesso ao equipamento. Confira endereço, credenciais e permissões.");
+        }
         return view(id);
     }
     public synchronized void validateSaved(String id) {

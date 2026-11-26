@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 
 /** IOS XE operational CLI only; never enters configuration mode or changes device configuration. */
 public class CiscoCli implements AutoCloseable {
+    private static final int COMMAND_TIMEOUT_SECONDS = 10;
     private static final Set<String> COMMANDS = Set.of("terminal length 0", "terminal width 512", "show version", "show interfaces", "show interfaces description");
     static final String PORT = "(?:GigabitEthernet|TenGigabitEthernet|Port-channel|Loopback|Virtual-Access)[0-9]{1,6}(?:/[0-9]{1,6}){0,2}(?:\\.[0-9]{1,6})?";
     private static final Pattern PORT_COMMAND = Pattern.compile("show interfaces " + PORT);
@@ -26,7 +27,7 @@ public class CiscoCli implements AutoCloseable {
         input = channel.getInputStream(); output = channel.getOutputStream();
         try {
             channel.connect(10000);
-            String greeting = receive(null);
+            String greeting = receive(null, COMMAND_TIMEOUT_SECONDS);
             prompt = greeting.substring(greeting.lastIndexOf('\n') + 1).trim();
             command("terminal length 0");
             command("terminal width 512");
@@ -35,9 +36,15 @@ public class CiscoCli implements AutoCloseable {
     static boolean allowed(String command) { return COMMANDS.contains(command) || PORT_COMMAND.matcher(command).matches(); }
     public String command(String command) throws Exception {
         if (!allowed(command)) throw new IllegalArgumentException("Unsupported IOS XE command");
+        return readCommand(command, COMMAND_TIMEOUT_SECONDS);
+    }
+    public String backupConfiguration(int timeoutSeconds) throws Exception {
+        return readCommand("show running-config", timeoutSeconds);
+    }
+    private String readCommand(String command, int timeoutSeconds) throws Exception {
         String sent = command;
         output.write((sent + "\n").getBytes(StandardCharsets.UTF_8)); output.flush();
-        String result = receive(prompt);
+        String result = receive(prompt, timeoutSeconds);
         String body = result.substring(0, result.lastIndexOf(prompt)).trim();
         if (body.startsWith(sent)) body = body.substring(sent.length()).stripLeading();
         if (Pattern.compile("(?im)^\\s*(?:%|syntax error|error:|unknown command|invalid command|permission denied|access denied)").matcher(body).find())
@@ -47,9 +54,9 @@ public class CiscoCli implements AutoCloseable {
     static class CommandRejectedException extends IOException {
         CommandRejectedException() { super("IOS XE rejected read-only command"); }
     }
-    private String receive(String expected) throws Exception {
+    private String receive(String expected, int timeoutSeconds) throws Exception {
         var bytes = new ByteArrayOutputStream();
-        long commandDeadline = clock.getAsLong() + 10_000_000_000L;
+        long commandDeadline = clock.getAsLong() + java.util.concurrent.TimeUnit.SECONDS.toNanos(timeoutSeconds);
         while (clock.getAsLong() < commandDeadline) {
             while (input.available() > 0) {
                 byte[] buffer = new byte[Math.min(8192, input.available())];
@@ -64,7 +71,7 @@ public class CiscoCli implements AutoCloseable {
             if (channel.isClosed()) throw new EOFException("SSH CLI closed before prompt");
             Thread.sleep(10);
         }
-        throw new IOException("SSH CLI timed out");
+        throw new IOException("Tempo limite de " + timeoutSeconds + " s aguardando a resposta da CLI SSH.");
     }
     static String clean(String text) { return text.replaceAll("\\x1B\\[[0-?]*[ -/]*[@-~]", "").replace("\r", ""); }
     public void close() { channel.disconnect(); }

@@ -43,6 +43,7 @@ public class SecurityConfiguration {
                 .requestMatchers(HttpMethod.GET, "/*.css", "/*.js", "/*.svg", "/*.png", "/*.webp", "/*.ico", "/*.woff2", "/webjars/**").permitAll()
                 .requestMatchers("/api/ap/*/configuration", "/api/ap/*/configuration/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/ap/*").hasRole("ADMIN")
+                .requestMatchers("/backup", "/api/backups", "/api/backups/**").hasRole("ADMIN")
                 .requestMatchers("/api/host-configurations", "/api/host-configurations/**").hasRole("ADMIN")
                 .requestMatchers("/configuracao/**", "/api/users/**", "/api/ap/candidates").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/incidents/*/updates").hasRole("ADMIN")

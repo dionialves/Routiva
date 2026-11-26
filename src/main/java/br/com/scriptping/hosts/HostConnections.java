@@ -13,7 +13,10 @@ public class HostConnections {
     public HostConnections(HostRepository repository, HostSecrets secrets) { this.repository = repository; this.secrets = secrets; }
     public Connection require(Host host) {
         repository.require(host.id());
-        var c = repository.credentials(host.id());
+        return require(host, repository.credentials(host.id()));
+    }
+
+    public Connection require(Host host, HostRepository.Credentials c) {
         if (c == null || !"ACTIVE".equals(c.status()) || !java.util.Objects.equals(c.verifiedIp(), host.ip()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Configure e valide a autenticação nas configurações do host.");
         int port = HostAuthentication.usesSsh(c.manufacturer()) ? repository.terminalPorts(host.id()).sshPort() : c.port();

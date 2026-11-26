@@ -35,6 +35,17 @@ public class MimosaHttps {
             return dashboard(session, wirelessTraffic);
         }
     }
+    public byte[] backup(String address, int port, String password, Runnable connected, int timeoutSeconds) throws Exception {
+        try (var session = open(address, port, password)) {
+            connected.run();
+            return request(session.origin.resolve("/?q=preferences.configure&mimosa_action=download"),
+                session, null, address, Math.multiplyExact(timeoutSeconds, 1000));
+        }
+    }
+    public static final class AuthenticationRejected extends java.io.IOException {
+        AuthenticationRejected() { super("Autenticação HTTPS rejeitada pela Mimosa."); }
+    }
+
     static final class Session implements AutoCloseable {
         final URI origin;
         final SSLSocketFactory sockets;
@@ -102,6 +113,10 @@ public class MimosaHttps {
         return json.writeValueAsBytes(root);
     }
     byte[] request(URI uri, Session session, byte[] form, String address) throws Exception {
+        return request(uri, session, form, address, 10000);
+    }
+
+    private byte[] request(URI uri, Session session, byte[] form, String address, int readTimeoutMs) throws Exception {
         var connection = (HttpsURLConnection) uri.toURL().openConnection();
         session.lastRequest = connection;
         var cookies = session.cookies;
@@ -113,7 +128,7 @@ public class MimosaHttps {
                 return true;
             } catch (Exception ex) { return false; }
         });
-        connection.setConnectTimeout(5000); connection.setReadTimeout(10000);
+        connection.setConnectTimeout(5000); connection.setReadTimeout(readTimeoutMs);
         connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Accept", "application/json");
         cookies.get(uri, Map.of()).forEach((key, values) -> connection.setRequestProperty(key, String.join("; ", values)));
@@ -125,6 +140,7 @@ public class MimosaHttps {
             }
             int status = connection.getResponseCode();
             cookies.put(uri, connection.getHeaderFields());
+            if (form != null && (status == 401 || status == 403)) throw new AuthenticationRejected();
             if (status != 200 && !(form != null && (status == 302 || status == 303))) throw new IllegalArgumentException("Mimosa HTTP " + status);
             try (var input = connection.getInputStream()) {
                 byte[] body = input.readNBytes(2 * 1024 * 1024 + 1);

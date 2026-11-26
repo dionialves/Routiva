@@ -1,4 +1,4 @@
-@import url("/design-tokens.css?v=20261120-modal-tabs");
+@import url("/design-tokens.css?v=20261126-equipment-modal");
 @import url("/modal-tabs.css?v=20261121-grid-height");
 @import url("/pagination.css");
 @import url("/signal-indicators.css");
@@ -1026,6 +1026,9 @@ body { background: var(--app-bg); }
 .profile-menu .profile-panel { width:160px; padding:12px; top:44px; }
 .profile-panel .system-button { width:100%; }
 
+/* Reserve the viewport gutter both before and during the modal scroll lock. */
+html { scrollbar-gutter:stable; }
+
 /* Keep the background still while any application modal is open.
    CSS follows the actual open state, including nested dialogs and Escape/form closes. */
 html:has(dialog[open]),
@@ -1034,7 +1037,6 @@ html:has([aria-modal="true"]),
 body:has([aria-modal="true"]) {
   overflow:hidden;
   overscroll-behavior:none;
-  scrollbar-gutter:stable;
 }
 dialog[open], [aria-modal="true"] { overscroll-behavior:contain; }
 

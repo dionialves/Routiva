@@ -157,11 +157,57 @@ class HostCatalogTests {
         assertThat(auth.test("42", input).success()).isTrue();
         assertThat(hosts.credentials("42")).isNull();
         assertThat(auth.save("42", input).status()).isEqualTo("ACTIVE");
+        clearInvocations(provider);
+        var withoutPassword = new HostAuthentication.Input("MikroTik", "reader", null, 8728, true, false);
+        assertThat(auth.test("42", withoutPassword).success()).isTrue();
+        assertThat(auth.save("42", withoutPassword).status()).isEqualTo("ACTIVE");
+        verify(provider, times(2)).testConnection(hosts.target("42"),
+            new EquipmentProvider.Connection("reader", "private-secret", 8728, false));
         var connections = new HostConnections(hosts, secrets);
         assertThat(connections.require(hosts.target("42")).password()).isEqualTo("private-secret");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM access_point", Integer.class)).isZero();
         var changed = new Host("42", "Router", "192.0.2.99", List.of());
         assertThatThrownBy(() -> connections.require(changed)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        var saved = hosts.credentials("42");
+        doThrow(new IllegalStateException("Credenciais rejeitadas")).when(provider).testConnection(any(), any());
+        assertThat(auth.test("42", withoutPassword).success()).isFalse();
+        assertThat(auth.connectionStatuses(hosts.all())).containsEntry("42", "ERROR");
+        assertThat(hosts.credentials("42").encryptedPassword()).isEqualTo(saved.encryptedPassword());
+        var rejected = new HostAuthentication.Input("MikroTik", "new-reader", "new-secret", 8729, true, true);
+        assertThat(auth.save("42", rejected).status()).isEqualTo("CONNECTION_FAILED");
+        assertThat(hosts.credentials("42").login()).isEqualTo("new-reader");
+        assertThat(secrets.decrypt(hosts.credentials("42").encryptedPassword())).isEqualTo("new-secret");
+    }
+    @Test void unreadableSavedPasswordAllowsSavingOtherFieldsAndExplicitPasswordCanReplaceIt() {
+        catalog.reconcile();
+        var provider = mock(EquipmentProvider.class);
+        when(provider.manufacturer()).thenReturn("MikroTik");
+        var auth = new HostAuthentication(hosts, secrets, List.of(provider));
+        var input = new HostAuthentication.Input("MikroTik", "reader", "secret", 8728, true, false);
+        auth.save("42", input);
+        var saved = hosts.credentials("42");
+        var replacementKey = new HostSecrets(temp.resolve("replacement-key").toString());
+        replacementKey.encrypt("initialize");
+        var afterKeyChange = new HostAuthentication(hosts, replacementKey, List.of(provider));
+        var blank = new HostAuthentication.Input("MikroTik", "reader", "", 8728, true, false);
+        clearInvocations(provider);
+
+        assertThatThrownBy(() -> afterKeyChange.test("42", blank))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+            .hasMessageContaining("Não foi possível ler a senha cadastrada");
+        var changed = new HostAuthentication.Input("MikroTik", "new-reader", "", 8729, true, true);
+        var view = afterKeyChange.save("42", changed);
+        assertThat(view.message()).contains("Não foi possível ler a senha cadastrada");
+        assertThat(view.login()).isEqualTo("new-reader");
+        assertThat(view.port()).isEqualTo(8729);
+        verify(provider, never()).testConnection(any(), any());
+        var failed = hosts.credentials("42");
+        assertThat(failed.status()).isEqualTo("CONNECTION_FAILED");
+        assertThat(failed.encryptedPassword()).isEqualTo(saved.encryptedPassword());
+        assertThat(afterKeyChange.test("42", input).success()).isTrue();
+        assertThat(hosts.credentials("42")).isEqualTo(failed);
+        assertThat(afterKeyChange.save("42", input).status()).isEqualTo("ACTIVE");
+        assertThat(afterKeyChange.test("42", blank).success()).isTrue();
     }
     @Test void mimosaUsesFixedLoginEvenWhenClientOmitsOrMisspellsIt() {
         catalog.reconcile();

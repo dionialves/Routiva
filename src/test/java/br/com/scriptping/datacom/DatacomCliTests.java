@@ -36,4 +36,31 @@ class DatacomCliTests {
         }
         verify(channel).disconnect();
     }
+
+    @Test
+    void waitsForAnOltExportPastTheOrdinaryCommandDeadline() throws Exception {
+        var session = mock(Session.class);
+        var channel = mock(ChannelShell.class);
+        var input = new Input();
+        var readsAfterExport = new java.util.concurrent.atomic.AtomicInteger();
+        input.feed("OLT-42# ");
+        when(session.openChannel("shell")).thenReturn(channel);
+        when(channel.getInputStream()).thenReturn(input);
+        when(channel.getOutputStream()).thenReturn(new OutputStream() {
+            @Override public void write(int value) {}
+            @Override public void write(byte[] bytes, int offset, int length) {
+                readsAfterExport.set(1);
+            }
+        });
+        try (var cli = new DatacomCli(session, () -> {
+            if (readsAfterExport.get() == 0) return 0;
+            if (readsAfterExport.getAndIncrement() == 2) {
+                input.feed("show running-config | nomore\r\ninterface gpon 1/1/1\r\nOLT-42# ");
+                return 30_000_000_000L;
+            }
+            return 0;
+        })) {
+            assertThat(cli.backupConfiguration(120)).isEqualTo("interface gpon 1/1/1");
+        }
+    }
 }

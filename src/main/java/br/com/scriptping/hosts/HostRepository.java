@@ -82,6 +82,15 @@ public class HostRepository {
         return result;
     }
     @org.springframework.transaction.annotation.Transactional
+    public void markAuthenticationRejected(String id, Credentials attempted, Integer sshPort, String message) {
+        var ports = jdbc.queryForList("SELECT ssh_port FROM app_host WHERE host_id=? FOR UPDATE", Integer.class, id);
+        if (ports.isEmpty() || (sshPort != null && !sshPort.equals(ports.getFirst()))
+            || !attempted.equals(credentials(id))) return;
+        jdbc.update("UPDATE host_authentication SET connection_status='CONNECTION_FAILED', connection_message=?, verified_ip=NULL, tested_at=? WHERE host_id=?",
+            message, System.currentTimeMillis(), id);
+    }
+
+    @org.springframework.transaction.annotation.Transactional
     public void configure(String id, Credentials c) {
         configure(id, c, null);
     }

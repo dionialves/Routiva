@@ -31,19 +31,25 @@ public class HostSecrets {
         return bytes;
     }
     public String encrypt(String value) {
+        return encryptBytes(value.getBytes(StandardCharsets.UTF_8));
+    }
+    public String encryptBytes(byte[] value) {
         try {
             byte[] iv = new byte[12]; random.nextBytes(iv);
             var cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key(true), "AES"), new GCMParameterSpec(128, iv));
-            return Base64.getEncoder().encodeToString(iv) + ":" + Base64.getEncoder().encodeToString(cipher.doFinal(value.getBytes(StandardCharsets.UTF_8)));
+            return Base64.getEncoder().encodeToString(iv) + ":" + Base64.getEncoder().encodeToString(cipher.doFinal(value));
         } catch (Exception ex) { throw new IllegalStateException("Não foi possível proteger a senha do equipamento."); }
     }
     public String decrypt(String value) {
+        return new String(decryptBytes(value), StandardCharsets.UTF_8);
+    }
+    public byte[] decryptBytes(String value) {
         try {
             var parts = value.split(":", 2);
             var cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(key(false), "AES"), new GCMParameterSpec(128, Base64.getDecoder().decode(parts[0])));
-            return new String(cipher.doFinal(Base64.getDecoder().decode(parts[1])), StandardCharsets.UTF_8);
+            return cipher.doFinal(Base64.getDecoder().decode(parts[1]));
         } catch (Exception ex) { throw new IllegalStateException("Não foi possível abrir a senha do equipamento. Verifique o arquivo de proteção."); }
     }
 }

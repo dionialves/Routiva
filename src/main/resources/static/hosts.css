@@ -67,9 +67,9 @@
 
 /* Host editor compact layout, scoped so shared form dialogs keep their defaults. */
 #host-dialog {
-  --host-modal-bg:#0f1b2a;
-  --host-section-bg:#182a3b;
-  --host-section-head:#24384b;
+  --host-modal-bg:var(--equipment-modal-bg);
+  --host-section-bg:var(--equipment-section-bg);
+  --host-section-head:var(--equipment-section-head);
   --host-control-bg:#0d1927;
   --host-control-border:#52667a;
   --host-section-border:#344b60;

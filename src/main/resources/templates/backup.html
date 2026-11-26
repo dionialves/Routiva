@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <th:block th:replace="~{shell :: security}"></th:block>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backup • TraceOne</title>
+  <th:block th:replace="~{design-system :: base}"></th:block>
+  <th:block th:replace="~{design-system :: layout}"></th:block>
+  <th:block th:replace="~{design-system :: actions}"></th:block>
+  <th:block th:replace="~{design-system :: filters}"></th:block>
+  <th:block th:replace="~{design-system :: picker}"></th:block>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
+  <link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
+  <link rel="stylesheet" href="/backup.css?v=20261126-filter-alignment">
+  <script src="/shell.js" defer></script>
+  <script src="/multi-picker.js" defer></script>
+  <script src="/group-picker.js" defer></script>
+  <script src="/backup.js?v=20261126-filter-alignment" defer></script>
+</head>
+<body class="availability-dashboard">
+<aside th:replace="~{shell :: sidebar('backup')}"></aside>
+<div class="app-workspace">
+  <header th:replace="~{shell :: topbar}"></header>
+  <main class="page-content availability-page backup-page">
+    <div class="availability-heading page-action-heading">
+      <div>
+        <p class="eyebrow">GERENCIAMENTO DE EQUIPAMENTOS</p>
+        <h1>Backup</h1>
+        <p>Faça backups das configurações dos equipamentos e consulte o histórico.</p>
+      </div>
+      <div class="settings-actions">
+        <button id="backup-settings" aria-haspopup="dialog" aria-controls="backup-settings-dialog" class="system-button" type="button"><svg th:replace="~{shell :: icon('settings')}"></svg>Configurações</button>
+        <button id="backup-run" aria-haspopup="dialog" aria-controls="backup-run-dialog" class="system-button system-button-primary query-primary-action" type="button"><svg th:replace="~{shell :: icon('plus')}"></svg>Novo backup</button>
+      </div>
+    </div>
+    <section class="card query-filter-bar" aria-label="Filtros de backups">
+      <div class="query-filter-row">
+        <div th:replace="~{multi-picker :: checklist('backup-history-group', 'Grupo de Host', 'layers', 'Todos os grupos', 'Pesquisar grupo de hosts')}"></div>
+        <div th:replace="~{multi-picker :: checklist('backup-history-host', 'Host', 'server', 'Todos os hosts', 'Pesquisar host')}"></div>
+      </div>
+    </section>
+    <section class="card availability-host-section system-table-compact" aria-labelledby="backup-history-title">
+      <h2 id="backup-history-title">Histórico de backups</h2>
+      <p id="backup-empty" role="status">Carregando backups…</p>
+      <div th:replace="~{design-system :: dataTable('Backups realizados', ~{backup :: history})}">
+        <th:block th:fragment="history">
+          <thead><tr><th scope="col">Host</th><th scope="col">Fabricante</th><th scope="col">Data do backup</th><th scope="col">Arquivo</th></tr></thead>
+          <tbody id="backup-rows"></tbody>
+        </th:block>
+      </div>
+      <nav id="backup-pagination" class="system-pagination" aria-label="Paginação dos backups">
+        <button id="backup-prev" class="system-button" type="button" disabled><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button>
+        <span id="backup-count" role="status">Exibindo 0–0 de 0 registros</span>
+        <button id="backup-next" class="system-button" type="button" disabled><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Próxima</button>
+      </nav>
+    </section>
+  </main>
+</div>
+<dialog th:replace="~{design-system :: formDialog('backup-settings-dialog', 'backup-settings-title', null, ~{backup :: settingsForm})}">
+  <form th:fragment="settingsForm" id="backup-settings-form" class="form-dialog-frame">
+    <header th:replace="~{design-system :: modalHeader('backup-settings-title', 'Configurações de backup', null, null, 'settings', 'backup-settings-close', 'Fechar configurações')}"></header>
+    <div class="form-dialog-content">
+      <section th:replace="~{design-system :: formSection('backup-retention-title', 'Retenção', 'clock-3', ~{backup :: retention})}">
+        <th:block th:fragment="retention">
+          <div class="backup-retention">
+            <label for="backup-retention">Backups mantidos por host</label>
+            <div class="backup-retention-stepper">
+              <button id="backup-retention-decrease" type="button" class="system-button system-button-icon-only" aria-label="Diminuir retenção">
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+              </button>
+              <input id="backup-retention" type="number" min="1" max="2147483647" required>
+              <button id="backup-retention-increase" type="button" class="system-button system-button-icon-only" aria-label="Aumentar retenção">
+                <svg th:replace="~{shell :: icon('plus')}"></svg>
+              </button>
+            </div>
+            <span>backup(s)</span>
+          </div>
+        </th:block>
+      </section>
+      <section th:replace="~{design-system :: formSection('backup-hosts-title', 'Hosts', 'server', ~{backup :: hostSelection})}">
+        <th:block th:fragment="hostSelection">
+          <div class="query-filter-bar" data-clear-filters="false">
+            <div class="query-filter-row">
+              <div th:replace="~{multi-picker :: checklist('backup-group', 'Grupo de hosts', 'layers', 'Todos os grupos', 'Buscar grupo')}"></div>
+              <div th:replace="~{multi-picker :: checklist('backup-settings-host', 'Host', 'server', 'Todos os hosts', 'Pesquisar host')}"></div>
+            </div>
+            <div class="backup-host-toolbar">
+              <button id="backup-select-all" type="button" class="system-button"><svg th:replace="~{shell :: icon('check')}"></svg><span>Selecionar todos</span></button>
+              <button id="backup-deselect-all" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg><span>Desmarcar todos</span></button>
+              <span id="backup-selection" role="status"></span>
+            </div>
+          </div>
+          <div class="availability-page backup-host-table">
+            <div class="system-table-compact">
+              <div th:replace="~{design-system :: dataTable('Hosts cadastrados', ~{backup :: hosts})}">
+                <th:block th:fragment="hosts">
+                  <thead><tr><th scope="col"><input id="backup-select-page" type="checkbox" aria-label="Selecionar hosts desta página" disabled></th><th scope="col">Host</th><th scope="col">IP</th></tr></thead>
+                  <tbody id="backup-host-rows"></tbody>
+                </th:block>
+              </div>
+            </div>
+          </div>
+          <nav id="backup-host-pagination" class="system-pagination" aria-label="Paginação de hosts" hidden>
+            <button id="backup-host-prev" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button>
+            <span id="backup-host-count" role="status"></span>
+            <button id="backup-host-next" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Próxima</button>
+          </nav>
+          <p id="backup-host-empty" hidden>Nenhum host encontrado.</p>
+        </th:block>
+      </section>
+    </div>
+    <footer th:replace="~{design-system :: modalFooter(~{backup :: settingsActions})}">
+      <div th:fragment="settingsActions" class="backup-footer-actions">
+        <button type="button" class="system-button" data-close-backup-dialog><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+        <button type="submit" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg>Salvar</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+<dialog th:replace="~{design-system :: formDialog('backup-text-dialog', 'backup-text-title', null, ~{backup :: textPreview})}">
+  <div th:fragment="textPreview" class="form-dialog-frame">
+    <header th:replace="~{design-system :: modalHeader('backup-text-title', 'Backup', 'backup-filename', '', 'file', 'backup-text-close', 'Fechar backup')}"></header>
+    <div class="form-dialog-content"><pre id="backup-text" tabindex="0"></pre></div>
+    <footer th:replace="~{design-system :: modalFooter(~{backup :: previewActions})}">
+      <div th:fragment="previewActions" class="backup-footer-actions">
+        <button id="backup-delete" class="system-button system-button-danger" type="button"><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir</button>
+        <div class="backup-footer-actions">
+          <button type="button" class="system-button" data-close-backup-dialog><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+          <button id="backup-copy" class="system-button" type="button"><svg th:replace="~{shell :: icon('copy')}"></svg>Copiar texto</button>
+          <button id="backup-download" type="button" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('download')}"></svg>Baixar backup</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+</dialog>
+<dialog th:replace="~{design-system :: formDialog('backup-delete-dialog', 'backup-delete-title', 'backup-delete-description', ~{backup :: deleteConfirmation})}">
+  <div th:fragment="deleteConfirmation" class="form-dialog-frame">
+    <header th:replace="~{design-system :: modalHeader('backup-delete-title', 'Excluir backup?', null, null, 'trash', 'backup-delete-close', 'Fechar confirmação')}"></header>
+    <div class="form-dialog-content"><p id="backup-delete-description">O arquivo <strong id="backup-delete-name"></strong> será removido do histórico.</p></div>
+    <footer th:replace="~{design-system :: modalFooter(~{backup :: deleteActions})}">
+      <div th:fragment="deleteActions" class="backup-footer-actions">
+        <button type="button" class="system-button" data-close-backup-dialog autofocus><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+        <button id="backup-delete-confirm" type="button" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir</button>
+      </div>
+    </footer>
+  </div>
+</dialog>
+<dialog th:replace="~{design-system :: formDialog('backup-run-dialog', 'backup-run-title', null, ~{backup :: runForm})}">
+  <form th:fragment="runForm" id="backup-run-form" class="form-dialog-frame">
+    <header th:replace="~{design-system :: modalHeader('backup-run-title', 'Novo backup', null, null, 'download', 'backup-run-close', 'Fechar novo backup')}"></header>
+    <div class="form-dialog-content">
+      <section th:replace="~{design-system :: formSection('backup-run-host-title', 'Equipamento', 'server', ~{backup :: runHost})}">
+        <th:block th:fragment="runHost">
+          <div class="backup-run-host-field">
+            <span id="backup-run-host-label">Host</span>
+            <div class="query-filter-field">
+              <select id="backup-run-host" aria-labelledby="backup-run-host-label"></select>
+            </div>
+          </div>
+          <p id="backup-run-empty" role="status" hidden>Valide a autenticação de um host para fazer o backup.</p>
+        </th:block>
+      </section>
+      <section id="backup-run-progress" aria-labelledby="backup-run-progress-title" hidden>
+        <h3 id="backup-run-progress-title">Progresso do backup</h3>
+        <div id="backup-run-status" role="status" hidden>
+          <svg class="ui-icon backup-run-status-icon" viewBox="0 0 24 24" aria-hidden="true"><use></use></svg>
+          <strong></strong>
+          <span class="backup-run-status-date">
+            <svg th:replace="~{shell :: icon('clock-3')}"></svg>
+            <time></time>
+          </span>
+        </div>
+        <ol id="backup-run-events" aria-live="polite" aria-relevant="additions" hidden></ol>
+        <p id="backup-run-notice" role="status" hidden></p>
+      </section>
+    </div>
+    <footer th:replace="~{design-system :: modalFooter(~{backup :: runActions})}">
+      <div th:fragment="runActions" class="backup-footer-actions">
+        <button id="backup-run-cancel" type="button" class="system-button" data-close-backup-dialog><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+        <button id="backup-run-submit" type="submit" class="system-button system-button-primary" disabled><svg th:replace="~{shell :: icon('download')}"></svg>Backup</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+</body>
+</html>

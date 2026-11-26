@@ -408,3 +408,22 @@ UPDATE host_authentication SET api_port=NULL
 WHERE manufacturer IN ('Ubiquiti','Datacom','Cisco') AND EXISTS (
     SELECT 1 FROM app_host h WHERE h.host_id=host_authentication.host_id
 );
+
+CREATE TABLE IF NOT EXISTS backup_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    retention INTEGER NOT NULL CHECK (retention > 0),
+    host_ids TEXT NOT NULL
+);
+INSERT INTO backup_settings (id, retention, host_ids) SELECT 1, 5, '[]' WHERE NOT EXISTS (SELECT 1 FROM backup_settings WHERE id = 1);
+
+CREATE TABLE IF NOT EXISTS equipment_backup (
+    id VARCHAR(36) PRIMARY KEY,
+    host_id VARCHAR(255) NOT NULL,
+    host_name TEXT NOT NULL,
+    manufacturer VARCHAR(32) NOT NULL,
+    filename VARCHAR(255) NOT NULL,
+    is_text BOOLEAN NOT NULL,
+    created_at BIGINT NOT NULL,
+    encrypted_content TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS equipment_backup_host_history ON equipment_backup (host_id, created_at DESC, id DESC);

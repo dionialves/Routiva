@@ -1,0 +1,3 @@
+# Reject downloads and uploads outside the backup naming convention.
+aG .*
+aP~ ^traceone-[0-9a-f-]{36}[.]tar$

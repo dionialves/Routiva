@@ -550,3 +550,39 @@ O modal de Hosts organiza Identificação, Associação e Interface SNMP em seç
 verticais, cabeçalho e rodapé fixos. Alterações pendentes exigem confirmação antes de fechar.
 A exclusão usa `host.delete`, exige perfil administrador, proteção CSRF, confirmação explícita
 e a revisão atual do cadastro. Recusas ou falhas sem confirmação não repetem a exclusão.
+
+### Backup de equipamentos
+
+O menu **Backup** está disponível para administradores. Em **Configurações**, selecione
+os hosts cadastrados e a retenção por host. Em **Novo backup**, escolha um host
+com autenticação validada e clique em **Backup** para iniciar a coleta em segundo
+plano. A tela mostra o progresso e eventuais falhas. O histórico e os arquivos são
+armazenados no PostgreSQL. Preserve a chave `ap.secrets-key-file` (ou
+`AP_SECRETS_KEY_FILE` no Docker) junto ao backup do banco para recuperar os arquivos.
+
+#### Receber backups Digistar no próprio TraceOne
+
+Em produção Linux, habilite `compose.digistar.yaml` para subir o serviço
+`tftp` junto com o TraceOne. Ele escuta no IPv4 de gerência do servidor,
+aceita somente uploads com o nome gerado pelo TraceOne e compartilha a pasta
+de recebimento com o serviço `app`. O app valida o TAR, remove o arquivo
+temporário e armazena o backup criptografado no PostgreSQL.
+
+1. No `.env`, defina `BACKUP_TFTP_HOST` com um IPv4 configurado no servidor
+   e alcançável pelas OLTs. Se quiser outro diretório, defina também
+   `BACKUP_TFTP_DIRECTORY`.
+2. Crie a pasta usada pelos containers. Para o caminho padrão, execute
+   `sudo install -d -m 0700 -o 10001 -g 10001 /srv/traceone/tftp`.
+3. No firewall do servidor, permita UDP/69 e UDP/40000–40015 no IPv4 de
+   gerência, somente a partir dos endereços das OLTs autorizadas. A porta
+   69 desse endereço deve estar livre.
+4. Execute `docker compose -f compose.yaml -f compose.digistar.yaml up -d --build`.
+   Use os mesmos arquivos nas próximas atualizações, ou inclua os dois em
+   `COMPOSE_FILE` no `.env` (separados por dois pontos no Linux).
+5. Configure a autenticação de um host Digistar e selecione-o em **Backup →
+   Novo backup**. Clique em **Backup**. Confira se o `.tar` aparece no
+   histórico e pode ser baixado.
+
+Para uma instalação que já usa um TFTP externo, o serviço integrado é opcional.
+Nesse caso, configure `BACKUP_TFTP_HOST` com o endereço do TFTP visto pela OLT
+e `BACKUP_TFTP_INBOX` com a pasta de recebimento acessível dentro do app.

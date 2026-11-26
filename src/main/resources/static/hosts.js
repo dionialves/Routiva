@@ -236,7 +236,7 @@
   }
   function updatePasswordPlaceholder(configured) {
     $('host-auth-password').placeholder = configured ? '*'.repeat(22) : '';
-    $('host-auth-password-help').textContent = configured ? 'Senha cadastrada. Deixe em branco para preservar.' : 'Informe a senha do equipamento.';
+    $('host-auth-password-help').textContent = configured ? 'Deixe em branco para usar a senha cadastrada ao testar ou salvar.' : 'Informe a senha do equipamento.';
   }
   function hideAuthPassword() {
     $('host-auth-password').type = 'password';
@@ -247,7 +247,7 @@
   function authInput() {
     const manufacturer = $('host-auth-manufacturer').value;
     return { manufacturer, login: $('host-auth-login').value,
-      password: $('host-auth-password').value,
+      password: $('host-auth-password').value || undefined,
       port: ['MikroTik', 'Mimosa'].includes(manufacturer) ? Number($('host-auth-port').value) : null,
       tls: manufacturer === 'Mimosa' || (manufacturer === 'MikroTik' && $('host-auth-tls').checked) };
   }
@@ -309,6 +309,18 @@
   $('host-auth-tls').addEventListener('change', () => {
     if (['8728', '8729'].includes($('host-auth-port').value)) $('host-auth-port').value = $('host-auth-tls').checked ? 8729 : 8728;
   });
+  async function refreshConnectionStatus(host) {
+    if (!hasList) return;
+    try {
+      const rows = await request();
+      const updated = rows.find(row => row.id === host.id);
+      if (!updated) return;
+      host.connectionStatus = updated.connectionStatus;
+      const row = hosts.find(row => row.id === host.id);
+      if (row) row.connectionStatus = updated.connectionStatus;
+      render();
+    } catch { /* Keep the original authentication result visible. */ }
+  }
   async function saveAuth(testOnly) {
     if (busy || !authLoaded || !current) return;
     for (const id of ['host-auth-port', 'host-ssh-port', 'host-telnet-port']) {
@@ -324,6 +336,7 @@
     const ports = auth.manufacturer === 'Mimosa' ? {} : terminalPorts();
     const terminalOnly = !testOnly && !auth.manufacturer && JSON.stringify(auth) === authBaseline;
     const input = { ...auth, ...ports };
+    const host = current;
     setBusy(true, testOnly ? 'test' : 'save');
     try {
       if (terminalOnly) {
@@ -346,7 +359,11 @@
       }
       const success = testOnly ? result.success : result.status === 'ACTIVE';
       window.notify?.(testOnly ? result.message : 'Autenticação salva. ' + result.message, success ? 'success' : 'error');
-    } catch (error) { window.notify?.(error.message, 'error'); }
+      if (testOnly && !success) await refreshConnectionStatus(host);
+    } catch (error) {
+      window.notify?.(error.message, 'error');
+      if (!terminalOnly) await refreshConnectionStatus(host);
+    }
     finally { setBusy(false); }
   }
   $('host-auth-test').addEventListener('click', () => saveAuth(true));

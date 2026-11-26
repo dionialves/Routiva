@@ -68,9 +68,25 @@ public class UbiquitiSsh {
         public br.com.scriptping.cisco.CiscoCli ciscoCli() throws Exception {
             return new br.com.scriptping.cisco.CiscoCli(session);
         }
+        public void setBackupReadTimeout(int seconds) throws JSchException {
+            session.setTimeout(Math.multiplyExact(seconds, 1000));
+        }
+
+        public void digistarDump(String password, String destination, String filename, int timeoutSeconds) throws Exception {
+            br.com.scriptping.digistar.DigistarCli.dump(session, password, destination, filename, timeoutSeconds);
+        }
         public String command(String command) throws Exception {
             if (!java.util.Set.of("mca-status", "wstalist", "cat /proc/net/dev", "ifconfig -a").contains(command))
                 throw new IllegalArgumentException("Unsupported SSH command");
+            return readCommand(command, 10);
+        }
+        public String exportRouterOs(int timeoutSeconds) throws Exception {
+            return readCommand("/export", timeoutSeconds);
+        }
+        public String backupAirOs(int timeoutSeconds) throws Exception {
+            return readCommand("cat /tmp/system.cfg", timeoutSeconds);
+        }
+        private String readCommand(String command, int timeoutSeconds) throws Exception {
             var channel = (ChannelExec) session.openChannel("exec");
             try {
                 channel.setCommand(command);
@@ -80,7 +96,7 @@ public class UbiquitiSsh {
                 channel.connect(10000);
                 var output = new ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];
-                long deadline = System.nanoTime() + 10_000_000_000L;
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(timeoutSeconds);
                 while (true) {
                     while (input.available() > 0) {
                         int size = input.read(buffer);
@@ -89,7 +105,7 @@ public class UbiquitiSsh {
                         output.write(buffer, 0, size);
                     }
                     if (channel.isClosed() && input.available() == 0) break;
-                    if (System.nanoTime() > deadline) throw new IOException("SSH command timed out");
+                    if (System.nanoTime() > deadline) throw new IOException("Tempo limite de " + timeoutSeconds + " s aguardando a resposta do comando SSH.");
                     Thread.sleep(10);
                 }
                 if (channel.getExitStatus() != 0) throw new IOException("SSH command failed");

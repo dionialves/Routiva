@@ -3,9 +3,9 @@
 <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
 <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
 <th:block th:replace="~{design-system :: picker}"></th:block>
-<link rel="stylesheet" href="/hosts.css?v=20261124-auth-notifications">
+<link rel="stylesheet" href="/hosts.css?v=20261126-saved-password">
 <script src="/multi-picker.js" defer></script>
-<script src="/hosts.js?v=20261124-auth-notifications" defer></script>
+<script src="/hosts.js?v=20261126-connection-status" defer></script>
 </th:block></head><body>
 <th:block th:fragment="dialogs">
 <dialog th:replace="~{design-system :: formDialog('host-dialog', 'host-dialog-title', 'host-dialog-description', ~{host-dialog :: hostForm})}"><th:block th:fragment="hostForm">
@@ -49,7 +49,7 @@
       <div id="host-auth" class="host-form-fields" role="tabpanel" aria-labelledby="host-auth-tab" hidden>
         <section th:replace="~{design-system :: formSection('host-auth-section-title', 'Autenticação do app', 'key', ~{host-dialog :: hostAuthPanel})}"><th:block th:fragment="hostAuthPanel">
             <fieldset id="host-auth-fields" class="host-auth-fields">
-              <div class="host-auth-field host-auth-manufacturer"><label for="host-auth-manufacturer">Fabricante</label><select id="host-auth-manufacturer"><option value="">Selecione</option><option>MikroTik</option><option>Ubiquiti</option><option>Datacom</option><option>Cisco</option><option>Mimosa</option></select></div>
+              <div class="host-auth-field host-auth-manufacturer"><label for="host-auth-manufacturer">Fabricante</label><select id="host-auth-manufacturer"><option value="">Selecione</option><option>MikroTik</option><option>Ubiquiti</option><option>Datacom</option><option>Cisco</option><option>Mimosa</option><option>Digistar</option></select></div>
               <div id="host-auth-login-field" class="host-auth-field host-auth-user"><label id="host-auth-login-label" for="host-auth-login">Usuário</label><input id="host-auth-login" maxlength="255" autocomplete="off"></div>
               <div class="host-auth-field host-auth-password"><label for="host-auth-password">Senha</label><div class="host-password-control"><input id="host-auth-password" type="password" maxlength="4096" autocomplete="new-password" aria-describedby="host-auth-password-help"><button id="host-auth-password-toggle" type="button" class="host-password-toggle" aria-label="Mostrar senha" aria-pressed="false"><svg th:replace="~{shell :: icon('eye')}"></svg></button></div><small id="host-auth-password-help">Informe a senha do equipamento.</small></div>
               <div id="host-auth-ports" class="host-auth-ports">
