@@ -41,4 +41,28 @@ class ScheduleRuleTests {
         var rule = new ScheduleRule("DAILY", "02:30", null, 1, 30, "America/New_York");
         assertThat(rule.next(at("2026-03-08T05:00:00Z"))).isEqualTo(at("2026-03-09T06:30:00Z"));
     }
+    @Test void cronUsesFiveFieldsAndRunsAtSecondZeroInTheConfiguredZone() {
+        var rule = ScheduleRule.cron("00 01 * * *", "America/Sao_Paulo");
+        assertThat(rule.cron()).isEqualTo("0 1 * * *");
+        assertThat(rule.next(at("2026-11-16T03:59:59Z"))).isEqualTo(at("2026-11-16T04:00:00Z"));
+        assertThat(ScheduleRule.cron("* * * * *", "UTC").next(at("2026-11-16T04:00:00Z")))
+            .isEqualTo(at("2026-11-16T04:01:00Z"));
+    }
+
+    @Test void cronRequiresBothCalendarDaysToMatchAndUsesZeroForSunday() {
+        var rule = ScheduleRule.cron("0 1 15 * 1", "UTC");
+        assertThat(rule.next(at("2026-11-16T00:00:00Z"))).isEqualTo(at("2027-02-15T01:00:00Z"));
+        assertThat(ScheduleRule.cron("59 23 * 11 0", "UTC").next(at("2026-11-16T00:00:00Z")))
+            .isEqualTo(at("2026-11-22T23:59:00Z"));
+        assertThat(ScheduleRule.cron("0 1 29 2 1", "UTC").next(at("2026-11-16T00:00:00Z")))
+            .isEqualTo(at("2044-02-29T01:00:00Z"));
+    }
+
+    @Test void cronRejectsOutOfRangeFieldsAndUnrepresentableExpressions() {
+        for (String cron : List.of("60 * * * *", "* 24 * * *", "* * 0 * *", "* * 32 * *",
+            "* * * 0 *", "* * * 13 *", "* * * * 7", "* * * * -1", "* * 31 2 *",
+            "0.5 * * * *", "*/5 * * * *", "0 * * * 1,2", "0 * * * * *", "0 * * *", "0 * *  *")) {
+            assertThatIllegalArgumentException().as(cron).isThrownBy(() -> ScheduleRule.cron(cron, "UTC"));
+        }
+    }
 }

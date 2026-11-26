@@ -9,10 +9,10 @@
   <th:block th:replace="~{design-system :: actions}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
   <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
-  <link rel="stylesheet" href="/availability.css">
-  <link rel="stylesheet" href="/task-scheduler.css?v=20261116-3">
+  <link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
+  <link rel="stylesheet" href="/task-scheduler.css?v=20261126-status-text">
   <script src="/shell.js?v=20261124-dialog-notifications" defer></script>
-  <script src="/task-scheduler.js?v=20261116-run-now" defer></script>
+  <script src="/task-scheduler.js?v=20261126-status-text" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('scheduler')}"></aside>
@@ -22,42 +22,152 @@
     <button id="new-schedule" aria-haspopup="dialog" aria-controls="schedule-dialog" class="system-button system-button-primary query-primary-action" type="button" th:disabled="${#lists.isEmpty(tasks)}"><svg th:replace="~{shell :: icon('plus')}"></svg>Novo agendamento</button>
   </div>
   <p th:if="${#lists.isEmpty(tasks)}" class="scheduler-notice">Nenhuma tarefa disponível. O agendador está preparado; as tarefas serão disponibilizadas após a definição do catálogo.</p>
-  <p id="scheduler-feedback" role="status" aria-live="polite">Carregando agendamentos…</p>
-  <section class="card availability-host-section" aria-labelledby="schedules-title"><h2 id="schedules-title">Agendamentos</h2><p>Clique no nome da tarefa para consultar ou editar o agendamento e acompanhar suas execuções.</p>
+  <section class="card availability-host-section system-table-compact" aria-labelledby="schedules-title">
+    <h2 id="schedules-title">Agendamentos</h2>
+    <p id="scheduler-feedback" role="status" aria-live="polite">Carregando agendamentos…</p>
     <div th:replace="~{design-system :: dataTable('Agendamentos cadastrados', ~{task-scheduler :: scheduleSections})}"><th:block th:fragment="scheduleSections">
-      <thead><tr><th scope="col">Tarefa</th><th scope="col">Programação</th><th scope="col">Situação</th><th scope="col">Próxima execução</th><th scope="col">Última execução</th></tr></thead><tbody id="schedule-rows"></tbody>
+      <thead>
+        <tr>
+          <th scope="col">Tarefa</th>
+          <th scope="col">Programação</th>
+          <th scope="col">Situação</th>
+          <th scope="col">Próxima execução</th>
+          <th scope="col">Última execução</th>
+          <th scope="col">Status</th>
+        </tr>
+      </thead>
+      <tbody id="schedule-rows"></tbody>
     </th:block></div>
-    <div class="system-pagination"><button th:replace="~{design-system :: action('schedule-previous', 'chevron-left', 'Anterior')}"></button><span id="schedule-page"></span><button th:replace="~{design-system :: action('schedule-next', 'chevron-right', 'Próxima')}"></button></div>
+    <nav class="system-pagination" aria-label="Paginação de agendamentos">
+      <button th:replace="~{design-system :: action('schedule-previous', 'chevron-left', 'Anterior')}"></button>
+      <span id="schedule-page" role="status" aria-live="polite"></span>
+      <button th:replace="~{design-system :: action('schedule-next', 'chevron-right', 'Próxima')}"></button>
+    </nav>
   </section>
 </main></div>
 <dialog th:replace="~{design-system :: analysisDialog('schedule-dialog', 'schedule-title', 'schedule-description', ~{task-scheduler :: scheduleContent})}"><th:block th:fragment="scheduleContent">
   <div class="analysis-dialog-layout">
   <header class="analysis-header"><div class="analysis-title"><span class="analysis-title-icon"><svg th:replace="~{shell :: icon('calendar-days')}"></svg></span><div><h2 id="schedule-title">Agendamento</h2><p id="schedule-description">Dados do agendamento e histórico de execuções.</p></div></div><button id="schedule-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar agendamento"><svg th:replace="~{shell :: icon('close')}"></svg></button></header>
-  <div class="analysis-tabs" role="tablist" aria-label="Agendamento"><button type="button" id="schedule-data-tab" role="tab" aria-selected="true" aria-controls="schedule-data"><svg th:replace="~{shell :: icon('file')}"></svg><span><strong>Dados do agendamento</strong><small>Tarefa e programação</small></span></button><button type="button" id="schedule-history-tab" role="tab" tabindex="-1" aria-selected="false" aria-controls="schedule-history"><svg th:replace="~{shell :: icon('chart-line')}"></svg><span><strong>Histórico de execuções</strong><small>Resultados do agendamento</small></span></button></div>
+  <div class="analysis-tabs" role="tablist" aria-label="Agendamento"><button type="button" id="schedule-data-tab" role="tab" aria-selected="true" aria-controls="schedule-data"><svg th:replace="~{shell :: icon('file')}"></svg><span><strong>Dados do agendamento</strong></span></button><button type="button" id="schedule-history-tab" role="tab" tabindex="-1" aria-selected="false" aria-controls="schedule-history"><svg th:replace="~{shell :: icon('chart-line')}"></svg><span><strong>Histórico de execuções</strong></span></button></div>
   <section id="schedule-data" class="analysis-body" role="tabpanel" aria-labelledby="schedule-data-tab" tabindex="0">
   <form id="schedule-form" class="connection-form">
-    <input type="hidden" name="id">
-    <label>Tarefa<select name="taskKey" required><option value="">Selecione uma tarefa</option><option th:each="task : ${tasks}" th:value="${task.key}" th:text="${task.label}"></option></select></label>
-    <label>Frequência<select name="frequency"><option value="DAILY">Diariamente</option><option value="WEEKLY">Semanalmente</option><option value="MONTHLY">Mensalmente</option><option value="INTERVAL">Por intervalo</option></select></label>
-    <label id="schedule-time-field">Horário<input name="time" type="time" value="02:00" required></label>
-    <fieldset id="schedule-weekdays" hidden><legend>Dias da semana</legend><label><input type="checkbox" name="weekday" value="1">Segunda</label><label><input type="checkbox" name="weekday" value="2">Terça</label><label><input type="checkbox" name="weekday" value="3">Quarta</label><label><input type="checkbox" name="weekday" value="4">Quinta</label><label><input type="checkbox" name="weekday" value="5">Sexta</label><label><input type="checkbox" name="weekday" value="6">Sábado</label><label><input type="checkbox" name="weekday" value="7">Domingo</label></fieldset>
-    <label id="schedule-month-field" hidden>Dia do mês<input name="monthDay" type="number" min="1" max="31" value="1"><small>Dias 29, 30 e 31 executam somente nos meses que possuem esse dia.</small></label>
-    <label id="schedule-interval-field" hidden>Intervalo<select name="intervalMinutes"><option value="5">5 minutos</option><option value="10">10 minutos</option><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">1 hora</option></select><small>Intervalos alinhados ao relógio, a partir do minuto 00.</small></label>
-    <label>Fuso horário<input name="zone" value="America/Sao_Paulo" required maxlength="80" list="schedule-zones"><datalist id="schedule-zones"><option value="America/Sao_Paulo"></option><option value="America/Manaus"></option><option value="America/Rio_Branco"></option><option value="America/Noronha"></option><option value="UTC"></option></datalist></label>
-    <label class="scheduler-checkbox"><input type="checkbox" name="enabled" checked>Agendamento ativo</label>
-    <section aria-labelledby="preview-title" aria-live="polite"><h3 id="preview-title">Próximas cinco execuções</h3><p id="schedule-summary"></p><ol id="schedule-preview"></ol></section>
-    <p id="schedule-execution-help">Executar agora em um novo agendamento salva a configuração como pausada e inicia a tarefa uma vez.</p>
-    <p id="schedule-error" role="alert"></p>
+    <div class="schedule-task-field">
+      <label for="schedule-task">Tarefa</label>
+      <select id="schedule-task" name="taskKey" required>
+        <option value="">Selecione uma tarefa</option>
+        <option th:each="task : ${tasks}" th:value="${task.key}" th:text="${task.label}"></option>
+      </select>
+    </div>
+    <p id="schedule-legacy" hidden></p>
+    <th:block th:replace="~{task-scheduler :: cronField('minute', 'Minuto', 0, 59, '0–59', 'clock-3')}"></th:block>
+    <th:block th:replace="~{task-scheduler :: cronField('hour', 'Hora', 0, 23, '0–23', 'clock-3')}"></th:block>
+    <th:block th:replace="~{task-scheduler :: cronField('dayOfMonth', 'Dia do mês', 1, 31, '1–31', 'calendar-days')}"></th:block>
+    <th:block th:replace="~{task-scheduler :: cronField('month', 'Mês', 1, 12, '1–12', 'calendar-days')}"></th:block>
+    <th:block th:replace="~{task-scheduler :: cronField('dayOfWeek', 'Dia da semana', 0, 6, '0 = dom, 1 = seg, …, 6 = sáb', 'calendar-days')}"></th:block>
   </form></section>
-  <section id="schedule-history" class="analysis-body" role="tabpanel" aria-labelledby="schedule-history-tab" tabindex="0" hidden><div class="scheduler-section-heading"><h2 id="history-title">Histórico de execuções</h2><button th:replace="~{design-system :: action('refresh-history', 'refresh', 'Atualizar')}"></button></div>
-    <p id="history-feedback" role="status" aria-live="polite"></p><p>Horários exibidos no fuso de cada agendamento. Ocorrências atrasadas não são executadas retroativamente.</p>
+  <section id="schedule-history" class="analysis-body" role="tabpanel" aria-labelledby="schedule-history-tab" tabindex="0" hidden>
+    <h2 id="history-title">Histórico de execuções</h2>
+    <p id="history-feedback" role="status" aria-live="polite"></p>
     <div th:replace="~{design-system :: dataTable('Histórico de execuções', ~{task-scheduler :: historySections})}"><th:block th:fragment="historySections">
-      <thead><tr><th scope="col">Horário previsto</th><th scope="col">Início</th><th scope="col">Término</th><th scope="col">Resultado</th><th scope="col">Detalhes</th></tr></thead><tbody id="execution-rows"></tbody>
+      <thead><tr><th scope="col">Horário previsto</th><th scope="col">Início</th><th scope="col">Término</th><th scope="col">Status</th></tr></thead><tbody id="execution-rows"></tbody>
     </th:block></div>
-    <div class="system-pagination"><button th:replace="~{design-system :: action('history-previous', 'chevron-left', 'Anterior')}"></button><span id="history-page"></span><button th:replace="~{design-system :: action('history-next', 'chevron-right', 'Próxima')}"></button></div>
+    <nav class="system-pagination" aria-label="Páginas do histórico">
+      <button th:replace="~{design-system :: action('history-previous', 'chevron-left', 'Anterior')}"></button>
+      <span id="history-page" aria-live="polite"></span>
+      <button th:replace="~{design-system :: action('history-next', 'chevron-right', 'Próxima')}"></button>
+    </nav>
   </section>
-  <footer class="analysis-footer"><div class="settings-actions"><button id="schedule-run" type="button" class="system-button"><svg th:replace="~{shell :: icon('play')}"></svg>Executar agora</button><button id="schedule-toggle" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('play')}"></svg><span>Pausar</span></button><button id="schedule-delete" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir</button></div><div class="settings-actions"><button id="schedule-cancel" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Fechar</button><button id="schedule-save" form="schedule-form" type="submit" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg>Salvar agendamento</button></div></footer>
+  <footer class="analysis-footer">
+    <div class="settings-actions">
+      <button id="schedule-delete" type="button" class="system-button system-button-danger" hidden><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir</button>
+    </div>
+    <div class="settings-actions">
+      <button id="schedule-cancel" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+      <button id="schedule-run" type="button" class="system-button"><svg th:replace="~{shell :: icon('play')}"></svg>Executar agora</button>
+      <button id="schedule-save" form="schedule-form" type="submit" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg>Salvar</button>
+    </div>
+  </footer>
   </div>
 </th:block></dialog>
-<dialog th:replace="~{design-system :: formDialog('delete-schedule-dialog', 'delete-schedule-title', 'delete-schedule-description', ~{task-scheduler :: deleteContent})}"><th:block th:fragment="deleteContent"><h2 id="delete-schedule-title">Excluir agendamento?</h2><p id="delete-schedule-description">O histórico será preservado. Uma execução já iniciada continuará até terminar.</p><div class="settings-actions"><button id="delete-cancel" type="button" class="system-button">Cancelar</button><button id="delete-confirm" type="button" class="system-button system-button-primary">Excluir agendamento</button></div><p id="delete-error" role="alert"></p></th:block></dialog>
+<dialog th:replace="~{design-system :: analysisDialog('execution-dialog', 'execution-title', 'execution-description', ~{task-scheduler :: executionContent})}">
+  <th:block th:fragment="executionContent">
+    <div class="analysis-dialog-layout">
+      <header class="analysis-header">
+        <div class="analysis-title"><span class="analysis-title-icon"><svg th:replace="~{shell :: icon('calendar-days')}"></svg></span>
+          <div><h2 id="execution-title">Logs da execução</h2><p id="execution-description">Detalhes da execução.</p></div>
+        </div>
+        <button id="execution-close" type="button" class="system-button system-button-icon-only" aria-label="Fechar logs da execução"><svg th:replace="~{shell :: icon('close')}"></svg></button>
+      </header>
+      <section class="analysis-body">
+        <p id="execution-feedback" role="status"></p>
+        <dl id="execution-summary" class="execution-summary" hidden>
+          <div><dt><svg th:replace="~{shell :: icon('calendar-days')}"></svg>Horário previsto</dt><dd id="execution-scheduled"></dd></div>
+          <div><dt><svg th:replace="~{shell :: icon('play')}"></svg>Início</dt><dd id="execution-started"></dd></div>
+          <div><dt><svg th:replace="~{shell :: icon('clock-3')}"></svg>Término</dt><dd id="execution-finished"></dd></div>
+          <div><dt><svg th:replace="~{shell :: icon('activity')}"></svg>Status</dt><dd id="execution-status"></dd></div>
+          <div><dt><svg th:replace="~{shell :: icon('layers')}"></svg>Resultado geral</dt><dd id="execution-result"></dd></div>
+        </dl>
+        <div id="execution-logs" hidden>
+          <h3>Logs por host</h3>
+          <div class="execution-log-filters" role="group" aria-labelledby="logs-filter-label">
+            <span class="execution-log-filter-label" id="logs-filter-label"><svg th:replace="~{shell :: icon('filter')}"></svg>Resultado:</span>
+            <label><input id="logs-filter-success" type="checkbox">Sucesso</label>
+            <label><input id="logs-filter-failure" type="checkbox">Falha</label>
+          </div>
+          <div th:replace="~{design-system :: dataTable('Logs por host', ~{task-scheduler :: executionSections})}">
+            <th:block th:fragment="executionSections">
+              <colgroup><col class="execution-host-column"><col class="execution-state-column"><col class="execution-message-column"></colgroup>
+              <thead><tr><th scope="col">Host</th><th scope="col">Resultado</th><th scope="col">Mensagem</th></tr></thead>
+              <tbody id="execution-log-rows"></tbody>
+            </th:block>
+          </div>
+          <div class="system-pagination">
+            <button th:replace="~{design-system :: action('logs-previous', 'chevron-left', 'Anterior')}"></button>
+            <span id="logs-page" aria-live="polite"></span>
+            <button th:replace="~{design-system :: action('logs-next', 'chevron-right', 'Próxima')}"></button>
+          </div>
+        </div>
+      </section>
+      <footer class="analysis-footer">
+        <div class="settings-actions">
+          <button th:replace="~{design-system :: action('execution-export', 'download', 'Exportar logs')}"></button>
+          <button id="execution-dismiss" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Fechar</button>
+        </div>
+      </footer>
+    </div>
+  </th:block>
+</dialog>
+<dialog th:replace="~{design-system :: formDialog('delete-schedule-dialog', 'delete-schedule-title', 'delete-schedule-description', ~{task-scheduler :: deleteContent})}">
+  <th:block th:fragment="deleteContent">
+    <div class="form-dialog-frame">
+      <header class="form-dialog-header"><h2 id="delete-schedule-title">Excluir agendamento?</h2></header>
+      <div class="form-dialog-content"><p id="delete-schedule-description">O histórico será preservado. Uma execução já iniciada continuará até terminar.</p></div>
+      <footer th:replace="~{design-system :: modalFooter(~{task-scheduler :: deleteActions})}">
+        <th:block th:fragment="deleteActions">
+          <div class="settings-actions">
+            <button id="delete-cancel" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
+            <button id="delete-confirm" type="button" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir agendamento</button>
+          </div>
+        </th:block>
+      </footer>
+    </div>
+  </th:block>
+</dialog>
+<th:block th:remove="all"><div th:fragment="cronField(key, label, min, max, range, icon)" class="schedule-cron-field"
+               role="group" th:attr="aria-labelledby=|schedule-${key}-label|">
+  <div class="schedule-cron-title">
+    <svg th:replace="~{shell :: icon(${icon})}"></svg>
+    <div><strong th:id="|schedule-${key}-label|" th:text="${label}"></strong><small th:text="${range}"></small></div>
+  </div>
+  <div class="schedule-cron-type">
+    <span>Tipo:</span>
+    <label><input type="radio" th:name="|${key}Type|" value="all" checked>Todos</label>
+    <label><input type="radio" th:name="|${key}Type|" value="value">Valor</label>
+  </div>
+  <div class="schedule-cron-value">
+    <label th:for="|schedule-${key}|">Valor:</label>
+    <input type="number" th:id="|schedule-${key}|" th:name="${key}" th:min="${min}" th:max="${max}"
+           th:attr="aria-labelledby=|schedule-${key}-label|" step="1" disabled>
+  </div>
+</div></th:block>
 </body></html>

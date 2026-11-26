@@ -1,40 +1,39 @@
 # Agendador de tarefas
 
 Acesso administrativo em **Configuração → Agendador de tarefas** (`/configuracao/agendador`).
-O catálogo inclui **Avaliação de Cliente Rádio**, que processa todos os APs em sequência
-e avalia 30 pacotes por destino. Veja [Clientes Rádio](radio-clients.md). Nenhum agendamento
-é criado automaticamente; escolha a frequência e salve para ativar a tarefa.
+O catálogo inclui **Backup de hosts** e **Avaliação de Cliente Rádio**.
+O backup percorre os hosts habilitados em sequência e usa as credenciais e a retenção de cada host.
+A avaliação percorre os APs e avalia 30 pacotes por destino. Veja [Clientes Rádio](radio-clients.md).
+Escolha a tarefa e salve a programação para ativar a recorrência.
 A página usa a tabela compartilhada com uma linha por agendamento. O nome da tarefa
 é um link no padrão das tabelas do sistema e abre o modal `analysisDialog`, com as abas
-**Dados do agendamento** e **Histórico de execuções**. As ações de pausar, ativar e excluir
-ficam no rodapé do modal. A consulta do histórico filtra por agendamento no banco antes
+**Dados do agendamento** e **Histórico de execuções**. O rodapé oferece **Excluir**, **Cancelar**, **Executar agora** e **Salvar**. A consulta do histórico filtra por agendamento no banco antes
 de paginar, sem misturar execuções de outras tarefas.
 
 ## Configuração guiada
 
-- Identificação pela própria tarefa, sem campo de nome. Uma atividade pode ter apenas um agendamento não excluído, ativo ou pausado.
-- Tarefa do catálogo, ativo/pausado e fuso IANA.
-- Diário: horário local.
-- Semanal: um ou mais dias e horário local.
-- Mensal: dia 1–31 e horário. Meses sem o dia escolhido são pulados.
-- Intervalo: 5, 10, 15, 30 ou 60 minutos. Os disparos são alinhados ao relógio
-  (30 minutos significa HH:00 e HH:30, não 30 minutos após salvar).
-- Fuso inicial `America/Sao_Paulo`; aceita outros fusos IANA e UTC.
-- Prévia calculada no servidor: descrição e próximas cinco ocorrências.
-- Não há campo de cron, comandos de sistema ou código livre. `ScheduleRule` gera
-  internamente uma expressão Spring somente a partir dos campos validados.
+- Cada tarefa pode ter um agendamento não excluído.
+- Os cinco campos CRON são minuto (0–59), hora (0–23), dia do mês (1–31), mês (1–12)
+  e dia da semana (0–6, começando pelo domingo).
+- **Todos** gera `*` e **Valor** aceita um único inteiro dentro do intervalo do campo.
+- `0 1 * * *` executa diariamente às 01:00. O Spring recebe `0 0 1 * * *`, com segundos no início.
+- Se dia do mês e dia da semana tiverem valores fixos, os dois precisam coincidir.
+  Datas impossíveis, como 31 de fevereiro, são rejeitadas.
+- Novas programações usam `spring.jackson.time-zone`, com padrão `America/Sao_Paulo`.
+  Regras antigas mantêm sua recorrência e seu fuso até serem substituídas no formulário.
+  Agendamentos já pausados mantêm esse estado ao editar.
 - Horários locais inexistentes na entrada do horário de verão são pulados.
   Na saída do horário de verão, um horário repetido pode ocorrer duas vezes, com instantes UTC distintos.
 
 ## Executar agora e unicidade
 
 O rodapé do modal oferece **Executar agora**. A solicitação retorna imediatamente e
-usa o mesmo pool, proteção contra sobreposição, resultados por AP e histórico da execução automática.
+usa o mesmo pool, proteção contra sobreposição, resultados por equipamento e histórico da execução automática.
 
 - Agendamento existente: executa os dados salvos, mesmo se pausado, sem alterar a próxima ocorrência.
   Alterações no formulário precisam ser salvas antes para afetar essa execução.
-- Novo agendamento: valida os campos, salva como **pausado** e executa uma vez. Não ativa
-  recorrência implicitamente. O modal informa esse comportamento.
+- Novo agendamento: valida os campos, cria um registro para guardar o histórico e executa uma vez.
+  O registro aparece como **Somente manual** até salvar a programação recorrente.
 - Tarefa em andamento ou executor ocupado: recusa com mensagem, sem criar outra execução concorrente.
 - A interface impede duplo clique enquanto envia a solicitação; o servidor também valida concorrência.
 - Acesso restrito a administrador e proteção CSRF, como nas demais alterações.
@@ -84,11 +83,11 @@ Regras:
 - Exclusão lógica: interrompe novos disparos e preserva histórico e execução em andamento.
 - Desligamento solicita interrupção aos workers. Implementações de tarefas devem respeitar
   interrupções e configurar limites de tempo para chamadas externas.
-- Histórico sem expiração automática nesta versão, paginado em blocos de 25 registros.
+- Histórico sem expiração automática, paginado na interface em blocos de 10 registros.
 
 A tela atualiza a lista a cada 15 segundos quando visível e os modais estão fechados.
-Com o modal aberto na aba Histórico, atualiza apenas as execuções do agendamento selecionado.
-Há atualização manual, estados vazios, mensagens de falha e formulários com CSRF.
+O histórico consulta as execuções ao abrir a aba, mudar de página ou iniciar uma execução manual.
+O horário previsto abre os logs da execução, com resumo e resultados por equipamento. A exportação em texto inclui todos os resultados. A interface apresenta estados vazios, mensagens de falha e formulários com CSRF.
 Todas as rotas, inclusive prévia e API, ficam sob `/configuracao/**`, restrito a ADMIN.
 
 ## Inclusão de novas tarefas
@@ -111,10 +110,10 @@ sem criar sessões HTTP. Apenas a tarefa entrega lotes ao serviço de persistên
 
 ## Validação
 
-- `ScheduleRuleTests`: fuso, horário de verão, semanal, mensal, intervalos e validação.
+- `ScheduleRuleTests`: campos CRON, combinação dos dias, fuso, horário de verão e regras legadas.
 - `ScheduleStoreTests`: DDL idempotente em H2, persistência, reservas concorrentes,
   sobreposição, limite de concorrência, atraso, recuperação, pausa e histórico após exclusão.
 - `SchedulePageTests`: renderização dos fragmentos sem duplicação, catálogo vazio, CSRF,
-  prévia e rejeição de tarefa desconhecida.
+  persistência do CRON no fuso padrão, prévia legada e rejeição de tarefa desconhecida.
 - `SecurityFlowTests`: usuário normal sem acesso às telas e operações do agendador.
-- `task-scheduler.test.cjs`: resumos e formatação no fuso selecionado.
+- `task-scheduler.test.cjs`: campos CRON, edição legada, histórico, execução manual e formatação no fuso da regra.

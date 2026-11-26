@@ -37,11 +37,24 @@ public class ScheduleStore {
     }
     public long historyCount() { return jdbc.queryForObject("SELECT COUNT(*) FROM task_execution", Long.class); }
     public List<Execution> history(String scheduleId, int page) {
-        return jdbc.query("SELECT * FROM task_execution WHERE schedule_id=? ORDER BY scheduled_at DESC, id LIMIT 25 OFFSET ?", (r, n) ->
-            new Execution(r.getString("id"), r.getString("schedule_id"), r.getString("schedule_name"), r.getString("task_label"),
-                r.getString("zone"), r.getLong("scheduled_at"), (Long) r.getObject("started_at"),
-                (Long) r.getObject("finished_at"), r.getString("state"), r.getString("message")), scheduleId, page * 25);
+        return historySummary(scheduleId, page, 25);
     }
+    public List<Execution> historySummary(String scheduleId, int page, int size) {
+        return jdbc.query("SELECT * FROM task_execution WHERE schedule_id=? ORDER BY scheduled_at DESC, id LIMIT ? OFFSET ?",
+            this::execution, scheduleId, size, (long) page * size);
+    }
+
+    public Optional<Execution> execution(String scheduleId, String executionId) {
+        return jdbc.query("SELECT * FROM task_execution WHERE schedule_id=? AND id=?", this::execution,
+            scheduleId, executionId).stream().findFirst();
+    }
+
+    private Execution execution(java.sql.ResultSet r, int row) throws java.sql.SQLException {
+        return new Execution(r.getString("id"), r.getString("schedule_id"), r.getString("schedule_name"), r.getString("task_label"),
+            r.getString("zone"), r.getLong("scheduled_at"), (Long) r.getObject("started_at"),
+            (Long) r.getObject("finished_at"), r.getString("state"), r.getString("message"));
+    }
+
     public long historyCount(String scheduleId) {
         return jdbc.queryForObject("SELECT COUNT(*) FROM task_execution WHERE schedule_id=?", Long.class, scheduleId);
     }
@@ -58,12 +71,33 @@ public class ScheduleStore {
         catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalArgumentException("Configuração inválida."); }
     }
     public void save(Entry entry, boolean create, long now) {
+        boolean guidedCron = entry.rule().cron() != null;
         if (create) {
+            // A manual run before the first save needs a history owner but has no planned occurrence.
+            long nextRun = guidedCron && !entry.enabled() ? 0 : entry.nextRun();
             jdbc.update("INSERT INTO task_schedule(id,name,task_key,task_label,rule_json,parameters_json,enabled,next_run,created_at,updated_at,task_slot) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                entry.id(), entry.name(), entry.taskKey(), entry.taskLabel(), encode(entry.rule()), encode(entry.parameters()), entry.enabled(), entry.nextRun(), now, now, entry.taskKey());
-        } else if (jdbc.update("UPDATE task_schedule SET name=?,task_key=?,task_label=?,rule_json=?,parameters_json=?,enabled=?,next_run=?,updated_at=?,task_slot=? WHERE id=? AND deleted=FALSE",
-            entry.name(), entry.taskKey(), entry.taskLabel(), encode(entry.rule()), encode(entry.parameters()), entry.enabled(), entry.nextRun(), now, entry.taskKey(), entry.id()) == 0) missing();
+                entry.id(), entry.name(), entry.taskKey(), entry.taskLabel(), encode(entry.rule()), encode(entry.parameters()), entry.enabled(), nextRun, now, now, entry.taskKey());
+            return;
+        }
+        tx.executeWithoutResult(status -> {
+            var rows = jdbc.query("SELECT * FROM task_schedule WHERE id=? AND deleted=FALSE FOR UPDATE", this::row, entry.id());
+            if (rows.isEmpty()) missing();
+            var previous = rows.getFirst();
+            if (!previous.taskKey().equals(entry.taskKey()) && isRunning(previous.taskKey()))
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                    "Aguarde o fim da execução para alterar a tarefa.");
+            boolean enabled = guidedCron ? previous.enabled() || previous.nextRun() == 0 : entry.enabled();
+            jdbc.update("UPDATE task_schedule SET name=?,task_key=?,task_label=?,rule_json=?,parameters_json=?,enabled=?,next_run=?,updated_at=?,task_slot=? WHERE id=?",
+                entry.name(), entry.taskKey(), entry.taskLabel(), encode(entry.rule()), encode(entry.parameters()),
+                enabled, entry.nextRun(), now, entry.taskKey(), entry.id());
+        });
     }
+
+    private boolean isRunning(String taskKey) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM task_execution e JOIN task_schedule s ON s.id=e.schedule_id WHERE s.task_key=? AND e.state='RUNNING'",
+            Integer.class, taskKey) > 0;
+    }
+
     public void change(String id, String action, long now) {
         tx.executeWithoutResult(s -> {
             var rows = jdbc.query("SELECT * FROM task_schedule WHERE id=? AND deleted=FALSE FOR UPDATE", this::row, id);
@@ -86,7 +120,7 @@ public class ScheduleStore {
             for (var entry : due) {
                 String state = "RUNNING", message = "Execução iniciada.";
                 if (now - entry.nextRun() > 60000) { state = "MISSED"; message = "Horário perdido; ocorrências atrasadas não serão executadas."; }
-                else if (jdbc.queryForObject("SELECT COUNT(*) FROM task_execution e JOIN task_schedule s ON s.id=e.schedule_id WHERE s.task_key=? AND e.state='RUNNING'", Integer.class, entry.taskKey()) > 0) {
+                else if (isRunning(entry.taskKey())) {
                     state = "SKIPPED"; message = "Ignorada: outra execução desta tarefa ainda está em andamento.";
                 } else if (claimed.size() >= capacity) { state = "SKIPPED"; message = "Ignorada: limite de execuções simultâneas atingido."; }
                 String id = UUID.randomUUID().toString();
@@ -104,7 +138,7 @@ public class ScheduleStore {
             var rows = jdbc.query("SELECT * FROM task_schedule WHERE id=? AND deleted=FALSE FOR UPDATE", this::row, id);
             if (rows.isEmpty()) missing();
             var entry = rows.getFirst();
-            if (jdbc.queryForObject("SELECT COUNT(*) FROM task_execution e JOIN task_schedule s ON s.id=e.schedule_id WHERE s.task_key=? AND e.state='RUNNING'", Integer.class, entry.taskKey()) > 0)
+            if (isRunning(entry.taskKey()))
                 throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Esta tarefa já está em execução.");
             if (capacity < 1) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "O executor está ocupado. Tente novamente após a conclusão das tarefas em andamento.");
             String execution = UUID.randomUUID().toString();

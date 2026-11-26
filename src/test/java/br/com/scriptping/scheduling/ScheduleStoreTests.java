@@ -155,6 +155,36 @@ class ScheduleStoreTests {
         }
         assertThat(store.historyCount()).isEqualTo(1);
     }
+    @Test void cronRecurrenceSkipsWhileAnImmediateRunIsActive() {
+        var rule = ScheduleRule.cron("* * * * *", "UTC");
+        store.save(new ScheduleStore.Entry("one", "Teste", "test", "Teste", rule, Map.of(), true, now), true, now);
+        var manual = store.claimNow("one", now - 1000, 2);
+        assertThat(store.claim(now, 2)).isEmpty();
+        assertThat(store.history("one", 0).getFirst().state()).isEqualTo("SKIPPED");
+        assertThat(store.all().getFirst().nextRun()).isEqualTo(now + 60_000);
+        store.finish(manual.executionId(), "COMPLETED", "OK", now + 1000);
+        assertThat(store.claim(now + 60_000, 2)).hasSize(1);
+    }
+
+    @Test void firstSaveAfterManualRunActivatesCronButEditingAnOldPausedRuleKeepsItPaused() {
+        var rule = ScheduleRule.cron("0 1 * * *", "UTC");
+        long next = rule.next(now);
+        store.save(new ScheduleStore.Entry("one", "Teste", "test", "Teste", rule, Map.of(), false, next), true, now);
+        var run = store.claimNow("one", now, 2);
+        store.finish(run.executionId(), "COMPLETED", "OK", now + 1000);
+        var save = new ScheduleStore.Entry("one", "Teste", "test", "Teste", rule, Map.of(), true, next);
+        store.save(save, false, now);
+        assertThat(store.all().getFirst().enabled()).isTrue();
+        assertThat(store.all().getFirst().nextRun()).isEqualTo(next);
+        assertThat(store.historyCount("one")).isEqualTo(1);
+
+        store.save(entry("two", next), true, now);
+        store.change("two", "pause", now);
+        store.save(new ScheduleStore.Entry("two", "Teste", "two", "Teste", rule, Map.of(), true, next), false, now);
+        assertThat(store.all().stream().filter(entry -> entry.id().equals("two")).findFirst().orElseThrow().enabled())
+            .isFalse();
+    }
+
     @Test void engineRunsRegisteredTaskWithoutSessionAndPersistsOutcome() throws Exception {
         var completed = new CountDownLatch(1);
         var task = new ScheduledTask() {
@@ -167,7 +197,8 @@ class ScheduleStoreTests {
         var engine = new ScheduleEngine(store, new TaskCatalog(List.of(task)));
         try {
             long current = System.currentTimeMillis();
-            store.save(entry("one", current), true, current);
+            var rule = ScheduleRule.cron("* * * * *", "UTC");
+            store.save(new ScheduleStore.Entry("one", "Teste", "test", "Teste", rule, Map.of(), true, current), true, current);
             engine.dispatch(); assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
         } finally { engine.close(); }
         assertThat(store.history(0).getFirst().state()).isEqualTo("COMPLETED");

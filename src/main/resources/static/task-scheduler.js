@@ -4,6 +4,7 @@
     FAILED: 'Falhou', INTERRUPTED: 'Interrompida', SKIPPED: 'Ignorada', MISSED: 'Horário perdido',
   };
   function describe(rule) {
+    if (rule.cron) return rule.cron;
     if (rule.frequency === 'INTERVAL') return rule.intervalMinutes === 60
       ? 'A cada hora, no minuto 00' : `A cada ${rule.intervalMinutes} minutos, a partir do minuto 00`;
     if (rule.frequency === 'MONTHLY') return `Dia ${rule.monthDay} às ${rule.time}`
@@ -14,25 +15,50 @@
   }
   function date(at, zone) {
     return at == null ? '—' : new Intl.DateTimeFormat('pt-BR', {
-      timeZone: zone, dateStyle: 'short', timeStyle: 'medium',
+      timeZone: zone, day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
     }).format(new Date(at));
   }
-  function ruleFrom(form) {
-    const value = name => form.elements.namedItem(name).value;
-    return {
-      frequency: value('frequency'), time: value('time'),
-      weekdays: Array.from(form.querySelectorAll('[name=weekday]:checked'), input => Number(input.value)),
-      monthDay: Number(value('monthDay')), intervalMinutes: Number(value('intervalMinutes')),
-      zone: value('zone').trim(),
-    };
+  const historySize = 10;
+  const statusLabel = (state, item = false) => state === 'COMPLETED'
+    ? item ? 'Sucesso' : 'Concluída com sucesso' : states[state] || state;
+  function exportText(execution, items) {
+    const zone = execution.zone;
+    return [
+      'Logs da execução — ' + execution.taskLabel,
+      'Horário previsto: ' + date(execution.scheduledAt, zone),
+      'Início: ' + date(execution.startedAt, zone),
+      'Término: ' + date(execution.finishedAt, zone),
+      'Fuso horário: ' + zone,
+      'Status: ' + statusLabel(execution.state),
+      'Resultado geral: ' + (execution.message || '—'),
+      '',
+      ...items.map(item => `${item.hostName} — ${statusLabel(item.state, true)} — ${item.message || '—'}`),
+      '',
+    ].join('\n');
   }
-  if (typeof module !== 'undefined') module.exports = { describe, date, ruleFrom, states };
+  const cronFields = ['minute', 'hour', 'dayOfMonth', 'month', 'dayOfWeek'];
+  function cronFrom(form) {
+    const field = name => form.elements.namedItem(name);
+    return cronFields.map(name => field(name + 'Type').value === 'all' ? '*' : String(field(name).valueAsNumber)).join(' ');
+  }
+  function cronValues(rule) {
+    if (rule.cron) return rule.cron.split(' ');
+    if (rule.frequency === 'INTERVAL')
+      return [rule.intervalMinutes === 60 ? '0' : '', '*', '*', '*', '*'];
+    const [hour, minute] = rule.time.split(':').map(value => String(Number(value)));
+    const weekday = rule.frequency !== 'WEEKLY' || rule.weekdays.length === 7 ? '*'
+      : rule.weekdays.length === 1 ? String(rule.weekdays[0] % 7) : '';
+    return [minute, hour, rule.frequency === 'MONTHLY' ? String(rule.monthDay) : '*', '*', weekday];
+  }
+  if (typeof module !== 'undefined') module.exports = { describe, date, cronFrom, cronValues, states, exportText };
   if (typeof document === 'undefined') return;
   const $ = id => document.getElementById(id);
   const form = $('schedule-form'), dialog = $('schedule-dialog'), deletion = $('delete-schedule-dialog');
   const field = name => form.elements.namedItem(name);
   let schedules = [], page = 0, schedulePage = 0, pendingDelete = null, saving = false, loading = false;
-  let previewVersion = 0, previewTimer, parameters = {}, deleting = false;
+  let parameters = {}, deleting = false, defaultZone;
+  const notify = (message, type) => window.notify(message, type);
   let selected = null, historyVersion = 0, historyLoading = false, activeTab = 'data', tasks = [];
   async function request(path = '/api', body) {
     const headers = { Accept: 'application/json' };
@@ -57,15 +83,9 @@
     if (text !== undefined) element.textContent = text;
     return element;
   }
-  function cell(row, text, secondary) {
+  function cell(row, text) {
     const td = node('td', text);
-    if (secondary) td.append(node('small', secondary));
     row.append(td); return td;
-  }
-  function stateCell(row, execution) {
-    const td = cell(row, execution ? states[execution.state] || execution.state : 'Ainda não executado');
-    td.className = 'scheduler-state'; td.dataset.state = execution?.state || '';
-    return td;
   }
   function empty(body, columns, text) {
     const row = node('tr'), td = cell(row, text); td.colSpan = columns; body.append(row);
@@ -76,7 +96,7 @@
     $('schedule-rows').setAttribute('aria-busy', 'true');
     try {
       const data = await request('/api');
-      schedules = data.schedules; tasks = data.tasks;
+      schedules = data.schedules; tasks = data.tasks; defaultZone = data.defaultZone;
       $('new-schedule').disabled = !tasks.some(task => !schedules.some(schedule => schedule.taskKey === task.key));
       const rows = $('schedule-rows'); rows.replaceChildren();
       schedulePage = Math.min(schedulePage, Math.max(0, Math.ceil(schedules.length / 25) - 1));
@@ -87,15 +107,19 @@
         link.setAttribute('aria-haspopup', 'dialog'); link.setAttribute('aria-controls', 'schedule-dialog');
         link.addEventListener('click', event => { event.preventDefault(); open(schedule); });
         heading.append(link); row.append(heading);
-        cell(row, describe(schedule.rule), zone);
-        cell(row, schedule.enabled ? 'Ativo' : 'Pausado');
+        cell(row, describe(schedule.rule));
+        cell(row, schedule.enabled ? 'Ativo' : schedule.nextRun === 0 ? 'Somente manual' : 'Pausado');
         cell(row, schedule.enabled ? date(schedule.nextRun, zone) : '—');
         const last = data.latest[schedule.id];
-        const lastCell = stateCell(row, last);
-        if (last) lastCell.append(node('small', date(last.scheduledAt, last.zone)));
+        cell(row, last ? date(last.startedAt, last.zone) : '—');
+        const status = cell(row, last ? statusLabel(last.state, true) : 'Ainda não executado');
+        if (last) {
+          status.className = 'schedule-status-text';
+          status.dataset.state = last.state;
+        }
         rows.append(row);
       }
-      if (!schedules.length) empty(rows, 5, 'Nenhum agendamento cadastrado.');
+      if (!schedules.length) empty(rows, 6, 'Nenhum agendamento cadastrado.');
       $('schedule-previous').disabled = schedulePage === 0;
       $('schedule-next').disabled = (schedulePage + 1) * 25 >= schedules.length;
       $('schedule-page').textContent = `Exibindo ${schedules.length ? schedulePage * 25 + 1 : 0}–${Math.min((schedulePage + 1) * 25, schedules.length)} de ${schedules.length} registros`;
@@ -103,44 +127,176 @@
     } catch (error) { $('scheduler-feedback').textContent = error.message; }
     finally { loading = false; $('schedule-rows').removeAttribute('aria-busy'); }
   }
+  const executionDialog = $('execution-dialog');
+  let logs = null, logPage = 0, logsVersion = 0;
+
+  function badge(state, item = false) {
+    const label = node('span');
+    label.className = 'scheduler-status-badge';
+    label.dataset.state = state;
+    const symbols = { COMPLETED: '✓', FAILED: '×', INTERRUPTED: '×', PARTIAL: '!', MISSED: '!' };
+    if (symbols[state]) {
+      const icon = node('span', symbols[state]);
+      icon.setAttribute('aria-hidden', 'true');
+      label.append(icon);
+    }
+    label.append(node('span', statusLabel(state, item)));
+    return label;
+  }
+  function renderPagination(prefix, current, total) {
+    $(prefix + '-previous').disabled = current === 0;
+    $(prefix + '-next').disabled = (current + 1) * historySize >= total;
+    $(prefix + '-page').textContent =
+      `Exibindo ${total ? current * historySize + 1 : 0}–${Math.min((current + 1) * historySize, total)} de ${total} registros`;
+  }
   async function loadHistory() {
-    if (!selected || !dialog.open) return;
+    if (!selected || !dialog.open || historyLoading) return;
     const id = selected.id, version = ++historyVersion;
-    historyLoading = true; $('refresh-history').disabled = true;
-    $('history-feedback').textContent = 'Carregando execuções…';
-    $('execution-rows').replaceChildren();
-    $('history-previous').disabled = true; $('history-next').disabled = true;
+    historyLoading = true;
+    const history = $('execution-rows');
+    history.setAttribute('aria-busy', 'true');
+    if (!history.children.length) $('history-feedback').textContent = 'Carregando execuções…';
     try {
-      const data = await request(`/api/${encodeURIComponent(id)}/history?page=${page}`);
+      const data = await request(`/api/${encodeURIComponent(id)}/history/summary?page=${page}`);
       if (version !== historyVersion || selected?.id !== id || !dialog.open) return;
       page = data.page;
-      const history = $('execution-rows'); history.replaceChildren();
+      history.replaceChildren();
       for (const execution of data.history) {
         const row = node('tr'), zone = execution.zone;
-        cell(row, date(execution.scheduledAt, zone), zone);
-        cell(row, date(execution.startedAt, zone)); cell(row, date(execution.finishedAt, zone));
-        stateCell(row, execution);
-        const detailsCell = cell(row, execution.message);
-        const items = data.details?.[execution.id] || [];
-        if (items.length) {
-          const disclosure = node('details'), summary = node('summary', `Resultados por AP (${items.length})`);
-          const list = node('ul');
-          for (const item of items) list.append(node('li', `${item.hostName}: ${states[item.state] || item.state} — ${item.message}`));
-          disclosure.append(summary, list); detailsCell.append(disclosure);
-        }
+        const button = node('button', date(execution.scheduledAt, zone));
+        button.type = 'button';
+        button.className = 'scheduler-execution-link';
+        button.setAttribute('aria-haspopup', 'dialog');
+        button.setAttribute('aria-controls', 'execution-dialog');
+        button.addEventListener('click', () => openLogs(id, execution));
+        cell(row).append(button);
+        cell(row, date(execution.startedAt, zone));
+        cell(row, date(execution.finishedAt, zone));
+        cell(row).append(badge(execution.state));
         history.append(row);
       }
-      if (!data.history.length) empty(history, 5, 'Nenhuma execução registrada.');
-      $('history-previous').disabled = page === 0;
-      $('history-next').disabled = (page + 1) * 25 >= data.total;
-      $('history-page').textContent = `Exibindo ${data.total ? page * 25 + 1 : 0}–${Math.min((page + 1) * 25, data.total)} de ${data.total} registros`;
+      if (!data.history.length) empty(history, 4, 'Nenhuma execução registrada.');
+      renderPagination('history', page, data.total);
       $('history-feedback').textContent = '';
     } catch (error) {
-      if (version === historyVersion) $('history-feedback').textContent = error.message;
+      if (version === historyVersion) {
+        $('history-feedback').textContent = '';
+        notify(error.message, 'error');
+      }
     } finally {
-      if (version === historyVersion) { historyLoading = false; $('refresh-history').disabled = false; }
+      if (version === historyVersion) {
+        historyLoading = false;
+        history.removeAttribute('aria-busy');
+      }
     }
   }
+  function renderExecutionResult(execution, items) {
+    const result = $('execution-result');
+    const summary = /^(\d+) hosts: (\d+) backups salvos, (\d+) com falha\.$/.exec(execution.message || '');
+    const allFailed = execution.taskLabel === 'Backup de hosts' && execution.state === 'FAILED'
+      && items.length > 0 && items.every(item => item.state === 'FAILED');
+    if (!summary && !allFailed) {
+      result.textContent = execution.message || '—';
+      return;
+    }
+    const [, total, saved, failed] = summary || [null, items.length, 0, items.length];
+    const counts = node('span');
+    counts.className = 'execution-result-counts';
+    const success = node('span', `${saved} salvos`);
+    success.className = 'execution-result-success';
+    const failure = node('span', `${failed} com falha`);
+    failure.className = 'execution-result-failure';
+    counts.append(success, ' · ', failure);
+    result.replaceChildren(node('span', `${total} ${Number(total) === 1 ? 'host processado' : 'hosts processados'}`), counts);
+  }
+  const logFilters = ['logs-filter-success', 'logs-filter-failure'].map($);
+  for (const filter of logFilters) {
+    filter.addEventListener('change', () => {
+      if (!logs) return;
+      logPage = 0;
+      renderLogs();
+    });
+  }
+  function renderLogs() {
+    const rows = $('execution-log-rows');
+    rows.replaceChildren();
+    const [success, failure] = logFilters.map(filter => filter.checked);
+    const filtered = success || failure;
+    const items = filtered ? logs.items.filter(({ state }) =>
+      (success && state === 'COMPLETED') || (failure && (state === 'FAILED' || state === 'PARTIAL'))
+    ) : logs.items;
+    for (const item of items.slice(logPage * historySize, (logPage + 1) * historySize)) {
+      const row = node('tr');
+      row.className = 'execution-log-row';
+      const host = node('span', item.hostName);
+      host.className = 'execution-log-ellipsis';
+      host.title = item.hostName;
+      cell(row).append(host);
+      const status = badge(item.state, true);
+      status.title = statusLabel(item.state, true);
+      cell(row).append(status);
+      const message = node('span', item.message || '—');
+      message.className = 'execution-log-ellipsis';
+      if (item.message) message.title = item.message;
+      cell(row).append(message);
+      rows.append(row);
+    }
+    if (!items.length) empty(rows, 3, filtered
+      ? 'Nenhum log corresponde aos filtros selecionados.'
+      : 'Nenhum resultado por equipamento registrado.');
+    renderPagination('logs', logPage, items.length);
+  }
+  async function openLogs(scheduleId, execution) {
+    if (executionDialog.open) return;
+    const version = ++logsVersion;
+    logs = null; logPage = 0;
+    for (const filter of logFilters) filter.checked = false;
+    $('execution-description').textContent = execution.taskLabel;
+    $('execution-feedback').textContent = 'Carregando logs…';
+    $('execution-summary').hidden = true;
+    $('execution-logs').hidden = true;
+    $('execution-export').disabled = true;
+    executionDialog.showModal();
+    try {
+      const result = await request(`/api/${encodeURIComponent(scheduleId)}/history/${encodeURIComponent(execution.id)}`);
+      if (version !== logsVersion || !executionDialog.open) return;
+      logs = result;
+      const { zone, scheduledAt, startedAt, finishedAt, state } = logs.execution;
+      $('execution-scheduled').textContent = date(scheduledAt, zone);
+      $('execution-started').textContent = date(startedAt, zone);
+      $('execution-finished').textContent = date(finishedAt, zone);
+      $('execution-status').replaceChildren(badge(state));
+      renderExecutionResult(logs.execution, logs.items);
+      $('execution-feedback').textContent = '';
+      $('execution-summary').hidden = false;
+      $('execution-logs').hidden = false;
+      $('execution-export').disabled = false;
+      renderLogs();
+    } catch (error) {
+      if (version !== logsVersion || !executionDialog.open) return;
+      $('execution-feedback').textContent = 'Logs indisponíveis.';
+      notify(error.message, 'error');
+    }
+  }
+  for (const id of ['execution-close', 'execution-dismiss'])
+    $(id).addEventListener('click', () => executionDialog.close());
+  executionDialog.addEventListener('close', () => { logsVersion++; logs = null; });
+  for (const [id, direction] of [['logs-previous', -1], ['logs-next', 1]]) {
+    $(id).addEventListener('click', () => {
+      if (!logs || $(id).disabled) return;
+      logPage += direction;
+      renderLogs();
+    });
+  }
+  $('execution-export').addEventListener('click', () => {
+    if (!logs) return;
+    const url = URL.createObjectURL(new Blob([exportText(logs.execution, logs.items)], { type: 'text/plain;charset=utf-8' }));
+    const link = node('a');
+    link.href = url;
+    link.download = `execucao-${logs.execution.id}.txt`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
   function selectTab(name, focus = false) {
     if (name === 'history' && !selected) return;
     activeTab = name;
@@ -150,7 +306,6 @@
       $('schedule-' + tab).hidden = !chosen;
       if (chosen && focus) button.focus();
     }
-    $('schedule-save').hidden = name !== 'data';
     if (name === 'history') loadHistory();
   }
   for (const name of ['data', 'history']) {
@@ -164,136 +319,147 @@
       selectTab(target === 'history' && !selected ? 'data' : target, true);
     });
   }
-  function visibility() {
-    const frequency = field('frequency').value;
-    $('schedule-time-field').hidden = frequency === 'INTERVAL';
-    field('time').disabled = frequency === 'INTERVAL';
-    $('schedule-weekdays').hidden = frequency !== 'WEEKLY';
-    $('schedule-month-field').hidden = frequency !== 'MONTHLY';
-    field('monthDay').disabled = frequency !== 'MONTHLY';
-    $('schedule-interval-field').hidden = frequency !== 'INTERVAL';
+  function syncFields() {
+    for (const name of cronFields) {
+      const enabled = field(name + 'Type').value === 'value';
+      field(name).disabled = !enabled;
+      field(name).required = enabled;
+    }
   }
-  function preview() {
-    visibility();
-    const version = ++previewVersion;
-    clearTimeout(previewTimer);
-    $('schedule-preview').replaceChildren(); $('schedule-summary').textContent = 'Calculando próximas execuções…';
-    previewTimer = setTimeout(async () => {
-      try {
-        const rule = ruleFrom(form), result = await request('/preview', rule);
-        if (version !== previewVersion || !dialog.open) return;
-        $('schedule-summary').textContent = result.description + ' · ' + rule.zone
-          + (field('enabled').checked ? '' : ' · Pausado: horários apenas para referência.');
-        $('schedule-preview').replaceChildren(...result.times.map(at => node('li', date(at, rule.zone))));
-      } catch (error) { if (version === previewVersion) $('schedule-summary').textContent = error.message; }
-    }, 200);
+  function syncActions(active) {
+    field('taskKey').disabled = saving || deleting;
+    for (const id of ['schedule-close', 'schedule-cancel', 'schedule-delete', 'schedule-run', 'schedule-save']) {
+      const button = $(id);
+      button.disabled = saving || deleting || (id === 'schedule-run' && !field('taskKey').value);
+      button.classList.toggle('system-button-loading', id === active);
+      if (id === active) button.setAttribute('aria-busy', 'true');
+      else button.removeAttribute('aria-busy');
+    }
+  }
+  function showSchedule(schedule) {
+    $('schedule-history-tab').disabled = !schedule;
+    $('schedule-delete').hidden = !schedule;
+  }
+  function updateTitle() {
+    const choice = tasks.find(task => task.key === field('taskKey').value);
+    $('schedule-title').textContent = choice?.label || selected?.taskLabel || 'Novo agendamento';
+    $('schedule-description').textContent = field('taskKey').value === 'host-backup'
+      ? 'Configure a programação da tarefa de backup dos hosts.'
+      : 'Configure a programação e acompanhe as execuções desta tarefa.';
   }
   function open(schedule) {
+    if (dialog.open) return;
     selected = schedule || null; page = 0; historyVersion++; historyLoading = false;
     form.reset(); parameters = schedule?.parameters || {};
-    field('id').value = schedule?.id || '';
-    $('schedule-title').textContent = schedule ? schedule.taskLabel : 'Novo agendamento';
-    $('schedule-description').textContent = schedule ? 'Configure a programação e acompanhe as execuções desta tarefa.' : 'Escolha uma tarefa e configure sua programação.';
-    $('schedule-history-tab').disabled = !schedule;
-    $('schedule-toggle').hidden = !schedule; $('schedule-delete').hidden = !schedule;
-    $('schedule-toggle').querySelector('span').textContent = schedule?.enabled ? 'Pausar' : 'Ativar';
-    $('schedule-toggle').disabled = !!schedule && !schedule.enabled && !tasks.some(task => task.key === schedule.taskKey);
-    selectTab('data');
-    if (schedule) {
-      for (const name of ['taskKey']) field(name).value = schedule[name];
-      for (const name of ['frequency', 'time', 'monthDay', 'intervalMinutes', 'zone'])
-        field(name).value = schedule.rule[name] ?? '';
-      for (const checkbox of form.querySelectorAll('[name=weekday]'))
-        checkbox.checked = schedule.rule.weekdays.includes(Number(checkbox.value));
-      field('enabled').checked = schedule.enabled;
-    }
     for (const option of field('taskKey').options || [])
       option.disabled = !!option.value && schedules.some(existing => existing.taskKey === option.value && existing.id !== schedule?.id);
-    if (!schedule) field('taskKey').value = tasks.find(task => !schedules.some(existing => existing.taskKey === task.key))?.key || '';
-    $('schedule-run').disabled = !field('taskKey').value;
-    $('schedule-execution-help').textContent = schedule
-      ? 'Executar agora usa os dados salvos e mantém a próxima execução programada. Salve antes para aplicar alterações.'
-      : 'Executar agora salva este agendamento como pausado e inicia a tarefa uma vez.';
-    $('schedule-error').textContent = '';
-    dialog.showModal(); preview(); field('taskKey').focus();
+    field('taskKey').value = schedule?.taskKey
+      || tasks.find(task => !schedules.some(existing => existing.taskKey === task.key))?.key || '';
+    showSchedule(schedule);
+    updateTitle();
+    const values = schedule ? cronValues(schedule.rule) : ['0', '2', '*', '*', '*'];
+    cronFields.forEach((name, index) => {
+      field(name + 'Type').value = values[index] === '*' ? 'all' : 'value';
+      field(name).value = values[index] === '*' ? '' : values[index];
+    });
+    const notices = [];
+    if (values.includes(''))
+      notices.push('A programação anterior continua em vigor. Preencha os campos em branco ou selecione Todos para substituí-la.');
+    if (schedule && schedule.rule.zone !== defaultZone)
+      notices.push(`Ao salvar, a programação passará de ${schedule.rule.zone} para ${defaultZone}.`);
+    $('schedule-legacy').textContent = notices.join(' ');
+    $('schedule-legacy').hidden = !notices.length;
+    $('execution-rows').replaceChildren();
+    selectTab('data');
+    syncFields();
+    syncActions();
+    dialog.showModal();
+    (schedule ? $('schedule-data-tab') : field('taskKey')).focus();
   }
   $('new-schedule').addEventListener('click', () => open());
   for (const id of ['schedule-cancel', 'schedule-close'])
-    $(id).addEventListener('click', () => { if (!saving) dialog.close(); });
-  dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
-  dialog.addEventListener('close', () => { previewVersion++; historyVersion++; selected = null; clearTimeout(previewTimer); });
-  form.addEventListener('input', () => {
-    $('schedule-run').disabled = saving || !field('taskKey').value;
-    preview();
+    $(id).addEventListener('click', () => { if (!saving && !deleting) dialog.close(); });
+  dialog.addEventListener('cancel', event => { if (saving || deleting) event.preventDefault(); });
+  dialog.addEventListener('close', () => { historyVersion++; selected = null; });
+  form.addEventListener('change', () => {
+    syncFields();
+    syncActions();
+    updateTitle();
   });
+  form.addEventListener('invalid', () => {
+    if (activeTab === 'history') selectTab('data');
+  }, true);
   form.addEventListener('submit', async event => {
-    event.preventDefault(); if (saving) return;
-    if (activeTab !== 'data') return;
-    saving = true; $('schedule-save').disabled = true; $('schedule-cancel').disabled = true;
-    $('schedule-error').textContent = '';
+    event.preventDefault();
+    if (saving || deleting) return;
+    saving = true;
+    syncActions('schedule-save');
     try {
       const result = await request('/api', {
-        id: field('id').value, taskKey: field('taskKey').value,
-        enabled: field('enabled').checked, rule: ruleFrom(form), parameters,
+        id: selected?.id, taskKey: field('taskKey').value, cron: cronFrom(form), parameters,
       });
-      dialog.close(); await load(); $('scheduler-feedback').textContent = result.message;
-    } catch (error) { $('schedule-error').textContent = error.message; }
-    finally { saving = false; $('schedule-save').disabled = false; $('schedule-cancel').disabled = false; }
+      dialog.close();
+      notify(result.message);
+      await load();
+    } catch (error) { notify(error.message, 'error'); }
+    finally { saving = false; syncActions(); }
   });
   $('schedule-run').addEventListener('click', async () => {
     if (saving || deleting || !field('taskKey').value) return;
     if (!selected && !form.reportValidity()) return;
-    saving = true; $('schedule-run').disabled = true; $('schedule-save').disabled = true;
-    $('schedule-error').textContent = '';
+    saving = true;
+    syncActions('schedule-run');
     try {
       if (!selected) {
-        const created = await request('/api', {
-          taskKey: field('taskKey').value, enabled: false, rule: ruleFrom(form), parameters,
-        });
+        const taskKey = field('taskKey').value;
+        const created = await request('/api', { taskKey, enabled: false, cron: cronFrom(form), parameters });
+        selected = { id: created.id, taskKey, taskLabel: $('schedule-title').textContent };
+        showSchedule(selected);
         await load(true);
-        const createdSchedule = schedules.find(schedule => schedule.id === created.id);
-        if (!createdSchedule) throw new Error('Agendamento salvo. Atualize a página para executar.');
-        open(createdSchedule);
       }
       const result = await request(`/api/${encodeURIComponent(selected.id)}/run`, {});
-      page = 0; selectTab('history');
-      $('scheduler-feedback').textContent = result.message;
-    } catch (error) { selectTab('data'); $('schedule-error').textContent = error.message; }
-    finally { saving = false; $('schedule-run').disabled = false; $('schedule-save').disabled = false; }
-  });
-  $('schedule-toggle').addEventListener('click', async () => {
-    if (!selected || saving) return;
-    saving = true; $('schedule-toggle').disabled = true;
-    try {
-      const result = await request(`/api/${selected.id}/${selected.enabled ? 'pause' : 'enable'}`, {});
-      dialog.close(); await load(); $('scheduler-feedback').textContent = result.message;
-    } catch (error) { $('schedule-error').textContent = error.message; selectTab('data'); }
-    finally { saving = false; $('schedule-toggle').disabled = false; }
+      page = 0;
+      selectTab('history');
+      notify(result.message);
+    } catch (error) { notify(error.message, 'error'); }
+    finally { saving = false; syncActions(); }
   });
   $('schedule-delete').addEventListener('click', () => {
-    if (!selected || saving) return;
-    pendingDelete = selected.id; $('delete-error').textContent = '';
-    $('delete-schedule-title').textContent = `Excluir “${selected.taskLabel}”?`; deletion.showModal();
+    if (!selected || saving || deleting) return;
+    pendingDelete = selected.id;
+    $('delete-schedule-title').textContent = `Excluir “${selected.taskLabel}”?`;
+    deletion.showModal();
   });
-  $('refresh-history').addEventListener('click', loadHistory);
   $('delete-cancel').addEventListener('click', () => { if (!deleting) deletion.close(); });
   deletion.addEventListener('cancel', event => { if (deleting) event.preventDefault(); });
   $('delete-confirm').addEventListener('click', async () => {
     if (deleting) return;
-    deleting = true; $('delete-confirm').disabled = true; $('delete-cancel').disabled = true;
+    deleting = true;
+    syncActions();
+    const confirm = $('delete-confirm');
+    confirm.disabled = true; $('delete-cancel').disabled = true;
+    confirm.classList.add('system-button-loading');
+    confirm.setAttribute('aria-busy', 'true');
     try {
       const result = await request(`/api/${pendingDelete}/delete`, {});
-      deletion.close(); dialog.close(); await load(); $('scheduler-feedback').textContent = result.message;
-    } catch (error) { $('delete-error').textContent = error.message; }
-    finally { deleting = false; $('delete-confirm').disabled = false; $('delete-cancel').disabled = false; }
+      deletion.close(); dialog.close();
+      notify(result.message);
+      await load();
+    } catch (error) { notify(error.message, 'error'); }
+    finally {
+      deleting = false;
+      syncActions();
+      confirm.disabled = false; $('delete-cancel').disabled = false;
+      confirm.classList.remove('system-button-loading');
+      confirm.removeAttribute('aria-busy');
+    }
   });
   $('schedule-previous').addEventListener('click', () => { if (!loading) { schedulePage--; load(); } });
   $('schedule-next').addEventListener('click', () => { if (!loading) { schedulePage++; load(); } });
-  $('history-previous').addEventListener('click', () => { if (!historyLoading) { page--; loadHistory(); } });
-  $('history-next').addEventListener('click', () => { if (!historyLoading) { page++; loadHistory(); } });
+  $('history-previous').addEventListener('click', () => { if (!historyLoading && !$('history-previous').disabled) { page--; loadHistory(); } });
+  $('history-next').addEventListener('click', () => { if (!historyLoading && !$('history-next').disabled) { page++; loadHistory(); } });
   load();
-  setInterval(() => { if (!document.hidden && !deletion.open) {
-      if (!dialog.open) load(true);
-      else if (activeTab === 'history' && !historyLoading) loadHistory();
-    } }, 15000);
+  setInterval(() => {
+    if (!document.hidden && !dialog.open && !deletion.open) load(true);
+  }, 15000);
 })();
