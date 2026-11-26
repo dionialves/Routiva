@@ -18,6 +18,7 @@ public class HostCatalog {
     public Set<String> backupEnabledIds() { return repository.backupEnabledIds(); }
 
     public List<ManagedHost> all() { return repository.all(); }
+    public String revision(String id) { return repository.require(id).revision(); }
     public Map<String, ?> options() { return repository.options(); }
     public synchronized void restoreLegacy() {
         if (!repository.all().isEmpty()) return;

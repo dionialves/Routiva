@@ -87,6 +87,7 @@
   }
 
   const discardDialog = $('host-discard-dialog'), deleteDialog = $('host-delete-dialog');
+  let passwordConfigured = false;
   let baseline = '', closeTrigger, authBaseline = '', terminalBaseline = '', backupBaseline = '', authLoaded = false, activeTab = 'general';
   let hosts = [], options, current, opener, busy = false, loading = false, page = 0;
   let sortKey = 'name', direction = 1;
@@ -237,10 +238,7 @@
     const manufacturer = $('host-auth-manufacturer').value;
     const mikrotik = manufacturer === 'MikroTik';
     const mimosa = manufacturer === 'Mimosa';
-    $('host-auth-login').disabled = !manufacturer;
-    $('host-auth-password').disabled = !manufacturer;
-    $('host-auth-password-toggle').disabled = !manufacturer;
-    $('host-auth-test').disabled = !authLoaded || !manufacturer;
+    $('host-auth-test').disabled = !authLoaded || !current || !manufacturer;
     $('host-auth-ports').classList.toggle('host-auth-ports-mikrotik', mikrotik);
     $('host-auth-port-label').textContent = mimosa ? 'Porta HTTPS' : 'Porta API';
     $('host-auth-port-row').hidden = !mikrotik && !mimosa;
@@ -255,6 +253,7 @@
     if (mimosa) $('host-auth-login').value = 'configure';
   }
   function updatePasswordPlaceholder(configured) {
+    passwordConfigured = configured;
     $('host-auth-password').placeholder = configured ? '*'.repeat(22) : '';
     $('host-auth-password-help').textContent = configured ? 'Deixe em branco para usar a senha cadastrada ao testar ou salvar.' : 'Informe a senha do equipamento.';
   }
@@ -281,9 +280,8 @@
       $(`host-${key}`).hidden = key !== name;
       if (focus && key === name) button.focus();
     }
-    $('host-save').disabled = busy || (name === 'auth' ? !authLoaded : current && !current.editable);
+    $('host-save').disabled = busy || !authLoaded;
     $('host-save-label').textContent = 'Salvar';
-    if (name === 'auth' && !current) window.notify?.('Salve o host para cadastrar a autenticação.', 'error');
   }
   for (const name of ['general', 'auth']) {
     $(`host-${name}-tab`).addEventListener('click', () => tab(name));
@@ -297,11 +295,11 @@
     authLoaded = false;
     $('host-auth-fields').disabled = true; $('host-auth-test').disabled = true;
     $('host-backup-fields').disabled = true;
-    if (!host) return;
+    tab(activeTab);
     try {
-      const [c, backup] = await Promise.all([
+      const [c, backup] = host ? await Promise.all([
         request('/' + host.id + '/authentication'), request('/' + host.id + '/backup'),
-      ]);
+      ]) : [{ sshPort: 22, telnetPort: 23 }, { enabled: false, retention: 5 }];
       if (current !== host || !dialog.open) return;
       for (const name of ['manufacturer', 'login']) $(`host-auth-${name}`).value = c[name] || '';
       $('host-auth-password').value = ''; $('host-auth-port').value = c.port || (c.manufacturer === 'Mimosa' ? 443 : 8728);
@@ -322,6 +320,7 @@
   $('host-auth-manufacturer').addEventListener('change', () => {
     const manufacturer = $('host-auth-manufacturer').value;
     const mimosa = manufacturer === 'Mimosa';
+    if (!mimosa && $('host-auth-login-field').hidden) $('host-auth-login').value = '';
     if (!manufacturer) {
       $('host-auth-login').value = '';
       $('host-auth-password').value = '';
@@ -355,68 +354,60 @@
       render();
     } catch { /* Keep the original authentication result visible. */ }
   }
-  async function saveAuth(testOnly) {
-    if (busy || !authLoaded || !current) return;
-    const backup = backupInput();
-    const backupChanged = !testOnly && JSON.stringify(backup) !== backupBaseline;
-    const credentialsChanged = JSON.stringify(authInput()) !== authBaseline || JSON.stringify(terminalPorts()) !== terminalBaseline;
-    const backupOnly = backupChanged && !credentialsChanged;
-    const retention = $('host-backup-retention');
-    if (backupChanged && !retention.reportValidity()) return;
-    for (const id of backupOnly ? [] : ['host-auth-port', 'host-ssh-port', 'host-telnet-port']) {
+  function validateAuthentication(input, testOnly) {
+    const credentials = [
+      ['host-auth-manufacturer', 'Fabricante', input.manufacturer],
+      ['host-auth-login', 'Usuário', input.login.trim()],
+      ['host-auth-password', 'Senha', input.password || (input.manufacturer && passwordConfigured)],
+    ];
+    const checks = testOnly || credentials.some(([, , value]) => value)
+      ? credentials.filter(([, , value]) => !value).map(([id, label]) => [id, `${label}: preencha este campo.`])
+      : [];
+    for (const id of ['host-auth-port', 'host-ssh-port', 'host-telnet-port', ...(testOnly ? [] : ['host-backup-retention'])]) {
       const control = $(id);
-      if (!control.disabled && !control.checkValidity()) {
-        control.setAttribute('aria-invalid', 'true');
-        control.focus();
-        window.notify?.(`${control.labels[0].textContent}: informe uma porta inteira entre 1 e 65535.`, 'error');
-        return;
+      if (control.willValidate && !control.checkValidity()) {
+        checks.push([id, `${control.labels[0].textContent}: ${control.validationMessage}`]);
       }
     }
-    const auth = authInput();
-    const ports = auth.manufacturer === 'Mimosa' ? {} : terminalPorts();
-    const terminalOnly = !testOnly && !auth.manufacturer && JSON.stringify(auth) === authBaseline;
-    const input = { ...auth, ...ports };
+    if (!checks.length) return true;
+    tab('auth');
+    for (const [id] of checks) $(id).setAttribute('aria-invalid', 'true');
+    $(checks[0][0]).focus();
+    window.notify?.(checks.map(([, message]) => message).join(' '), 'error');
+    return false;
+  }
+  function authenticationInput() {
+    return { ...authInput(), ...terminalPorts() };
+  }
+  $('host-auth-test').addEventListener('click', async () => {
+    if (busy || !authLoaded || !current) return;
+    const input = authenticationInput();
+    clearErrors();
+    if (!validateAuthentication(input, true)) return;
     const host = current;
-    setBusy(true, testOnly ? 'test' : 'save');
+    setBusy(true, 'test');
     try {
-      if (backupOnly) {
-        await saveBackup(host, backup);
-        window.notify?.('Configuração de backup salva.');
-        return;
-      }
-      if (terminalOnly) {
-        await request('/' + current.id + '/authentication/terminal-ports', 'PUT', ports);
-        terminalBaseline = JSON.stringify(ports);
-        if (backupChanged) await saveBackup(host, backup);
-        window.notify?.(backupChanged ? 'Portas do terminal e configuração de backup salvas.' : 'Portas do terminal salvas.');
-        return;
-      }
-      const result = await request('/' + current.id + '/authentication' + (testOnly ? '/test' : ''), testOnly ? 'POST' : 'PUT', input);
-      if (!testOnly) {
-        $('host-auth-password').value = '';
-        updatePasswordPlaceholder(result.passwordConfigured);
-        $('host-ssh-port').value = result.sshPort;
-        $('host-telnet-port').value = result.telnetPort;
-        hideAuthPassword(); authBaseline = JSON.stringify(authInput()); terminalBaseline = JSON.stringify(terminalPorts());
-        current.connectionStatus = !result.manufacturer ? 'NOT_CONFIGURED' : result.status === 'ACTIVE' ? 'ACTIVE' : 'ERROR';
-        const row = hosts.find(host => host.id === current.id);
-        if (row) row.connectionStatus = current.connectionStatus;
-        render();
-      }
-      if (backupChanged) await saveBackup(host, backup);
-      const success = testOnly ? result.success : !result.manufacturer || result.status === 'ACTIVE';
-      const savedMessage = backupChanged ? 'Autenticação e configuração de backup salvas. ' : 'Autenticação salva. ';
-      const message = testOnly ? result.message : result.manufacturer ? savedMessage + result.message :
-        backupChanged ? 'Autenticação removida e configuração de backup salva.' : 'Autenticação removida.';
-      window.notify?.(message, success ? 'success' : 'error');
-      if (testOnly && !success) await refreshConnectionStatus(host);
+      const result = await request('/' + host.id + '/authentication/test', 'POST', input);
+      window.notify?.(result.message, result.success ? 'success' : 'error');
+      if (!result.success) await refreshConnectionStatus(host);
     } catch (error) {
       window.notify?.(error.message, 'error');
-      if (!terminalOnly && !backupOnly) await refreshConnectionStatus(host);
-    }
-    finally { setBusy(false); }
+      await refreshConnectionStatus(host);
+    } finally { setBusy(false); }
+  });
+  async function saveAuthentication(host, input) {
+    const result = await request('/' + host.id + '/authentication', 'PUT', input);
+    $('host-auth-password').value = '';
+    updatePasswordPlaceholder(result.passwordConfigured);
+    hideAuthPassword();
+    authBaseline = JSON.stringify(authInput());
+    terminalBaseline = JSON.stringify(terminalPorts());
+    host.connectionStatus = !result.manufacturer ? 'NOT_CONFIGURED' : result.status === 'ACTIVE' ? 'ACTIVE' : 'ERROR';
+    const row = hosts.find(item => item.id === host.id);
+    if (row) row.connectionStatus = host.connectionStatus;
+    render();
+    return result;
   }
-  $('host-auth-test').addEventListener('click', () => saveAuth(true));
   function terminalPorts() {
     return { sshPort: $('host-ssh-port').valueAsNumber, telnetPort: $('host-telnet-port').valueAsNumber };
   }
@@ -481,7 +472,7 @@
       messages.push('Selecione pelo menos um grupo.');
       groupSummary.setAttribute('aria-invalid', 'true'); firstInvalid ||= groupSummary;
     }
-    firstInvalid?.focus();
+    if (firstInvalid) { tab('general'); firstInvalid.focus(); }
     if (messages.length) window.notify?.(messages.join(' '), 'error');
     return !firstInvalid;
   }
@@ -582,29 +573,36 @@
     }
   });
   form.addEventListener('submit', async event => {
-    event.preventDefault(); if (activeTab === 'auth') { await saveAuth(false); return; }
-    if (busy || !validate()) return;
-    const input = { ...readInput(), revision: current?.revision };
+    event.preventDefault();
+    if (busy || !authLoaded) return;
+    clearErrors();
+    const general = readInput();
+    const generalChanged = !current || (current.editable && JSON.stringify(general) !== baseline);
+    const auth = authenticationInput();
+    const backup = backupInput();
+    const backupChanged = JSON.stringify(backup) !== backupBaseline;
+    if ((generalChanged && !validate()) || !validateAuthentication(auth, false)) return;
+
     setBusy(true);
-    let saved = false, createdId;
-    const pendingAuth = pendingAuthChanges();
+    let completed = false;
+    let generalSaved = false;
     try {
-      const result = await request(current ? '/' + current.id : '', current ? 'PUT' : 'POST', input);
-      if (!current) createdId = result.id;
-      saved = true;
-    } catch (error) { window.notify?.(error.message, 'error'); }
-    finally { setBusy(false); }
-    if (saved) {
-      window.notify?.('Host salvo no app e no Zabbix.');
-      if (pendingAuth && current) {
-        const id = current.id; baseline = JSON.stringify(readInput()); await load();
-        current = hosts.find(h => h.id === id) || current; tab('auth');
-        window.notify?.('Salve também as alterações da aba Autenticação.');
-      } else {
-        closeNow(); await load();
-        if (createdId) { const created = hosts.find(h => h.id === createdId); if (created) { open(created, $('host-new')); tab('auth'); } }
+      if (generalChanged) {
+        const result = await request(current ? '/' + current.id : '', current ? 'PUT' : 'POST',
+          { ...general, revision: current?.revision });
+        current = { ...current, ...general, id: result.id, revision: result.revision, editable: true };
+        baseline = JSON.stringify(general);
+        generalSaved = true;
       }
-    }
+      const result = await saveAuthentication(current, auth);
+      if (backupChanged) await saveBackup(current, backup);
+      const rejected = current.connectionStatus === 'ERROR';
+      window.notify?.(rejected ? `Host salvo. ${result.message}` : 'Host salvo.', rejected ? 'error' : 'success');
+      completed = true;
+    } catch (error) {
+      window.notify?.(generalSaved ? `Configuração do host salva. ${error.message}` : error.message, 'error');
+    } finally { setBusy(false); }
+    if (completed) { closeNow(); await load(); }
   });
   $('host-sync')?.addEventListener('click', async () => {
     $('host-sync').disabled = true;

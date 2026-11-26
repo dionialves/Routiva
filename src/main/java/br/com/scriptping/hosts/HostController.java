@@ -32,13 +32,13 @@ public class HostController {
     public Map<String, String> create(@RequestBody ManagedHost.Input input) {
         String saved = catalog.save(null, input);
         inventory.refreshLocalHosts();
-        return Map.of("id", saved);
+        return Map.of("id", saved, "revision", catalog.revision(saved));
     }
     @PutMapping("/api/host-configurations/{id}") @ResponseBody
     public Map<String, String> update(@PathVariable String id, @RequestBody ManagedHost.Input input) {
         String saved = catalog.save(id, input);
         inventory.refreshLocalHosts();
-        return Map.of("id", saved);
+        return Map.of("id", saved, "revision", catalog.revision(saved));
     }
     @PostMapping("/api/host-configurations/synchronize") @ResponseBody
     public List<HostRow> synchronize() { inventory.sync(); return list(); }

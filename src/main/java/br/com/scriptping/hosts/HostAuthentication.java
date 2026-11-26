@@ -70,7 +70,8 @@ public class HostAuthentication {
         return result;
     }
     static String connectionStatus(ManagedHost host, HostRepository.Credentials credentials) {
-        if (credentials == null || credentials.encryptedPassword() == null || credentials.login() == null || credentials.login().isBlank())
+        if (credentials == null || credentials.manufacturer() == null || credentials.manufacturer().isBlank()
+            || credentials.encryptedPassword() == null || credentials.login() == null || credentials.login().isBlank())
             return "NOT_CONFIGURED";
         String address = host.useIp() ? host.ip() : host.dns();
         return "ACTIVE".equals(credentials.status()) && Objects.equals(credentials.verifiedIp(), address) ? "ACTIVE" : "ERROR";
@@ -143,6 +144,8 @@ public class HostAuthentication {
     public synchronized View save(String id, Input input) {
         var ports = requestedPorts(id, input);
         if (input.manufacturer() == null || input.manufacturer().isEmpty()) {
+            if (input.login() != null && !input.login().isBlank() || input.password() != null && !input.password().isEmpty())
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione um fabricante.");
             repository.configure(id, null, ports);
             return view(id);
         }
