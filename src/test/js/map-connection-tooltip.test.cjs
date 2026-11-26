@@ -103,3 +103,19 @@ test('aggregate PON traffic remains available when an individual destination is 
   assert.equal(data.aggregatePon, true);
   assert.equal(data.traffic.tx, 200e6);
 });
+
+
+test('tooltip uses the same capacity source as map traffic, without fallback', () => {
+  const link = {from:'a',to:'b',appearance:'dashed-pulses',connection:definition};
+  const port = {name:'ether1',connector:'electrical',capacity:'100m'};
+  const nodes = [{id:'a',hostId:'1',ports:[port]}];
+  const capacity = reading => details(reading, definition, hosts, false, now, false, link, nodes).traffic.capacity;
+  assert.equal(capacity(sample()), 1e9);
+  assert.equal(capacity(sample({capacityBps:null})), null);
+  port.connector = 'wireless';
+  link.appearance = 'solid-pulses';
+  assert.equal(capacity(sample()), 100e6);
+  assert.equal(capacity(sample({capacityBps:null})), 100e6);
+  port.capacity = 'unknown';
+  assert.equal(capacity(sample()), null);
+});

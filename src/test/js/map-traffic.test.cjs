@@ -142,22 +142,46 @@ test('radio links to host groups are wireless in either direction, preserving Et
 });
 
 
-test('links without readings use gray and use the configured source port capacity for utilization', () => {
+test('wired capacity comes only from Zabbix and wireless only from configured source', () => {
   for (const wireless of [false, true]) {
+    const link = {from:'a', to:'b', fromPort:'w', toPort:'w',
+      connection:{hostA:'1', interfaceA:'port', hostB:'2', interfaceB:'port'}};
+    const connector = wireless ? 'wireless' : 'electrical';
+    const nodes = [ {id:'a', hostId:'1', ports:[{id:'w', name:'port', connector, capacity:'1g'}]},
+      {id:'b', hostId:'2', ports:[{id:'w', name:'port', connector, capacity:'10g'}]} ];
     const layer = element('g');
-    layer.trafficContext = {wireless, link:{from:'a', fromPort:'w'}};
+    layer.trafficContext = {wireless, link};
     const path = element('path', {d:'M 0 0 L 300 0'});
     const route = [{x:0,y:0},{x:300,y:0}];
-    const nodes = [{id:'a', ports:[{id:'w', capacity:'1g'}]}];
     traffic.render(element, layer, path, route, nodes, undefined, true);
     assert.equal(path.attrs['--traffic-color'], '#687486');
-    for (const [txBps, color] of [[100e6, '#22C55E'], [700e6, '#EAB308'], [900e6, '#EF4444']]) {
-      traffic.render(element, layer, path, route, nodes,
-        {a:{up:true, measuredAt:Date.now(), txBps}}, true);
-      assert.equal(path.attrs['--traffic-color'], color);
-      assert.equal(layer.children.some(child => child.tag === 'text'), false);
-    }
+    const a = {up:true, name:'port', measuredAt:Date.now(), txBps:900e6, capacityBps:10e9};
+    assert.equal(traffic.connectionCapacity({a}, link, nodes), wireless ? 1e9 : 10e9);
+    traffic.render(element, layer, path, route, nodes, {a}, true);
+    assert.equal(path.attrs['--traffic-color'], wireless ? '#EF4444' : '#22C55E');
+    traffic.render(element, layer, path, route, nodes, {a:{...a, capacityBps:null}}, true);
+    assert.equal(path.attrs['--traffic-color'], wireless ? '#EF4444' : '#687486');
+    link.appearance = 'dashed-pulses';
+    layer.trafficContext.wireless = true;
+    traffic.render(element, layer, path, route, nodes, {a}, true);
+    assert.equal(path.attrs['--traffic-color'], wireless ? '#EF4444' : '#22C55E');
+    nodes[0].ports[0].capacity = 'unknown';
+    assert.equal(traffic.connectionCapacity({a}, link, nodes), wireless ? null : 10e9);
   }
+});
+
+test('capacity follows the mapped origin even when reversed and ignores visual style', () => {
+  const link = {from:'group', to:'host', appearance:'dashed-pulses',
+    connection:{hostA:'2', interfaceA:'ether1'}};
+  const nodes = [{id:'group', groupId:'g', linkInterfaces:[{hostId:'2', name:'ether1', connector:'electrical', capacity:'1g'}]},
+    {id:'host', hostId:'1', ports:[]}];
+  const reading = {a:{name:'ether1', capacityBps:10e9}};
+  assert.equal(traffic.connectionCapacity(reading, link, nodes), 10e9);
+  nodes[0].linkInterfaces[0].connector = 'wireless';
+  link.appearance = 'solid-pulses';
+  assert.equal(traffic.connectionCapacity(reading, link, nodes), 1e9);
+  [link.from, link.to] = [link.to, link.from];
+  assert.equal(traffic.connectionCapacity(reading, link, nodes), 1e9);
 });
 
 test('Zabbix validity follows each item interval and traffic clock independently', () => {

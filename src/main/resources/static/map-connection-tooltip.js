@@ -1,7 +1,7 @@
 'use strict';
 
 const MapConnectionTooltip = (() => {
-  function details(reading, definition, hosts, failed = false, now = Date.now(), aggregatePon = false) {
+  function details(reading, definition, hosts, failed = false, now = Date.now(), aggregatePon = false, link, nodes = []) {
     const endpoints = ['a', 'b'].map((key, index) => {
       const sample = reading?.[key];
       const hostId = (index ? reading?.hostB : reading?.hostA) || (index ? definition?.hostB : definition?.hostA);
@@ -15,6 +15,7 @@ const MapConnectionTooltip = (() => {
     const status = endpoints.some(e => e.status === 'DOWN') ? 'Inativa'
       : endpoints.every(e => e.status === 'UP') ? 'Ativa' : 'Indisponível';
     const traffic = MapTraffic.state(aggregatePon && reading ? {a: reading.a} : reading, now);
+    traffic.capacity = MapTraffic.connectionCapacity(reading, link, nodes, definition);
     const staleTraffic = reading?.a && !reading.a.error && (reading.a.rxBps != null && now > reading.a.rxValidUntil
       || reading.a.txBps != null && now > reading.a.txValidUntil);
     const timestamps = endpoints.map(e => e.measuredAt).filter(t => Number.isFinite(t) && t > 0 && t <= now);

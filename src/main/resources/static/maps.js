@@ -2180,6 +2180,8 @@ function mappedConnectionTitle(id) {
   const definition = connectionDefinitions.find(c => c.id === id);
   const now = connectionDisplayTime(id);
   const data = MapTraffic.state(reading, now);
+  const link = current?.layout.links.find(link => link.mappedConnectionId === id);
+  data.capacity = MapTraffic.connectionCapacity(reading, link, current?.layout.nodes || [], definition);
   const utilization = value => value == null || !data.capacity ? 'Sem dados' : (value / data.capacity * 100).toLocaleString('pt-BR', {maximumFractionDigits: 2}) + '%';
   return [reading.a, reading.b].map((e, i) => {
     const hostId = i ? reading.hostB || definition?.hostB : reading.hostA || definition?.hostA;
@@ -2198,7 +2200,7 @@ function mappedConnectionTooltip(link) {
   const definition = connectionDefinitions.find(c => c.id === id) || link.connection;
   const port = MapTraffic.mappedSourcePort(link, current.layout.nodes, reading, definition);
   return MapConnectionTooltip.details(reading, definition, inventory, connectionFailures.has(id),
-    connectionDisplayTime(id), port?.connector === 'pon');
+    connectionDisplayTime(id), port?.connector === 'pon', link, current.layout.nodes);
 }
 function renderMappedReadings() {
   document.querySelectorAll('.map-traffic').forEach(updateTrafficLayer);

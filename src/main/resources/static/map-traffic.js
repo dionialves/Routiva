@@ -113,6 +113,17 @@ const MapTraffic = (() => {
     }
     return null;
   }
+  function connectionCapacity(reading, link, nodes = [], definition = link?.connection) {
+    const port = mappedSourcePort(link, nodes, reading, definition);
+    // Use the mapped hardware interface, not the chosen solid/dashed appearance.
+    const wireless = port ? port.connector === 'wireless' || port.type === 'wireless'
+      : link && isWireless(link, nodes);
+    if (!wireless) return number(reading?.a?.capacityBps) || null;
+    const capacities = { '10m': 1e7, '100m': 1e8, '1g': 1e9, '10g': 1e10,
+      '25g': 25e9, '40g': 40e9, '50g': 50e9, '100g': 100e9,
+      '200g': 200e9, '400g': 400e9, '800g': 800e9 };
+    return capacities[port?.capacity] || null;
+  }
   function render(svg, layer, path, route, nodes, reading, enabled, reverse = false, now = Date.now()) {
     const wireless = Boolean(layer.trafficContext?.wireless);
     const data = state(reading, now);
@@ -120,14 +131,7 @@ const MapTraffic = (() => {
     const explicitPulses = link?.appearance?.endsWith('-pulses');
     const solidPulses = link?.appearance === 'solid-pulses';
     const phase = layer.trafficContext?.phase || 0;
-    const capacities = { '10m': 1e7, '100m': 1e8, '1g': 1e9, '10g': 1e10,
-      '25g': 25e9, '40g': 40e9, '50g': 50e9, '100g': 100e9,
-      '200g': 200e9, '400g': 400e9, '800g': 800e9 };
-    const source = nodes.find(node => node.id === link?.[reverse ? 'to' : 'from']);
-    const port = source?.ports?.find(port => port.id === link?.[reverse ? 'toPort' : 'fromPort'])
-      || source?.linkInterfaces?.find(entry => entry.hostId === (reading?.hostA || link?.connection?.hostA)
-        && entry.name === (reading?.a?.name || link?.connection?.interfaceA));
-    data.capacity = capacities[port?.capacity] || data.capacity;
+    data.capacity = connectionCapacity(reading, link, nodes);
     data.down = [reading?.a, reading?.b].some(endpoint => fresh(endpoint, now) && !endpoint.up);
     if (data.down || mappedSourcePort(link, nodes, reading)?.connector === 'pon') {
       data.tx = null;
@@ -138,7 +142,7 @@ const MapTraffic = (() => {
     const utilization = utilizationColor(data.tx, data.capacity);
     const color = data.down ? '#EF4444' : solidPulses
       ? utilization && utilization !== '#22C55E' ? utilization : '#16A34A'
-      : explicitPulses ? '#22C55E' : utilization || '#687486';
+      : explicitPulses ? utilization || '#22C55E' : utilization || '#687486';
     path.style?.setProperty('--traffic-color', color);
     path.classList.toggle('traffic-measured', Boolean(color));
     // Geometry owns the animation. Metric updates only change visibility and color.
@@ -285,6 +289,6 @@ const MapTraffic = (() => {
     }
   }
 
-  return {fresh, isWireless, mappedSourcePort, number, count, utilizationColor, rate, state, render, maskOverlaps, pulsePhases, synchronizePulses};
+  return {fresh, isWireless, mappedSourcePort, connectionCapacity, number, count, utilizationColor, rate, state, render, maskOverlaps, pulsePhases, synchronizePulses};
 })();
 if (typeof module !== 'undefined') module.exports = MapTraffic;
