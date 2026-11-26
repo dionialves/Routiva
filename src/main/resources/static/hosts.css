@@ -2,13 +2,18 @@
 .hosts-page .hosts-table { width:100%; min-width:1200px; table-layout:fixed; font-size:13px; }
 .hosts-page .hosts-table :is(th, td) { padding:9px 16px; text-align:left; white-space:normal; overflow-wrap:anywhere; }
 .hosts-page .hosts-table thead th { padding-top:12px; padding-bottom:12px; }
-.hosts-page .hosts-table thead th:nth-child(1) { width:22%; }
+.hosts-page .hosts-table thead th:nth-child(1) { width:19%; }
 .hosts-page .hosts-table thead th:nth-child(2) { width:5%; }
 .hosts-page .hosts-table thead th:nth-child(3) { width:6%; }
 .hosts-page .hosts-table thead th:nth-child(4) { width:13%; }
-.hosts-page .hosts-table thead th:nth-child(5) { width:22%; }
+.hosts-page .hosts-table thead th:nth-child(5) { width:19%; }
 .hosts-page .hosts-table thead th:nth-child(6) { width:8%; }
 .hosts-page .hosts-table thead th:nth-child(7) { width:12%; }
+.hosts-page .hosts-table thead th:nth-child(8) { width:6%; }
+.hosts-page .hosts-table :is(th:nth-child(8), td[data-backup-enabled]) { text-align:center; }
+.hosts-page [data-backup-enabled="true"] { color:var(--success); }
+.hosts-page [data-backup-enabled="false"] { color:var(--error); }
+.hosts-page [data-backup-enabled] .ui-icon { width:16px; height:16px; vertical-align:middle; }
 .hosts-page .hosts-table tbody th, .hosts-page .hosts-table tbody th .availability-host-name { max-width:none; white-space:normal; overflow-wrap:anywhere; word-break:normal; }
 .hosts-page .hosts-table tbody td:nth-child(5) { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #host-dialog .app-modal-header { flex-wrap:nowrap; border-bottom:0; }

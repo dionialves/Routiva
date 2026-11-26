@@ -23,9 +23,24 @@ class BackupPageTests {
     @Test
     void rendersSharedDialogsAndTablesOnce() throws Exception {
         String html = mvc.perform(get("/backup")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        for (String id : List.of("backup-settings-dialog", "backup-settings-form", "backup-text-dialog", "backup-run-dialog", "backup-run-form", "backup-run-host", "backup-run-events", "backup-rows", "backup-host-rows")) {
+        assertThat(html).doesNotContain("id=\"backup-settings\"", "id=\"backup-settings-dialog\"");
+        for (String id : List.of("backup-text-dialog", "backup-run-dialog", "backup-run-form", "backup-run-host", "backup-run-events", "backup-rows")) {
             assertThat(html.split("id=\"" + id + "\"", -1)).hasSize(2);
         }
+    }
+
+    @Test
+    void readsAndSavesBackupSettingsForTheRequestedHost() throws Exception {
+        var settings = new BackupStore.Settings(true, 7);
+        when(store.settings("42")).thenReturn(settings);
+        when(store.save("42", settings)).thenReturn(settings);
+        mvc.perform(get("/api/host-configurations/42/backup"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.enabled").value(true))
+            .andExpect(jsonPath("$.retention").value(7));
+        mvc.perform(put("/api/host-configurations/42/backup").with(csrf())
+            .contentType("application/json").content("{\"enabled\":true,\"retention\":7}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.retention").value(7));
+        verify(store).save("42", settings);
     }
 
     @Test

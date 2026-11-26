@@ -22,6 +22,10 @@ public class HostRepository {
         try { return json.readValue(secrets.decrypt(payload), ManagedHost.class); }
         catch (Exception ex) { throw new IllegalStateException("Não foi possível ler o cadastro local de hosts."); }
     }
+    public Set<String> backupEnabledIds() {
+        return new HashSet<>(jdbc.queryForList("SELECT host_id FROM app_host WHERE backup_enabled=TRUE", String.class));
+    }
+
     public List<ManagedHost> all() {
         return jdbc.query("SELECT payload FROM app_host ORDER BY host_id", (rs, n) -> read(rs.getString(1)));
     }

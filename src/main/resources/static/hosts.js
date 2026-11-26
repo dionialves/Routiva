@@ -40,6 +40,8 @@
         if (Boolean(left) !== Boolean(right)) return left ? -1 : 1;
         order = String(a.ip || '').localeCompare(String(b.ip || ''), 'pt-BR', { numeric: true });
       } else order = left[0] - right[0] || (left[1] < right[1] ? -1 : left[1] > right[1] ? 1 : 0);
+    } else if (key === 'backup') {
+      order = Number(a.backupEnabled === true) - Number(b.backupEnabled === true);
     } else if (key === 'items' || key === 'triggers') {
       order = (a[key === 'items' ? 'monitoredItems' : 'monitoredTriggers'] || 0)
         - (b[key === 'items' ? 'monitoredItems' : 'monitoredTriggers'] || 0);
@@ -85,7 +87,7 @@
   }
 
   const discardDialog = $('host-discard-dialog'), deleteDialog = $('host-delete-dialog');
-  let baseline = '', closeTrigger, authBaseline = '', terminalBaseline = '', authLoaded = false, activeTab = 'general';
+  let baseline = '', closeTrigger, authBaseline = '', terminalBaseline = '', backupBaseline = '', authLoaded = false, activeTab = 'general';
   let hosts = [], options, current, opener, busy = false, loading = false, page = 0;
   let sortKey = 'name', direction = 1;
   const pickers = {};
@@ -142,6 +144,21 @@
         }
         row.append(cell);
       }
+      const backupCell = document.createElement('td');
+      const enabled = host.backupEnabled === true;
+      const label = enabled ? 'Backup ativo' : 'Backup desativado';
+      backupCell.dataset.backupEnabled = String(enabled);
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.classList.add('ui-icon');
+      icon.setAttribute('viewBox', '0 0 24 24');
+      icon.setAttribute('role', 'img');
+      icon.setAttribute('aria-label', label);
+      const use = document.createElementNS(icon.namespaceURI, 'use');
+      use.setAttribute('href', enabled ? '/icons.svg#check' : '/icons.svg#close');
+      icon.append(use);
+      backupCell.title = label;
+      backupCell.append(icon);
+      row.insertBefore(backupCell, row.lastElementChild);
       return row;
     }));
     document.querySelectorAll('[data-host-sort]').forEach(button => {
@@ -276,9 +293,12 @@
   async function loadAuth(host) {
     authLoaded = false;
     $('host-auth-fields').disabled = true; $('host-auth-test').disabled = true;
+    $('host-backup-fields').disabled = true;
     if (!host) return;
     try {
-      const c = await request('/' + host.id + '/authentication');
+      const [c, backup] = await Promise.all([
+        request('/' + host.id + '/authentication'), request('/' + host.id + '/backup'),
+      ]);
       if (current !== host || !dialog.open) return;
       for (const name of ['manufacturer', 'login']) $(`host-auth-${name}`).value = c[name] || '';
       $('host-auth-password').value = ''; $('host-auth-port').value = c.port || (c.manufacturer === 'Mimosa' ? 443 : 8728);
@@ -287,9 +307,13 @@
       updateAuthFields();
       $('host-ssh-port').value = c.sshPort;
       $('host-telnet-port').value = c.telnetPort;
+      $('host-backup-enabled').checked = backup.enabled;
+      $('host-backup-retention').value = backup.retention;
+      backupBaseline = JSON.stringify(backupInput());
       terminalBaseline = JSON.stringify(terminalPorts());
       authBaseline = JSON.stringify(authInput()); authLoaded = true;
-      $('host-auth-fields').disabled = false; $('host-auth-test').disabled = false; tab(activeTab);
+      $('host-auth-fields').disabled = false; $('host-auth-test').disabled = false;
+      $('host-backup-fields').disabled = false; tab(activeTab);
     } catch (error) { if (current === host && dialog.open) window.notify?.(error.message, 'error'); }
   }
   $('host-auth-manufacturer').addEventListener('change', () => {
@@ -323,7 +347,13 @@
   }
   async function saveAuth(testOnly) {
     if (busy || !authLoaded || !current) return;
-    for (const id of ['host-auth-port', 'host-ssh-port', 'host-telnet-port']) {
+    const backup = backupInput();
+    const backupChanged = !testOnly && JSON.stringify(backup) !== backupBaseline;
+    const credentialsChanged = JSON.stringify(authInput()) !== authBaseline || JSON.stringify(terminalPorts()) !== terminalBaseline;
+    const backupOnly = backupChanged && !credentialsChanged;
+    const retention = $('host-backup-retention');
+    if (backupChanged && !retention.reportValidity()) return;
+    for (const id of backupOnly ? [] : ['host-auth-port', 'host-ssh-port', 'host-telnet-port']) {
       const control = $(id);
       if (!control.disabled && !control.checkValidity()) {
         control.setAttribute('aria-invalid', 'true');
@@ -339,10 +369,16 @@
     const host = current;
     setBusy(true, testOnly ? 'test' : 'save');
     try {
+      if (backupOnly) {
+        await saveBackup(host, backup);
+        window.notify?.('Configuração de backup salva.');
+        return;
+      }
       if (terminalOnly) {
         await request('/' + current.id + '/authentication/terminal-ports', 'PUT', ports);
         terminalBaseline = JSON.stringify(ports);
-        window.notify?.('Portas do terminal salvas.');
+        if (backupChanged) await saveBackup(host, backup);
+        window.notify?.(backupChanged ? 'Portas do terminal e configuração de backup salvas.' : 'Portas do terminal salvas.');
         return;
       }
       const result = await request('/' + current.id + '/authentication' + (testOnly ? '/test' : ''), testOnly ? 'POST' : 'PUT', input);
@@ -357,12 +393,14 @@
         if (row) row.connectionStatus = current.connectionStatus;
         render();
       }
+      if (backupChanged) await saveBackup(host, backup);
       const success = testOnly ? result.success : result.status === 'ACTIVE';
-      window.notify?.(testOnly ? result.message : 'Autenticação salva. ' + result.message, success ? 'success' : 'error');
+      const savedMessage = backupChanged ? 'Autenticação e configuração de backup salvas. ' : 'Autenticação salva. ';
+      window.notify?.(testOnly ? result.message : savedMessage + result.message, success ? 'success' : 'error');
       if (testOnly && !success) await refreshConnectionStatus(host);
     } catch (error) {
       window.notify?.(error.message, 'error');
-      if (!terminalOnly) await refreshConnectionStatus(host);
+      if (!terminalOnly && !backupOnly) await refreshConnectionStatus(host);
     }
     finally { setBusy(false); }
   }
@@ -370,8 +408,20 @@
   function terminalPorts() {
     return { sshPort: $('host-ssh-port').valueAsNumber, telnetPort: $('host-telnet-port').valueAsNumber };
   }
+  function backupInput() {
+    return { enabled: $('host-backup-enabled').checked, retention: $('host-backup-retention').valueAsNumber };
+  }
+  async function saveBackup(host, backup) {
+    const saved = await request('/' + host.id + '/backup', 'PUT', backup);
+    backupBaseline = JSON.stringify({ enabled: saved.enabled, retention: saved.retention });
+    host.backupEnabled = saved.enabled;
+    const row = hosts.find(item => item.id === host.id);
+    if (row) row.backupEnabled = saved.enabled;
+    render();
+  }
   function pendingAuthChanges() {
-    return authLoaded && (JSON.stringify(authInput()) !== authBaseline || JSON.stringify(terminalPorts()) !== terminalBaseline);
+    return authLoaded && (JSON.stringify(authInput()) !== authBaseline || JSON.stringify(terminalPorts()) !== terminalBaseline
+      || JSON.stringify(backupInput()) !== backupBaseline);
   }
   const isDirty = () => JSON.stringify(readInput()) !== baseline || pendingAuthChanges();
   function clearErrors() {
@@ -457,7 +507,7 @@
       button.classList.toggle('system-button-loading', waiting);
       button.setAttribute('aria-busy', String(waiting));
     }
-    if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; updateAuthFields(); tab(activeTab); }
+    if (!value) { if (current && !current.editable) $('host-general').querySelectorAll('input, select, textarea, button').forEach(control => { control.disabled = true; }); $('host-auth-fields').disabled = !authLoaded; $('host-auth-test').disabled = !authLoaded; $('host-backup-fields').disabled = !authLoaded; updateAuthFields(); tab(activeTab); }
   }
   document.querySelectorAll('[data-host-sort]').forEach(button => {
     button.addEventListener('click', () => {
@@ -537,7 +587,7 @@
       if (pendingAuth && current) {
         const id = current.id; baseline = JSON.stringify(readInput()); await load();
         current = hosts.find(h => h.id === id) || current; tab('auth');
-        window.notify?.('Salve também as alterações de autenticação.');
+        window.notify?.('Salve também as alterações da aba Autenticação.');
       } else {
         closeNow(); await load();
         if (createdId) { const created = hosts.find(h => h.id === createdId); if (created) { open(created, $('host-new')); tab('auth'); } }

@@ -414,7 +414,8 @@ CREATE TABLE IF NOT EXISTS backup_settings (
     retention INTEGER NOT NULL CHECK (retention > 0),
     host_ids TEXT NOT NULL
 );
-INSERT INTO backup_settings (id, retention, host_ids) SELECT 1, 5, '[]' WHERE NOT EXISTS (SELECT 1 FROM backup_settings WHERE id = 1);
+ALTER TABLE app_host ADD COLUMN IF NOT EXISTS backup_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE app_host ADD COLUMN IF NOT EXISTS backup_retention INTEGER NOT NULL DEFAULT 5 CHECK (backup_retention > 0);
 
 CREATE TABLE IF NOT EXISTS equipment_backup (
     id VARCHAR(36) PRIMARY KEY,

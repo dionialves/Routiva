@@ -1,14 +1,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const base = '/api/backups';
-  const settingsDialog = $('backup-settings-dialog');
   const textDialog = $('backup-text-dialog');
   const deleteDialog = $('backup-delete-dialog');
-  const form = $('backup-settings-form');
-  const settingsCancel = form.querySelector('[data-close-backup-dialog]');
-  const settingsSubmit = form.querySelector('[type=submit]');
-  const retentionInput = $('backup-retention');
-  let savingSettings = false;
   const runButton = $('backup-run');
   const runDialog = $('backup-run-dialog');
   const runHost = $('backup-run-host');
@@ -29,11 +23,7 @@
   let entries = [];
   let historyInventory = new Map();
   const filterPickers = {};
-  const hostPageSize = 10;
-  let hostPage = 0;
   let page = 0;
-  let hosts = [];
-  let selected = new Set();
   let currentEntry;
   let pollTimer;
 
@@ -134,9 +124,9 @@
     }
   }
 
-  function setupFilter(kind, options, allLabel, selectedLabel, onChange, reset = false) {
+  function setupFilter(kind, options, allLabel, selectedLabel, onChange) {
     const select = $(`incident-${kind}`);
-    const selectedIds = reset ? new Set() : filterSelection(kind);
+    const selectedIds = filterSelection(kind);
     const sorted = [...options].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     filterPickers[kind]?.dispose();
     if (reset) {
@@ -153,90 +143,12 @@
   async function loadEntries() {
     const [history, inventory] = await Promise.all([
       request().then(response => response.json()),
-      request('/settings').then(response => response.json()).catch(() => null),
+      request('/hosts').then(response => response.json()).catch(() => null),
     ]);
     entries = history;
-    if (inventory) historyInventory = new Map(inventory.hosts.map(host => [host.id, host]));
+    if (inventory) historyInventory = new Map(inventory.map(host => [host.id, host]));
     setupHistoryFilters();
     renderEntries();
-  }
-
-  function visibleHosts() {
-    const groupIds = filterSelection('backup-group');
-    const hostIds = filterSelection('backup-settings-host');
-    return hosts.filter(host => (!hostIds.size || hostIds.has(host.id)) &&
-      (!groupIds.size || host.groups.some(group => groupIds.has(group.id))));
-  }
-
-  function currentHostPage(visible) {
-    const start = hostPage * hostPageSize;
-    return visible.slice(start, start + hostPageSize);
-  }
-
-  function updateRetentionButtons() {
-    const amount = retentionInput.valueAsNumber;
-    $('backup-retention-decrease').disabled = amount <= Number(retentionInput.min);
-    $('backup-retention-increase').disabled = amount >= Number(retentionInput.max);
-  }
-
-  function updateSelection() {
-    const boxes = [...$('backup-host-rows').querySelectorAll('input[type="checkbox"]')];
-    const checked = boxes.filter(box => box.checked).length;
-    const pageCheckbox = $('backup-select-page');
-    pageCheckbox.disabled = boxes.length === 0;
-    pageCheckbox.checked = boxes.length > 0 && checked === boxes.length;
-    pageCheckbox.indeterminate = checked > 0 && checked < boxes.length;
-    $('backup-selection').textContent = `${selected.size} de ${hosts.length} hosts selecionados`;
-  }
-
-  function renderHosts() {
-    const visible = visibleHosts();
-    hostPage = Math.min(hostPage, Math.max(0, Math.ceil(visible.length / hostPageSize) - 1));
-    const start = hostPage * hostPageSize;
-    const rows = $('backup-host-rows');
-    rows.replaceChildren();
-    for (const host of currentHostPage(visible)) {
-      const row = rows.insertRow();
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = selected.has(host.id);
-      checkbox.setAttribute('aria-label', host.name);
-      checkbox.addEventListener('change', () => {
-        if (checkbox.checked) selected.add(host.id);
-        else selected.delete(host.id);
-        updateSelection();
-      });
-      cell(row, checkbox);
-      cell(row, host.name);
-      cell(row, host.ip || '—');
-    }
-    $('backup-host-empty').hidden = visible.length > 0;
-    $('backup-host-pagination').hidden = visible.length === 0;
-    $('backup-host-prev').disabled = hostPage === 0;
-    $('backup-host-next').disabled = start + hostPageSize >= visible.length;
-    $('backup-host-count').textContent =
-      `Exibindo ${start + 1}–${Math.min(start + hostPageSize, visible.length)} de ${visible.length} hosts`;
-    const all = visible.length === hosts.length;
-    $('backup-select-all').querySelector('span').textContent = all ? 'Selecionar todos' : 'Selecionar filtrados';
-    $('backup-deselect-all').querySelector('span').textContent = all ? 'Desmarcar todos' : 'Desmarcar filtrados';
-    $('backup-select-all').disabled = $('backup-deselect-all').disabled = visible.length === 0;
-    updateSelection();
-  }
-
-  async function openSettings() {
-    const data = await (await request('/settings')).json();
-    hosts = data.hosts;
-    const available = new Set(hosts.map(host => host.id));
-    selected = new Set(data.settings.hostIds.filter(id => available.has(id)));
-    retentionInput.value = data.settings.retention;
-    updateRetentionButtons();
-    hostPage = 0;
-    const groups = new Map(hosts.flatMap(host => host.groups).map(group => [group.id, group]));
-    const filtersChanged = () => { hostPage = 0; renderHosts(); };
-    setupFilter('backup-group', groups.values(), 'Todos os grupos', 'grupos selecionados', filtersChanged, true);
-    setupFilter('backup-settings-host', hosts, 'Todos os hosts', 'hosts selecionados', filtersChanged, true);
-    renderHosts();
-    settingsDialog.showModal();
   }
 
   async function openPreview(entry) {
@@ -372,63 +284,9 @@
     }
   }
 
-  $('backup-settings').onclick = event => action(event.currentTarget, openSettings);
-  $('backup-host-prev').onclick = () => { hostPage--; renderHosts(); };
-  $('backup-host-next').onclick = () => { hostPage++; renderHosts(); };
-  $('backup-retention-decrease').onclick = () => {
-    retentionInput.stepDown();
-    updateRetentionButtons();
-  };
-  $('backup-retention-increase').onclick = () => {
-    retentionInput.stepUp();
-    updateRetentionButtons();
-  };
-  retentionInput.oninput = updateRetentionButtons;
-  $('backup-select-page').onchange = event => {
-    for (const host of currentHostPage(visibleHosts())) {
-      if (event.currentTarget.checked) selected.add(host.id);
-      else selected.delete(host.id);
-    }
-    renderHosts();
-  };
-  $('backup-select-all').onclick = () => {
-    visibleHosts().forEach(host => selected.add(host.id));
-    renderHosts();
-  };
-  $('backup-deselect-all').onclick = () => {
-    visibleHosts().forEach(host => selected.delete(host.id));
-    renderHosts();
-  };
-  form.onsubmit = event => {
-    event.preventDefault();
-    if (savingSettings) return;
-    savingSettings = true;
-    const content = form.querySelector('.form-dialog-content');
-    content.inert = true;
-    settingsCancel.disabled = $('backup-settings-close').disabled = true;
-    action(settingsSubmit, async () => {
-      try {
-        await request('/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ retention: retentionInput.valueAsNumber, hostIds: [...selected] }),
-        });
-        settingsDialog.close();
-        window.notify('Configurações salvas.');
-        await loadEntries();
-      } finally {
-        content.inert = false;
-        settingsCancel.disabled = $('backup-settings-close').disabled = false;
-        savingSettings = false;
-      }
-    });
-  };
-  settingsDialog.addEventListener('cancel', event => {
-    if (savingSettings) event.preventDefault();
-  });
   runButton.onclick = () => action(runButton, async () => {
-    const data = await (await request('/settings')).json();
-    const available = data.hosts.filter(host => host.ready);
+    const data = await (await request('/hosts')).json();
+    const available = data.filter(host => host.ready);
     runHost.replaceChildren(new Option('Selecione um host', ''), ...available.map(host => new Option(host.name, host.id)));
     runPicker.sync();
     setRunBusy(false);
@@ -465,7 +323,7 @@
       startingRun = false;
     }
   };
-  for (const button of document.querySelectorAll('[data-close-backup-dialog], #backup-settings-close, #backup-text-close, #backup-delete-close, #backup-run-close')) {
+  for (const button of document.querySelectorAll('[data-close-backup-dialog], #backup-text-close, #backup-delete-close, #backup-run-close')) {
     button.onclick = () => button.closest('dialog').close();
   }
   runDialog.addEventListener('cancel', event => {

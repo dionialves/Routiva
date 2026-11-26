@@ -3,9 +3,9 @@
 <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
 <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
 <th:block th:replace="~{design-system :: picker}"></th:block>
-<link rel="stylesheet" href="/hosts.css?v=20261126-saved-password">
+<link rel="stylesheet" href="/hosts.css?v=20261126-backup-column">
 <script src="/multi-picker.js" defer></script>
-<script src="/hosts.js?v=20261126-connection-status" defer></script>
+<script src="/hosts.js?v=20261126-backup-column" defer></script>
 </th:block></head><body>
 <th:block th:fragment="dialogs">
 <dialog th:replace="~{design-system :: formDialog('host-dialog', 'host-dialog-title', 'host-dialog-description', ~{host-dialog :: hostForm})}"><th:block th:fragment="hostForm">
@@ -59,6 +59,12 @@
                 <div id="host-telnet-port-row" class="host-auth-field"><label for="host-telnet-port">Porta Telnet</label><input id="host-telnet-port" type="number" min="1" max="65535" step="1" value="23" required></div>
               </div>
             </fieldset>
+        </th:block></section>
+        <section th:replace="~{design-system :: formSection('host-backup-title', 'Backup', 'file', ~{host-dialog :: hostBackupPanel})}"><th:block th:fragment="hostBackupPanel">
+          <fieldset id="host-backup-fields" class="host-auth-fields" disabled>
+            <div class="host-auth-field"><label for="host-backup-enabled">Realizar backup</label><div class="host-auth-tls-control"><input id="host-backup-enabled" type="checkbox" role="switch" class="system-switch"></div></div>
+            <div class="host-auth-field"><label for="host-backup-retention">Backups mantidos por host</label><input id="host-backup-retention" type="number" min="1" max="2147483647" step="1" value="5" required></div>
+          </fieldset>
         </th:block></section>
       </div>
     </div>

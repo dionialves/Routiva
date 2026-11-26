@@ -11,9 +11,9 @@
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
   <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
   <th:block th:replace="~{design-system :: picker}"></th:block>
-  <link rel="stylesheet" href="/hosts.css?v=20261126-saved-password">
+  <link rel="stylesheet" href="/hosts.css?v=20261126-backup-column">
   <script src="/shell.js?v=20261124-dialog-notifications" defer></script>
-  <script src="/multi-picker.js" defer></script><script src="/hosts.js?v=20261126-connection-status" defer></script>
+  <script src="/multi-picker.js" defer></script><script src="/hosts.js?v=20261126-backup-column" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('hosts')}"></aside>
@@ -30,7 +30,7 @@
   </div></section>
   <section class="card availability-host-section" aria-labelledby="hosts-title"><h2 id="hosts-title">Hosts</h2>
     <p id="hosts-state" role="status" aria-live="polite">Carregando hosts…</p>
-    <div th:replace="~{design-system :: dataTable('Hosts cadastrados', ~{hosts :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col" aria-sort="ascending"><button type="button" data-host-sort="name">Nome <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="items">Itens <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="triggers">Trigger <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="interface">Interface <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="templates">Templates <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="status">Status <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="connection">Conexão <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="availability">Disponibilidade <span aria-hidden="true">↕</span></button></th></tr></thead><tbody id="hosts-rows"></tbody></th:block></div>
+    <div th:replace="~{design-system :: dataTable('Hosts cadastrados', ~{hosts :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col" aria-sort="ascending"><button type="button" data-host-sort="name">Nome <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="items">Itens <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="triggers">Trigger <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="interface">Interface <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="templates">Templates <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="status">Status <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="connection">Conexão <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="backup">Backup <span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-host-sort="availability">Disponibilidade <span aria-hidden="true">↕</span></button></th></tr></thead><tbody id="hosts-rows"></tbody></th:block></div>
     <nav class="system-pagination" aria-label="Paginação de hosts"><button id="hosts-prev" type="button" class="system-button" disabled>Anterior</button><span id="hosts-range"></span><button id="hosts-next" type="button" class="system-button" disabled>Próxima</button></nav>
   </section>
 </main></div>

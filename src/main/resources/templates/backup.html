@@ -12,11 +12,11 @@
   <th:block th:replace="~{design-system :: picker}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
   <link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
-  <link rel="stylesheet" href="/backup.css?v=20261126-filter-alignment">
+  <link rel="stylesheet" href="/backup.css?v=20261126-host-backup">
   <script src="/shell.js" defer></script>
   <script src="/multi-picker.js" defer></script>
   <script src="/group-picker.js" defer></script>
-  <script src="/backup.js?v=20261126-filter-alignment" defer></script>
+  <script src="/backup.js?v=20261126-host-backup" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('backup')}"></aside>
@@ -30,7 +30,6 @@
         <p>Faça backups das configurações dos equipamentos e consulte o histórico.</p>
       </div>
       <div class="settings-actions">
-        <button id="backup-settings" aria-haspopup="dialog" aria-controls="backup-settings-dialog" class="system-button" type="button"><svg th:replace="~{shell :: icon('settings')}"></svg>Configurações</button>
         <button id="backup-run" aria-haspopup="dialog" aria-controls="backup-run-dialog" class="system-button system-button-primary query-primary-action" type="button"><svg th:replace="~{shell :: icon('plus')}"></svg>Novo backup</button>
       </div>
     </div>
@@ -57,67 +56,6 @@
     </section>
   </main>
 </div>
-<dialog th:replace="~{design-system :: formDialog('backup-settings-dialog', 'backup-settings-title', null, ~{backup :: settingsForm})}">
-  <form th:fragment="settingsForm" id="backup-settings-form" class="form-dialog-frame">
-    <header th:replace="~{design-system :: modalHeader('backup-settings-title', 'Configurações de backup', null, null, 'settings', 'backup-settings-close', 'Fechar configurações')}"></header>
-    <div class="form-dialog-content">
-      <section th:replace="~{design-system :: formSection('backup-retention-title', 'Retenção', 'clock-3', ~{backup :: retention})}">
-        <th:block th:fragment="retention">
-          <div class="backup-retention">
-            <label for="backup-retention">Backups mantidos por host</label>
-            <div class="backup-retention-stepper">
-              <button id="backup-retention-decrease" type="button" class="system-button system-button-icon-only" aria-label="Diminuir retenção">
-                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
-              </button>
-              <input id="backup-retention" type="number" min="1" max="2147483647" required>
-              <button id="backup-retention-increase" type="button" class="system-button system-button-icon-only" aria-label="Aumentar retenção">
-                <svg th:replace="~{shell :: icon('plus')}"></svg>
-              </button>
-            </div>
-            <span>backup(s)</span>
-          </div>
-        </th:block>
-      </section>
-      <section th:replace="~{design-system :: formSection('backup-hosts-title', 'Hosts', 'server', ~{backup :: hostSelection})}">
-        <th:block th:fragment="hostSelection">
-          <div class="query-filter-bar" data-clear-filters="false">
-            <div class="query-filter-row">
-              <div th:replace="~{multi-picker :: checklist('backup-group', 'Grupo de hosts', 'layers', 'Todos os grupos', 'Buscar grupo')}"></div>
-              <div th:replace="~{multi-picker :: checklist('backup-settings-host', 'Host', 'server', 'Todos os hosts', 'Pesquisar host')}"></div>
-            </div>
-            <div class="backup-host-toolbar">
-              <button id="backup-select-all" type="button" class="system-button"><svg th:replace="~{shell :: icon('check')}"></svg><span>Selecionar todos</span></button>
-              <button id="backup-deselect-all" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg><span>Desmarcar todos</span></button>
-              <span id="backup-selection" role="status"></span>
-            </div>
-          </div>
-          <div class="availability-page backup-host-table">
-            <div class="system-table-compact">
-              <div th:replace="~{design-system :: dataTable('Hosts cadastrados', ~{backup :: hosts})}">
-                <th:block th:fragment="hosts">
-                  <thead><tr><th scope="col"><input id="backup-select-page" type="checkbox" aria-label="Selecionar hosts desta página" disabled></th><th scope="col">Host</th><th scope="col">IP</th></tr></thead>
-                  <tbody id="backup-host-rows"></tbody>
-                </th:block>
-              </div>
-            </div>
-          </div>
-          <nav id="backup-host-pagination" class="system-pagination" aria-label="Paginação de hosts" hidden>
-            <button id="backup-host-prev" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button>
-            <span id="backup-host-count" role="status"></span>
-            <button id="backup-host-next" type="button" class="system-button"><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Próxima</button>
-          </nav>
-          <p id="backup-host-empty" hidden>Nenhum host encontrado.</p>
-        </th:block>
-      </section>
-    </div>
-    <footer th:replace="~{design-system :: modalFooter(~{backup :: settingsActions})}">
-      <div th:fragment="settingsActions" class="backup-footer-actions">
-        <button type="button" class="system-button" data-close-backup-dialog><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
-        <button type="submit" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('check')}"></svg>Salvar</button>
-      </div>
-    </footer>
-  </form>
-</dialog>
 <dialog th:replace="~{design-system :: formDialog('backup-text-dialog', 'backup-text-title', null, ~{backup :: textPreview})}">
   <div th:fragment="textPreview" class="form-dialog-frame">
     <header th:replace="~{design-system :: modalHeader('backup-text-title', 'Backup', 'backup-filename', '', 'file', 'backup-text-close', 'Fechar backup')}"></header>

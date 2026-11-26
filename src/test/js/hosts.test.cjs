@@ -30,3 +30,14 @@ test('connection filter supports the three states and defaults missing configura
   assert.equal(connectionStatus(rows[2]), 'NOT_CONFIGURED');
   assert.deepEqual([...rows].sort((a,b) => compareHosts(a,b,'connection')).map(h => h.id), ['a','b','c']);
 });
+
+test('sorts backup status in both directions and uses the host name for ties', () => {
+  const hosts = [
+    { id: '1', visibleName: 'Zulu', backupEnabled: true },
+    { id: '2', visibleName: 'Bravo', backupEnabled: false },
+    { id: '3', visibleName: 'Alfa', backupEnabled: true },
+  ];
+  const sorted = direction => [...hosts].sort((a, b) => compareHosts(a, b, 'backup', direction)).map(host => host.id);
+  assert.deepEqual(sorted(1), ['2', '3', '1']);
+  assert.deepEqual(sorted(-1), ['3', '1', '2']);
+});

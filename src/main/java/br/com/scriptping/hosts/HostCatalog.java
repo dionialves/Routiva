@@ -15,6 +15,8 @@ public class HostCatalog {
         this.repository = repository; this.zabbix = zabbix; this.settings = settings;
         this.transactions = new org.springframework.transaction.support.TransactionTemplate(manager);
     }
+    public Set<String> backupEnabledIds() { return repository.backupEnabledIds(); }
+
     public List<ManagedHost> all() { return repository.all(); }
     public Map<String, ?> options() { return repository.options(); }
     public synchronized void restoreLegacy() {

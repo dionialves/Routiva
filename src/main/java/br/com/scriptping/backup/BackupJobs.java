@@ -1,10 +1,12 @@
 package br.com.scriptping.backup;
 
+import br.com.scriptping.scheduling.ScheduledTask.Detail;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -34,15 +36,12 @@ class BackupJobs {
     }
 
     synchronized Status start(String hostId) {
-        if (status.running()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe um backup em execução.");
-        }
+        requireIdle();
         List<BackupStore.HostOption> targets;
         if (hostId == null) {
-            var selected = new java.util.HashSet<>(store.settings().hostIds());
-            targets = store.inventory().stream().filter(host -> selected.contains(host.id())).toList();
+            targets = configuredTargets();
             if (targets.isEmpty()) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecione os hosts nas configurações de backup.");
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Habilite o backup na configuração dos hosts.");
             }
         } else {
             var target = store.inventory().stream().filter(host -> host.id().equals(hostId)).findFirst()
@@ -57,12 +56,45 @@ class BackupJobs {
         if (runId != null) events.add(new Event(System.currentTimeMillis(), "Iniciando backup"));
         var started = new Status(true, targets.size(), 0, 0, List.of(), runId, List.copyOf(events));
         status = started;
-        worker.execute(() -> run(targets, runId, events));
+        try {
+            worker.execute(() -> {
+                try {
+                    run(targets, runId, events, detail -> {});
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ex) {
+            status = new Status(false, targets.size(), 0, 0, List.of(), runId, List.copyOf(events));
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Executor de backup indisponível.", ex);
+        }
         return started;
     }
 
-    private void run(List<BackupStore.HostOption> targets, String runId, List<Event> events) {
-        java.util.function.Consumer<String> progress = message -> {
+    Status runScheduled(Consumer<Detail> report) throws InterruptedException {
+        List<BackupStore.HostOption> targets;
+        synchronized (this) {
+            requireIdle();
+            targets = configuredTargets();
+            if (targets.isEmpty()) return new Status(false, 0, 0, 0, List.of(), null, List.of());
+            status = new Status(true, targets.size(), 0, 0, List.of(), null, List.of());
+        }
+        return run(targets, null, new ArrayList<>(), report);
+    }
+
+    private void requireIdle() {
+        if (status.running()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe um backup em execução.");
+        }
+    }
+
+    private List<BackupStore.HostOption> configuredTargets() {
+        return store.inventory().stream().filter(BackupStore.HostOption::backupEnabled).toList();
+    }
+
+    private Status run(List<BackupStore.HostOption> targets, String runId, List<Event> events,
+                       Consumer<Detail> report) throws InterruptedException {
+        Consumer<String> progress = message -> {
             if (runId == null) return;
             events.add(new Event(System.currentTimeMillis(), message));
             var current = status;
@@ -72,8 +104,15 @@ class BackupJobs {
         int completed = 0;
         int saved = 0;
         var failures = new ArrayList<Failure>();
+        Status finished;
         try {
             for (var target : targets) {
+                report.accept(new Detail(target.id(), target.name(), "PENDING", "Aguardando backup."));
+            }
+            for (var target : targets) {
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                report.accept(new Detail(target.id(), target.name(), "RUNNING", "Coletando configuração."));
+                String failure = null;
                 try {
                     if (!target.ready()) throw new IOException("Configure e valide a autenticação do host.");
                     var result = capture.capture(target.id(), progress);
@@ -83,20 +122,23 @@ class BackupJobs {
                     saved++;
                 } catch (InterruptedException ex) {
                     progress.accept("Backup interrompido");
-                    Thread.currentThread().interrupt();
-                    break;
+                    throw ex;
                 } catch (Exception ex) {
                     LOGGER.warn("Backup failed for host {} ({})", target.id(), ex.getClass().getSimpleName());
-                    String message = ex.getClass() == IOException.class
+                    failure = ex.getClass() == IOException.class && ex.getMessage() != null
                         ? ex.getMessage() : "Falha ao coletar ou armazenar a configuração.";
-                    failures.add(new Failure(target.name(), message));
-                    progress.accept("Erro: " + message);
+                    failures.add(new Failure(target.name(), failure));
+                    progress.accept("Erro: " + failure);
                 }
                 status = new Status(true, targets.size(), ++completed, saved, List.copyOf(failures), runId, List.copyOf(events));
+                report.accept(new Detail(target.id(), target.name(), failure == null ? "COMPLETED" : "FAILED",
+                    failure == null ? "Backup salvo." : failure));
             }
         } finally {
-            status = new Status(false, targets.size(), completed, saved, List.copyOf(failures), runId, List.copyOf(events));
+            finished = new Status(false, targets.size(), completed, saved, List.copyOf(failures), runId, List.copyOf(events));
+            status = finished;
         }
+        return finished;
     }
 
     @PreDestroy

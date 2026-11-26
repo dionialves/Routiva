@@ -15,12 +15,14 @@ public class HostController {
         this.catalog = catalog; this.authentication = authentication; this.inventory = inventory;
     }
     @GetMapping("/configuracao/hosts") public String page() { return "hosts"; }
-    public record HostRow(@com.fasterxml.jackson.annotation.JsonUnwrapped ManagedHost configuration, String connectionStatus) {}
+    public record HostRow(@com.fasterxml.jackson.annotation.JsonUnwrapped ManagedHost configuration, String connectionStatus, boolean backupEnabled) {}
     @GetMapping("/api/host-configurations") @ResponseBody
     public List<HostRow> list() {
         var hosts = catalog.all();
         var statuses = authentication.connectionStatuses(hosts);
-        return hosts.stream().map(host -> new HostRow(host, statuses.getOrDefault(host.id(), "NOT_CONFIGURED"))).toList();
+        var backupEnabled = catalog.backupEnabledIds();
+        return hosts.stream().map(host -> new HostRow(host, statuses.getOrDefault(host.id(), "NOT_CONFIGURED"),
+            backupEnabled.contains(host.id()))).toList();
     }
     @GetMapping("/api/host-configurations/options") @ResponseBody
     public Map<String, ?> options() {

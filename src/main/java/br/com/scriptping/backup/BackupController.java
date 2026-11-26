@@ -24,14 +24,15 @@ class BackupController {
     @GetMapping("/api/backups")
     @ResponseBody List<BackupStore.Entry> list() { return store.list(); }
 
-    @GetMapping("/api/backups/settings")
-    @ResponseBody Map<String, Object> settings() {
-        return Map.of("settings", store.settings(), "hosts", store.inventory());
-    }
+    @GetMapping("/api/backups/hosts")
+    @ResponseBody List<BackupStore.HostOption> hosts() { return store.inventory(); }
 
-    @PutMapping("/api/backups/settings")
-    @ResponseBody BackupStore.Settings save(@RequestBody BackupStore.Settings settings) {
-        return store.save(settings);
+    @GetMapping("/api/host-configurations/{id}/backup")
+    @ResponseBody BackupStore.Settings settings(@PathVariable String id) { return store.settings(id); }
+
+    @PutMapping("/api/host-configurations/{id}/backup")
+    @ResponseBody BackupStore.Settings save(@PathVariable String id, @RequestBody BackupStore.Settings settings) {
+        return store.save(id, settings);
     }
 
     record RunRequest(String hostId) {}
