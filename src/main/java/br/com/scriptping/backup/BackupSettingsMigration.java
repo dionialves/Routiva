@@ -25,16 +25,22 @@ class BackupSettingsMigration implements InitializingBean {
     @Override
     public void afterPropertiesSet() {
         transaction.executeWithoutResult(status -> {
+            if (jdbc.queryForObject("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = current_schema AND LOWER(table_name) = 'backup_settings'
+                """, Integer.class) == 0) return;
+
             var legacy = jdbc.query("SELECT retention, host_ids FROM backup_settings WHERE id=1 FOR UPDATE",
                 (rs, row) -> new LegacySettings(rs.getInt(1), rs.getString(2)));
-            if (legacy.isEmpty()) return;
-
-            var settings = legacy.getFirst();
-            jdbc.update("UPDATE app_host SET backup_retention=?", settings.retention());
-            for (String hostId : decodeIds(settings.hostIds())) {
-                jdbc.update("UPDATE app_host SET backup_enabled=TRUE WHERE host_id=?", hostId);
+            if (!legacy.isEmpty()) {
+                var settings = legacy.getFirst();
+                var hostIds = decodeIds(settings.hostIds());
+                jdbc.update("UPDATE app_host SET backup_retention=?", settings.retention());
+                for (String hostId : hostIds) {
+                    jdbc.update("UPDATE app_host SET backup_enabled=TRUE WHERE host_id=?", hostId);
+                }
             }
-            jdbc.update("DELETE FROM backup_settings WHERE id=1");
+            jdbc.execute("DROP TABLE backup_settings");
         });
     }
 

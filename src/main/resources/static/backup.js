@@ -129,10 +129,6 @@
     const selectedIds = filterSelection(kind);
     const sorted = [...options].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     filterPickers[kind]?.dispose();
-    if (reset) {
-      $(`incident-${kind}-picker`).open = false;
-      $(`incident-${kind}-search`).value = '';
-    }
     select.replaceChildren(...sorted.map(choice => new Option(choice.name, choice.id, false, selectedIds.has(choice.id))));
     $(`incident-${kind}-options`).replaceChildren();
     filterPickers[kind] = window.setupMultiPicker(kind, select, allLabel, onChange,

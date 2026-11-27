@@ -409,11 +409,6 @@ WHERE manufacturer IN ('Ubiquiti','Datacom','Cisco') AND EXISTS (
     SELECT 1 FROM app_host h WHERE h.host_id=host_authentication.host_id
 );
 
-CREATE TABLE IF NOT EXISTS backup_settings (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    retention INTEGER NOT NULL CHECK (retention > 0),
-    host_ids TEXT NOT NULL
-);
 ALTER TABLE app_host ADD COLUMN IF NOT EXISTS backup_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE app_host ADD COLUMN IF NOT EXISTS backup_retention INTEGER NOT NULL DEFAULT 5 CHECK (backup_retention > 0);
 

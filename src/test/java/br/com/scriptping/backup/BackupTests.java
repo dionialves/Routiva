@@ -96,11 +96,15 @@ class BackupTests {
         jdbc.update("INSERT INTO app_host(host_id,payload,synced_at) VALUES ('1','{}',0),('2','{}',0)");
         assertThat(store.settings("1")).isEqualTo(new BackupStore.Settings(false, 5));
 
+        jdbc.execute("CREATE TABLE backup_settings (id INTEGER PRIMARY KEY, retention INTEGER NOT NULL, host_ids TEXT NOT NULL)");
         jdbc.update("INSERT INTO backup_settings(id, retention, host_ids) VALUES (1, ?, ?)", 3, json.writeValueAsString(List.of("1")));
         var migration = new BackupSettingsMigration(jdbc, new org.springframework.jdbc.datasource.DataSourceTransactionManager(source));
         migration.afterPropertiesSet();
         assertThat(store.settings("1")).isEqualTo(new BackupStore.Settings(true, 3));
         assertThat(store.settings("2")).isEqualTo(new BackupStore.Settings(false, 3));
+        assertThat(jdbc.queryForObject("""
+            SELECT COUNT(*) FROM information_schema.tables WHERE LOWER(table_name) = 'backup_settings'
+            """, Integer.class)).isZero();
 
         byte[] original = {0, 12, (byte) 0xff};
         byte[] text = "interface VLAN".getBytes(StandardCharsets.UTF_8);
