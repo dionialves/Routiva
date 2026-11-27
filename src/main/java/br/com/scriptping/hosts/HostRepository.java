@@ -26,6 +26,20 @@ public class HostRepository {
         return new HashSet<>(jdbc.queryForList("SELECT host_id FROM app_host WHERE backup_enabled=TRUE", String.class));
     }
 
+    public record BackupSummary(String name, int retention, long saved, Long lastBackup) {}
+
+    public List<BackupSummary> backupSummary() {
+        return jdbc.query("""
+            SELECT h.payload, h.backup_retention, COUNT(b.id), MAX(b.created_at)
+            FROM app_host h LEFT JOIN equipment_backup b ON b.host_id = h.host_id
+            WHERE h.backup_enabled = TRUE
+            GROUP BY h.host_id, h.payload, h.backup_retention
+            ORDER BY h.host_id
+            """, (rs, row) -> new BackupSummary(read(rs.getString(1)).visibleName(),
+                rs.getInt(2), rs.getLong(3), rs.getObject(4, Long.class)))
+            .stream().sorted(Comparator.comparing(BackupSummary::name, String.CASE_INSENSITIVE_ORDER)).toList();
+    }
+
     public List<ManagedHost> all() {
         return jdbc.query("SELECT payload FROM app_host ORDER BY host_id", (rs, n) -> read(rs.getString(1)));
     }

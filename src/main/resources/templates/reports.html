@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <th:block th:replace="~{shell :: security}"></th:block>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relatórios • TraceOne</title>
+  <th:block th:replace="~{design-system :: base}"></th:block>
+  <th:block th:replace="~{design-system :: layout}"></th:block>
+  <th:block th:replace="~{design-system :: actions}"></th:block>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
+  <link rel="stylesheet" href="/reports.css?v=20261127-summary">
+  <script src="/shell.js" defer></script>
+  <script src="/reports.js?v=20261127-pdf-filename" defer></script>
+</head>
+<body>
+<aside th:replace="~{shell :: sidebar('reports')}"></aside>
+<div class="app-workspace">
+  <header th:replace="~{shell :: topbar}"></header>
+  <main class="page-content reports-catalog">
+    <div class="page-heading reports-heading">
+      <h1>Relatórios</h1>
+      <p>Consulte e exporte informações operacionais e gerenciais da sua rede.</p>
+    </div>
+    <div>
+      <section th:each="group : ${reportGroups}" class="report-category"
+               th:attr="aria-labelledby=|report-category-${group.category().id()}|">
+        <div class="report-category-heading">
+          <div class="report-category-title">
+            <svg th:replace="~{shell :: icon(${group.category().icon()})}"></svg>
+            <h2 th:id="|report-category-${group.category().id()}|" th:text="${group.category().name()}"></h2>
+          </div>
+          <p th:text="${group.category().description()}"></p>
+        </div>
+        <div class="report-grid">
+          <th:block th:each="report : ${group.reports()}">
+            <button th:replace="~{report-card :: card(${report})}"></button>
+          </th:block>
+        </div>
+      </section>
+    </div>
+    <p class="report-empty" role="status" th:hidden="${!reportGroups.isEmpty()}">Nenhum relatório disponível</p>
+  </main>
+</div>
+<th:block th:each="group : ${reportGroups}">
+  <th:block th:each="report : ${group.reports()}">
+    <th:block th:replace="~{reports :: ${report.dialogFragment()}}"></th:block>
+  </th:block>
+</th:block>
+<th:block th:remove="all">
+<th:block th:fragment="backupReportDialog">
+<dialog th:replace="~{design-system :: modalDialog('backup-summary-dialog', 'backup-summary-title', 'backup-summary-description', ~{reports :: backupSummary}, 'app-modal-adaptive')}">
+  <div th:fragment="backupSummary" class="form-dialog-frame">
+    <header th:replace="~{design-system :: modalHeader('backup-summary-title', 'Resumo de backup', 'backup-summary-description', 'Visão geral dos backups realizados nos hosts.', 'file', 'backup-summary-close', 'Fechar relatório')}"></header>
+    <div class="form-dialog-content">
+      <div class="backup-summary-metrics">
+        <article th:replace="~{reports :: backupMetric('Hosts habilitados', ${summary.rows().size()}, 'server', 'enabled')}"></article>
+        <article th:replace="~{reports :: backupMetric('Backups salvos', ${summary.saved()}, 'download', 'saved')}"></article>
+        <article th:replace="~{reports :: backupMetric('Hosts sem backup', ${summary.withoutBackup()}, 'circle-alert', ${summary.withoutBackup() > 0 ? 'missing' : 'neutral'})}"></article>
+      </div>
+      <div th:replace="~{design-system :: dataTableRegion('Hosts habilitados para backup', ~{reports :: backupRows}, 'backup-summary-table', 'backup-summary-table-region', null, false)}">
+        <th:block th:fragment="backupRows">
+          <colgroup><col><col><col><col></colgroup>
+          <thead>
+            <tr><th scope="col">Host</th><th scope="col">Retenção configurada</th><th scope="col">Backups salvos</th><th scope="col">Último backup</th></tr>
+          </thead>
+          <tbody id="backup-summary-rows">
+            <tr th:each="host : ${summary.rows()}">
+              <td th:text="${host.name()}"></td>
+              <td th:text="${host.retention()}"></td>
+              <td th:text="${host.saved()}"></td>
+              <td th:attr="data-sort-value=${host.lastBackup() ?: 0}" th:text="${host.lastBackupLabel()}"></td>
+            </tr>
+          </tbody>
+        </th:block>
+      </div>
+      <nav th:replace="~{design-system :: tablePagination('Paginação do resumo de backup', 'backup-summary-pagination', 'registros', 'backup-summary-rows', 25)}"></nav>
+    </div>
+    <footer th:replace="~{design-system :: modalFooter(~{reports :: backupSummaryActions})}">
+      <div th:fragment="backupSummaryActions" class="backup-summary-actions">
+        <button id="backup-summary-cancel" type="button" class="system-button"><svg th:replace="~{shell :: icon('close')}"></svg>Fechar</button>
+        <form id="backup-summary-download" method="get" action="/relatorios/resumo-backup/pdf">
+          <button type="submit" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('download')}"></svg>Baixar relatório</button>
+        </form>
+        <p id="backup-summary-download-error" role="alert"></p>
+      </div>
+    </footer>
+  </div>
+</dialog>
+</th:block>
+<article th:fragment="backupMetric(label, value, icon, tone)" class="backup-summary-metric" th:attr="data-tone=${tone}">
+  <span class="backup-summary-metric-icon"><svg th:replace="~{shell :: icon(${icon})}"></svg></span>
+  <div><h3 th:text="${label}"></h3><strong th:text="${value}"></strong></div>
+</article>
+</th:block>
+</body>
+</html>

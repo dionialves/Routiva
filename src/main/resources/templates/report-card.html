@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<body>
+<button th:fragment="card(report)" type="button" class="report-card" aria-haspopup="dialog"
+        th:attr="aria-controls=${report.dialogId()},data-report-id=${report.id()}">
+  <span class="report-card-icons">
+    <span class="report-card-icon"><svg th:replace="~{shell :: icon(${report.icon()})}"></svg></span>
+    <svg th:replace="~{shell :: icon('arrow-right')}"></svg>
+  </span>
+  <strong class="report-card-name" th:text="${report.name()}"></strong>
+  <span class="report-card-description" th:text="${report.description()}"></span>
+</button>
+</body>
+</html>

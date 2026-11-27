@@ -84,6 +84,33 @@ class BackupTests {
     }
 
     @Test
+    void summarizesOnlyEnabledHostsIncludingThoseWithoutBackups() {
+        var source = new DriverManagerDataSource("jdbc:h2:mem:backup-report-" + UUID.randomUUID()
+            + ";DB_CLOSE_DELAY=-1", "sa", "");
+        new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(source);
+        var jdbc = new JdbcTemplate(source);
+        var secrets = new HostSecrets(directory.resolve("report-key").toString());
+        var hosts = new HostRepository(jdbc, new ObjectMapper(), secrets);
+        var store = new BackupStore(jdbc, hosts, secrets);
+        for (int id = 1; id <= 3; id++) {
+            jdbc.update("INSERT INTO app_host(host_id,payload,synced_at) VALUES (?,?,0)",
+                Integer.toString(id), secrets.encrypt("{\"visibleName\":\"Host " + id + "\"}"));
+        }
+        store.save("1", new BackupStore.Settings(true, 3));
+        store.save("2", new BackupStore.Settings(true, 5));
+        var capture = new BackupCapture.Result("Old name", "Datacom", ".cfg", new byte[]{1}, true);
+        store.insert("1", capture);
+        jdbc.update("UPDATE equipment_backup SET created_at=10");
+        store.insert("1", capture);
+        store.insert("3", capture);
+        jdbc.update("UPDATE equipment_backup SET created_at=20 WHERE created_at<>10");
+
+        assertThat(hosts.backupSummary()).containsExactly(
+            new HostRepository.BackupSummary("Host 1", 3, 2, 20L),
+            new HostRepository.BackupSummary("Host 2", 5, 0, null));
+    }
+
+    @Test
     void keepsMostRecentBackupsPerHostAndPreservesOriginalBytes() throws Exception {
         var source = new DriverManagerDataSource("jdbc:h2:mem:backup-" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1", "sa", "");
         var schema = new ResourceDatabasePopulator(new ClassPathResource("schema.sql"));
