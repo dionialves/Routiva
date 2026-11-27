@@ -67,3 +67,22 @@ dialog.form-dialog:has(.form-dialog-frame) { padding:0; overflow:hidden; }
 @media(max-width:600px) { .form-dialog-section-title, .form-dialog-section-fields { padding:16px; } }
 
 .form-dialog textarea { box-sizing:border-box; width:100%; min-height:100px; resize:vertical; padding:12px; color:var(--text); background:var(--panel-bg); border:1px solid var(--border); border-radius:6px; font:inherit; font-size:13px; }
+
+@media (prefers-color-scheme: light) {
+  dialog.app-modal-adaptive {
+    color-scheme: light;
+    --modal-bg: #f8fafc;
+    --panel-bg: #fff;
+    --surface-bg: #f1f5f9;
+    --text: #142635;
+    --muted: #475569;
+    --border: #cbd5e1;
+    --border-strong: #94a3b8;
+    --cyan: #087b94;
+    --focus: #176cba;
+    --primary: #1267c5;
+    --success: #166534;
+    --error: #a61b29;
+    --error-bg: #fff0f1;
+  }
+}

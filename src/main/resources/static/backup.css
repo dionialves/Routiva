@@ -10,22 +10,104 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-}
-.backup-footer-actions {
   justify-content: flex-end;
 }
-#backup-delete {
-  margin-inline-end: auto;
+#backup-text-dialog .app-modal-footer > .backup-footer-actions {
+  width: 100%;
+  justify-content: flex-start;
+}
+#backup-text-dialog .backup-footer-actions > .backup-footer-actions {
+  margin-inline-start: auto;
+  min-width: 0;
+}
+#backup-text-dialog {
+  --backup-modal-bg: var(--modal-bg, var(--equipment-modal-bg));
+}
+#backup-text-dialog .app-modal-header {
+  padding-block: 10px;
+  gap: 12px;
+}
+#backup-text-dialog .app-modal-title-icon {
+  flex-basis: 36px;
+  width: 36px;
+  height: 36px;
 }
 #backup-filename {
   overflow-wrap: anywhere;
 }
-#backup-text {
+#backup-text-dialog .system-button {
+  user-select: none;
+}
+#backup-text-dialog .backup-preview-body {
+  display: flex;
+  overflow: hidden;
+  padding: 12px;
+}
+.backup-editor {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--backup-modal-bg) 96%, black);
+}
+.backup-editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--backup-modal-bg);
+  color: var(--muted);
+  font-size: 12px;
+}
+.backup-editor-toolbar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.backup-editor-toolbar svg {
+  width: 14px;
+  height: 14px;
+}
+.backup-editor-scroll {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.backup-editor-scroll:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.backup-editor-scroll pre {
   margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  padding: 8px 10px;
+  white-space: pre;
+  tab-size: 4;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+#backup-line-numbers {
+  position: sticky;
+  left: 0;
+  flex: none;
+  border-inline-end: 1px solid var(--border);
+  background: var(--backup-modal-bg);
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+#backup-text {
   user-select: text;
 }
+.backup-code-comment { color: var(--muted); }
+.backup-code-command { color: var(--focus); }
+.backup-code-parameter { color: var(--success); }
 
 /* The backup timeline sits inside the standard scrolling modal body. */
 .backup-run-host-field {

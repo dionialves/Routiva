@@ -92,3 +92,23 @@ button.system-button > [data-ap-icon] svg { width:16px; height:16px; }
 
 button.system-button.system-button-danger { color:var(--error) !important; border-color:var(--error) !important; background:var(--error-bg) !important; }
 button.system-button.system-button-danger:hover:not(:disabled) { background:color-mix(in srgb, var(--error) 20%, var(--error-bg)) !important; }
+button.system-button.system-button-danger-solid {
+  color:#fff !important;
+  border-color:#b4232c !important;
+  background:#b4232c !important;
+}
+button.system-button.system-button-danger-solid:hover:not(:disabled) {
+  background:#972029 !important;
+}
+
+@media (prefers-color-scheme: light) {
+  .app-modal-adaptive {
+    --button-border:var(--border-strong);
+    --button-background:var(--surface-bg);
+    --button-primary:var(--primary);
+  }
+  .app-modal-adaptive button.system-button-primary,
+  .app-modal-adaptive button.system-button:hover:not(:disabled, .system-button-danger) {
+    color:#fff !important;
+  }
+}

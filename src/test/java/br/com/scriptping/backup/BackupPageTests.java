@@ -23,7 +23,9 @@ class BackupPageTests {
     @Test
     void rendersSharedDialogsAndTablesOnce() throws Exception {
         String html = mvc.perform(get("/backup")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        assertThat(html).doesNotContain("id=\"backup-settings\"", "id=\"backup-settings-dialog\"");
+        assertThat(html)
+            .contains("Visualizar backup", "Somente leitura", "app-modal-adaptive", "aria-describedby=\"backup-filename\"")
+            .doesNotContain("id=\"backup-settings\"", "id=\"backup-settings-dialog\"", "id=\"backup-delete-dialog\"");
         for (String id : List.of("backup-text-dialog", "backup-run-dialog", "backup-run-form", "backup-run-host", "backup-run-events", "backup-rows")) {
             assertThat(html.split("id=\"" + id + "\"", -1)).hasSize(2);
         }

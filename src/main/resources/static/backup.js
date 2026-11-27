@@ -2,7 +2,11 @@
   const $ = id => document.getElementById(id);
   const base = '/api/backups';
   const textDialog = $('backup-text-dialog');
-  const deleteDialog = $('backup-delete-dialog');
+  const previewText = $('backup-text');
+  const lineNumbers = $('backup-line-numbers');
+  const deleteButton = $('backup-delete');
+  const copyButton = $('backup-copy');
+  const previewButtons = [...textDialog.querySelectorAll('button')];
   const runButton = $('backup-run');
   const runDialog = $('backup-run-dialog');
   const runHost = $('backup-run-host');
@@ -24,7 +28,11 @@
   let historyInventory = new Map();
   const filterPickers = {};
   let page = 0;
-  let currentEntry;
+  let preview;
+  let deleteTimer;
+  let confirmUntil = 0;
+  let deleting = false;
+  let copying = false;
   let pollTimer;
 
   const downloadUrl = entry => `${base}/${encodeURIComponent(entry.id)}/download`;
@@ -149,21 +157,72 @@
     }
   }
 
+  function renderPreview(content) {
+    const lines = content.split(/\r\n|\n|\r/);
+    const numbers = Array.from({ length: lines.length }, (_, index) => index + 1);
+    const code = document.createDocumentFragment();
+    const tokens = /^\s*(?:[#!;].*|\S+)|"[^"\\]*(?:\\.[^"\\]*)*"|'[^']*'|[\w.-]+(?==)/g;
+
+    for (const [index, line] of lines.entries()) {
+      let end = 0;
+      for (const match of line.matchAll(tokens)) {
+        const value = match[0];
+        const token = document.createElement('span');
+        const kind = match.index === 0
+          ? (/^[#!;]/.test(value.trimStart()) ? 'comment' : 'command')
+          : 'parameter';
+        token.className = `backup-code-${kind}`;
+        token.textContent = value;
+        code.append(line.slice(end, match.index), token);
+        end = match.index + value.length;
+      }
+      code.append(line.slice(end));
+      if (index < lines.length - 1) code.append('\n');
+    }
+
+    lineNumbers.textContent = numbers.join('\n');
+    lineNumbers.hidden = false;
+    previewText.replaceChildren(code);
+  }
+
+  function updatePreviewButtons() {
+    for (const button of previewButtons) button.disabled = deleting;
+    copyButton.disabled = deleting || copying || preview?.content === undefined;
+  }
+
+  function resetDeleteConfirmation() {
+    clearTimeout(deleteTimer);
+    confirmUntil = 0;
+    deleteButton.classList.remove('system-button-danger-solid');
+    deleteButton.querySelector('span').textContent = 'Excluir';
+    deleteButton.querySelector('use').setAttribute('href', '/icons.svg#trash');
+  }
+
   async function openPreview(entry) {
     if (textDialog.open) return;
-    currentEntry = entry;
+    const opened = { entry };
+    preview = opened;
+    resetDeleteConfirmation();
     $('backup-filename').textContent = entry.filename;
-    $('backup-text').textContent = 'Carregando…';
-    $('backup-copy').disabled = true;
+    const extension = /\.([^.]+)$/.exec(entry.filename)?.[1];
+    $('backup-format').textContent = extension?.toLowerCase() === 'rsc' ? 'RouterOS (.rsc)' : extension ? `.${extension}` : 'Texto';
+    lineNumbers.hidden = true;
+    previewText.textContent = 'Carregando…';
+    updatePreviewButtons();
     textDialog.showModal();
+    $('backup-editor-scroll').scrollTo(0, 0);
     try {
       const content = await (await request(`/${encodeURIComponent(entry.id)}/text`)).text();
-      if (textDialog.open && currentEntry === entry) {
-        $('backup-text').textContent = content;
-        $('backup-copy').disabled = false;
+      if (textDialog.open && preview === opened) {
+        renderPreview(content);
+        opened.content = content;
+        updatePreviewButtons();
       }
     } catch (error) {
-      if (currentEntry === entry) $('backup-text').textContent = error.message;
+      if (textDialog.open && preview === opened) {
+        previewText.textContent = '';
+        window.notify(error.message, 'error');
+      }
     }
   }
 
@@ -321,45 +380,101 @@
       startingRun = false;
     }
   };
-  for (const button of document.querySelectorAll('[data-close-backup-dialog], #backup-text-close, #backup-delete-close, #backup-run-close')) {
+  for (const button of document.querySelectorAll('[data-close-backup-dialog], #backup-text-close, #backup-run-close')) {
     button.onclick = () => button.closest('dialog').close();
   }
   runDialog.addEventListener('cancel', event => {
     if (startingRun || activeRunId) event.preventDefault();
   });
+  textDialog.addEventListener('cancel', event => {
+    if (deleting) event.preventDefault();
+    else resetDeleteConfirmation();
+  });
   textDialog.addEventListener('close', () => {
     if (textDialog.open) return;
-    currentEntry = undefined;
-    $('backup-text').textContent = '';
+    resetDeleteConfirmation();
+    preview = undefined;
+    previewText.textContent = '';
+    lineNumbers.textContent = '';
   });
   $('backup-download').onclick = () => {
-    if (currentEntry) window.location.assign(downloadUrl(currentEntry));
+    if (preview && !deleting) window.location.assign(downloadUrl(preview.entry));
   };
-  $('backup-copy').onclick = event => action(event.currentTarget, async () => {
-    const content = $('backup-text');
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(content.textContent);
-    } else {
-      const selection = window.getSelection();
-      selection.selectAllChildren(content);
-      if (!document.execCommand('copy')) throw new Error('Selecione o texto e copie pelo teclado.');
-      selection.removeAllRanges();
+  copyButton.onclick = async () => {
+    const content = preview?.content;
+    if (content === undefined || deleting || copying) return;
+    copying = true;
+    loading(copyButton, true);
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const copyOriginal = event => {
+          event.clipboardData.setData('text/plain', content);
+          event.preventDefault();
+        };
+        const selection = window.getSelection();
+        selection.selectAllChildren(previewText);
+        document.addEventListener('copy', copyOriginal, { once: true });
+        try {
+          if (!document.execCommand('copy')) throw new Error('Selecione o texto e copie pelo teclado.');
+        } finally {
+          document.removeEventListener('copy', copyOriginal);
+          selection.removeAllRanges();
+        }
+      }
+      window.notify('Texto copiado.');
+    } catch (error) {
+      window.notify(error.message, 'error');
+    } finally {
+      copying = false;
+      loading(copyButton, false);
+      updatePreviewButtons();
     }
-    window.notify('Texto copiado.');
-  });
-  $('backup-delete').onclick = () => {
-    $('backup-delete-name').textContent = currentEntry.filename;
-    deleteDialog.showModal();
   };
-  $('backup-delete-confirm').onclick = event => {
-    const entry = currentEntry;
-    action(event.currentTarget, async () => {
-      await request(`/${encodeURIComponent(entry.id)}`, { method: 'DELETE' });
-      deleteDialog.close();
-      if (currentEntry === entry) textDialog.close();
-      window.notify('Backup excluído.');
+  deleteButton.addEventListener('keydown', event => {
+    if (event.repeat && (event.key === 'Enter' || event.key === ' ')) event.preventDefault();
+  });
+  deleteButton.onclick = async () => {
+    if (!textDialog.open || !preview || deleting) return;
+    if (performance.now() >= confirmUntil) {
+      clearTimeout(deleteTimer);
+      confirmUntil = performance.now() + 5000;
+      deleteButton.classList.add('system-button-danger-solid');
+      deleteButton.querySelector('span').textContent = 'Confirmar exclusão?';
+      deleteButton.querySelector('use').setAttribute('href', '/icons.svg#alert');
+      deleteTimer = setTimeout(resetDeleteConfirmation, 5000);
+      return;
+    }
+
+    clearTimeout(deleteTimer);
+    deleting = true;
+    loading(deleteButton, true);
+    updatePreviewButtons();
+    let failed = false;
+    try {
+      await request(`/${encodeURIComponent(preview.entry.id)}`, { method: 'DELETE' });
+    } catch (error) {
+      failed = true;
+      window.notify(error.message, 'error');
+    } finally {
+      deleting = false;
+      loading(deleteButton, false);
+      resetDeleteConfirmation();
+      updatePreviewButtons();
+    }
+
+    if (failed) {
+      deleteButton.focus();
+      return;
+    }
+    textDialog.close();
+    window.notify('Backup excluído.');
+    try {
       await loadEntries();
-    });
+    } catch (error) {
+      window.notify(error.message, 'error');
+    }
   };
   loadEntries().catch(() => {});
   poll();

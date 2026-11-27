@@ -12,11 +12,11 @@
   <th:block th:replace="~{design-system :: picker}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
   <link rel="stylesheet" href="/availability.css?v=20261127-table-states">
-  <link rel="stylesheet" href="/backup.css?v=20261126-host-backup">
+  <link rel="stylesheet" href="/backup.css?v=20261127-preview-footer">
   <script src="/shell.js" defer></script>
   <script src="/multi-picker.js" defer></script>
   <script src="/group-picker.js" defer></script>
-  <script src="/backup.js?v=20261127-table-states" defer></script>
+  <script src="/backup.js?v=20261127-preview" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('backup')}"></aside>
@@ -52,30 +52,29 @@
     </section>
   </main>
 </div>
-<dialog th:replace="~{design-system :: formDialog('backup-text-dialog', 'backup-text-title', null, ~{backup :: textPreview})}">
+<dialog th:replace="~{design-system :: modalDialog('backup-text-dialog', 'backup-text-title', 'backup-filename', ~{backup :: textPreview}, 'app-modal-adaptive')}">
   <div th:fragment="textPreview" class="form-dialog-frame">
-    <header th:replace="~{design-system :: modalHeader('backup-text-title', 'Backup', 'backup-filename', '', 'file', 'backup-text-close', 'Fechar backup')}"></header>
-    <div class="form-dialog-content"><pre id="backup-text" tabindex="0"></pre></div>
+    <header th:replace="~{design-system :: modalHeader('backup-text-title', 'Visualizar backup', 'backup-filename', '', 'file', 'backup-text-close', 'Fechar backup')}"></header>
+    <div class="form-dialog-content backup-preview-body">
+      <div class="backup-editor">
+        <div class="backup-editor-toolbar">
+          <span id="backup-format"></span>
+          <span><svg th:replace="~{shell :: icon('lock')}"></svg>Somente leitura</span>
+        </div>
+        <div id="backup-editor-scroll" class="backup-editor-scroll" role="region" aria-label="Conteúdo do backup" tabindex="0">
+          <pre id="backup-line-numbers" aria-hidden="true" hidden></pre>
+          <pre id="backup-text"></pre>
+        </div>
+      </div>
+    </div>
     <footer th:replace="~{design-system :: modalFooter(~{backup :: previewActions})}">
       <div th:fragment="previewActions" class="backup-footer-actions">
-        <button id="backup-delete" class="system-button system-button-danger" type="button"><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir</button>
+        <button id="backup-delete" class="system-button system-button-danger" type="button"><svg th:replace="~{shell :: icon('trash')}"></svg><span>Excluir</span></button>
         <div class="backup-footer-actions">
           <button type="button" class="system-button" data-close-backup-dialog><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
           <button id="backup-copy" class="system-button" type="button"><svg th:replace="~{shell :: icon('copy')}"></svg>Copiar texto</button>
           <button id="backup-download" type="button" class="system-button system-button-primary"><svg th:replace="~{shell :: icon('download')}"></svg>Baixar backup</button>
         </div>
-      </div>
-    </footer>
-  </div>
-</dialog>
-<dialog th:replace="~{design-system :: formDialog('backup-delete-dialog', 'backup-delete-title', 'backup-delete-description', ~{backup :: deleteConfirmation})}">
-  <div th:fragment="deleteConfirmation" class="form-dialog-frame">
-    <header th:replace="~{design-system :: modalHeader('backup-delete-title', 'Excluir backup?', null, null, 'trash', 'backup-delete-close', 'Fechar confirmação')}"></header>
-    <div class="form-dialog-content"><p id="backup-delete-description">O arquivo <strong id="backup-delete-name"></strong> será removido do histórico.</p></div>
-    <footer th:replace="~{design-system :: modalFooter(~{backup :: deleteActions})}">
-      <div th:fragment="deleteActions" class="backup-footer-actions">
-        <button type="button" class="system-button" data-close-backup-dialog autofocus><svg th:replace="~{shell :: icon('close')}"></svg>Cancelar</button>
-        <button id="backup-delete-confirm" type="button" class="system-button system-button-danger"><svg th:replace="~{shell :: icon('trash')}"></svg>Excluir</button>
       </div>
     </footer>
   </div>
