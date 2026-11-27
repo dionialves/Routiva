@@ -157,13 +157,20 @@ final class ReportPdf {
         text(definition.section(), MARGIN, y, usable, 10, true, Alignment.LEFT, INK);
         y -= 8;
         rule(y);
+        int headerLines = definition.columns().stream().mapToInt(column -> column.label().split("\\R").length)
+            .max().orElse(1);
         float x = MARGIN;
         for (var column : definition.columns()) {
             float cellWidth = columnWidth(column);
-            text(column.label(), x + 6, y - 12, cellWidth - 12, 9, true, column.alignment(), INK);
+            String[] labels = column.label().split("\\R");
+            float baseline = y - 12 - (headerLines - labels.length) * LINE_HEIGHT;
+            for (String label : labels) {
+                text(label, x + 6, baseline, cellWidth - 12, 9, true, column.alignment(), INK);
+                baseline -= LINE_HEIGHT;
+            }
             x += cellWidth;
         }
-        y -= 16;
+        y -= 16 + (headerLines - 1) * LINE_HEIGHT;
         rule(y);
         y -= 3;
     }

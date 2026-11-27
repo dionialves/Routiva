@@ -16,10 +16,10 @@ final class BackupSummaryPdf {
                 new ReportPdf.Indicator("Hosts sem backup", ReportPdf.number(summary.withoutBackup()))),
             "Backup de hosts",
             List.of(
-                new ReportPdf.Column("Host", 40, LEFT),
-                new ReportPdf.Column("Retenção", 15, CENTER),
-                new ReportPdf.Column("Backups salvos", 20, CENTER),
-                new ReportPdf.Column("Último backup", 25, RIGHT)),
+                new ReportPdf.Column("Host", 59, LEFT),
+                new ReportPdf.Column("Retenção", 11, CENTER),
+                new ReportPdf.Column("Backup\nSalvo", 9, CENTER),
+                new ReportPdf.Column("Último backup", 21, RIGHT)),
             summary.rows().stream().map(row -> List.of(row.name(), ReportPdf.number(row.retention()),
                 ReportPdf.number(row.saved()), row.lastBackup() == null ? "–" : row.lastBackupLabel())).toList(),
             "Nenhum host habilitado para backup.", "Total de hosts: " + ReportPdf.number(summary.rows().size()));

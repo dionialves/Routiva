@@ -9,7 +9,7 @@
   <th:block th:replace="~{design-system :: layout}"></th:block>
   <th:block th:replace="~{design-system :: actions}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
-  <link rel="stylesheet" href="/reports.css?v=20261127-summary">
+  <link rel="stylesheet" href="/reports.css?v=20261127-summary-columns">
   <script src="/shell.js" defer></script>
   <script src="/reports.js?v=20261127-pdf-filename" defer></script>
 </head>
@@ -62,7 +62,12 @@
         <th:block th:fragment="backupRows">
           <colgroup><col><col><col><col></colgroup>
           <thead>
-            <tr><th scope="col">Host</th><th scope="col">Retenção configurada</th><th scope="col">Backups salvos</th><th scope="col">Último backup</th></tr>
+            <tr>
+              <th scope="col">Host</th>
+              <th scope="col">Retenção</th>
+              <th scope="col">Backup Salvo</th>
+              <th scope="col">Último backup</th>
+            </tr>
           </thead>
           <tbody id="backup-summary-rows">
             <tr th:each="host : ${summary.rows()}">
