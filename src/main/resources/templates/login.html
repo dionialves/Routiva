@@ -3,53 +3,77 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Acesso • TraceOne</title><link rel="icon" href="/favicon.svg">
-  <th:block th:replace="~{design-system :: base}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><link rel="stylesheet" href="/auth.css">
+  <th:block th:replace="~{design-system :: base}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><link rel="stylesheet" href="/auth.css?v=20261127-integrated">
 </head>
 <body class="auth-page"><main class="auth-card">
-  <svg class="auth-brand" viewBox="0 0 880 245" role="img" aria-label="TraceOne Network"><image href="/traceone-brand.webp?v=3" width="880" height="245"/></svg>
+  <svg class="auth-brand" viewBox="0 0 880 245" role="img" aria-label="TraceOne Network"><defs>
+      <!-- Keep the original RGB artwork and remove the dark matte through alpha. -->
+      <filter id="auth-brand-transparency" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 7 0 0 -1"/>
+      </filter>
+    </defs><image href="/traceone-brand.webp?v=3" width="880" height="245" filter="url(#auth-brand-transparency)"/></svg>
   <p class="eyebrow">ACESSO AO SISTEMA</p><h1 id="login-title">Entrar</h1>
-  <p id="login-help" aria-live="polite">Informe seu usuário para continuar.</p>
+  <p id="login-help" aria-live="polite" th:text="${identified == true} ? 'Informe sua senha para continuar.' : 'Informe seu usuário para continuar.'">Informe seu usuário para continuar.</p>
   <p th:if="${param.logout != null}" role="status">Você saiu do sistema.</p>
-  <form th:action="@{/login/usuario}" method="post" class="auth-form" id="login-form" th:attr="data-setup=${setup == true}">
+  <form th:action="${identified == true} ? @{/login/senha} : @{/login/usuario}" method="post" class="auth-form" id="login-form" th:attr="data-setup=${setup == true},data-identified=${identified == true}">
     <div>
       <label for="username">Usuário</label>
-      <div class="auth-user-row">
-        <div class="auth-input-wrap">
-          <input id="username" name="username" th:value="${username}" required maxlength="64" autocomplete="username" autofocus autocapitalize="none" spellcheck="false" aria-describedby="login-error">
-          <button type="button" id="clear-user" class="auth-icon" aria-label="Limpar usuário" hidden><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
-        </div>
-        <button id="identify-user" class="system-button system-button-primary" type="submit" aria-label="Continuar com este usuário" disabled><svg viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+      <div th:replace="~{auth-fields :: field(~{login :: userControls})}">
+        <th:block th:fragment="userControls">
+          <input id="username" name="username" th:value="${username}" required maxlength="64"
+                 autocomplete="username" th:autofocus="${identified != true and setup != true}"
+                 th:readonly="${identified == true}" placeholder="Seu usuário" autocapitalize="none"
+                 spellcheck="false" aria-describedby="login-error">
+          <button type="button" id="clear-user" class="auth-icon" aria-label="Usar outro usuário" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+          <button th:replace="~{auth-fields :: advance('identify-user', 'Continuar', ${identified == true ? 'button' : 'submit'}, false, ${identified == true})}"></button>
+        </th:block>
       </div>
     </div>
     <p id="login-error" class="auth-error" role="alert" th:text="${error}" th:hidden="${error == null}"></p>
-    <div id="password-stage" hidden>
+    <div id="password-stage" th:hidden="${identified != true}">
       <div class="auth-password-content">
         <div id="setup-fields" hidden>
           <label for="code">Código de ativação</label>
-          <div class="auth-user-row"><div class="auth-input-wrap">
-            <input id="code" name="code" maxlength="128" autocomplete="one-time-code" aria-describedby="activation-help code-error">
-            <svg id="code-check" class="auth-code-check" viewBox="0 0 24 24" aria-label="Código validado" hidden><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
-          </div><button id="validate-code" class="system-button system-button-primary" type="submit" aria-label="Validar código de ativação" disabled><svg viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
+          <div th:replace="~{auth-fields :: field(~{login :: codeControls})}">
+            <th:block th:fragment="codeControls">
+              <input id="code" name="code" maxlength="128" autocomplete="one-time-code" aria-describedby="activation-help code-error">
+              <svg id="code-check" class="auth-code-check" viewBox="0 0 24 24" aria-label="Código validado" hidden><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>
+              <button th:replace="~{auth-fields :: advance('validate-code', 'Validar código de ativação', 'button', true, false)}"></button>
+            </th:block>
+          </div>
           <p id="code-error" class="auth-error" role="alert" hidden></p>
           <p id="code-success" role="status" hidden>Código validado com sucesso.</p>
           <small id="activation-help">Solicite o código ao Administrador. No primeiro acesso do admin, consulte o log de inicialização. Válido por 24 horas.</small>
         </div>
         <div id="password-fields">
           <label id="password-label" for="password">Senha</label>
-          <div class="auth-input-wrap">
-            <input id="password" name="password" type="password" maxlength="128" autocomplete="current-password">
-            <button id="toggle-password" type="button" class="auth-icon" aria-label="Mostrar senha" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path id="eye-slash" d="m3 3 18 18" hidden/></svg></button>
+          <div th:replace="~{auth-fields :: field(~{login :: passwordControls})}">
+            <th:block th:fragment="passwordControls">
+              <input id="password" name="password" type="password" maxlength="128" autocomplete="current-password"
+                     th:required="${identified == true}" th:autofocus="${identified == true}" aria-describedby="login-error">
+              <button id="toggle-password" hidden type="button" class="auth-icon" aria-label="Mostrar senha" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path id="eye-slash" d="m3 3 18 18" hidden/></svg></button>
+              <button th:replace="~{auth-fields :: advance('login-submit', 'Entrar', ${identified == true ? 'submit' : 'button'}, false, ${identified != true})}"></button>
+            </th:block>
           </div>
           <small id="password-requirements" hidden>Use de 12 a 128 caracteres, incluindo maiúscula, minúscula, número e caractere especial.</small>
         </div>
         <div id="confirmation-field" hidden>
           <label for="confirmation">Confirmar nova senha</label>
-          <div class="auth-input-wrap"><input id="confirmation" name="confirmation" type="password" maxlength="128" autocomplete="new-password" aria-describedby="confirmation-error"><button id="toggle-confirmation" type="button" class="auth-icon" aria-label="Mostrar confirmação de senha" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path id="confirmation-slash" d="m3 3 18 18" hidden/></svg></button></div><p id="confirmation-error" class="auth-error" role="alert" hidden>As senhas não correspondem.</p>
+          <div th:replace="~{auth-fields :: field(~{login :: confirmationControls})}">
+            <th:block th:fragment="confirmationControls">
+              <input id="confirmation" name="confirmation" type="password" maxlength="128" autocomplete="new-password" aria-describedby="confirmation-error">
+              <button id="toggle-confirmation" type="button" class="auth-icon" aria-label="Mostrar confirmação de senha" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path id="confirmation-slash" d="m3 3 18 18" hidden/></svg></button>
+              <button th:replace="~{auth-fields :: advance('setup-submit', 'Salvar senha e entrar', 'button', true, false)}"></button>
+            </th:block>
+          </div>
+          <p id="confirmation-error" class="auth-error" role="alert" hidden>As senhas não correspondem.</p>
         </div>
-        <button id="login-submit" class="system-button system-button-primary" type="submit">Entrar</button>
       </div>
     </div>
-    <noscript><p>Ative o JavaScript para entrar nesta interface.</p><button class="system-button system-button-primary" type="submit">Continuar</button></noscript>
+    <noscript>
+      <a th:if="${identified == true}" href="/login">Usar outro usuário</a>
+      <p th:if="${setup == true}">Ative o JavaScript para entrar nesta interface.</p>
+    </noscript>
   </form>
-  <script src="/login.js" defer></script>
+  <script src="/login.js?v=20261127-integrated" defer></script>
 </main></body></html>

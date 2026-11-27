@@ -174,7 +174,9 @@ class SecurityFlowTests {
         mvc.perform(post("/logout").session(session).with(csrf())).andExpect(redirectedUrl("/login?logout"));
         var login = identify(saved.user().username());
         mvc.perform(get("/login/nova-senha").session(login)).andExpect(redirectedUrl("/login/senha"));
-        mvc.perform(get("/login/senha").session(login)).andExpect(status().isOk());
+        mvc.perform(get("/login/senha").session(login)).andExpect(status().isOk())
+            .andExpect(content().string(containsString("data-identified=\"true\"")))
+            .andExpect(content().string(containsString("action=\"/login/senha\"")));
         mvc.perform(post("/login/senha").session(login).with(csrf()).param("password", "WrongPassword#123"))
             .andExpect(model().attributeExists("error"));
         mvc.perform(post("/login/senha").session(login).with(csrf()).param("password", "SenhaForte#12345"))

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function setup() {
+function setup({ needsSetup = true, identified = false } = {}) {
   const nodes = new Map();
   const requests = [];
   const replies = [];
@@ -15,13 +15,15 @@ function setup() {
         value: '', hidden: false, disabled: false, type: 'password', dataset: {}, listeners: {},
         classList: { toggle(name, on) { on ? classes.add(name) : classes.delete(name); } },
         setAttribute(name, value) { this[name] = value; },
+        toggleAttribute(name, on) { this[name] = on; },
         addEventListener(name, fn) { this.listeners[name] = fn; },
         focus() { this.focused = true; },
       });
     }
     return nodes.get(id);
   }
-  get('login-form').dataset.setup = 'true';
+  get('login-form').dataset.setup = String(needsSetup);
+  get('login-form').dataset.identified = String(identified);
   get('username').value = 'teste123';
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/login.js', 'utf8'), {
     document: { getElementById: get },
@@ -55,12 +57,12 @@ test('activation only reveals passwords after backend approval and submits the o
   assert.equal(ui.requests[1].path, '/login/validar-codigo');
   assert.equal(ui.get('code').readOnly, true);
   assert.equal(ui.get('password-fields').hidden, false);
-  assert.equal(ui.get('login-submit').disabled, true);
+  assert.equal(ui.get('setup-submit').disabled, true);
   ui.input('password', 'SenhaForte#12345');
   ui.input('confirmation', 'diferente');
   assert.equal(ui.get('confirmation-error').hidden, false);
   ui.input('confirmation', 'SenhaForte#12345');
-  assert.equal(ui.get('login-submit').disabled, false);
+  assert.equal(ui.get('setup-submit').disabled, false);
   ui.replies.push({ ok: true, body: { redirect: '/disponibilidade' } });
   await ui.submit();
   assert.equal(ui.requests[2].path, '/login/nova-senha');
@@ -85,4 +87,52 @@ test('revoked code returns to validation and clear restores identification', asy
   assert.equal(ui.get('username').value, '');
   assert.equal(ui.get('code').value, '');
   assert.equal(ui.get('username').readOnly, false);
+});
+
+test('normal login makes only the current action the implicit submit button', async () => {
+  const ui = setup({ needsSetup: false });
+  const continueButton = ui.get('identify-user');
+  const enterButton = ui.get('login-submit');
+  ui.input('username', ' ');
+  assert.equal(continueButton.disabled, true);
+  assert.equal(continueButton.type, 'submit');
+  assert.equal(enterButton.type, 'button');
+
+  ui.input('username', 'teste123');
+  ui.replies.push({ ok: true, body: { username: 'teste123', setup: false } });
+  const identifying = ui.submit();
+  assert.equal(continueButton['aria-busy'], 'true');
+  await identifying;
+  assert.equal(continueButton.type, 'button');
+  assert.equal(enterButton.type, 'submit');
+  assert.equal(enterButton.disabled, true);
+  assert.equal(ui.get('clear-user').hidden, false);
+  assert.equal(ui.get('password').focused, true);
+
+  ui.input('password', 'senha');
+  assert.equal(enterButton.disabled, false);
+  ui.get('toggle-password').listeners.click();
+  assert.equal(ui.get('password').type, 'text');
+  assert.equal(ui.get('eye-slash').hidden, false);
+  ui.get('toggle-password').listeners.click();
+  assert.equal(ui.get('password').type, 'password');
+  assert.equal(ui.get('eye-slash').hidden, true);
+  ui.replies.push({ ok: false, body: { message: 'Senha inválida.' } });
+  const authenticating = ui.submit();
+  assert.equal(enterButton['aria-busy'], 'true');
+  assert.equal(enterButton.disabled, true);
+  await ui.submit();
+  await authenticating;
+  assert.equal(ui.requests.length, 2);
+  assert.equal(ui.requests[1].path, '/login/senha');
+  assert.equal(ui.get('login-error').textContent, 'Senha inválida.');
+  assert.equal(enterButton['aria-busy'], 'false');
+  assert.equal(enterButton.disabled, true);
+});
+
+test('direct password page starts at the password stage', () => {
+  const ui = setup({ needsSetup: false, identified: true });
+  assert.equal(ui.get('password-stage').hidden, false);
+  assert.equal(ui.get('username').readOnly, true);
+  assert.equal(ui.get('login-submit').type, 'submit');
 });

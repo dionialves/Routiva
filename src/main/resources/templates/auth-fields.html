@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org"><body>
+<div th:fragment="field(content)" class="auth-input-wrap">
+  <th:block th:replace="${content}"></th:block>
+</div>
+<button th:fragment="advance(buttonId, label, buttonType, disabled, hidden)" th:id="${buttonId}"
+        th:attr="aria-label=${label},type=${buttonType}" th:disabled="${disabled}" th:hidden="${hidden}"
+        class="system-button system-button-primary system-button-icon-only auth-advance">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+</button>
+</body></html>

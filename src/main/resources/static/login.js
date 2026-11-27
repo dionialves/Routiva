@@ -8,10 +8,13 @@
   const arrow = get('identify-user');
   const clear = get('clear-user');
   const submit = get('login-submit');
+  const setupSubmit = get('setup-submit');
+  const togglePassword = get('toggle-password');
+  const toggleConfirmation = get('toggle-confirmation');
   const error = get('login-error');
   let state = 'INITIAL';
   let setup = form.dataset.setup === 'true';
-  let validated = setup;
+  let validated = setup || form.dataset.identified === 'true';
   let codeValidated = false;
   const code = get('code');
   const codeArrow = get('validate-code');
@@ -21,20 +24,31 @@
     && /[^\p{L}\p{N}\s]/u.test(value);
   const isBusy = () => ['VALIDATING_USER', 'AUTHENTICATING', 'VALIDATING_CODE', 'SAVING_PASSWORD'].includes(state);
   let clearing = Promise.resolve();
+  function renderAction(button, visible, enabled, loading) {
+    button.hidden = !visible;
+    // Only the current action can be the form's implicit submit button.
+    button.type = visible ? 'submit' : 'button';
+    button.disabled = !enabled || loading;
+    button.classList.toggle('system-button-loading', loading);
+    button.setAttribute('aria-busy', String(loading));
+  }
   function render(next) {
     state = next;
     form.dataset.state = state;
     const busy = isBusy();
     form.setAttribute('aria-busy', String(busy));
     username.readOnly = validated || busy;
-    arrow.hidden = validated;
-    arrow.disabled = busy || !username.value.trim();
-    arrow.classList.toggle('is-loading', state === 'VALIDATING_USER');
+    renderAction(arrow, !validated, !busy && Boolean(username.value.trim()), state === 'VALIDATING_USER');
     clear.hidden = !validated;
     clear.disabled = busy;
     const ready = validated && (!setup || codeValidated);
-    submit.hidden = !ready;
-    submit.disabled = busy || (setup && (!strongPassword(password.value) || password.value !== confirmation.value));
+    renderAction(submit, ready && !setup, !busy && Boolean(password.value), state === 'AUTHENTICATING');
+    renderAction(setupSubmit, ready && setup,
+      !busy && strongPassword(password.value) && password.value === confirmation.value,
+      state === 'SAVING_PASSWORD');
+    togglePassword.hidden = !ready;
+    togglePassword.disabled = !ready || busy;
+    toggleConfirmation.disabled = !ready || busy;
     password.disabled = !ready || busy;
     confirmation.disabled = !ready || busy;
     get('password-fields').hidden = !ready;
@@ -42,15 +56,12 @@
     get('password-requirements').hidden = !setup;
     get('confirmation-error').hidden = !setup || !confirmation.value || password.value === confirmation.value;
     code.readOnly = codeValidated || busy;
-    codeArrow.hidden = codeValidated;
-    codeArrow.disabled = busy || !code.value.trim();
-    codeArrow.classList.toggle('is-loading', state === 'VALIDATING_CODE');
-    get('code-check').hidden = !codeValidated;
+    renderAction(codeArrow, validated && setup && !codeValidated, !busy && Boolean(code.value.trim()),
+      state === 'VALIDATING_CODE');
+    get('code-check').toggleAttribute('hidden', !codeValidated);
     get('code-success').hidden = !codeValidated;
     code.classList.toggle('auth-code-valid', codeValidated);
     get('login-title').textContent = setup ? 'Definir senha' : 'Entrar';
-    submit.classList.toggle('is-loading', ['AUTHENTICATING', 'SAVING_PASSWORD'].includes(state));
-    submit.textContent = ['AUTHENTICATING', 'SAVING_PASSWORD'].includes(state) ? 'Entrando…' : setup ? 'Salvar senha e entrar' : 'Entrar';
     get('password-stage').hidden = !validated;
     get('setup-fields').hidden = !setup;
     get('confirmation-field').hidden = !setup || !codeValidated;
@@ -83,43 +94,45 @@
     codeValidated = false;
     get('code-error').hidden = true;
     confirmation.type = 'password';
-    get('toggle-confirmation').setAttribute('aria-pressed', 'false');
-    get('toggle-confirmation').setAttribute('aria-label', 'Mostrar confirmação de senha');
-    get('confirmation-slash').hidden = true;
+    toggleConfirmation.setAttribute('aria-pressed', 'false');
+    toggleConfirmation.setAttribute('aria-label', 'Mostrar confirmação de senha');
+    get('confirmation-slash').toggleAttribute('hidden', true);
     username.value = '';
     password.value = '';
     get('code').value = '';
     get('confirmation').value = '';
     password.type = 'password';
-    get('toggle-password').setAttribute('aria-pressed', 'false');
-    get('toggle-password').setAttribute('aria-label', 'Mostrar senha');
-    get('eye-slash').hidden = true;
+    togglePassword.setAttribute('aria-pressed', 'false');
+    togglePassword.setAttribute('aria-label', 'Mostrar senha');
+    get('eye-slash').toggleAttribute('hidden', true);
     error.hidden = true;
     error.textContent = '';
     render('INITIAL');
     username.focus();
   }
-  username.addEventListener('input', () => render('INITIAL'));
   clear.addEventListener('click', () => {
     // Reset locally immediately; the next identification also replaces the server challenge.
     const data = new FormData(form);
     reset();
     clearing = post('/login/limpar', data).catch(() => {});
   });
-  get('toggle-password').addEventListener('click', () => {
+  togglePassword.addEventListener('click', () => {
     const visible = password.type === 'password';
     password.type = visible ? 'text' : 'password';
-    get('toggle-password').setAttribute('aria-pressed', String(visible));
-    get('toggle-password').setAttribute('aria-label', visible ? 'Ocultar senha' : 'Mostrar senha');
-    get('eye-slash').hidden = !visible;
+    togglePassword.setAttribute('aria-pressed', String(visible));
+    togglePassword.setAttribute('aria-label', visible ? 'Ocultar senha' : 'Mostrar senha');
+    get('eye-slash').toggleAttribute('hidden', !visible);
   });
-  [code, password, confirmation].forEach(input => input.addEventListener('input', () => render(state)));
-  get('toggle-confirmation').addEventListener('click', () => {
+  [username, code, password, confirmation].forEach(input => {
+    input.addEventListener('input', () => render(state));
+    input.addEventListener('change', () => render(state));
+  });
+  toggleConfirmation.addEventListener('click', () => {
     const visible = confirmation.type === 'password';
     confirmation.type = visible ? 'text' : 'password';
-    get('toggle-confirmation').setAttribute('aria-pressed', String(visible));
-    get('toggle-confirmation').setAttribute('aria-label', visible ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha');
-    get('confirmation-slash').hidden = !visible;
+    toggleConfirmation.setAttribute('aria-pressed', String(visible));
+    toggleConfirmation.setAttribute('aria-label', visible ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha');
+    get('confirmation-slash').toggleAttribute('hidden', !visible);
   });
   form.addEventListener('submit', async event => {
     event.preventDefault();
@@ -129,6 +142,7 @@
     const identifying = !validated;
     const validatingCode = validated && setup && !codeValidated;
     if (validatingCode && !code.value.trim()) return;
+    if (validated && !setup && !password.value) return;
     if (setup && codeValidated && (!strongPassword(password.value) || password.value !== confirmation.value)) return;
     get('code-error').hidden = true;
     const data = new FormData(form);
@@ -161,6 +175,6 @@
       (setup && !codeValidated ? code : validated ? password : username).focus();
     }
   });
-  render(setup ? 'WAITING_CODE' : 'INITIAL');
+  render(setup ? 'WAITING_CODE' : validated ? 'USER_VALIDATED' : 'INITIAL');
   if (setup) code.focus();
 })();
