@@ -190,9 +190,7 @@
     const visible = filterClients(clients, marked('client'), marked('ap'), marked('status'), marked('group'))
       .sort((a, b) => compareClients(a, b, sortKey, direction));
     const pagination = paginateClients(visible, clientPage); clientPage = pagination.page;
-    $('radio-clients-previous').disabled = !pagination.previous;
-    $('radio-clients-next').disabled = !pagination.next;
-    $('radio-clients-count').textContent = `Exibindo ${pagination.start}–${pagination.end} de ${pagination.total} clientes`;
+    TablePagination.render('radio-pagination', clientPage, 50, pagination.total, target => { clientPage = target; render(); });
     $('radio-rows').replaceChildren(...pagination.rows.map(client => {
       const row = document.createElement('tr'), v = tableValues(client);
       const heading = document.createElement('th'), link = document.createElement('a');
@@ -211,11 +209,11 @@
       button.closest('th').setAttribute('aria-sort', active ? (direction === 1 ? 'ascending' : 'descending') : 'none');
       button.querySelector('span').textContent = active ? (direction === 1 ? '↑' : '↓') : '↕';
     });
-    $('radio-state').textContent = visible.length ? `${visible.length} cliente(s). Os indicadores refletem a última coleta válida de cada cliente.` : 'Nenhum cliente encontrado para os filtros selecionados.';
+    globalThis.TableState?.done('radio-rows');
   }
   async function load() {
-    $('radio-state').textContent = 'Carregando clientes…';
-    try { clients = await request(); setupFilters(); render(); } catch (error) { $('radio-state').textContent = error.message; }
+    globalThis.TableState?.loading('radio-rows');
+    try { clients = await request(); setupFilters(); render(); } catch (error) { globalThis.TableState?.error('radio-rows', error.message); }
   }
   function tab(history) {
     for (const name of ['overview', 'history']) {
@@ -230,6 +228,9 @@
   }
   function open(client, source) {
     selected = client; trigger = source; page = 0; generation++; pending = null;
+    $('radio-history-items').replaceChildren();
+    globalThis.TableState?.loading('radio-history-items');
+    TablePagination.render('radio-history-pagination', 1, 20, 0);
     $('radio-title').textContent = client.login || client.provisional_mac || 'Cliente Rádio';
     $('radio-details').replaceChildren(description(client));
     const connection = tableValues(client);
@@ -249,7 +250,7 @@
   }
   async function loadHistory() {
     const own = ++generation;
-    $('radio-history-state').textContent = 'Carregando histórico…'; $('radio-history-items').replaceChildren();
+    globalThis.TableState?.loading('radio-history-items');
     try {
       const items = await request('/' + selected.id + '/history?page=' + page);
       if (own !== generation) return;
@@ -303,10 +304,10 @@
         row.children[4].dataset.severity = item.data.connectionSeverity ?? 'unknown';
         return row;
       }));
-      $('radio-history-state').textContent = items.length ? '' : 'Nenhuma coleta neste período.';
-      $('radio-history-page').textContent = `Exibindo ${items.length ? page * 20 + 1 : 0}–${items.length ? page * 20 + items.length : 0} de ${items.totalCount ?? items.length} coletas`;
-      $('radio-history-previous').disabled = page === 0; $('radio-history-next').disabled = items.totalCount == null ? items.length < 20 : (page + 1) * 20 >= items.totalCount;
-    } catch (error) { if (own === generation) $('radio-history-state').textContent = error.message; }
+      globalThis.TableState?.done('radio-history-items');
+      TablePagination.render('radio-history-pagination', page + 1, 20, items.totalCount ?? page * 20 + items.length,
+        target => { page = target - 1; loadHistory(); });
+    } catch (error) { if (own === generation) globalThis.TableState?.error('radio-history-items', error.message); }
   }
   $('radio-binding').onsubmit = async event => {
     event.preventDefault(); $('radio-binding-confirm').hidden = true;
@@ -336,15 +337,11 @@
       tab(history); $('radio-' + (history ? 'history' : 'overview') + '-tab').focus();
     }
   };
-  $('radio-history-previous').onclick = () => { page--; loadHistory(); };
-  $('radio-history-next').onclick = () => { page++; loadHistory(); };
   let collectionTrigger;
   $('radio-collection-close-top').onclick = $('radio-collection-cancel').onclick = () => $('radio-collection-dialog').close();
   $('radio-collection-dialog').addEventListener('close', () => collectionTrigger?.focus());
   $('radio-close').onclick = $('radio-cancel').onclick = () => $('radio-dialog').close();
   $('radio-dialog').addEventListener('close', () => { generation++; if ($('radio-collection-dialog').open) $('radio-collection-dialog').close(); trigger?.focus(); });
   document.querySelectorAll('[data-radio-sort]').forEach(button => { button.onclick = () => { const key = button.dataset.radioSort; direction = key === sortKey ? -direction : 1; sortKey = key; clientPage = 1; render(); }; });
-  $('radio-clients-previous').onclick = () => { clientPage--; render(); };
-  $('radio-clients-next').onclick = () => { clientPage++; render(); };
   load();
 })();

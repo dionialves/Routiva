@@ -131,7 +131,7 @@
     document.getElementById('latency-execution-status').dataset.state = kind;
     if (remaining !== undefined) text('latency-remaining', remaining + ' / ' + packetGoal);
   }
-  const diagnosticControls = { search, sort, lossOnly, rows, body, empty: document.getElementById('latency-empty') };
+  const diagnosticControls = { search, sort, lossOnly, rows, body };
   function renderTable(results, completed, controls) {
     const { search, sort, rows, body } = controls;
     const summary = summarize(results);
@@ -172,14 +172,14 @@
       previous = row;
     }
     for (const [key, row] of rows) if (!currentKeys.has(key)) { row.remove(); rows.delete(key); }
-    controls.empty.hidden = clients.length > 0;
+
   }
   function render(results, completed = false) {
     latest = results;
     finished = completed;
     renderTable(results, completed, diagnosticControls);
   }
-  for (const control of [search, lossOnly, sort]) control.addEventListener('input', () => render(latest, finished));
+  for (const control of [search, lossOnly, sort]) control.addEventListener('input', () => { TablePagination.reset('latency-pagination'); render(latest, finished); });
   const diagnosticTab = document.getElementById('latency-diagnostic-tab');
   const resultsTab = document.getElementById('latency-results-tab');
   const diagnosticPanel = document.getElementById('latency-diagnostic-panel');
@@ -188,7 +188,6 @@
     search: document.getElementById('latency-final-search'),
     sort: document.getElementById('latency-final-sort'),
     body: document.getElementById('latency-final-results'),
-    empty: document.getElementById('latency-final-empty'),
     rows: new Map(),
   };
   let activeTab = 'diagnostic', finalView = null, expiryTimer = null;
@@ -284,6 +283,7 @@
     renderTable(view.results, true, finalControls);
   }
   for (const control of [finalControls.search, finalControls.sort]) control.addEventListener('input', () => {
+    TablePagination.reset('latency-final-pagination');
     if (finalView) renderTable(finalView.results, true, finalControls);
   });
   function complete(view, serverTime) {
@@ -307,6 +307,7 @@
   async function poll() {
     if (!session || !dialog.open) return;
     const current = session, attempt = generation;
+    globalThis.TableState?.loading('ap-latency-results');
     try {
       const view = await request('/' + encodeURIComponent(current.id));
       if (session !== current || attempt !== generation || !dialog.open) return;
@@ -318,11 +319,13 @@
         execution('Erro', 'error', processed);
         state.textContent = view.failed ? 'Não foi possível concluir todos os pacotes. Verifique o coletor e tente novamente.'
           : 'O coletor não retornou medições ICMP válidas. Verifique a comunicação com o coletor e tente novamente.';
+        globalThis.TableState?.error('ap-latency-results', state.textContent);
         start.disabled = false;
         packetPicker.disabled = false;
         return;
       }
       render(view.results, completed);
+      globalThis.TableState?.done('ap-latency-results');
       state.textContent = completed ? `Avaliação concluída · ${packetGoal} pacotes por destino.`
         : `Em andamento · ${processed} de ${packetGoal} pacotes concluídos em todos os destinos.`;
       execution(completed ? 'Concluído' : 'Em andamento', completed ? 'completed' : 'running', processed);
@@ -332,6 +335,7 @@
       if (session !== current || attempt !== generation || !dialog.open) return;
       execution('Erro', 'error');
       state.textContent = error.message;
+      globalThis.TableState?.error('ap-latency-results', error.message);
       if (error.status === 404) { start.disabled = false; packetPicker.disabled = false; return; }
       timer = setTimeout(poll, 3000);
     }
@@ -342,7 +346,7 @@
     dialog.showModal();
     const attempt = ++generation;
     start.disabled = true;
-    state.textContent = 'Carregando clientes e endereços do IXC…';
+    state.textContent = '';
     rows.clear();
     body.replaceChildren();
     latest = [];
@@ -354,13 +358,15 @@
     lossOnly.checked = false;
     sort.value = 'delta-desc';
     render([]);
+    globalThis.TableState?.loading('ap-latency-results');
     try {
       const targets = await request();
       if (!dialog.open || attempt !== generation) return;
       render(targets.map(target => ({ target, samples: [] })));
+      globalThis.TableState?.done('ap-latency-results');
       state.textContent = `${targets.length - 1} clientes conectados. Pronto para iniciar.`;
       start.disabled = false;
-    } catch (error) { if (attempt === generation) { execution('Erro', 'error'); state.textContent = error.message; } }
+    } catch (error) { if (attempt === generation) { execution('Erro', 'error'); globalThis.TableState?.error('ap-latency-results', error.message); } }
   });
   if (window.location?.hash === '#avaliacao-latencia') {
     document.getElementById('ap-latency-open').click();
@@ -377,7 +383,8 @@
     generation++;
     render([]);
     execution('Aguardando', 'waiting', 0);
-    state.textContent = 'Preparando medição…';
+    state.textContent = '';
+    globalThis.TableState?.loading('ap-latency-results');
     try {
       clearTimeout(timer);
       if (session) { await request('/' + encodeURIComponent(session.id), 'DELETE'); session = null; }
@@ -385,7 +392,7 @@
       execution('Em andamento', 'running', 0);
       render(session.results);
       poll();
-    } catch (error) { execution('Erro', 'error'); state.textContent = error.message; start.disabled = false; packetPicker.disabled = false; }
+    } catch (error) { execution('Erro', 'error'); globalThis.TableState?.error('ap-latency-results', error.message); start.disabled = false; packetPicker.disabled = false; }
     finally { busy = false; close.disabled = false; }
   });
   async function dismiss(event) {

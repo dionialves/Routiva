@@ -1158,7 +1158,7 @@ function renderList(focusFavoriteId) {
     favoriteCell.append(star);
     if (focusFavoriteId === map.id) star.focus({preventScroll:true});
     const title = document.createElement('a');
-    title.className = 'map-name-link';
+    title.className = 'system-table-link map-name-link';
     title.href = '#workspace';
     title.textContent = layout.name;
     title.setAttribute('aria-label', 'Visualizar mapa ' + layout.name);
@@ -1171,15 +1171,10 @@ function renderList(focusFavoriteId) {
     row.insertCell().textContent = maps.some(parent => parent.id !== map.id &&
       parent.layout.nodes.some(node => node.groupId && node.subMapId === map.id)) ? 'Sub-mapa' : 'Principal';
   }
-  $('maps-empty').hidden = rows.length > 0;
-  $('map-count').textContent = `Exibindo ${filtered.length ? start + 1 : 0}–${start + rows.length} de ${filtered.length} mapas`;
-  $('previous').hidden = $('next').hidden = false;
-  $('previous').disabled = page === 0;
-  $('next').disabled = start + rows.length >= filtered.length;
+  globalThis.TableState?.done('maps');
+  TablePagination.render('map-pagination', page + 1, pageSize, filtered.length, target => { page = target - 1; renderList(); });
 }
 $('map-search').oninput = () => { page = 0; renderList(); };
-$('previous').onclick = () => { page--; renderList(); };
-$('next').onclick = () => { page++; renderList(); };
 
 const createDialog = $('create-dialog');
 const createForm = $('create-form');
@@ -1640,24 +1635,12 @@ function switchDraft() {
 }
 function renderSwitchSlots() {
   const panel = $('switch-slots');
-  panel.replaceChildren();
-  panel.setAttribute('aria-busy', String(loadingInterfaces));
+  panel.inert = loadingInterfaces;
   if (loadingInterfaces) {
-    const row = document.createElement('tr'), cell = document.createElement('td');
-    cell.colSpan = 6; cell.className = 'element-slot-empty';
-    const spinner = document.createElement('span');
-    spinner.className = 'element-interface-spinner'; spinner.setAttribute('aria-hidden', 'true');
-    const label = document.createElement('span');
-    label.className = 'sr-only'; label.textContent = 'Carregando interfaces';
-    cell.append(spinner, label); row.append(cell); panel.append(row);
+    globalThis.TableState?.loading('switch-slots');
     return;
   }
-  if (!configuredSlots.length) {
-    const row = document.createElement('tr'), cell = document.createElement('td');
-    cell.colSpan = 6; cell.className = 'element-slot-empty';
-    cell.textContent = 'Nenhum slot configurado. Adicione um slot para começar.';
-    row.append(cell); panel.append(row);
-  }
+  panel.replaceChildren();
   configuredSlots.forEach((slot, index) => {
     const row = document.createElement('tr');
     const heading = document.createElement('th'); heading.scope = 'row';
@@ -1716,6 +1699,7 @@ function renderSwitchSlots() {
     };
     const actions = document.createElement('td'); actions.append(remove); row.append(actions); panel.append(row);
   });
+  globalThis.TableState?.done('switch-slots', 'Adicione um slot para começar.');
 }
 $('load-switch-interfaces').onclick = async () => {
   const hostId = $('type').value === 'host' ? $('group').value : null;
@@ -1727,6 +1711,7 @@ $('load-switch-interfaces').onclick = async () => {
   $('interface-load-status').textContent = '';
   $('interface-load-status').setAttribute('role', 'status');
   renderSwitchSlots();
+  let failed = false, noInterfaces = false;
   let failureMessage = 'Não foi possível acessar a aplicação para consultar as interfaces. Verifique a conexão com o servidor.';
   try {
     const response = await fetch('/api/maps/connections/discover/' + encodeURIComponent(hostId), {cache: 'no-store'});
@@ -1749,8 +1734,8 @@ $('load-switch-interfaces').onclick = async () => {
     failureMessage = 'As interfaces foram recebidas, mas não foi possível montar as portas no navegador. Atualize a página para carregar a versão atual do mapa.';
     const imported = MapSwitch.importInterfaces(data, previous);
     if (!imported.ports.length) {
-      failureMessage = 'Nenhuma interface com item de estado encontrada no Zabbix. A configuração atual foi preservada.';
-      throw new Error();
+      noInterfaces = true;
+      return;
     }
     if (['radio', 'sector-radio'].includes($('element-icon').value) && imported.ports.length > 4) {
       failureMessage = 'O host possui mais de 4 interfaces. Configure manualmente até 4 interfaces para este rádio. A configuração atual foi preservada.';
@@ -1765,11 +1750,20 @@ $('load-switch-interfaces').onclick = async () => {
       + (imported.unidentifiedConnectors?.length ? ' Conectores não identificados pelo Zabbix: ' + imported.unidentifiedConnectors.join(', ') + '. Confira os conectores; os anteriores foram preservados quando disponíveis, e as novas portas usam Elétrico provisoriamente.' : '');
   } catch (error) {
     if (generation === interfaceLoadGeneration && $('type').value === 'host' && $('group').value === hostId) {
+      failed = true;
       $('interface-load-status').setAttribute('role', 'alert');
-      $('interface-load-status').textContent = failureMessage;
     }
   } finally {
-    if (generation === interfaceLoadGeneration) { loadingInterfaces = false; renderSwitchSlots(); drawPreview(); }
+    if (generation === interfaceLoadGeneration) {
+      loadingInterfaces = false;
+      renderSwitchSlots(); drawPreview();
+      if (failed) globalThis.TableState?.error('switch-slots', failureMessage);
+      if (noInterfaces) {
+        const message = 'Nenhuma interface com item de estado encontrada no Zabbix.';
+        globalThis.TableState?.done('switch-slots', message);
+        if (configuredSlots.length) $('interface-load-status').textContent = message + ' A configuração atual foi preservada.';
+      }
+    }
   }
 };
 $('add-switch-slot').onclick = () => {
@@ -2077,12 +2071,13 @@ $('save').onclick = async () => {
 };
 
 (async () => {
+  globalThis.TableState?.loading('maps');
   try {
     [maps, groups, inventory, favoriteMaps] = await Promise.all([api(''), api('/groups'), api('/hosts'), api('/favorites')]);
     renderList();
     $('create').disabled = !canManageMaps;
     openMap(null);
-  } catch { $('status').textContent = 'Falha ao carregar os mapas. Recarregue a página para tentar novamente.'; }
+  } catch { globalThis.TableState?.error('maps', 'Recarregue a página para tentar novamente.'); }
 })();
 
 

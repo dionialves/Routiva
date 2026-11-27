@@ -314,23 +314,12 @@ class PopSummary {
       metrics.append(item);
     }
     this.box.append(metrics);
-    if (!data && !cached?.error) {
-      const loading = el('p', 'Carregando resumo…', 'pop-loading'); loading.setAttribute('role', 'status');
-      this.box.append(loading);
-    }
-    if (cached?.error || data?.warning) this.box.append(el('p', data?.warning ||
-      'Não foi possível atualizar os dados deste host.', 'pop-message pop-failure'));
     const title = el('h3'); title.append(popIcon('alert'), document.createTextNode('Últimos 5 incidentes'));
     this.box.append(title);
-    if (data?.incidents?.length) {
-      const table = el('table', null, 'host-incident-table');
-      const head = el('thead'), labels = el('tr');
-      for (const label of ['Data / Hora', 'Severidade', 'Incidente', 'Status']) {
-        const cell = el('th', label); cell.scope = 'col'; labels.append(cell);
-      }
-      head.append(labels); table.append(head);
-      const body = el('tbody');
-      for (const issue of data.incidents.slice(0, 5)) {
+    {
+      const table = document.getElementById('map-host-incidents-table').content.cloneNode(true);
+      const body = table.querySelector('tbody');
+      for (const issue of (data?.incidents ?? []).slice(0, 5)) {
         const row = el('tr');
         const date = el('td', hostIncidentDate(issue.timestamp));
         date.title = new Date(issue.timestamp).toLocaleString('pt-BR');
@@ -347,15 +336,12 @@ class PopSummary {
         state.append(popIcon(issue.resolved ? 'check-circle' : 'circle-alert', 16));
         status.append(state); row.append(date, severity, text, status); body.append(row);
       }
-      table.append(body);
-      const scroll = el('div', null, 'host-incident-scroll');
-      scroll.tabIndex = 0; scroll.setAttribute('role', 'region');
-      scroll.setAttribute('aria-label', 'Últimos 5 incidentes');
-      scroll.append(table); this.box.append(scroll);
-    } else if (data?.incidents) {
-      const empty = el('p', null, 'pop-message pop-empty');
-      empty.append(popIcon('check-circle'), document.createTextNode('Nenhum incidente registrado para este host.'));
-      this.box.append(empty);
+      const pager = table.querySelector('.system-pagination');
+      this.box.append(table);
+      TablePagination.render(pager, 1, 5, body.children.length);
+      if (cached?.error || data?.warning) globalThis.TableState?.error(body, data?.warning);
+      else if (data) globalThis.TableState?.done(body);
+      else globalThis.TableState?.loading(body);
     }
     const link = el('a', null, 'host-all-incidents');
     link.href = `/incidentes?hostId=${encodeURIComponent(id)}&history=all`;

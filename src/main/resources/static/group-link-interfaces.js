@@ -70,11 +70,7 @@ const GroupLinkInterfaces = (() => {
         };
         cell(remove); get('rows').append(row);
       });
-      if (!entries.length) {
-        const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 5;
-        cell.className = 'group-link-empty';
-        cell.innerHTML = '<svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="4"/><path d="M7 9h18v12h-4v4H11v-4H7zM10 9v4m4-4v4m4-4v4m4-4v4"/></svg><strong>Nenhuma interface habilitada para enlaces.</strong><span>Clique em Adicionar interface para incluir a primeira interface deste elemento.</span>'; row.append(cell); get('rows').append(row);
-      }
+      globalThis.TableState?.done('group-link-rows', 'Clique em Adicionar interface para incluir a primeira interface deste elemento.');
     }
     function closeEditor(focus = false) {
       reset(); hostSelect.value = ''; picker.sync(); get('editor').hidden = true;

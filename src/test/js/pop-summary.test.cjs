@@ -1,3 +1,4 @@
+const { install: installPagination, pager } = require('./support/table-pagination.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -176,7 +177,20 @@ class PopElement {
 
 function renderPreview(hosts, fresh = {updatedAt: Date.now(), failed: false}, minimumSeverity = 0) {
   const dom = {createTextNode: text => { const node = new PopElement('#text'); node.textContent = text; return node; }, createElement: tag => new PopElement(tag), createElementNS: (_, tag) => new PopElement(tag)};
+  dom.getElementById = id => {
+    assert.equal(id, 'map-host-incidents-table');
+    return {content: {cloneNode() {
+      const region = new PopElement('div'), table = new PopElement('table');
+      region.className = 'host-incident-scroll'; region.tabIndex = 0;
+      table.append(new PopElement('thead'), new PopElement('tbody'));
+      region.append(table);
+      const fragment = new PopElement('div');
+      fragment.append(region, Object.assign(new PopElement('nav'), pager('incidentes'), { className:'system-pagination' }));
+      return fragment;
+    }}};
+  };
   const preview = vm.createContext({document: dom, hosts, fresh, minimumSeverity});
+  installPagination(preview);
   vm.runInContext(fs.readFileSync('src/main/resources/static/pop-summary.js', 'utf8'), preview);
   preview.box = new PopElement('section');
   vm.runInContext(`subject = Object.assign(Object.create(PopSummary.prototype), {
@@ -361,7 +375,8 @@ test('missing host metrics stay unknown and an empty history keeps the full-hist
   assert.equal(preview.box.querySelector('.host-state').textContent, 'Desconhecido');
   assert.ok(preview.box.textContent.includes('Sem dados'));
   assert.ok(!preview.box.textContent.includes('0,00%'));
-  assert.ok(preview.box.textContent.includes('Nenhum incidente registrado para este host.'));
+  assert.equal(preview.box.querySelector('tbody').children.length, 0);
+  assert.equal(preview.box.querySelector('.system-pagination').children[0].textContent, 'Exibindo 0 de 0 registros');
   assert.ok(preview.box.querySelector('.host-all-incidents'));
 });
 

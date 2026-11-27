@@ -7,12 +7,12 @@
   <th:block th:replace="~{design-system :: layout}"></th:block>
   <th:block th:replace="~{design-system :: actions}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
-  <link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
+  <link rel="stylesheet" href="/availability.css?v=20261127-table-states">
   <th:block th:replace="~{design-system :: filters}"></th:block>
   <th:block th:replace="~{design-system :: picker}"></th:block>
   <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
-  <link rel="stylesheet" href="/radio-clients.css?v=20261124-compact-radio-cards">
-  <script src="/multi-picker.js?v=20261115-radio" defer></script><script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/radio-clients.js?v=20261124-collection-layout" defer></script>
+  <link rel="stylesheet" href="/radio-clients.css?v=20261127-table-states">
+  <script src="/multi-picker.js?v=20261115-radio" defer></script><script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/radio-clients.js?v=20261127-table-states" defer></script>
 </head><body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('radio-clients')}"></aside>
 <div class="app-workspace"><header th:replace="~{shell :: topbar}"></header>
@@ -25,12 +25,12 @@
 <div th:replace="~{multi-picker :: checklist('radio-client', 'Clientes', 'user', 'Todos os clientes', 'Pesquisar login')}"></div>
 <div th:replace="~{multi-picker :: checklist('radio-status', 'Conexão', 'activity', 'Todas as conexões', 'Pesquisar condição')}"></div>
 </div></section>
-<section class="card availability-host-section system-table-compact" aria-labelledby="radio-list-title">
-<h2 id="radio-list-title">Clientes cadastrados</h2>
-<p id="radio-state" role="status" aria-live="polite">Carregando clientes…</p>
+<section class="card availability-host-section" aria-labelledby="radio-list-title">
+<div th:replace="~{design-system :: tableHeading('radio-list-title', 'Clientes cadastrados', 'wifi', 'radio-rows')}"></div>
+
 <div th:replace="~{design-system :: dataTable('Clientes Rádio', ~{radio-clients :: sections})}">
 <th:block th:fragment="sections"><thead><tr><th scope="col" aria-sort="none"><button type="button" data-radio-sort="client">Cliente / MAC<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="ap">AP<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="observed">Última observação<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="status">Conexão<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="signal">Sinal<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="snr">SNR<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="ccq">TX CCQ<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="latency">Latência<span aria-hidden="true">↕</span></button></th><th scope="col" aria-sort="none"><button type="button" data-radio-sort="loss">Perda de pacotes<span aria-hidden="true">↕</span></button></th></tr></thead><tbody id="radio-rows"></tbody></th:block></div>
-<nav class="radio-pagination system-pagination" aria-label="Paginação de clientes"><button id="radio-clients-previous" type="button" class="system-button" disabled><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="radio-clients-count" role="status" aria-live="polite">Exibindo 0–0 de 0 clientes</span><button id="radio-clients-next" type="button" class="system-button" disabled><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Próxima</button></nav>
+<nav th:replace="~{design-system :: tablePagination('Paginação de clientes', 'radio-pagination', 'clientes', 'radio-rows', null)}"></nav>
 </section></main></div>
 <div th:replace="~{design-system :: analysisDialog('radio-dialog', 'radio-title', 'radio-description', ~{radio-clients :: content})}">
 <th:block th:fragment="content">
@@ -57,7 +57,7 @@
 <div class="radio-binding-actions"><button class="system-button" type="submit"><svg th:replace="~{shell :: icon('search')}"></svg>Revisar vínculo</button></div><p id="radio-binding-preview" role="status"></p>
 <button id="radio-binding-confirm" class="system-button system-button-primary" type="button" hidden><svg th:replace="~{shell :: icon('check')}"></svg>Confirmar vínculo</button>
 </form></section>
-<section class="analysis-body" id="radio-history" role="tabpanel" aria-labelledby="radio-history-tab" tabindex="0" hidden><p id="radio-history-state" role="status"></p><div th:replace="~{design-system :: dataTable('Histórico de coletas do cliente', ~{radio-clients :: historySections})}"><th:block th:fragment="historySections"><thead><tr><th scope="col">MAC</th><th scope="col">Data da coleta</th><th scope="col">AP</th><th scope="col">Sinal</th><th scope="col">Conexão</th><th scope="col">SNR</th><th scope="col">TX CCQ</th><th scope="col">Latência</th><th scope="col">Perda de pacotes</th></tr></thead><tbody id="radio-history-items"></tbody></th:block></div><nav class="system-pagination" aria-label="Paginação do histórico"><button id="radio-history-previous" class="system-button"><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button><span id="radio-history-page"></span><button id="radio-history-next" class="system-button"><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Próxima</button></nav></section>
+<section class="analysis-body" id="radio-history" role="tabpanel" aria-labelledby="radio-history-tab" tabindex="0" hidden><div th:replace="~{design-system :: dataTable('Histórico de coletas do cliente', ~{radio-clients :: historySections})}"><th:block th:fragment="historySections"><thead><tr><th scope="col">MAC</th><th scope="col">Data da coleta</th><th scope="col">AP</th><th scope="col">Sinal</th><th scope="col">Conexão</th><th scope="col">SNR</th><th scope="col">TX CCQ</th><th scope="col">Latência</th><th scope="col">Perda de pacotes</th></tr></thead><tbody id="radio-history-items"></tbody></th:block></div><nav th:replace="~{design-system :: tablePagination('Paginação do histórico', 'radio-history-pagination', 'coletas', 'radio-history-items', null)}"></nav></section>
 <p id="radio-dialog-state" role="status" aria-live="polite"></p>
 <footer th:replace="~{design-system :: modalFooter(~{radio-clients :: clientDialogFooter})}">
   <th:block th:fragment="clientDialogFooter">

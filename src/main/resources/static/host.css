@@ -43,17 +43,11 @@
 .host-page .host-list-panel .hosts-toolbar { margin-bottom:12px; }
 .host-page .host-list-panel h2 { margin:0; font-size:16px; }
 .host-page .host-list-panel > p { color:#a8bdd0; font-size:12px; }
-.host-page .host-list-panel .table-scroll { border:1px solid #193647; border-radius:8px; }
-.host-page .host-equipment-table { min-width:1000px; table-layout:auto; font-size:13px; }
-.host-page .host-equipment-table thead th { width:auto; padding:12px 10px; background:#102a3d; color:#c1d3e0; font-size:12px; white-space:nowrap; text-align:left; }
-.host-page .host-equipment-table tbody td { height:44px; box-sizing:border-box; padding:9px 10px; border-bottom:1px solid #193647; background:#0f2130; color:#c1d3e0; white-space:nowrap; text-align:left; }
-.host-page .host-equipment-table tbody tr:hover td { background:#102a3d; }
-.host-page .host-equipment-table tbody tr:last-child td { border-bottom:0; }
+.host-page .host-equipment-table { --data-table-min-width:1000px; }
 .host-page .host-equipment-table td:first-child { min-width:180px; color:#f1f5f9; font-weight:600; }
 .host-page .interface-table td:nth-child(n+6),.host-page .interface-table th:nth-child(n+6) { text-align:right; font-variant-numeric:tabular-nums; }
 .host-page .interface-table td:nth-child(2),.host-page .interface-table td:nth-child(5) { color:#94a3b8; }
 .host-page .wireless-table td:nth-child(n+3) { font-variant-numeric:tabular-nums; }
-.host-page .wireless-table td:first-child button { padding:0; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
 .host-page .wireless-table td:first-child button:hover { color:#06b6d4; }
 .host-page .host-list-panel .host-heading { margin-bottom:14px; }
 @media(max-width:760px) { .host-page .host-list-panel { padding:14px; } }
@@ -64,8 +58,6 @@
 .wireless-modal .wireless-detail-grid dt { color:#a8bdd0; opacity:1; }
 .wireless-modal .wireless-detail-grid dd { white-space:pre-wrap; }
 
-.host-page .wireless-table th button { display:inline-flex; align-items:center; gap:8px; border:0; padding:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
-.host-page .wireless-table th button:hover { color:#06b6d4; }
 .host-page .wireless-table th[aria-sort=ascending],.host-page .wireless-table th[aria-sort=descending] { color:#67e8f9; }
 
 .host-page .wireless-table tr[data-quality="0"] { --wireless-quality:#22c55e; }
@@ -139,7 +131,6 @@
 .host-tabs { margin:14px 0 8px; padding-bottom:8px; border-color:#164253; }
 .host-page .host-list-panel { margin-top:0; padding:14px; }
 .host-page .hosts-toolbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-.host-page .host-equipment-table tbody td { height:34px; padding:6px 10px; font-size:12px; }
 
 .host-page .wireless-table tbody td.signal-cell {
   font-weight:600;
@@ -202,7 +193,6 @@
 #wireless-summary button:nth-child(2) { color:#fda4a4; }
 #wireless-summary button:nth-child(3) { color:#fdba74; }
 #wireless-summary button:nth-child(4) { color:#fcd34d; }
-.host-page .wireless-table tbody td { padding:8px 10px; }
 
 .host-page .host-hero { align-items:flex-start; }
 .host-chart-grid .chart-card h2 { display:flex; align-items:center; gap:7px; font-size:14px; line-height:1.3; }

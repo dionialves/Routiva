@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -30,6 +31,7 @@ async function surface(initialRows = [], candidates = [{ id: '42', name: '<AP A>
       return { ok: true, json: async () => url.endsWith('/candidates') ? candidates : initialRows };
     }
   };
+  installPagination(context, elements, {'ap-pagination': ['APs', 'ap-previous', 'ap-page-count', 'ap-next']});
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/access-points.js', 'utf8'), context);
   await flush();
   return { elements, requests, fail: () => { fail = true; }, click: async id => { await elements['ap-' + id].handlers.click(); await flush(); } };

@@ -43,24 +43,17 @@
 .host-search input { width:100%; height:36px; background:#081c2c; border:1px solid #234357; border-radius:6px; color:var(--text); padding:8px 12px; font:inherit; font-size:12px; }
 .host-search input::placeholder { color:#94a3b8; }
 #host-count { margin-left:auto; color:#a8bdd0; font-size:12px; }
-.availability-page .hosts-table { width:100%; min-width:1200px; table-layout:fixed; font-size:12px; }
-.availability-page .hosts-table thead th:nth-child(1) { width:23%; }
-.availability-page .hosts-table thead th:nth-child(2) { width:20%; }
-.availability-page .hosts-table thead th:nth-child(3),
-.availability-page .hosts-table thead th:nth-child(4) { width:13%; }
-.availability-page .hosts-table thead th:nth-child(5) { width:10%; }
-.availability-page .hosts-table thead th:nth-child(6) { width:9%; }
-.availability-page .hosts-table thead th:nth-child(7) { width:12%; }
-.availability-page .hosts-table tr > :last-child { text-align:right; }
-.availability-page .hosts-table th,.availability-page .hosts-table td { padding:14px 10px; border-bottom:1px solid #173244; }
-.availability-page .hosts-table thead th { background:#112b3c; }
-.availability-page .hosts-table thead button { padding:0; border:0; background:transparent; font-size:11px; white-space:nowrap; color:#b9cbdd; }
-.availability-page .hosts-table tbody th { text-align:left; max-width:240px; }
-.availability-page .hosts-table tbody th .availability-host-name { color:#00d3fd; overflow-wrap:anywhere; text-decoration:none; }
-.availability-page .hosts-table tbody th .availability-host-name:hover,
-.availability-page .hosts-table tbody th .availability-host-name:focus-visible { text-decoration:underline; text-underline-offset:3px; }
-.availability-page .hosts-table tbody th small { display:block; margin-top:5px; font-size:10px; color:#8da6bc; font-weight:400; }
-.availability-page .hosts-table tbody tr:hover { background:#112b3c; }
+.availability-report-table { --data-table-min-width:1200px; table-layout:fixed; }
+.availability-report-table thead th:nth-child(1) { width:23%; }
+.availability-report-table thead th:nth-child(2) { width:20%; }
+.availability-report-table thead th:nth-child(3),
+.availability-report-table thead th:nth-child(4) { width:13%; }
+.availability-report-table thead th:nth-child(5) { width:10%; }
+.availability-report-table thead th:nth-child(6) { width:9%; }
+.availability-report-table thead th:nth-child(7) { width:12%; }
+.availability-report-table tr > :last-child { text-align:right; }
+.availability-report-table tbody th { text-align:left; max-width:240px; }
+.availability-report-table tbody th small { display:block; margin-top:5px; font-size:10px; color:#8da6bc; font-weight:400; }
 .availability-page .host-groups { color:#b0c1d2; }
 .host-groups-text { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .availability-percent { display:flex; gap:8px; align-items:center; justify-content:flex-end; white-space:nowrap; }
@@ -72,9 +65,6 @@
 .host-status.normal::before { color:#34d399; }
 .host-status.warning::before { color:#fbbf24; }
 .host-status.critical::before { color:#fb7185; }
-.availability-page .pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:18px; }
-.availability-page .pagination button { background:#092031; border:1px solid #28516b; font-size:12px; }
-#page-status { font-size:12px; color:#b0c1d2; }
 .availability-page .note { font-size:11px; line-height:1.8; color:#90a8bf; }
 #retry { margin:8px 0; }
 /* Skeleton shimmer travels from right to left until the first cached report arrives. */
@@ -99,7 +89,6 @@
 .availability-page.is-loading .metric-details-trigger { min-width:70%; }
 .availability-page.is-loading .metric-value { color:transparent; background:#183346; border-radius:5px; width:70%; }
 .availability-page.is-loading #availability-chart:empty { background:linear-gradient(#102839,#102839) center/100% 75% no-repeat; }
-.availability-page.is-loading .table-scroll { min-height:180px; background:repeating-linear-gradient(0deg,transparent 0 37px,#102839 37px 65px); }
 .chart-is-expanded { overflow:hidden; }
 .availability-page .chart-expanded { position:fixed; inset:24px; z-index:50; overflow:auto; margin:0; background:#071b2a; }
 @media(max-width:1150px) { .availability-page .availability-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .availability-heading { flex-wrap:wrap; } }
@@ -165,18 +154,6 @@
 
 /* Shared host rows in Availability and inside a host group. */
 .availability-page .host-list-table { border-collapse:collapse; }
-.availability-page .table-scroll:has(> .host-list-table) { border:1px solid #1d394b; border-radius:7px; overflow:auto; }
-.availability-page .host-list-table thead th { background:#112b3c; color:#bed0dd; font-size:12px; height:42px; box-sizing:border-box; padding:12px 10px; text-align:left; }
-.availability-page .host-list-table tbody tr { background:#0e202e; }
-.availability-page .host-list-table tbody tr:nth-child(even) { background:#102432; }
-.availability-page .host-list-table tbody tr:hover { background:#163243; }
-.availability-page .host-list-table tbody th,
-.availability-page .host-list-table tbody td { height:44px; box-sizing:border-box; padding:12px 10px; border-bottom:1px solid #1d394b; vertical-align:middle; }
-.availability-page .host-list-table tbody th { font-size:13px; font-weight:600; text-align:left; }
-.availability-page .host-list-table tbody th .availability-host-name,
-.availability-page .host-list-table tbody th .availability-host-name:visited { color:#71d7ff; line-height:20px; text-decoration:none; }
-.availability-page .host-list-table tbody th .availability-host-name:hover { color:#71d7ff; text-decoration:underline; text-underline-offset:3px; }
-.availability-page .host-list-table tbody th a.availability-host-name:focus-visible { color:#71d7ff; text-decoration:underline; text-underline-offset:3px; }
 .availability-page .host-list-table tbody th .host-connectivity { width:9px; height:9px; margin-right:10px; vertical-align:middle; }
 #availability-hosts .availability-host-name { display:inline-flex; align-items:baseline; gap:10px; }
 #availability-hosts .availability-host-name::before { content:''; width:9px; height:9px; flex:0 0 9px; border-radius:50%; background:#64748b; align-self:baseline; }
@@ -252,14 +229,3 @@
 .diagnostic-chart-tooltip { position:absolute; top:8px; max-width:min(280px,calc(100% - 16px)); padding:10px 12px; border:1px solid #315066; border-radius:8px; background:#102a3df5; color:#f1f5f9; font-size:12px; line-height:1.6; pointer-events:none; z-index:2; box-shadow:0 4px 12px #0003; }
 .diagnostic-chart-empty { display:flex; justify-content:center; align-items:center; gap:10px; min-height:210px; margin:0; color:#94a3b8; font-size:13px; }
 .diagnostic-chart-empty svg { width:22px; height:22px; }
-
-/* Shared compact table composition used by radio clients and maps. */
-.availability-page .system-table-compact > .table-scroll > .hosts-table {
-    table-layout:auto; font-size:13px; min-width:var(--compact-table-min-width, 680px);
-}
-.availability-page .system-table-compact > .table-scroll > .hosts-table :is(th, td) {
-    width:auto; padding:9px 16px; text-align:left; white-space:nowrap;
-}
-.availability-page .system-table-compact > .table-scroll > .hosts-table thead th {
-    width:auto; padding-top:12px; padding-bottom:12px;
-}

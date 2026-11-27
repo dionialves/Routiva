@@ -1,12 +1,12 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org"><head>
-<th:block th:fragment="base"><link rel="stylesheet" href="/style.css?v=20261126-equipment-modal"><script src="/modal-tabs.js?v=20261120" defer></script></th:block>
+<th:block th:fragment="base"><link rel="stylesheet" href="/style.css?v=20261127-compact-heading"><script src="/table-pagination.js?v=20261127-table-heading" defer></script><script src="/table-state.js?v=20261127" defer></script><script src="/modal-tabs.js?v=20261120" defer></script></th:block>
 <link th:fragment="actions" rel="stylesheet" href="/buttons.css?v=20261118-danger">
 <link th:fragment="filters" rel="stylesheet" href="/query-filters.css?v=20261115-ds1">
 <link th:fragment="layout" rel="stylesheet" href="/page-layout.css?v=20261115-ds1">
-<link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261124-shared-modal-frame">
+<link th:fragment="dialogStyles" rel="stylesheet" href="/form-dialog.css?v=20261127-table-review">
 <link th:fragment="picker" rel="stylesheet" href="/multi-picker.css?v=20261126-single-line-results">
-<link th:fragment="analysisDialogStyles" rel="stylesheet" href="/analysis-dialog.css?v=20261120-modal-tabs">
+<link th:fragment="analysisDialogStyles" rel="stylesheet" href="/analysis-dialog.css?v=20261127-table-review">
 </head><body>
 <article th:fragment="indicator(title, valueId, description, descriptionId)" class="card">
   <h2 th:text="${title}"></h2>
@@ -38,9 +38,44 @@
   <h3 class="form-dialog-section-title" th:id="${titleId}"><svg th:replace="~{shell :: icon(${iconName})}"></svg><span th:text="${title}"></span></h3>
   <div class="form-dialog-section-fields"><th:block th:replace="${content}"></th:block></div>
 </section>
-<div th:fragment="dataTable(label, sections)" class="table-scroll" role="region" th:attr="aria-label=${label}" tabindex="0">
-  <table class="hosts-table"><th:block th:replace="${sections}"></th:block></table>
+<div th:fragment="tableHeading(titleId, title, iconName, tableBodyId)" class="system-table-heading">
+  <svg th:replace="~{shell :: icon(${iconName})}"></svg>
+  <h2 th:id="${titleId}" th:text="${title}"></h2>
+  <span class="system-table-count" th:id="|${tableBodyId}-count|" role="status" hidden></span>
 </div>
+<div th:fragment="dataTable(label, sections)"
+     th:replace="~{design-system :: dataTableRegion(${label}, ${sections}, 'hosts-table', '', null, false)}"></div>
+<div th:fragment="dataTableRegion(label, sections, tableClasses, regionClasses, regionId, concealed)"
+     class="table-scroll" th:classappend="${regionClasses}" th:id="${regionId}"
+     role="region" th:attr="aria-label=${label}" tabindex="0" th:hidden="${concealed}">
+  <table th:replace="~{design-system :: dataTableContent(${tableClasses}, ${sections})}"></table>
+</div>
+<table th:fragment="dataTableContent(tableClasses, sections)" class="system-data-table" data-table-state="uninitialized" th:classappend="${tableClasses}">
+  <th:block th:replace="${sections}"></th:block>
+  <tbody class="system-table-state">
+    <tr><td colspan="1">
+      <div class="system-table-state-content" role="status" aria-atomic="true">
+        <span class="system-table-spinner" aria-hidden="true"></span>
+        <svg th:replace="~{shell :: icon('server')}"></svg>
+        <strong class="system-table-loading">Carregando dados...</strong>
+        <strong class="system-table-empty">Nenhum registro encontrado</strong>
+        <strong class="system-table-error">Não foi possível carregar os dados.</strong>
+        <strong class="system-table-stale">Os dados apresentados podem estar desatualizados.</strong>
+        <span class="system-table-description">Não há dados para exibir no momento.</span>
+      </div>
+    </td></tr>
+  </tbody>
+</table>
+<nav th:fragment="tablePagination(label, navId, unit, tableBodyId, localPageSize)" class="system-pagination"
+     th:id="${navId}" th:attr="aria-label=${label},data-pagination-unit=${unit},data-pagination-table=${tableBodyId},data-pagination-local=${localPageSize}">
+  <span class="system-pagination-status" role="status"></span>
+  <button type="button" data-page-action="first" aria-label="Primeira página" title="Primeira página" disabled><svg th:replace="~{shell :: icon('chevrons-left')}"></svg></button>
+  <button type="button" data-page-action="previous" aria-label="Página anterior" title="Página anterior" disabled><svg th:replace="~{shell :: icon('chevron-left')}"></svg></button>
+  <button th:each="slot : ${#numbers.sequence(1, 5)}" type="button" data-page-action="number" disabled
+          th:hidden="${slot > 1}" th:attr="aria-current=${slot == 1 ? 'page' : null},aria-label=|Página ${slot}|" th:text="${slot}"></button>
+  <button type="button" data-page-action="next" aria-label="Próxima página" title="Próxima página" disabled><svg th:replace="~{shell :: icon('chevron-right')}"></svg></button>
+  <button type="button" data-page-action="last" aria-label="Última página" title="Última página" disabled><svg th:replace="~{shell :: icon('chevrons-right')}"></svg></button>
+</nav>
 <button th:fragment="action(buttonId, iconName, label)" type="button" class="system-button" th:id="${buttonId}">
   <svg th:replace="~{shell :: icon(${iconName})}"></svg><span th:text="${label}"></span>
 </button>

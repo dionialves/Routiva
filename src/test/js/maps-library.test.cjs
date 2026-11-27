@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -18,6 +19,7 @@ test('library derives map type from all group bindings, including maps outside t
   ];
   const makeElement = () => ({setAttribute(){},addEventListener(){},append(){}});
   const context = vm.createContext({$,maps,page:0,pageSize:10,favoriteMaps:[],favoriteSaving:false,svg:makeElement,document:{createElement:makeElement}});
+  installPagination(context, {}, {'map-pagination': ['mapas']});
   vm.runInContext(source.slice(source.indexOf('function renderList('),source.indexOf("$('map-search').oninput")),context);
   vm.runInContext('renderList()',context);
   assert.equal(rows.length,3);
@@ -43,6 +45,7 @@ test('favorites appear first before pagination and update only after the server 
   const context = vm.createContext({$,maps,page:0,pageSize:10,favoriteMaps:['m11'],favoriteSaving:false,
     svg:makeElement,document:{createElement:makeElement},window:{notify(){}},
     api:async (path, body)=>{requests.push([path,body.favorite]); if(reject) throw Error('offline'); return body.favorite?['m3','m11']:['m11'];}});
+  installPagination(context, {}, {'map-pagination': ['mapas']});
   vm.runInContext(source.slice(source.indexOf('async function toggleMapFavorite('),source.indexOf("$('map-search').oninput")),context);
   vm.runInContext('renderList()',context);
   assert.equal(rows[0][1].child.textContent,'Map 11');

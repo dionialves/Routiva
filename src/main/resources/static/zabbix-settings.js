@@ -118,8 +118,7 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
       const row = node('tr'), cell = node('td', members.length ? 'Nenhum host corresponde ao filtro.' : 'Nenhum host neste grupo.', 'table-empty');
       cell.colSpan = 4; row.append(cell); list.append(row);
     }
-    $('page-label').textContent = `Exibindo ${matches.length ? page * pageSize + 1 : 0}–${Math.min((page + 1) * pageSize, matches.length)} de ${matches.length} hosts`;
-    $('previous-page').disabled = page === 0; $('next-page').disabled = page + 1 >= pages;
+    TablePagination.render('zabbix-host-pagination', page + 1, pageSize, matches.length, target => { page = target - 1; renderHosts(); });
   }
   function render() {
     const focus = document.activeElement;
@@ -166,7 +165,7 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
   }
   async function refresh() {
     connection('loading', 'Verificando conexão…');
-    $('inventory-feedback').textContent = 'Consultando grupos e hosts…';
+    globalThis.TableState?.loading('host-list');
     try {
       const response = await fetch('/configuracao/zabbix/inventario');
       if (!response.ok) throw new Error('Falha ao consultar o Zabbix. Verifique a conexão e tente novamente.');
@@ -175,7 +174,8 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
       $('last-query').textContent = new Date(data.queriedAt).toLocaleString('pt-BR');
       connection('connected', 'Conectado'); $('inventory-feedback').textContent = '';
       result(data.result);
-    } catch (error) { connection('error', 'Falha de conexão'); throw error; }
+      globalThis.TableState?.done('host-list');
+    } catch (error) { globalThis.TableState?.error('host-list', error.message); connection('error', 'Falha de conexão'); throw error; }
   }
   $('refresh-inventory').addEventListener('click', () => run(refresh));
   form.addEventListener('submit', event => {
@@ -218,19 +218,19 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
   $('group-all').addEventListener('change', () => { state.toggleGroup(current, $('group-all').checked); render(); });
   $('group-search').addEventListener('input', renderGroups);
   ['host-search', 'selection-filter'].forEach(id => $(id).addEventListener(id === 'host-search' ? 'input' : 'change', () => { page = 0; renderHosts(); }));
-  $('previous-page').addEventListener('click', () => { page--; renderHosts(); });
-  $('next-page').addEventListener('click', () => { page++; renderHosts(); });
   window.addEventListener('beforeunload', event => {
     if (state.changes() || busy) { event.preventDefault(); event.returnValue = ''; }
   });
   render();
   run(async () => {
     try {
+      globalThis.TableState?.loading('import-log');
       const response = await fetch('/configuracao/zabbix/resultado');
       if (!response.ok) throw new Error();
       const data = await response.json();
       results.load(data.result, data.imported);
     } catch {
+      globalThis.TableState?.error('import-log', error.message);
       $('inventory-feedback').textContent = 'Não foi possível recuperar o último resultado salvo.';
     }
     if (configured) await refresh();

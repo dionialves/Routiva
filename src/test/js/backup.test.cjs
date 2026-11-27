@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -43,6 +44,8 @@ test('backup history initializes its filters and renders saved entries', async (
         : [{ id: 'backup-1', hostId: '1', hostName: 'Roteador', filename: 'router.rsc' }],
     }),
   });
+  const pagers = {};
+  installPagination(context, pagers, {'backup-pagination': ['registros', null, 'backup-count']});
   vm.runInContext(
     'let entries, historyInventory, page = 0; const filterPickers = {}, pageSize = 50;' +
     source.slice(source.indexOf('  function cell('), source.indexOf('  async function openPreview(')),
@@ -52,6 +55,5 @@ test('backup history initializes its filters and renders saved entries', async (
 
   assert.equal(get('backup-rows').children[0][0].child.textContent, 'Roteador');
   assert.equal(get('backup-rows').children[0][3].textContent, 'router.rsc');
-  assert.equal(get('backup-empty').hidden, true);
-  assert.equal(get('backup-count').textContent, 'Exibindo 1–1 de 1 registros');
+  assert.equal(pagers['backup-count'].textContent, 'Exibindo 1–1 de 1 registros');
 });

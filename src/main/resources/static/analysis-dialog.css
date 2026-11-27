@@ -29,7 +29,7 @@ dialog.analysis-dialog::backdrop { background:rgb(0 7 14 / 75%); }
 .analysis-footer { justify-content:space-between; border-top:1px solid var(--analysis-border); padding-top:14px; flex-shrink:0; }
 .analysis-footer p { margin:0; color:var(--muted); line-height:1.5; }
 .analysis-dialog :is(.table-scroll, .latency-table-scroll) { overflow:auto; border:1px solid var(--analysis-border); border-radius:6px; }
-.analysis-dialog :is(.table-scroll, .latency-table-scroll) thead th { position:sticky; top:0; z-index:1; background:var(--analysis-table-head); color:var(--muted); font-size:11px; }
+.analysis-dialog :is(.table-scroll, .latency-table-scroll) thead th { position:sticky; top:0; z-index:1; background:inherit; }
 .analysis-dialog :is(.table-scroll, .latency-table-scroll) tbody tr:nth-child(even) { background:var(--surface-bg); }
 @media(max-width:600px) {
   dialog.analysis-dialog { width:calc(100vw - 16px); padding:12px; }

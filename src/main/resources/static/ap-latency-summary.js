@@ -6,6 +6,7 @@
   const format = (value, unit = ' ms') => value === null ? '—' : value.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + unit;
   const url = '/api/ap/' + encodeURIComponent(page.dataset.hostId) + '/latency/' + encodeURIComponent(page.dataset.assessmentId);
   async function load() {
+    globalThis.TableState?.loading('summary-results');
     try {
       const response = await fetch(url, { cache: 'no-store' });
       const view = await response.json();
@@ -60,8 +61,9 @@
         body.append(row);
       });
       document.getElementById('latency-summary-content').hidden = false;
+      globalThis.TableState?.done('summary-results');
       state.textContent = 'Avaliação concluída.';
-    } catch (error) { state.textContent = error.message + ' Volte ao AP para iniciar uma nova avaliação.'; }
+    } catch (error) { globalThis.TableState?.error('summary-results', error.message); state.textContent = error.message + ' Volte ao AP para iniciar uma nova avaliação.'; }
   }
   load();
 })();

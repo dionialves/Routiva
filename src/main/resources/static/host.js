@@ -628,7 +628,7 @@
         }
         value ??= '—';
         td.title = String(value);
-        if (index === 0) { const button = document.createElement('button'); button.type = 'button'; button.textContent = value;
+        if (index === 0) { const button = document.createElement('button'); button.type = 'button'; button.className = 'system-table-link'; button.textContent = value;
           const status = !wirelessAvailable ? 'Dados desatualizados'
             : client['connection-status'] === 'disconnected' ? 'Desconectado' : client.quality || 'Indisponível';
           button.setAttribute('aria-haspopup', 'dialog');
@@ -852,7 +852,6 @@
       fragment.append(tr);
     }
     replaceRows('interface-rows', fragment, 'interfaceId');
-    $('interfaces-state').textContent = interfaces.length ? `${interfaces.length} interfaces` : 'Nenhuma interface disponível.';
   }
   function closeInterface() {
     const previous = selectedInterface;
@@ -870,6 +869,7 @@
   async function poll() {
     if (!livePollingEnabled()) return;
     const ownGeneration = generation;
+    globalThis.TableState?.loading(tab === 'wireless' ? 'wireless-clients' : 'interface-rows');
     controller = new AbortController();
     try {
       const section = tab;
@@ -906,17 +906,18 @@
       } catch (error) {
         if (error.name === 'AbortError') throw error;
         wirelessAvailable = false; signalSummary();
-        $('wireless-state').textContent = 'Registration Table indisponível · ' + error.message;
+        globalThis.TableState?.error('wireless-clients', error.message);
       }
       let interfaceResult;
       if (section === 'interfaces' || Date.now() - interfacesAt >= 5000) {
         try {
+          if (section !== 'interfaces') globalThis.TableState?.loading('interface-rows');
           interfaceResult = await request('/interfaces', { signal:controller.signal });
           if (generation !== ownGeneration) return;
           interfacesAt = Date.now(); interfacesAvailable = true;
         } catch (error) {
           interfacesAvailable = false;
-          $('interfaces-state').textContent = 'Interfaces indisponíveis · dados anteriores desatualizados';
+          globalThis.TableState?.error('interface-rows', error.message);
           if (section === 'interfaces' || error.name === 'AbortError') throw error;
         }
       }
@@ -925,11 +926,9 @@
       if (generation !== ownGeneration) return;
       if (section === 'wireless') {
         wireless(result.warning ? undefined : result.measuredAt);
+        if (result.warning) globalThis.TableState?.error('wireless-clients', result.warning);
+        else globalThis.TableState?.done('wireless-clients');
         if (result.warning && $('wireless-modal').open) $('wireless-live-state').textContent = 'Dados desatualizados';
-        $('wireless-state').textContent = result.warning
-          ? result.warning + ' · últimos dados desatualizados · leitura válida: ' + (lastValidAt ? new Date(lastValidAt).toLocaleTimeString('pt-BR') : '—')
-          : !clients.some(client => client['connection-status'] !== 'disconnected') ? 'Nenhuma estação conectada.'
-            : ccqLabel + ' exibe a média geral. Consulte o diagnóstico da linha para ver o CCQ sob tráfego.';
         loadLoginNames();
       }
       if (interfaceResult) {
@@ -946,7 +945,8 @@
         });
         interfaceCounters = nextCounters;
 
-        interfaceRows();
+        if (interfaceResult.warning) { globalThis.TableState?.error('interface-rows', interfaceResult.warning); }
+        else { interfaceRows(); globalThis.TableState?.done('interface-rows'); }
         const selected = interfaces.find(i => i['.id'] === selectedInterface);
         if ($('interface-modal').open && !selected) {
           $('interface-live-state').textContent = 'A interface não está mais disponível. Feche esta janela e selecione outra interface.';
@@ -990,7 +990,6 @@
         if ($('interface-modal').open) $('interface-live-state').textContent = 'Atualização indisponível · dados anteriores podem estar desatualizados';
         if (tab === 'wireless') {
           if (!wirelessAvailable) wireless();
-          $('wireless-state').textContent = 'Falha na comunicação com o AP · dados desatualizados · últimos valores preservados';
         }
         if ($('interface-modal').open) interfaceGap();
         root.dataset.api = 'unavailable';

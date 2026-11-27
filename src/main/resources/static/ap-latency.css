@@ -53,9 +53,9 @@
 #latency-sort { max-width:245px; }
 #ap-latency-modal :is(button,select,input,a):focus-visible { outline:2px solid #00c4dd; outline-offset:2px; }
 .latency-table-scroll { overflow:auto; min-height:0; flex:1; border:1px solid #24495e; border-radius:6px; }
-.latency-table { border-collapse:collapse; width:100%; table-layout:fixed; font-size:12px; font-variant-numeric:tabular-nums; }
-.latency-table th { position:sticky; top:0; background:#103347; z-index:1; font-size:11px; font-weight:600; color:#c3deef; text-align:left; }
-.latency-table :is(td,th) { padding:8px 7px; border-bottom:1px solid #203d4e; }
+.latency-table { table-layout:fixed; --data-table-min-width:0; font-variant-numeric:tabular-nums; }
+.latency-table th { position:sticky; top:0; z-index:1; background:inherit; }
+.latency-table :is(td,th) { padding-inline:7px; }
 .latency-table th:first-child { width:20%; }
 .latency-table th:nth-child(2) { width:15%; }
 .latency-table th:nth-child(3) { width:12%; }
@@ -190,7 +190,6 @@
   .latency-results-panel .latency-table-scroll { flex:none; overflow:visible; max-height:none; }
 }
 /* Keep consolidated results dense enough to leave room for the client rows. */
-.latency-final-table-panel .latency-table :is(td,th) { padding-block:5px; }
 .latency-final-table-panel .latency-badge { padding:2px 5px; }
 .latency-final-top li { padding-block:3px; }
 .latency-final-heading h3 { font-size:18px; }

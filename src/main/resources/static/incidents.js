@@ -116,15 +116,6 @@
     if (text != null) td.textContent = text;
     tr.append(td); return td;
   }
-  function skeleton() {
-    $('incident-rows').replaceChildren();
-    for (let i = 0; i < 6; i++) {
-      const tr = document.createElement('tr'); tr.className = 'incident-skeleton';
-      tr.setAttribute('aria-hidden', 'true');
-      for (let j = 0; j < 8; j++) cell(tr).append(document.createElement('span'));
-      $('incident-rows').append(tr);
-    }
-  }
   const calendarFormat = new Intl.DateTimeFormat('en-CA', {
     timeZone: document.querySelector('.incidents-page').dataset.timeZone,
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -139,23 +130,20 @@
       timeZone: 'UTC', day: '2-digit', month: '2-digit', ...(year ? { year: 'numeric' } : {}),
     }).format(new Date(day * 86400000));
   }
+  function incidentPager() {
+    return $('incident-pagination-template').content.firstElementChild.cloneNode(true);
+  }
   function pagination(period, count, container) {
-    const pages = Math.max(1, Math.ceil(count / size));
-    if (pages === 1) return;
-    const nav = document.createElement('nav'); nav.className = 'pagination system-pagination';
+    const nav = incidentPager();
+    nav.classList.add('incident-period-pager');
+    nav.dataset.paginationGrouped = 'true';
     nav.setAttribute('aria-label', `Paginação: ${period.label}`);
-    function button(label, target, disabled) {
-      const node = document.createElement('button'); node.type = 'button';
-      node.className = 'system-button';
-      node.append(icon(target < period.page ? 'chevron-left' : 'chevron-right'), document.createTextNode(label.replace(/[‹›]/g, '').trim())); node.disabled = disabled;
-      node.addEventListener('click', () => { period.page = target; render(snapshot); });
-      nav.append(node);
-    }
-    button('‹ Anterior', period.page - 1, period.page <= 1);
-    const status = document.createElement('span');
-    status.textContent = `Exibindo ${count ? (period.page - 1) * size + 1 : 0}–${Math.min(period.page * size, count)} de ${count} incidentes`;
-    nav.append(status);
-    button('Próxima ›', period.page + 1, period.page >= pages);
+    TablePagination.render(nav, period.page, size, count, page => {
+      period.page = page;
+      render(snapshot);
+      document.getElementById(`incident-pager-${period.id}`)?.querySelector('[aria-current=page]')?.focus({ preventScroll: true });
+    });
+    nav.id = `incident-pager-${period.id}`;
     container.append(nav);
   }
   function updateNameOptions(data) {
@@ -227,14 +215,10 @@
     });
     $('incident-rows').replaceChildren(fragment);
 
-    $('incident-total').textContent = `${total} encontrados`;
+    TablePagination.updateCount('incident-rows', total);
     $('incident-updated').textContent = `Última atualização: ${formatDate(data.updatedAt)}`;
     $('incident-updated').dataset.state = data.warning ? 'partial' : 'success';
     $('incident-warning').textContent = data.warning; $('incident-warning').hidden = !data.warning;
-    $('incident-empty').hidden = total !== 0;
-    const filtered = !!eventId || filterKeys.some(key => applied.get(key)?.trim());
-    $('incident-empty').querySelector('p').textContent = filtered
-      ? 'Nenhum incidente corresponde aos filtros selecionados' : 'Nenhum incidente ativo encontrado';
     $('incident-range').textContent = `Exibindo ${visible} de ${total} incidentes`;
     updateLocation();
   }
@@ -328,6 +312,7 @@
       ? below : bounds.top - tooltip.height - 8) + 'px';
   }
   function renderComments(history) {
+    TablePagination.reset('incident-comments-pagination');
     const rows = history.filter(item => item.message?.trim()).sort((a, b) => b.timestamp - a.timestamp);
     const body = $('incident-comments-rows'); body.replaceChildren();
     for (const item of rows) {
@@ -335,8 +320,7 @@
       cell(tr, formatDate(item.timestamp)); cell(tr, item.user || '—'); cell(tr, item.message);
       body.append(tr);
     }
-    $('incident-comments-table').hidden = rows.length === 0;
-    $('incident-comments-state').textContent = rows.length ? '' : 'Nenhum comentário registrado.';
+    globalThis.TableState?.done('incident-comments-rows');
   }
   async function showComments(row, anchor, inModal = false) {
     clearTimeout(commentsOpening); clearTimeout(commentsClosing);
@@ -344,8 +328,9 @@
     (inModal ? dialog : $('incident-comments-host')).append(commentsTooltip);
     anchor.setAttribute('aria-describedby', 'incident-comments-tooltip');
     commentsTooltip.hidden = false;
-    $('incident-comments-table').hidden = true;
-    $('incident-comments-state').textContent = 'Carregando comentários…';
+    $('incident-comments-rows').replaceChildren();
+    $('incident-comments-table').hidden = false;
+    globalThis.TableState?.loading('incident-comments-rows');
     commentsTooltip.showPopover?.(); positionComments(anchor);
     try {
       let entry = commentsCache.get(row.eventId);
@@ -363,9 +348,7 @@
     } catch (error) {
       commentsCache.delete(row.eventId);
       if (commentsAnchor !== anchor) return;
-      $('incident-comments-table').hidden = true;
-      $('incident-comments-state').textContent = error instanceof TypeError
-        ? 'Não foi possível consultar os comentários. Passe o mouse novamente para tentar.' : error.message;
+      globalThis.TableState?.error('incident-comments-rows', error.message);
       positionComments(anchor);
     }
   }
@@ -663,7 +646,7 @@
     const body = $('incident-trigger-rows'); body.replaceChildren();
     $('incident-trigger-scroll').scrollTop = 0;
     const rows = occurrenceRows || [];
-    $('incident-trigger-state').textContent = rows.length ? '' : 'Nenhum evento encontrado.';
+
     for (const row of rows.slice((occurrencePage - 1) * 10, occurrencePage * 10)) {
       const tr = document.createElement('tr');
       cell(tr, formatOccurrenceDate(row.timestamp));
@@ -677,38 +660,20 @@
       const comments = cell(tr); comments.className = 'incident-observations';
       renderCommentIndicator(comments, row, true); body.append(tr);
     }
-    const nav = $('incident-trigger-pagination'); nav.replaceChildren();
-    const pages = Math.max(1, Math.ceil(rows.length / 10));
-    function button(label, target, disabled, iconName) {
-      const node = document.createElement('button'); node.type = 'button'; node.className = 'system-button';
-      if (iconName) node.append(icon(iconName));
-      node.append(document.createTextNode(label)); node.disabled = disabled;
-      node.addEventListener('click', () => { occurrencePage = target; renderOccurrences(); }); nav.append(node);
-    }
-
-    button('Anterior', occurrencePage - 1, occurrencePage === 1, 'chevron-left');
-    const status = document.createElement('span');
-    status.className = 'incident-trigger-page-status';
-    status.setAttribute('role', 'status');
-    status.setAttribute('aria-live', 'polite');
-    status.textContent = `Exibindo ${rows.length ? (occurrencePage - 1) * 10 + 1 : 0}–${Math.min(occurrencePage * 10, rows.length)} de ${rows.length} registros`;
-    nav.append(status);
-    button('Próxima', occurrencePage + 1, occurrencePage === pages, 'chevron-right');
+    globalThis.TableState?.done('incident-trigger-rows');
+    TablePagination.render('incident-trigger-pagination', occurrencePage, 10, rows.length, page => {
+      occurrencePage = page;
+      renderOccurrences();
+    });
   }
   async function loadOccurrences() {
     if (occurrenceRows !== null || occurrenceLoading) return;
     const version = ++occurrenceVersion, id = activeIncident.eventId;
     occurrenceLoading = true;
     $('incident-trigger-retry').hidden = true;
-    $('incident-trigger-state').textContent = 'Consultando histórico da trigger…';
+    globalThis.TableState?.loading('incident-trigger-rows');
     $('incident-panel-trigger').setAttribute('aria-busy', 'true');
-    $('incident-trigger-pagination').replaceChildren();
-    const body = $('incident-trigger-rows'); body.replaceChildren();
-    for (let row = 0; row < 10; row++) {
-      const tr = document.createElement('tr'); tr.className = 'incident-skeleton';
-      for (let col = 0; col < 7; col++) cell(tr, ' ');
-      body.append(tr);
-    }
+    TablePagination.render('incident-trigger-pagination', 1, 10, 0);
     try {
       const response = await fetch(`/api/incidents/${encodeURIComponent(id)}/occurrences`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Não foi possível consultar o histórico da trigger.');
@@ -717,7 +682,7 @@
       occurrenceRows = data; occurrencePage = 1; renderOccurrences();
     } catch (error) {
       if (version !== occurrenceVersion || !dialog.open) return;
-      body.replaceChildren(); $('incident-trigger-state').textContent = error.message;
+      globalThis.TableState?.error('incident-trigger-rows', error.message);
       $('incident-trigger-retry').hidden = false;
     } finally {
       if (version === occurrenceVersion) {
@@ -727,6 +692,7 @@
   }
   $('incident-trigger-retry').addEventListener('click', loadOccurrences);
   function renderIncidentHistory(data) {
+    TablePagination.reset('incident-history-pagination');
     const history = $('incident-history'); history.replaceChildren();
     for (const [index, item] of [...data.history].sort((a, b) => b.timestamp - a.timestamp).entries()) {
       const tr = document.createElement('tr');
@@ -796,12 +762,12 @@
         detailsRow.hidden = !expanded;
       });
     }
-    $('incident-history-count').textContent = `${data.history.length} ${data.history.length === 1 ? 'registro' : 'registros'}`;
-    $('incident-history-empty').hidden = data.history.length !== 0;
-    $('incident-history-scroll').hidden = data.history.length === 0;
+    globalThis.TableState?.done('incident-history');
   }
   async function readDetails(focusHistory = false) {
     closeSeverityMenu();
+    $('incident-history-scroll').hidden = false;
+    globalThis.TableState?.loading('incident-history');
     const version = ++detailsVersion;
     const previousSeverity = hasIncidentDetails ? changedSeverity() : null;
     detailsLoaded = false;
@@ -843,6 +809,7 @@
       if (focusHistory) { selectModalTab('update'); $('incident-history').closest('.table-scroll').focus(); }
     } catch (error) {
       if (version !== detailsVersion || !dialog.open) return;
+      globalThis.TableState?.error('incident-history', error.message);
       $('incident-dialog-state').textContent = error.message; $('incident-details-retry').hidden = false;
     }
   }
@@ -850,16 +817,15 @@
     hideComments();
     returnFocus = trigger; activeIncident = row; uncertain = false; detailsLoaded = false; hasIncidentDetails = false;
     occurrenceVersion++; occurrenceRows = null; occurrenceLoading = false; occurrencePage = 1;
-    $('incident-trigger-rows').replaceChildren(); $('incident-trigger-pagination').replaceChildren();
-    $('incident-trigger-state').textContent = 'Aguardando os dados do incidente…';
+    $('incident-trigger-rows').replaceChildren(); TablePagination.render('incident-trigger-pagination', 1, 10, 0);
+    globalThis.TableState?.loading('incident-trigger-rows');
     $('incident-trigger-retry').hidden = true;
     $('incident-panel-trigger').setAttribute('aria-busy', 'false');
     selectModalTab(focusHistory ? 'update' : 'summary');
     renderSummary(row);
     updateForm.reset(); $('incident-update-error').textContent = '';
-    $('incident-history').replaceChildren(); $('incident-history-empty').hidden = true;
+    $('incident-history').replaceChildren();
     $('incident-history-scroll').hidden = true;
-    $('incident-history-count').textContent = '0 registros';
     $('incident-dialog-name').textContent = row.name; $('incident-dialog-id').textContent = `ID: ${row.eventId}`;
     $('incident-status-badge').textContent = 'Consultando…'; $('incident-status-badge').dataset.state = 'loading';
     $('incident-dialog-description').textContent = 'Consultando os dados do incidente…';
@@ -957,6 +923,7 @@
     clearTimeout(refreshTimer); busy = true;
     const requestFilterVersion = filterVersion;
     $('incidents-panel').setAttribute('aria-busy', 'true');
+    globalThis.TableState?.loading('incident-rows');
     updateLocation();
     const query = Object.fromEntries(['groupId', 'hostId', 'severity'].map(key => [key, applied.get(key) || '']));
     query.history = initial.get('history') === 'all';
@@ -973,9 +940,10 @@
       if (!response.ok) throw new Error('Zabbix indisponível');
       const data = await response.json();
       if (stopped || requestFilterVersion !== filterVersion) return;
-      busy = false; updateNameOptions(data); render(data); loaded = true; $('incident-error').hidden = true;
+      busy = false; updateNameOptions(data); render(data); globalThis.TableState?.done('incident-rows'); loaded = true; $('incident-error').hidden = true;
     } catch {
       if (!stopped && requestFilterVersion === filterVersion) {
+        globalThis.TableState?.error('incident-rows', null);
         $('incident-error').hidden = false;
         $('incident-updated').dataset.state = 'error';
         if (!loaded) {
@@ -1036,5 +1004,5 @@
   window.addEventListener('pageshow', event => {
     if (event.persisted) { stopped = false; durationTimer = setInterval(updateDurations, 60000); load(); }
   });
-  filterHosts(); skeleton(); durationTimer = setInterval(updateDurations, 60000); load();
+  filterHosts(); durationTimer = setInterval(updateDurations, 60000); load();
 })();

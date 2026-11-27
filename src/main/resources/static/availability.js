@@ -43,6 +43,9 @@
       $('availability-coverage').parentElement.hidden = !$('availability-coverage').textContent;
     }
     chart.update(r); performanceChart.update(r); AvailabilityView.table(data); page=data.page.number;
+    TablePagination.render('availability-pagination', page, data.page.size, data.page.total, target => {
+      page = target; url(); refresh();
+    });
     loading(r.evaluatedAt==null);
   }
   async function refresh(reset=false) {
@@ -50,6 +53,7 @@
     $('retry').hidden=true;
     if(reset) {$('collection-state').textContent='Aguardando indicadores';$('collection-state').dataset.state='neutral';$('last-measurement').textContent='Última medição: —';data=null;chart.clear();performanceChart.clear('Carregando período…');AvailabilityView.reset();AvailabilityView.times(null);loading(true);for(const key of ['operational','technical','loss','latency']) $(key).textContent='—';$('availability-coverage').textContent='';$('availability-range').textContent='';}
     if(!data) {$('availability-status').textContent='Carregando indicadores…';loading(true);}
+    globalThis.TableState?.loading('availability-hosts');
     const timeout=setTimeout(()=>active.abort(),9000);
     try {
       const response=await fetch('/api/availability/dashboard?'+query(),{signal:active.signal,cache:'no-store'});
@@ -57,9 +61,10 @@
       const result=await response.json();if(current!==generation)return;
       const options=JSON.stringify(result.groups);
       if(options!==groupVersion) {groupVersion=options;$('group').replaceChildren(new Option('Todos os hosts',''));for(const g of result.groups)$('group').add(new Option(g.name,g.id));for(const id of group.split(',').filter(Boolean)) if(id!=='__none__'&&!result.groups.some(g=>g.id===id))$('group').add(new Option('Grupo indisponível',id));for(const option of $('group').options)option.selected=!!option.value&&group.split(',').includes(option.value);window.availabilityGroupPicker?.sync();}
-      if(result.view){data=result;render();} else {loading(true);$('collection-state').textContent='Carregando indicadores';$('availability-status').textContent='Carregando a primeira versão dos indicadores…';}
+      if(result.view){data=result;render();globalThis.TableState?.done('availability-hosts');} else {loading(true);$('collection-state').textContent='Carregando indicadores';$('availability-status').textContent='Carregando a primeira versão dos indicadores…';}
     } catch(error) {
       if(current!==generation)return;
+      globalThis.TableState?.error('availability-hosts', error.message);
       loading(false);$('retry').hidden=false;
       $('availability-status').textContent=(error.name==='AbortError'?'A consulta demorou mais que o esperado.':error.message)+(data?' Exibindo os últimos dados recebidos.':'')+' Nova tentativa em 10 segundos.';
       $('collection-state').textContent='Estado da coleta indisponível';$('collection-state').dataset.state='neutral';
@@ -69,7 +74,7 @@
   for(const id of ['period','group'])$(id).addEventListener('change',()=>{if(id==='period')savePeriod();group=$('group').multiple?Array.from($('group').selectedOptions,option=>option.value).filter(Boolean).join(','):$('group').value;page=1;url();refresh(true);});
   $('host-search').addEventListener('input',()=>{clearTimeout(searchTimer);clearTimeout(timer);controller?.abort();generation++;searchTimer=setTimeout(()=>{page=1;url();refresh();},300);});
   document.querySelectorAll('[data-sort]').forEach(button=>button.addEventListener('click',()=>{direction=sort===button.dataset.sort&&direction==='asc'?'desc':'asc';sort=button.dataset.sort;page=1;document.querySelectorAll('[data-sort]').forEach(b=>b.parentElement.setAttribute('aria-sort',b===button?(direction==='asc'?'ascending':'descending'):'none'));url();refresh();}));
-  $('previous').addEventListener('click',()=>{page=Math.max(1,page-1);url();refresh();});$('next').addEventListener('click',()=>{page++;url();refresh();});$('retry').addEventListener('click',()=>refresh());
+  $('retry').addEventListener('click',()=>refresh());
   for(const mode of ['lines','bars'])$('chart-'+mode).addEventListener('click',()=>{chart.mode=mode;chart.draw();for(const item of ['lines','bars'])$('chart-'+item).setAttribute('aria-pressed',String(item===mode));});
   const panel=document.querySelector('.availability-timeseries');
   let chartInert=[];

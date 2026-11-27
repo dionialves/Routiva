@@ -105,18 +105,8 @@
 #execution-dialog .analysis-footer { justify-content:flex-end; }
 #schedule-history .hosts-table { min-width:620px; }
 
-:is(#schedule-history, #execution-dialog) .hosts-table :is(th, td) { padding:8px 12px; }
-#schedule-history .hosts-table td { white-space:nowrap; }
 #schedule-history h2 { margin:0 0 12px; }
 :is(#history-feedback, #execution-feedback):empty { display:none; }
-#schedule-history .scheduler-execution-link {
-  background:transparent;
-  color:var(--cyan);
-  text-decoration:underline;
-  text-underline-offset:3px;
-  padding:2px 0;
-  font-weight:600;
-}
 .schedule-status-text { font-weight:600; }
 .schedule-status-text[data-state=COMPLETED] { color:var(--success); }
 .schedule-status-text:is([data-state=PARTIAL], [data-state=MISSED]) { color:var(--warning); }
@@ -160,6 +150,7 @@
 .execution-summary dd { margin:4px 0 0; font-size:12px; font-weight:600; line-height:22px; }
 .execution-summary dd:not(#execution-result) { white-space:nowrap; }
 .execution-summary .scheduler-status-badge { line-height:16px; }
+.system-data-table .scheduler-status-badge { padding-block:0; line-height:17px; vertical-align:middle; }
 .execution-result-counts { display:block; line-height:17px; }
 .execution-result-success { color:var(--success); }
 .execution-result-failure { color:var(--error); }
@@ -169,11 +160,10 @@
 .execution-host-column { width:32%; }
 .execution-state-column { width:16%; }
 .execution-message-column { width:52%; }
-#execution-logs .hosts-table :is(th, td) { padding:7px 10px; vertical-align:middle; }
 #execution-logs .hosts-table :is(th, td):nth-child(2) { text-align:center; }
 .execution-log-row { height:37px; }
 .execution-log-ellipsis { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#execution-logs .scheduler-status-badge { max-width:100%; line-height:16px; padding:2px 6px; vertical-align:middle; }
+#execution-logs .scheduler-status-badge { max-width:100%; padding-inline:6px; }
 #execution-logs .scheduler-status-badge > span:last-child { overflow:hidden; text-overflow:ellipsis; }
 #execution-logs .execution-log-filters {
   display:flex;

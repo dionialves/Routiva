@@ -55,17 +55,6 @@
     $('diagnostic-retry').hidden = !error;
     $('diagnostic-feedback-icon').hidden = !error;
   }
-  function unknownLive() {
-    for (const [id, target] of cells) {
-      const row = tableRows.get(id);
-      if (row) { row.values.ping = null; row.values.loss = null; }
-      badge(target[0], 'Indisponível'); badge(target[1], 'Indisponível');
-      target[2].dataset.state = 'unknown';
-      target[2].title = 'Falha na atualização das medições';
-      target[2].setAttribute('aria-label', 'Estado desconhecido: falha na atualização');
-    }
-    if (['ping', 'loss'].includes(sortKey)) sortRows();
-  }
   async function get(url) {
     let response;
     try { response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15000) }); }
@@ -95,7 +84,9 @@
       nameCell.append(dot, name);
       window.HostMenu.attach(name, nameCell, { ip: host.ip, hostId: host.id });
       textCell(tr, host.ip || 'Sem IP');
-      textCell(tr, equipment.model || 'Não informado'); textCell(tr, equipment.version || 'Não informado');
+      textCell(tr, equipment.model || 'Não informado');
+      const version = textCell(tr, equipment.version || 'Não informado');
+      version.title = version.textContent;
       const incident = data.incidents[host.id];
       const incidentCell = textCell(tr, '');
       const severities = data.incidentSeverities?.[host.id];
@@ -129,7 +120,6 @@
         model: equipment.model, version: equipment.version, incidents: incident, ping: null, loss: null } });
     }
     sortRows();
-    $('diagnostic-hosts-empty').hidden = hosts.length !== 0;
     const known = hosts.filter(h => Number.isFinite(data.incidents[h.id]));
     const incidents = known.reduce((sum, h) => sum + data.incidents[h.id], 0);
     $('incident-count').href = `/incidentes?groupId=${encodeURIComponent(groupId)}`;
@@ -165,8 +155,13 @@
     if (stopped || !pingRunning) return;
     if (!document.hidden && !busy && !liveBusy) {
       liveBusy = true;
-      try { await live(); }
-      catch (error) { if (pingRunning && generation === pollGeneration) unknownLive(); }
+      globalThis.TableState?.loading('diagnostic-hosts');
+      try {
+        await live();
+        if (pingRunning && generation === pollGeneration) globalThis.TableState?.done('diagnostic-hosts');
+      } catch (error) {
+        if (pingRunning && generation === pollGeneration) globalThis.TableState?.error('diagnostic-hosts', error.message);
+      }
       finally { liveBusy = false; }
     }
     if (!stopped && pingRunning && generation === pollGeneration) liveTimer = setTimeout(poll, 2000);
@@ -182,6 +177,7 @@
     button.setAttribute('aria-pressed', String(pingRunning));
     button.title = label;
     $('auto-summary').textContent = pingRunning ? 'Ping em execução · 2 s' : 'Ping parado';
+    if (!pingRunning) globalThis.TableState?.done('diagnostic-hosts');
     if (pingRunning) {
       liveSince = Date.now();
       for (const [id, target] of cells) {
@@ -207,8 +203,11 @@
     busy = true;
     $('group-details').classList.toggle('initial-loading', true);
     try {
+      globalThis.TableState?.loading('diagnostic-hosts');
       await details();
+      globalThis.TableState?.done('diagnostic-hosts');
     } catch (error) {
+      globalThis.TableState?.error('diagnostic-hosts', error.message);
       feedback(error.message, true);
     } finally {
       busy = false;

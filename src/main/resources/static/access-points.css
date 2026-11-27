@@ -5,8 +5,7 @@
 .ap-toolbar h2 { margin: 0; font-size: 18px; }
 .ap-toolbar label, .ap-transfer section { display: flex; flex-direction: column; gap: 8px; }
 .ap-page input, #ap-dialog input { border: 1px solid #28485e; border-radius: 8px; padding: 10px 12px; font: inherit; background: #0c2030; color: inherit; }
-#ap-state, #ap-retry { margin: 0 20px 16px; }
-.ap-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 16px 20px; }
+#ap-retry { margin: 0 20px 16px; }
 /* Import dialog content uses the shared modal shell and fixed footer. */
 #ap-dialog::backdrop { background:rgb(3 12 20 / 68%); }
 #ap-dialog .app-modal-header { padding:20px 24px 16px; }
@@ -82,32 +81,18 @@
 .ap-page button:focus-visible, .ap-page summary:focus-visible, .ap-page a:focus-visible { outline:2px solid var(--ap-accent); outline-offset:3px; }
 .ap-page .availability-host-section { padding:22px; overflow:visible; min-width:0; }
 .ap-page #ap-title { margin:0 0 6px; font-size:20px; }
-.ap-page #ap-state { margin:0 0 24px; font-size:13px; color:#b0c1d2; }
 .ap-page #ap-retry { margin:0 0 16px; }
 .ap-page [hidden] { display:none; }
 .ap-filters { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:22px; margin-bottom:20px; }
-.ap-page .table-scroll { border:1px solid #28485e; border-radius:9px; overflow:auto; }
-.ap-page .hosts-table { min-width:1050px; table-layout:auto; font-size:13px; }
-.ap-page .hosts-table thead th:nth-child(n) { width:auto; text-align:left; }
+.ap-page .hosts-table { --data-table-min-width:1050px; }
 .ap-page .hosts-table thead th:first-child { width:28%; }
-.ap-page .hosts-table th, .ap-page .hosts-table td { padding:9px 16px; text-align:left; white-space:nowrap; }
-.ap-page .hosts-table thead th { background:#142e3e; padding-top:12px; padding-bottom:12px; }
-.ap-page .hosts-table thead button { font-size:12px; font-weight:600; color:#f1f5f9; }
-.ap-page .hosts-table thead svg { width:13px; height:13px; }
-.ap-page .hosts-table tbody tr:last-child > * { border-bottom:0; }
-.ap-page .hosts-table tbody tr:hover { background:#003442; }
-.ap-page .availability-host-name { display:inline-flex; align-items:center; gap:16px; color:var(--ap-accent); }
-.ap-page .availability-host-name svg { width:16px; height:16px; color:#8de3e4; }
 .ap-page .hosts-table td:nth-child(2), .ap-page .hosts-table td:nth-child(5) { font-variant-numeric:tabular-nums; }
+.ap-page .availability-host-name { display:inline-flex; align-items:center; gap:16px; }
+.ap-page .availability-host-name svg { width:16px; height:16px; color:#8de3e4; }
 .ap-row-actions { position:relative; }
 .ap-row-actions summary { list-style:none; display:flex; justify-content:center; padding:3px; border-radius:4px; cursor:pointer; }
 .ap-row-actions summary:hover { background:#28485e; }
 .ap-row-actions a { display:block; padding:10px; background:#173747; color:var(--ap-accent); border-radius:5px; margin-top:6px; }
-.ap-page .ap-pagination { display:grid; grid-template-columns:1fr auto 1fr; gap:12px; margin-top:26px; padding:10px 8px; border:1px solid #193447; border-radius:8px; font-size:13px; }
-.ap-pagination button:first-child { justify-self:start; }
-.ap-pagination button:last-child { justify-self:end; border-color:var(--ap-accent); }
-.ap-pagination button:enabled:hover { background:#003442; }
-.ap-pagination button:disabled { border-color:#28485e; }
 @media(max-width:760px) {
   .ap-filters { grid-template-columns:1fr; gap:12px; }
   .ap-page .availability-host-section { padding:16px; }
@@ -115,8 +100,6 @@
   .ap-heading-copy { gap:12px; }
   .ap-page .availability-heading h1 { font-size:26px; }
   .ap-page .availability-heading p { font-size:13px; line-height:1.5; }
-  .ap-page .ap-pagination { gap:6px; font-size:12px; }
-  .ap-pagination button { padding:8px; gap:3px; }
 }
 
 .ap-page .ap-filter-card { padding:16px 18px; margin-bottom:24px; }

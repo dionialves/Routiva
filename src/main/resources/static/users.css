@@ -3,9 +3,6 @@
 #user-error { color:#ffbec8; margin:0; }
 #user-reset-confirm { padding:16px; border:1px solid var(--border); border-radius:8px; background:#07131f; }
 
-.users-page .hosts-table { min-width:760px; table-layout:auto; }
-.users-page .hosts-table :is(th, td) { width:auto; }
-.users-page .hosts-table thead th:nth-child(n) { width:auto; }
 
 #user-form { max-width:none; }
 .user-dialog-content, .user-details { display:grid; gap:18px; min-width:0; }
@@ -31,3 +28,4 @@
   .user-code-visible .user-details { padding-right:0; padding-bottom:18px; border-right:0; border-bottom:1px solid var(--border); }
   #user-code-panel { padding:16px; }
 }
+.users-page .hosts-table { --data-table-min-width:760px; }

@@ -1,6 +1,5 @@
-.hosts-page .hosts-table { width:100%; min-width:0; table-layout:fixed; font-size:13px; }
-.hosts-page .hosts-table :is(th, td) { padding:9px clamp(2px, 1vw, 12px); text-align:left; white-space:normal; overflow-wrap:anywhere; }
-.hosts-page .hosts-table thead th { min-width:0; padding-top:12px; padding-bottom:12px; }
+.hosts-page .hosts-table { --data-table-min-width:0; table-layout:fixed; }
+.hosts-page .hosts-table :is(th, td) { padding-inline:clamp(2px, 1vw, 12px); white-space:normal; overflow-wrap:anywhere; }
 .hosts-page .hosts-table thead th:nth-child(1) { width:29%; }
 .hosts-page .hosts-table thead th:nth-child(2) { width:4%; }
 .hosts-page .hosts-table thead th:nth-child(3) { width:5%; }

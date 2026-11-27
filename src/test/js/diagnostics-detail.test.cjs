@@ -26,7 +26,9 @@ async function surface(report = null, { storage = new Map(), search = '', storag
   };
   let failLive=false, now=Date.now();
   class Clock extends Date { static now() { return now; } }
+  const tableErrors = [];
   const context={
+    TableState: { loading() {}, done() {}, error(id, message) { tableErrors.push([id, message]); } },
     document:{hidden:false,body:new Element(),addEventListener(){},getElementById:id=>elements[id],createElement:()=>new Element(),createElementNS:()=>new Element(),createDocumentFragment:()=>new Element(),createTextNode:text=>text},
     location:{pathname:'/diagnostico/grupos/g',search},addEventListener(){},URLSearchParams,
     localStorage:{getItem:key=>{if(storageUnavailable)throw Error('unavailable');return storage.get(key);},setItem:(key,value)=>{if(storageUnavailable)throw Error('unavailable');storage.set(key,value);}},
@@ -40,7 +42,7 @@ async function surface(report = null, { storage = new Map(), search = '', storag
   vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../../main/resources/static/diagnostics.js'),'utf8'),context);
   await flush();
-  return {elements,timers,requests,live,location:context.location,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
+  return {elements,timers,requests,live,tableErrors,location:context.location,advance:ms=>{now+=ms;},setFailLive:()=>{failLive=true;},row:()=>elements['diagnostic-hosts'].children[0].children[0]};
 }
 test('live badges use configured thresholds and incidents do not imply connectivity',async()=>{
   const ui=await surface();
@@ -67,15 +69,16 @@ test('group opens only the host table without history requests or background ref
   assert.equal(ui.requests.some(url => url.includes('/availability')), false);
   assert.equal(ui.timers.size, 0);
 });
-test('live fetch failure clears previous connectivity and numeric badges',async()=>{
+test('live fetch failure preserves the last readings and marks the table as outdated',async()=>{
   const ui=await surface();
   ui.elements['diagnostic-ping'].emit('click'); await flush();
   ui.setFailLive();
   [...ui.timers.values()].find(t=>t.ms===2000).fn();await flush();
   const row=ui.row();
-  assert.equal(row.children[0].children[0].dataset.state,'unknown');
-  assert.equal(row.children[5].children[0].textContent,'Indisponível');
-  assert.equal(row.children[6].children[0].className,'diagnostic-badge neutral');
+  assert.equal(row.children[0].children[0].dataset.state,'up');
+  assert.equal(row.children[5].children[0].textContent,'30 ms');
+  assert.equal(row.children[6].children[0].className,'diagnostic-badge critical');
+  assert.equal(ui.tableErrors[0][0], 'diagnostic-hosts');
 });
 
 test('live averaging starts on play and resets only when ping is restarted', async () => {

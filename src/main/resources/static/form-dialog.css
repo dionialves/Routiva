@@ -25,9 +25,6 @@ dialog.form-dialog.app-modal[open] { display:flex; }
 .form-dialog [role=alert]:empty { display:none; }
 .form-dialog [hidden] { display:none !important; }
 
-.form-dialog .hosts-table tbody th .availability-host-name { color:var(--cyan); text-decoration:none; }
-.form-dialog .hosts-table tbody th .availability-host-name:is(:hover, :focus-visible) { text-decoration:underline; text-underline-offset:3px; }
-.form-dialog .hosts-table tbody th .availability-host-name:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
 
 /* A fixed header and footer with a scrolling form body, for larger configuration forms. */
 dialog.form-dialog:has(.form-dialog-frame) { padding:0; overflow:hidden; }

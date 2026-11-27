@@ -101,14 +101,15 @@
       fragment.append(tr);
     }
     $('rows').replaceChildren(fragment);
-    $('state').textContent = rows.length === 0 ? (document.querySelector('meta[name="is-admin"]')?.content === 'false' ? 'Nenhum AP cadastrado.' : 'Nenhum AP cadastrado. Clique em Importar para definir seus Access Points.') : filtered.length === 0 ? 'Nenhum AP encontrado para esta busca.' : `${filtered.length} Access Point(s). Clientes e última leitura refletem a última consulta válida na página do AP.`;
-    $('page-count').textContent = `Exibindo ${filtered.length ? (page - 1) * pageSize + 1 : 0}–${Math.min(page * pageSize, filtered.length)} de ${filtered.length} APs`;
-    $('previous').disabled = page <= 1; $('next').disabled = page >= pages;
+    globalThis.TableState?.done('ap-rows');
+    TablePagination.render('ap-pagination', page, pageSize, filtered.length, target => { page = target; render(); });
+
   }
   async function load() {
     $('retry').hidden = true;
+    globalThis.TableState?.loading('ap-rows');
     try { rows = await request('/api/ap'); renderHostPicker(); render(); }
-    catch (error) { $('state').textContent = error.message; $('retry').hidden = false; }
+    catch (error) { globalThis.TableState?.error('ap-rows', error.message); $('retry').hidden = false; }
   }
   function feedback(message, pending = false) {
     $('import-state').textContent = message;
@@ -215,8 +216,6 @@
     }
   }
   updateSort();
-  $('previous').addEventListener('click', () => { page--; render(); });
-  $('next').addEventListener('click', () => { page++; render(); });
   $('retry').addEventListener('click', load);
   load();
 })();

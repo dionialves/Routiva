@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -34,6 +35,7 @@ async function surface(respond, saved) {
   };
   context.window = context;
   vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
+  installPagination(context, elements, {'groups-pagination': ['grupos', 'groups-previous', 'groups-page-status', 'groups-next']});
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/availability-view.js'), 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../main/resources/static/diagnostics-groups.js'), 'utf8'), context);
   await tick();
@@ -66,10 +68,10 @@ test('uses server pagination, preserves filters on refresh and resets page on so
 
 test('empty results and unavailable metrics do not show fictitious zeros', async () => {
   const empty = await surface(() => ({ ...response([]), pages: 1 }));
-  assert.equal(empty.elements['groups-empty'].hidden, false);
+  assert.equal(empty.rows().length, 0);
   assert.equal(empty.elements['groups-previous'].disabled, true);
   assert.equal(empty.elements['groups-next'].disabled, true);
-  assert.match(empty.elements['groups-empty'].textContent, /Nenhum grupo encontrado/);
+  assert.equal(empty.elements['groups-page-status'].textContent, 'Exibindo 0 de 0 registros');
   const ui = await surface(() => response([{ ...row, metrics: {}, incidents: null, severities: {}, status: 'SEM_DADOS' }]));
   assert.equal(ui.rows()[0].children[2].children[0].children[0].textContent, '—');
   assert.equal(ui.rows()[0].children[6].children[0].textContent, '—');

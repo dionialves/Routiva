@@ -48,26 +48,13 @@
     $('diagnostic-retry').hidden = !error;
     $('diagnostic-feedback-icon').hidden = !error;
   }
-  function skeleton() {
-    const fragment = document.createDocumentFragment();
-    for (let i = 0; i < 6; i++) {
-      const tr = document.createElement('tr');
-      tr.className = 'group-skeleton';
-      tr.setAttribute('aria-hidden', 'true');
-      for (let j = 0; j < 8; j++) {
-        const td = cell(tr, ''), span = document.createElement('span');
-        td.append(span);
-      }
-      fragment.append(tr);
-    }
-    $('group-rows').replaceChildren(fragment);
-  }
   function render(data) {
     const fragment = document.createDocumentFragment();
     const range = data.from && data.to ? `${new Date(data.from).toLocaleString('pt-BR')} – ${new Date(data.to).toLocaleString('pt-BR')}` : 'Sem medições';
     for (const row of data.rows) {
       const tr = document.createElement('tr');
       const name = cell(tr, '', true), link = document.createElement('a');
+      link.className = 'system-table-link';
       link.href = `/diagnostico/grupos/${encodeURIComponent(row.id)}?minutes=${encodeURIComponent($('group-period').value)}`;
       link.textContent = row.name;
       link.setAttribute('aria-label', `Ver diagnóstico de ${row.name}`);
@@ -129,11 +116,7 @@
     }
     $('group-rows').replaceChildren(fragment);
     page = data.number;
-    $('groups-empty').hidden = data.total !== 0;
-    $('groups-empty').textContent = 'Nenhum grupo encontrado para os filtros selecionados.';
-    $('groups-page-status').textContent = `Exibindo ${data.total ? (page - 1) * 20 + 1 : 0}–${Math.min(page * 20, data.total)} de ${data.total} grupos`;
-    $('groups-previous').disabled = page <= 1;
-    $('groups-next').disabled = page >= data.pages;
+    TablePagination.render('groups-pagination', page, 20, data.total, target => { page = target; load(); });
     feedback(data.warning || '');
   }
   async function load(initial = false) {
@@ -144,7 +127,7 @@
     const timeout = setTimeout(() => requestController.abort(), 15000);
     $('diagnostic-groups').setAttribute('aria-busy', 'true');
     feedback('');
-    if (initial) skeleton();
+    globalThis.TableState?.loading('group-rows');
     const params = new URLSearchParams({ minutes: $('group-period').value || '1440', groupId: [...group.options].filter(option => option.selected).map(option => option.value).join(','), status: $('group-status').value, sort, direction, page });
     try {
       const response = await fetch(`/api/diagnostics/group-indicators?${params}`, { cache: 'no-store', signal: controller.signal });
@@ -152,11 +135,13 @@
       const data = await response.json();
       if (request === version) {
         render(data);
+        globalThis.TableState?.done('group-rows');
         $('groups-updated').textContent = `Última atualização: ${new Date().toLocaleString('pt-BR', {timeZone: 'America/Sao_Paulo'})}`;
         $('groups-updated').dataset.state = data.warning ? 'partial' : 'success';
       }
     } catch (error) {
       if (request === version) {
+        globalThis.TableState?.error('group-rows', error.message);
         $('groups-updated').dataset.state = 'error';
         if (initial) {
           $('group-rows').replaceChildren();
@@ -177,8 +162,6 @@
   $('group-status').addEventListener('change', reset);
   $('group-period').addEventListener('change', reset);
   $('diagnostic-retry').addEventListener('click', () => load());
-  $('groups-previous').addEventListener('click', () => { page--; load(); });
-  $('groups-next').addEventListener('click', () => { page++; load(); });
   document.querySelectorAll('[data-group-sort]').forEach(button => button.addEventListener('click', () => {
     const key = button.dataset.groupSort;
     direction = sort === key && direction === 'asc' ? 'desc' : 'asc'; sort = key;

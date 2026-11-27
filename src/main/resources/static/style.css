@@ -1,6 +1,7 @@
 @import url("/design-tokens.css?v=20261126-equipment-modal");
 @import url("/modal-tabs.css?v=20261121-grid-height");
-@import url("/pagination.css");
+@import url("/pagination.css?v=20261127-table-states");
+@import url("/data-table.css?v=20261127-compact-heading");
 @import url("/signal-indicators.css");
 
 * {
@@ -378,40 +379,6 @@ footer time {
   }
 }
 
-.table-scroll {
-  overflow-x: auto;
-  max-width: 100%;
-  border: 1px solid #213343;
-  border-radius: 12px;
-  background: #101f2d;
-}
-.table-scroll:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 3px;
-}
-.hosts-table {
-  width: 100%;
-  min-width: 1180px;
-  border-collapse: collapse;
-  text-align: left;
-  font-size: 13px;
-}
-.hosts-table thead {
-  background: #132332;
-}
-.hosts-table th,
-.hosts-table td {
-  padding: 16px 12px;
-  vertical-align: middle;
-  border-bottom: 1px solid #213343;
-}
-.hosts-table thead th {
-  font-weight: 500;
-  color: #a7b5ca;
-  font-size: 11px;
-  white-space: normal;
-  min-width: 100px;
-}
 .hosts-table thead small {
   display: block;
   margin-top: 4px;
@@ -441,13 +408,6 @@ footer time {
 }
 .host-row:hover {
   background: #142d40;
-}
-.hosts-table tbody th,
-.hosts-table tbody td {
-  white-space: nowrap;
-}
-.hosts-table tbody tr:last-child > * {
-  border-bottom: 0;
 }
 .host-ip,
 .metric,
@@ -763,10 +723,6 @@ h2 { font-size: 18px; font-weight: 600; }
 .status { background: #0e1e2c; border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-size: 11px; }
 .section-title { margin-top: 12px; }
 .section-title span { font-size: 12px; }
-.table-scroll { border-radius: 8px; border-color: var(--border); background: linear-gradient(120deg, #102130, #0d1b28); }
-.hosts-table { min-width: 1080px; font-size: 12px; }
-.hosts-table thead { background: #142636; }
-.hosts-table th, .hosts-table td { padding: 17px 14px; border-bottom-color: #1d3040; }
 .host-row .host-name { border-left: 0; min-width: 220px; font-weight: 500; }
 .host-name a { color: #71d7ff; text-decoration: none; }
 .host-name a:hover { text-decoration: underline; }

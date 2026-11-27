@@ -4,9 +4,9 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <th:block th:replace="~{shell :: security}"></th:block>
   <title>Usuários • TraceOne</title><link rel="icon" href="/favicon.svg">
-  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css">
-  <th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/users.css?v=20261124-shared-modal-frame">
-  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/users.js?v=3" defer></script>
+  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261127-table-states">
+  <th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/users.css?v=20261127-table-review">
+  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/users.js?v=20261127-table-states" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('users')}"></aside>
@@ -18,9 +18,9 @@
   <section class="card query-filter-bar" aria-label="Filtros de usuários"><div class="query-filter-row">
     <label class="query-filter-field"><span class="query-filter-label"><svg th:replace="~{shell :: icon('search')}"></svg>Nome</span><input id="user-search" type="search" placeholder="Buscar usuário por nome…" autocomplete="off"></label>
   </div></section>
-  <section class="card availability-host-section" aria-labelledby="users-title"><h2 id="users-title">Usuários cadastrados</h2>
-    <p id="users-state" role="status" aria-live="polite">Carregando usuários…</p><button id="users-retry" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg><span>Tentar novamente</span></button>
-    <div th:replace="~{design-system :: dataTable('Usuários cadastrados', ~{users :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col">Nome</th><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Situação da senha</th><th scope="col">Último acesso</th></tr></thead><tbody id="users-rows"></tbody></th:block></div>
+  <section class="card availability-host-section" aria-labelledby="users-title"><div th:replace="~{design-system :: tableHeading('users-title', 'Usuários cadastrados', 'settings', 'users-rows')}"></div>
+    <button id="users-retry" type="button" class="system-button" hidden><svg th:replace="~{shell :: icon('refresh')}"></svg><span>Tentar novamente</span></button>
+    <div th:replace="~{design-system :: dataTable('Usuários cadastrados', ~{users :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col">Nome</th><th scope="col">Usuário</th><th scope="col">Perfil</th><th scope="col">Situação da senha</th><th scope="col">Último acesso</th></tr></thead><tbody id="users-rows"></tbody></th:block></div><nav th:replace="~{design-system :: tablePagination('Paginação dos usuários', 'users-pagination', 'usuários', 'users-rows', 50)}"></nav>
   </section>
 </main></div>
 <dialog th:replace="~{design-system :: formDialog('user-dialog', 'user-dialog-title', null, ~{users :: user-dialog-content})}"><th:block th:fragment="user-dialog-content">

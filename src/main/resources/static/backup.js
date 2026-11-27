@@ -93,12 +93,8 @@
       cell(row, date.format(entry.createdAt));
       cell(row, entry.filename);
     }
-    $('backup-empty').textContent = 'Nenhum backup encontrado.';
-    $('backup-empty').hidden = filtered.length > 0;
-    $('backup-prev').disabled = page === 0;
-    $('backup-next').disabled = start + pageSize >= filtered.length;
-    $('backup-count').textContent =
-      `Exibindo ${filtered.length ? start + 1 : 0}–${Math.min(start + pageSize, filtered.length)} de ${filtered.length} registros`;
+    globalThis.TableState?.done('backup-rows');
+    TablePagination.render('backup-pagination', page + 1, pageSize, filtered.length, target => { page = target - 1; renderEntries(); });
   }
 
   function filterSelection(kind) {
@@ -137,14 +133,20 @@
   }
 
   async function loadEntries() {
-    const [history, inventory] = await Promise.all([
-      request().then(response => response.json()),
-      request('/hosts').then(response => response.json()).catch(() => null),
-    ]);
-    entries = history;
-    if (inventory) historyInventory = new Map(inventory.map(host => [host.id, host]));
-    setupHistoryFilters();
-    renderEntries();
+    globalThis.TableState?.loading('backup-rows');
+    try {
+      const [history, inventory] = await Promise.all([
+        request().then(response => response.json()),
+        request('/hosts').then(response => response.json()).catch(() => null),
+      ]);
+      entries = history;
+      if (inventory) historyInventory = new Map(inventory.map(host => [host.id, host]));
+      setupHistoryFilters();
+      renderEntries();
+    } catch (error) {
+      globalThis.TableState?.error('backup-rows', error.message);
+      throw error;
+    }
   }
 
   async function openPreview(entry) {
@@ -359,8 +361,6 @@
       await loadEntries();
     });
   };
-  $('backup-prev').onclick = () => { page--; renderEntries(); };
-  $('backup-next').onclick = () => { page++; renderEntries(); };
-  loadEntries().catch(error => { $('backup-empty').textContent = error.message; });
+  loadEntries().catch(() => {});
   poll();
 })();

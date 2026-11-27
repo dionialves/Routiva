@@ -11,12 +11,12 @@
   <th:block th:replace="~{design-system :: filters}"></th:block>
   <th:block th:replace="~{design-system :: picker}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
-  <link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
+  <link rel="stylesheet" href="/availability.css?v=20261127-table-states">
   <link rel="stylesheet" href="/backup.css?v=20261126-host-backup">
   <script src="/shell.js" defer></script>
   <script src="/multi-picker.js" defer></script>
   <script src="/group-picker.js" defer></script>
-  <script src="/backup.js?v=20261127-backup-history" defer></script>
+  <script src="/backup.js?v=20261127-table-states" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('backup')}"></aside>
@@ -39,20 +39,16 @@
         <div th:replace="~{multi-picker :: checklist('backup-history-host', 'Host', 'server', 'Todos os hosts', 'Pesquisar host')}"></div>
       </div>
     </section>
-    <section class="card availability-host-section system-table-compact" aria-labelledby="backup-history-title">
-      <h2 id="backup-history-title">Histórico de backups</h2>
-      <p id="backup-empty" role="status">Carregando backups…</p>
+    <section class="card availability-host-section" aria-labelledby="backup-history-title">
+      <div th:replace="~{design-system :: tableHeading('backup-history-title', 'Histórico de backups', 'download', 'backup-rows')}"></div>
+
       <div th:replace="~{design-system :: dataTable('Backups realizados', ~{backup :: history})}">
         <th:block th:fragment="history">
           <thead><tr><th scope="col">Host</th><th scope="col">Fabricante</th><th scope="col">Data do backup</th><th scope="col">Arquivo</th></tr></thead>
           <tbody id="backup-rows"></tbody>
         </th:block>
       </div>
-      <nav id="backup-pagination" class="system-pagination" aria-label="Paginação dos backups">
-        <button id="backup-prev" class="system-button" type="button" disabled><svg th:replace="~{shell :: icon('chevron-left')}"></svg>Anterior</button>
-        <span id="backup-count" role="status">Exibindo 0–0 de 0 registros</span>
-        <button id="backup-next" class="system-button" type="button" disabled><svg th:replace="~{shell :: icon('chevron-right')}"></svg>Próxima</button>
-      </nav>
+      <nav th:replace="~{design-system :: tablePagination('Paginação dos backups', 'backup-pagination', 'registros', 'backup-rows', null)}"></nav>
     </section>
   </main>
 </div>

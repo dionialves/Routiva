@@ -4,9 +4,9 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mapas de rede • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
+  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/availability.css?v=20261127-table-states">
   <th:block th:replace="~{design-system :: picker}"></th:block>
-  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261125-compact-favorites"><script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261125-menu-hover" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261125-pop" defer></script><script src="/map-links.js?v=20261124-line-appearance" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261125-capacity-source" defer></script><script src="/map-connection-tooltip.js?v=20261125-capacity-source" defer></script><script src="/map-element-controls.js?v=20261125-scale-indicator" defer></script><script src="/group-link-interfaces.js?v=20261120-progressive-editor" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261125-disabled-submap" defer></script><script src="/maps.js?v=20261125-capacity-source" defer></script>
+  <th:block th:replace="~{design-system :: dialogStyles}"></th:block><link rel="stylesheet" href="/single-picker.css?v=20261117-icon-picker"><link rel="stylesheet" href="/maps.css?v=20261127-table-states"><script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/group-picker.js?v=20261120-disabled-options" defer></script><script src="/pop-summary.js?v=20261127-table-states" defer></script><script src="/map-overview.js?v=20261115-present-states" defer></script><script src="/map-switch.js?v=20261125-pop" defer></script><script src="/map-links.js?v=20261124-line-appearance" defer></script><script src="/single-picker.js?v=20261117-icon-categories" defer></script><script src="/map-traffic.js?v=20261125-capacity-source" defer></script><script src="/map-connection-tooltip.js?v=20261125-capacity-source" defer></script><script src="/map-element-controls.js?v=20261125-scale-indicator" defer></script><script src="/group-link-interfaces.js?v=20261127-table-states" defer></script><link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261125-disabled-submap" defer></script><script src="/maps.js?v=20261127-table-states" defer></script>
   <th:block th:replace="~{design-system :: filters}"></th:block>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{host-dialog :: resources}"></th:block></head>
 <body class="availability-dashboard">
@@ -23,16 +23,14 @@
 
       </div>
     </section>
-    <section class="card availability-host-section system-table-compact" aria-labelledby="library-title">
-      <div class="hosts-toolbar"><h2 id="library-title">Mapas cadastrados</h2></div>
+    <section class="card availability-host-section" aria-labelledby="library-title">
+      <div th:replace="~{design-system :: tableHeading('library-title', 'Mapas cadastrados', 'map', 'maps')}"></div>
       <div th:replace="~{design-system :: dataTable('Mapas cadastrados', ~{maps :: listSections})}"><th:block th:fragment="listSections">
         <thead><tr><th scope="col" class="map-favorite-cell" aria-label="Favoritos"></th><th scope="col">Nome do mapa</th><th scope="col">Elementos</th><th scope="col">Conexões</th><th scope="col">Atualizado em</th><th scope="col">Tipo</th></tr></thead>
         <tbody id="maps"></tbody>
       </th:block></div>
-      <p id="maps-empty" hidden>Nenhum mapa encontrado.</p>
-      <nav class="pagination system-pagination" aria-label="Paginação dos mapas"><span id="map-count" role="status"></span>
-        <button id="previous" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-left"></use></svg>Anterior</button><button id="next" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#chevron-right"></use></svg>Próxima</button>
-      </nav>
+
+      <nav th:replace="~{design-system :: tablePagination('Paginação dos mapas', 'map-pagination', 'mapas', 'maps', null)}"></nav>
     </section>
   </section>
   <section id="workspace" class="settings-panel" hidden>
@@ -277,8 +275,8 @@
           <fieldset id="switch-config" hidden>
             <legend class="sr-only">Slots de interfaces</legend>
             <div class="element-slot-table-scroll" role="region" aria-label="Slots de interfaces" tabindex="0">
-              <table class="element-slot-table"><thead><tr><th scope="col">Slot</th><th scope="col">Nome</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col">Portas</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="switch-slots"></tbody></table>
-            </div>
+              <table th:replace="~{design-system :: dataTableContent('element-slot-table', ~{maps :: slotSections})}"><th:block th:fragment="slotSections"><thead><tr><th scope="col">Slot</th><th scope="col">Nome</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col">Portas</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody id="switch-slots"></tbody></th:block></table>
+            </div><nav th:replace="~{design-system :: tablePagination('Paginação dos slots', 'slots-pagination', 'slots', 'switch-slots', 50)}"></nav>
             <p id="interface-load-status" role="status" aria-live="polite"></p>
           </fieldset>
         </section>
@@ -300,7 +298,7 @@
               <button id="group-link-add" type="button" class="system-button system-button-primary" disabled><svg class="system-button-icon" aria-hidden="true"><use href="/icons.svg#plus"/></svg>Adicionar interface</button>
             </div>
           </div>
-          <div class="element-slot-table-scroll" role="region" aria-label="Interfaces habilitadas" tabindex="0"><table class="element-slot-table group-link-table"><thead><tr><th scope="col">Host</th><th scope="col">Interface</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col">Ações</th></tr></thead><tbody id="group-link-rows"></tbody></table></div>
+          <div class="element-slot-table-scroll" role="region" aria-label="Interfaces habilitadas" tabindex="0"><table th:replace="~{design-system :: dataTableContent('element-slot-table group-link-table', ~{maps :: groupLinkSections})}"><th:block th:fragment="groupLinkSections"><thead><tr><th scope="col">Host</th><th scope="col">Interface</th><th scope="col">Conector</th><th scope="col">Capacidade</th><th scope="col">Ações</th></tr></thead><tbody id="group-link-rows"></tbody></th:block></table></div><nav th:replace="~{design-system :: tablePagination('Paginação das interfaces habilitadas', 'group-links-pagination', 'interfaces', 'group-link-rows', 50)}"></nav>
           <p>As interfaces habilitadas serão disponibilizadas para criação de enlaces neste elemento.</p>
           <p id="group-link-status" role="status" aria-live="polite"></p>
         </section>
@@ -327,4 +325,13 @@
       </footer>
     </form>
   </th:block></dialog>
+<template id="map-host-incidents-table">
+  <div th:replace="~{design-system :: dataTableRegion('Últimos 5 incidentes', ~{maps :: hostIncidentSections}, 'host-incident-table', 'host-incident-scroll', null, false)}">
+    <th:block th:fragment="hostIncidentSections">
+      <thead><tr><th scope="col">Data / Hora</th><th scope="col">Severidade</th><th scope="col">Incidente</th><th scope="col">Status</th></tr></thead>
+      <tbody id="map-host-incidents-rows"></tbody>
+    </th:block>
+  </div>
+  <nav th:replace="~{design-system :: tablePagination('Paginação dos incidentes do host', 'map-host-incidents-pagination', 'incidentes', 'map-host-incidents-rows', null)}"></nav>
+</template>
 </main></div><th:block th:replace="~{host-dialog :: dialogs}"></th:block></body></html>

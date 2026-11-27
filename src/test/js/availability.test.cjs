@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -24,6 +25,7 @@ function surface(search = '') {
     setTimeout(fn, ms) { timers.set(++serial, {fn, ms}); return serial; }, clearTimeout(id) { timers.delete(id); },
     fetch(url, options) { return new Promise((resolve, reject) => {requests.push({url, resolve, reject, options});}); }
   };
+  installPagination(context, elements, {'availability-pagination': ['hosts', 'previous', 'page-status', 'next']});
   context.window=context;vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../../main/resources/static/availability-view.js'),'utf8'),context);
   vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/performance-chart.js', 'utf8'), context);

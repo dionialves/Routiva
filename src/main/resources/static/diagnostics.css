@@ -3,9 +3,6 @@
 
 .diagnostic-groups-table th:first-child { width: 65%; }
 .availability-page .diagnostic-groups-table tr > :last-child { text-align:left; }
-.availability-page .diagnostic-groups-table tbody th a,
-.availability-page .diagnostic-groups-table tbody th a:visited { color:#00d3fd; text-decoration:none; }
-.availability-page .diagnostic-groups-table tbody th a:hover { color:#00d3fd; text-decoration:underline; }
 
 /* Diagnostics uses the shared shell, report cards and SVG chart primitives. */
 .diagnostics-dashboard { --diagnostic-green:#10b981; --diagnostic-cyan:#06b6d4; }
@@ -53,15 +50,12 @@
 .host-summary #incident-count:hover,
 .host-summary #incident-count:focus-visible { text-decoration:underline; text-underline-offset:3px; }
 
-.diagnostics-dashboard .diagnostic-hosts-table { table-layout:auto; min-width:1050px; font-size:13px; }
-.diagnostics-dashboard .diagnostic-hosts-table thead th { width:auto; padding:12px 10px; background:#102a3d; color:#c1d3e0; font-size:12px; }
+.diagnostics-dashboard .diagnostic-hosts-table { --data-table-min-width:1050px; }
 .diagnostics-dashboard .diagnostic-hosts-table th:first-child { min-width:240px; }
-.diagnostics-dashboard .diagnostic-hosts-table tbody th,.diagnostics-dashboard .diagnostic-hosts-table tbody td { height:44px; padding:9px 10px; border-bottom:1px solid #193647; }
-.diagnostics-dashboard .diagnostic-hosts-table tbody th { color:#f1f5f9; font-weight:600; }
+.diagnostic-hosts-table :is(th, td):nth-child(4) { width:240px; max-width:240px; }
+.diagnostic-hosts-table td:nth-child(4) { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .diagnostics-dashboard .diagnostic-hosts-table tbody td:nth-child(3),.diagnostics-dashboard .diagnostic-hosts-table tbody td:nth-child(4) { color:#94a3b8; }
 .diagnostics-dashboard .diagnostic-hosts-table tbody td:nth-child(n+5),.diagnostics-dashboard .diagnostic-hosts-table thead th:nth-child(n+5) { text-align:right; font-variant-numeric:tabular-nums; }
-.diagnostics-dashboard .diagnostic-hosts-table tbody tr { transition:background .18s; }
-.diagnostics-dashboard .diagnostic-hosts-table tbody tr:hover { background:#102a3d80; }
 .host-connectivity { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:10px; background:#64748b; }
 .host-connectivity[data-state=up] { background:#10b981; }
 .host-connectivity[data-state=down] { background:#f43f5e; }
@@ -125,27 +119,19 @@
 .group-filters .group-period { flex:0 1 230px; }
 .group-period select { width:100%; }
 #groups-refresh { display:grid; place-items:center; width:36px; height:36px; padding:8px; }
-.diagnostics-dashboard .diagnostic-groups-table { min-width:1100px; table-layout:auto; font-size:12px; }
+.diagnostics-dashboard .diagnostic-groups-table { --data-table-min-width:1100px; }
 .diagnostics-dashboard .diagnostic-groups-table th:first-child { width:auto; min-width:170px; }
-.diagnostic-groups-table thead th { background:#102a3d; padding:12px 10px; }
-.diagnostic-groups-table th button { display:inline-flex; align-items:center; gap:5px; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-align:inherit; cursor:pointer; }
-.diagnostic-groups-table th button svg { width:13px; height:13px; color:#7b9aad; }
-.diagnostic-groups-table tbody td,.diagnostic-groups-table tbody th { padding:14px 10px; height:46px; border-bottom:1px solid #193647; white-space:nowrap; }
 .diagnostic-groups-table td:nth-child(n+2):nth-child(-n+7),.diagnostic-groups-table thead th:nth-child(n+2):nth-child(-n+7) { text-align:right; font-variant-numeric:tabular-nums; }
 .availability-page .diagnostic-groups-table tbody td:nth-child(7),
 .availability-page .diagnostic-groups-table thead th:nth-child(7) { text-align:center; }
 .diagnostic-groups-table tbody th a { display:inline-block; }
-.diagnostic-groups-table .diagnostic-badge { border-radius:5px; min-width:28px; padding:3px 7px; }
-.group-skeleton span { display:block; height:12px; min-width:40px; background:#1d3b4e; border-radius:4px; animation:system-pulse 1.2s ease-in-out infinite alternate; }
+.diagnostic-groups-table .diagnostic-badge { border-radius:5px; min-width:28px; padding:0 7px; }
 #groups-refresh.refreshing svg { animation:system-spin 1s linear infinite; }
-#diagnostic-groups .pagination { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; font-size:12px; }
-#diagnostic-groups .pagination button { font-size:12px; }
-@media(prefers-reduced-motion:reduce) { .group-skeleton span,#groups-refresh.refreshing svg { animation:none; } }
+@media(prefers-reduced-motion:reduce) { #groups-refresh.refreshing svg { animation:none; } }
 @media(max-width:650px) { .group-filters .host-search { flex-basis:100%; } .group-filters .group-period { flex:1; } #groups-page-status { text-align:center; } }
 .availability-page .diagnostic-groups-table thead th:nth-child(n) { width:auto; }
 .group-filters select { color:#c1d3e0; background:#0b202e; border:1px solid #254052; border-radius:6px; padding:7px 10px; font-family:inherit; color-scheme:dark; }
 .group-filters select:focus-visible { outline:2px solid #06b6d4; outline-offset:2px; }
-#diagnostic-groups .pagination { border:0; padding:0; background:transparent; }
 
 .diagnostic-groups-table .diagnostic-incidents { display:flex; flex-flow:row nowrap; align-items:center; justify-content:center; gap:6px; direction:ltr; }
 
@@ -160,8 +146,6 @@ a.diagnostic-badge:hover { text-decoration: underline; }
 .diagnostics-dashboard .diagnostic-group-filters { padding:16px 18px; margin-bottom:24px; }
 .diagnostic-group-filters .group-filters { margin-bottom:0; }
 
-.groups-results-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:14px; }
-.groups-results-heading h2 { margin:0; font-size:17px; }
 #groups-updated { margin:0; color:#94a3b8; font-size:12px; }
 #groups-updated::before { content:''; display:inline-block; width:9px; height:9px; margin-right:9px; border-radius:50%; background:#71869b; }
 #groups-updated[data-state=success]::before { background:#0ed3a0; box-shadow:0 0 0 5px #0ed3a015; }

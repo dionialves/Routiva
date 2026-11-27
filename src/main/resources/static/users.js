@@ -29,12 +29,13 @@
       }
       return row;
     }));
-    $('users-state').textContent = !users.length ? 'Nenhum usuário cadastrado.' : !rows.length ? 'Nenhum usuário encontrado.' : `${rows.length} usuário(s).`;
+    globalThis.TableState?.done('users-rows');
   }
   async function load() {
+    globalThis.TableState?.loading('users-rows');
     $('users-retry').hidden = true;
     try { users = await request(''); render(); }
-    catch (error) { $('users-state').textContent = error.message; $('users-retry').hidden = false; }
+    catch (error) { globalThis.TableState?.error('users-rows', error.message); $('users-retry').hidden = false; }
   }
   function open(user, trigger) {
     current = user; opener = trigger; form.reset();
@@ -82,7 +83,7 @@
     $('user-code-panel').hidden = true;
     dialog.classList.remove('user-code-visible');
   });
-  $('user-search').addEventListener('input', render); $('users-retry').addEventListener('click', load);
+  $('user-search').addEventListener('input', () => { TablePagination.reset('users-pagination'); render(); }); $('users-retry').addEventListener('click', load);
   $('user-reset').addEventListener('click', () => { $('user-reset-confirm').hidden = false; $('user-reset-confirm-button').focus(); });
   $('user-reset-cancel').addEventListener('click', () => { $('user-reset-confirm').hidden = true; $('user-reset').focus(); });
   form.addEventListener('submit', async event => {

@@ -166,16 +166,14 @@
       button.closest('th').setAttribute('aria-sort', button.dataset.hostSort === sortKey
         ? (direction === 1 ? 'ascending' : 'descending') : 'none');
     });
-    $('hosts-state').textContent = !hosts.length ? 'Nenhum host disponível para edição com as permissões da integração.'
-      : !matches.length ? 'Nenhum host encontrado.' : 'Consulte e gerencie os hosts cadastrados.';
-    $('hosts-range').textContent = `Exibindo ${matches.length ? start + 1 : 0}–${start + visible.length} de ${matches.length} registros`;
-    $('hosts-prev').disabled = page === 0; $('hosts-next').disabled = start + 50 >= matches.length;
+    globalThis.TableState?.done('hosts-rows');
+    TablePagination.render('hosts-pagination', page + 1, 50, matches.length, target => { page = target - 1; render(); });
   }
   async function load() {
     if (!hasList) return;
     if (loading) return;
     loading = true; $('host-new').disabled = true;
-    $('hosts-state').textContent = 'Carregando hosts…';
+    globalThis.TableState?.loading('hosts-rows');
     try {
       const [rows, choices] = await Promise.all([request(), request('/options')]);
       hosts = rows; options = choices; setupFilters(); render(); $('host-new').disabled = false;
@@ -184,7 +182,7 @@
         const host = hosts.find(h => h.id === wanted);
         if (host) { open(host, $('host-new')); tab(new URLSearchParams(location.search).get('tab') === 'general' ? 'general' : 'auth'); history.replaceState(null, '', location.pathname); }
       }
-    } catch (error) { $('hosts-state').textContent = error.message; }
+    } catch (error) { globalThis.TableState?.error('hosts-rows', error.message); }
     finally { loading = false; }
   }
   function setupFilters() {
@@ -530,8 +528,6 @@
   });
   $('host-search')?.addEventListener('input', filtersChanged);
   $('host-filter-connection')?.addEventListener('change', filtersChanged);
-  $('hosts-prev')?.addEventListener('click', () => { page--; render(); });
-  $('hosts-next')?.addEventListener('click', () => { page++; render(); });
   field('useIp').addEventListener('change', endpointRequired);
   form.querySelectorAll('[data-host-endpoint]').forEach(button => {
     button.addEventListener('click', () => {
@@ -606,8 +602,9 @@
   });
   $('host-sync')?.addEventListener('click', async () => {
     $('host-sync').disabled = true;
+    globalThis.TableState?.loading('hosts-rows');
     try { await request('/synchronize', 'POST'); await load(); }
-    catch (error) { $('hosts-state').textContent = error.message; }
+    catch (error) { globalThis.TableState?.error('hosts-rows', error.message); }
     finally { $('host-sync').disabled = false; }
   });
   window.HostConfiguration = {

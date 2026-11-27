@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { describe, date, cronFrom, cronValues, states, exportText } = require('../../main/resources/static/task-scheduler.js');
@@ -73,6 +74,7 @@ async function schedulerHarness({ empty = false } = {}) {
       return { ok: true, headers: { get: () => 'application/json' }, json: async () => data };
     },
   };
+  installPagination(context, nodes, {'schedule-pagination': [], 'history-pagination': ['registros','history-previous','history-page','history-next'], 'logs-pagination': ['registros','logs-previous','logs-page','logs-next']});
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/task-scheduler.js', 'utf8'), context);
   await flush();
   return { nodes, fields, requests, defer: fn => { deferred = fn; }, setSchedules: values => { fixtureSchedules = values; }, schedule };

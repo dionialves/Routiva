@@ -1,3 +1,4 @@
+const { install: installPagination, pager } = require('./support/table-pagination.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -25,6 +26,8 @@ async function surface(respond, options = {}) {
     querySelector() { return this.p ||= new Element(); }
   }
   const elements = new Proxy({}, { get: (obj, id) => obj[id] ||= new Element() });
+  elements['incident-pagination-template'].content = { firstElementChild: { cloneNode: () => pager('incidentes') } };
+  elements['incident-trigger-pagination'] = pager();
   const sorts = ['date', 'duration'].map(key => { const el = new Element(); el.dataset.incidentSort = key; return el; });
   const fields = new Map([['groupId', 'g'], ['hostId', ''], ['severity', ''], ['q', '']]);
   const severityOptions = ['Não classificada', 'Informação', 'Atenção', 'Média', 'Alta', 'Desastre'].map((label, index) => {
@@ -55,12 +58,19 @@ async function surface(respond, options = {}) {
     addEventListener(key, fn) { events[key] = fn; },
     fetch: async (url, init) => { if (options.api && !url.includes('grouped-data')) return options.api(url, init); const params = init?.method === 'POST' ? new URLSearchParams(JSON.parse(init.body)) : new URL(url, 'http://localhost').searchParams; transports.push({ url, init }); requests.push(params); return respond(params); },
   };
+  const tableStates = {};
+  context.TableState = {
+    loading(id) { tableStates[id] = ['loading']; },
+    done(id) { tableStates[id] = ['done']; },
+    error(id, message) { tableStates[id] = ['error', message]; },
+  };
   context.window = context;
+  installPagination(context);
   vm.runInNewContext(require('node:fs').readFileSync('src/main/resources/static/host-menu.js', 'utf8'), context);
   vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../../main/resources/static/multi-picker.js'), 'utf8'), context);
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/incidents.js', 'utf8'), context);
   await tick();
-  return { elements, fields, requests, sorts, events, timers, intervals, severityOptions, storage, locations, transports, rows: () => elements['incident-rows'].children[0].children };
+  return { elements, tableStates, fields, requests, sorts, events, timers, intervals, severityOptions, storage, locations, transports, rows: () => elements['incident-rows'].children[0].children };
 }
 const row = { eventId: '1', name: '<script>original trigger</script>', severity: 4, severityLabel: 'Alta', timestamp: Date.now() - 87 * 60000, hosts: [{ name: 'Router', ip: '10.0.0.1' }] };
 function response(params) { return { ok: true, json: async () => ({ rows: [row], total: 32, page: Number(params.get('page')), pages: 4, size: 10, updatedAt: Date.now(), warning: '' }) }; }
@@ -77,7 +87,7 @@ test('renders eight columns safely and calculates durations locally', async () =
   assert.equal(cells[4].children[0].textContent, row.name);
   assert.equal(cells[4].children[0].title, row.name);
   assert.equal(cells[5].children[0].children[1].textContent, '1 h 27 min');
-  assert.equal(ui.elements['incident-total'].textContent, '32 encontrados');
+  assert.equal(ui.elements['incident-rows-count'].textContent, '32 encontrados');
   assert.equal(ui.requests[0].get('page'), null);
   ui.intervals[0](); assert.equal(ui.requests.length, 1);
 });
@@ -117,8 +127,8 @@ test('rapid clicks cannot create concurrent requests', async () => {
 
 test('distinguishes an empty filtered result and displays partial-data warnings', async () => {
   const ui = await surface(() => ({ ok: true, json: async () => ({ rows: [], total: 0, page: 1, pages: 1, size: 10, updatedAt: Date.now(), warning: '' }) }));
-  assert.equal(ui.elements['incident-empty'].hidden, false);
-  assert.match(ui.elements['incident-empty'].querySelector('p').textContent, /filtros selecionados/);
+  assert.equal(incidents(ui).length, 0);
+  assert.deepEqual(ui.tableStates['incident-rows'], ['done']);
   assert.equal(ui.elements['incident-warning'].hidden, true);
   const partial = await surface(params => ({ ok: true, json: async () => ({ ...(await response(params).json()), warning: 'Dados parciais' }) }));
   assert.equal(partial.elements['incident-warning'].hidden, false);
@@ -257,6 +267,25 @@ function snapshotResponse(rows) {
 function headers(ui) { return ui.rows().filter(node => node.className === 'incident-period'); }
 function incidents(ui) { return ui.rows().flatMap(node => node.fragment ? node.children : [node]).filter(node => node.dataset.severity != null); }
 
+test('group pagination appears only above 50 incidents in that group', async () => {
+  const clock = fixedClock('2026-01-01T15:00:00Z');
+  const makeRows = (count, period, date) => Array.from({ length: count }, (_, i) => ({
+    ...row, eventId: period + i, timestamp: Date.parse(date) + i,
+  }));
+  const rows = [
+    ...makeRows(50, 'today', '2026-01-01T04:00:00Z'),
+    ...makeRows(51, 'yesterday', '2025-12-31T04:00:00Z'),
+  ];
+  const ui = await surface(() => snapshotResponse(rows), clock);
+  const footers = ui.rows().flatMap(node => node.fragment ? node.children : [node])
+    .filter(node => node.className === 'incident-period-pagination');
+  assert.equal(footers.length, 1);
+  const pager = footers[0].children[0].children[0];
+  assert.equal(pager.children[0].textContent, 'Exibindo 1–50 de 51 incidentes');
+  pager.children[8].emit('click');
+  assert.equal(incidents(ui).length, 51);
+});
+
 test('exclusive calendar groups include all filtered incidents with independent local pagination', async () => {
   const clock = fixedClock('2026-01-01T15:00:00Z');
   const rows = [
@@ -271,7 +300,7 @@ test('exclusive calendar groups include all filtered incidents with independent 
   assert.equal(incidents(ui).length, 101);
   assert.equal(headers(ui)[3].children[0].children[0].attributes['aria-expanded'], 'false');
   const footers = ui.rows().flatMap(node => node.fragment ? node.children : [node]).filter(node => node.className === 'incident-period-pagination');
-  footers[0].children[0].children[0].children[2].emit('click');
+  footers[0].children[0].children[0].children[8].emit('click');
   assert.equal(incidents(ui).length, 87);
   assert.equal(ui.requests.length, 1);
   headers(ui)[3].children[0].children[0].emit('click');
@@ -310,7 +339,7 @@ test('incident name picker supports multiple exact names and updates counts loca
   options[2].children[0].checked = true;
   options[2].children[0].emit('change');
   assert.equal(ui.elements['incident-name-summary'].textContent, '2 incidentes selecionados');
-  assert.equal(ui.elements['incident-total'].textContent, '2 encontrados');
+  assert.equal(ui.elements['incident-rows-count'].textContent, '2 encontrados');
   assert.equal(ui.rows().filter(node => node.dataset.severity != null).length, 2);
   assert.equal(ui.requests.length, 1);
   const saved = JSON.parse(ui.storage.get('routiva.incidents.filters'));
@@ -322,10 +351,10 @@ test('restores incident names with commas and preserves selection through refres
   const ui = await surface(() => ({ ok: true, json: async () => ({ rows: [{ ...row, name }, row], total: 2, updatedAt: Date.now(), warning: '' }) }),
     { search: '', saved: { incidentNames: JSON.stringify([name]) } });
   assert.equal(ui.elements['incident-name-summary'].textContent, name);
-  assert.equal(ui.elements['incident-total'].textContent, '1 encontrados');
+  assert.equal(ui.elements['incident-rows-count'].textContent, '1 encontrado');
   [...ui.timers.values()].find(timer => timer.ms === 60000).fn(); await tick();
   assert.equal(ui.elements['incident-name-summary'].textContent, name);
-  assert.equal(ui.elements['incident-total'].textContent, '1 encontrados');
+  assert.equal(ui.elements['incident-rows-count'].textContent, '1 encontrado');
 });
 
 const details = { eventId: '1', name: 'Link', severity: 4, acknowledged: false, closed: false,
@@ -421,7 +450,6 @@ test('history disclosure expands action details and a long message in place', as
     ? ({ ok: true, json: async () => incidentDetails })
     : response(new URL(url, 'http://localhost').searchParams) });
   ui.rows().find(node => node.dataset.severity != null).children[4].children[0].emit('click'); await tick();
-  assert.equal(ui.elements['incident-history-count'].textContent, '1 registro');
   const rows = ui.elements['incident-history'].children;
   const disclosure = rows[0].children[0].children[0];
   assert.equal(disclosure.attributes['aria-expanded'], 'false');
@@ -488,7 +516,7 @@ test('map event links show only the exact ID, ignore saved filters and survive r
   assert.equal(ui.requests[0].get('groupId'), '');
   assert.equal(ui.requests[0].get('severity'), '');
   assert.equal(ui.rows().filter(node => node.dataset.severity != null).length, 1);
-  assert.equal(ui.elements['incident-total'].textContent, '1 encontrados');
+  assert.equal(ui.elements['incident-rows-count'].textContent, '1 encontrado');
   assert.ok(ui.locations.every(url => url === '/incidentes?eventId=2'));
   [...ui.timers.values()].find(timer => timer.ms === 60000).fn(); await tick();
   assert.equal(ui.rows().filter(node => node.dataset.severity != null).length, 1);
@@ -497,8 +525,9 @@ test('map event links show only the exact ID, ignore saved filters and survive r
 
 test('a missing linked event shows an empty result instead of unrelated incidents', async () => {
   const ui = await surface(response, { search: '?eventId=missing' });
-  assert.equal(ui.elements['incident-empty'].hidden, false);
-  assert.equal(ui.elements['incident-total'].textContent, '0 encontrados');
+  assert.equal(incidents(ui).length, 0);
+  assert.deepEqual(ui.tableStates['incident-rows'], ['done']);
+  assert.equal(ui.elements['incident-rows-count'].textContent, '0 encontrados');
 });
 
 
@@ -552,11 +581,11 @@ test('modal preserves pending changes across tabs and paginates cached trigger e
   assert.equal(occurrenceRequests, 1);
   assert.equal(ui.elements['incident-trigger-rows'].children.length, 10);
   assert.doesNotMatch(ui.elements['incident-trigger-rows'].children[0].children[4].textContent, /Em andamento/);
-  ui.elements['incident-trigger-pagination'].children[2].emit('click');
+  ui.elements['incident-trigger-pagination'].children[8].emit('click');
   assert.equal(ui.elements['incident-trigger-rows'].children.length, 10);
-  assert.equal(ui.elements['incident-trigger-pagination'].children[1].textContent, 'Exibindo 11–20 de 20 registros');
-  assert.equal(ui.elements['incident-trigger-pagination'].children[2].disabled, true);
-  assert.equal(ui.elements['incident-trigger-pagination'].children[0].disabled, false);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[0].textContent, 'Exibindo 11–20 de 20 registros');
+  assert.equal(ui.elements['incident-trigger-pagination'].children[8].disabled, true);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[2].disabled, false);
   ui.elements['incident-tab-update'].emit('click');
   assert.equal(ui.elements['incident-message'].value, 'Análise em andamento');
   assert.equal(ui.elements['incident-new-severity'].value, '2');
@@ -576,7 +605,8 @@ test('trigger history retries a failed request and shows its empty state', async
   ui.elements['incident-tab-trigger'].emit('click'); await tick();
   assert.equal(ui.elements['incident-trigger-retry'].hidden, false);
   ui.elements['incident-trigger-retry'].emit('click'); await tick();
-  assert.equal(ui.elements['incident-trigger-state'].textContent, 'Nenhum evento encontrado.');
+  assert.deepEqual(ui.tableStates['incident-trigger-rows'], ['done']);
+  assert.equal(ui.elements['incident-trigger-rows'].children.length, 0);
   assert.equal(ui.elements['incident-trigger-retry'].hidden, true);
 });
 
@@ -654,13 +684,13 @@ test('trigger history resets its viewport, formats dates to minutes and separate
   assert.equal(rows[1].children[5].textContent, 'Sim');
   assert.equal(rows[2].children[4].textContent, '1 min 23 s');
   const pagination = ui.elements['incident-trigger-pagination'];
-  assert.equal(pagination.children[0].disabled, true);
-  assert.equal(pagination.children[1].textContent, 'Exibindo 1–10 de 20 registros');
-  assert.equal(pagination.children[2].disabled, false);
+  assert.equal(pagination.children[2].disabled, true);
+  assert.equal(pagination.children[0].textContent, 'Exibindo 1–10 de 20 registros');
+  assert.equal(pagination.children[8].disabled, false);
   viewport.scrollTop = 250;
-  pagination.children[2].emit('click');
+  pagination.children[8].emit('click');
   assert.equal(viewport.scrollTop, 0);
-  assert.equal(ui.elements['incident-trigger-pagination'].children[2].disabled, true);
+  assert.equal(ui.elements['incident-trigger-pagination'].children[8].disabled, true);
   ui.elements['incident-tab-summary'].emit('click');
   viewport.scrollTop = 150;
   ui.elements['incident-tab-trigger'].emit('click'); await tick();
@@ -729,16 +759,15 @@ test('active trigger duration refreshes locally without resetting scroll or reso
 });
 
 
-test('update history hides empty table and shows newest updates with message-first columns', async () => {
+test('update history retains the table heading when empty and shows newest updates with message-first columns', async () => {
   let history = [];
   const ui = await surface(response, { api: async () => ({ ok: true, json: async () => ({
     ...details, history,
   }) }) });
   const link = ui.rows().find(node => node.dataset.severity != null).children[4].children[0];
   link.emit('click'); await tick();
-  assert.equal(ui.elements['incident-history-scroll'].hidden, true);
-  assert.equal(ui.elements['incident-history-empty'].hidden, false);
-  assert.equal(ui.elements['incident-history-count'].textContent, '0 registros');
+  assert.equal(ui.elements['incident-history-scroll'].hidden, false);
+  assert.deepEqual(ui.tableStates['incident-history'], ['done']);
   history = [
     { timestamp: Date.parse('2026-11-13T12:00:35Z'), user: 'ana', action: 4, message: 'Primeira mensagem' },
     { timestamp: Date.parse('2026-11-13T12:04:59Z'), user: 'carlos', action: 2, message: 'Reconhecido' },
@@ -746,7 +775,6 @@ test('update history hides empty table and shows newest updates with message-fir
   ui.elements['incident-details-retry'].emit('click'); await tick();
   assert.equal(ui.elements['incident-history-scroll'].hidden, false);
   assert.equal(ui.elements['incident-history-empty'].hidden, true);
-  assert.equal(ui.elements['incident-history-count'].textContent, '2 registros');
   const rows = ui.elements['incident-history'].children;
   assert.equal(rows[0].children[1].textContent, '13/11/2026');
   assert.equal(rows[0].children[2].textContent, 'carlos');
@@ -800,11 +828,13 @@ test('comment preview retries failed reads and displays an empty state', async (
   } });
   const anchor = ui.rows().find(node => node.dataset.severity != null).children[7].children[0];
   anchor.emit('focus'); await tick();
-  assert.match(ui.elements['incident-comments-state'].textContent, /Não foi possível/);
-  assert.equal(ui.elements['incident-comments-table'].hidden, true);
+  assert.equal(ui.tableStates['incident-comments-rows'][0], 'error');
+  assert.match(ui.tableStates['incident-comments-rows'][1], /Não foi possível/);
+  assert.equal(ui.elements['incident-comments-table'].hidden, false);
   anchor.emit('focus'); await tick();
   assert.equal(requests, 2);
-  assert.equal(ui.elements['incident-comments-state'].textContent, 'Nenhum comentário registrado.');
+  assert.deepEqual(ui.tableStates['incident-comments-rows'], ['done']);
+  assert.equal(ui.elements['incident-comments-rows'].children.length, 0);
   assert.notEqual(ui.elements['incident-dialog'].open, true);
 });
 

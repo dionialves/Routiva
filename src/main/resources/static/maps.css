@@ -257,10 +257,6 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #library .map-favorite:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }
 #library .map-favorite:disabled { cursor:default; opacity:.65; }
 
-#library .map-name-link,
-#library .map-name-link:visited { display:inline-block; color:#00d3fd; font-weight:700; text-decoration:none; }
-#library .map-name-link:hover,
-#library .map-name-link:focus-visible { color:#00d3fd; text-decoration:underline; text-underline-offset:3px; }
 
 /* Map viewer chrome. The renderer and editor retain their existing layout. */
 #workspace.viewing { margin:0; padding:0; border:0; background:transparent; }
@@ -480,8 +476,8 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 
 .element-slot-table-scroll { max-height:280px; overflow:auto; margin:12px 0 8px; border:1px solid var(--border); border-radius:6px; }
 .element-slot-table { table-layout:fixed; width:100%; border-collapse:collapse; }
-.element-slot-table :is(th, td) { padding:6px 8px; border-bottom:1px solid var(--border); text-align:left; font-size:12px; }
-.element-slot-table thead th { position:sticky; top:0; z-index:1; background:var(--panel-bg); font-weight:600; }
+.element-slot-table :is(th, td) { padding-inline:8px; }
+.element-slot-table thead th { position:sticky; top:0; z-index:1; background:inherit; }
 .element-slot-table th:first-child { width:46px; text-align:center; }
 .element-slot-table th:nth-child(3) { width:120px; }
 .element-slot-table th:nth-child(4) { width:120px; }
@@ -489,18 +485,16 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .element-slot-table th:last-child { width:48px; }
 .form-dialog .element-slot-table :is(input, select) { box-sizing:border-box; width:100%; min-width:0; height:36px; min-height:36px; padding:6px 8px; border-radius:6px; font-size:13px; }
 .element-slot-table tr:last-child :is(td, th) { border-bottom:0; }
-.element-slot-table .element-slot-empty { color:var(--muted); text-align:center; padding:16px; }
-.element-interface-spinner { display:inline-block; width:22px; height:22px; border:2px solid var(--border); border-top-color:var(--focus); border-radius:50%; animation:system-spin 800ms linear infinite; }
 #interface-load-status { color:var(--muted); font-size:12px; margin:8px 0 0; }
 #interface-load-status:empty { display:none; }
 #interface-load-status[role=alert] { color:var(--error); }
-@media (prefers-reduced-motion:reduce) { .element-interface-spinner { animation:none; } }
 #element-form #port-error { margin:0; font-size:12px; }
 #element-form #port-error:empty { display:none; }
 #switch-config .element-slot-table-scroll { max-height:none; overflow-x:auto; margin:12px 0 0; }
 #switch-config .element-slot-table { min-width:610px; }
-#switch-config th { position:static; background:var(--surface-bg); }
-#switch-config :is(th, td) { padding:4px 6px; }
+#switch-config th { position:static; }
+#switch-config :is(th, td) { padding-inline:6px; }
+#switch-config td { padding-block:4px; }
 #switch-config :is(th, td):first-child { width:6%; text-align:center; }
 #switch-config th:nth-child(3) { width:17%; }
 #switch-config th:nth-child(4) { width:18%; }
@@ -715,10 +709,6 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 #group-link-interfaces .group-link-table th:last-child { width:120px; text-align:right; }
 .group-link-table td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .group-link-table td:last-child { text-align:right; }
-#group-link-interfaces .group-link-empty { padding:24px 12px; text-align:center; white-space:normal; }
-.group-link-empty svg { display:block; margin:0 auto 12px; color:var(--muted); }
-.group-link-empty strong, .group-link-empty span { display:block; margin-top:8px; }
-.group-link-empty span { color:var(--muted); }
 #node-preview { border:1px solid var(--border); border-radius:8px; background:var(--panel-bg); }
 @media(max-width:700px) {
   #group-link-interfaces .element-section-heading { flex-direction:column; }
@@ -746,9 +736,8 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .pop-host-summary .host-metric-label { min-height:32px; display:flex; align-items:center; justify-content:center; font-size:12px; text-align:center; }
 .pop-host-summary .host-metric-value { font-size:22px; line-height:1.2; }
 .pop-host-summary h3 { display:flex; align-items:center; gap:8px; padding-top:12px; margin:12px 0 8px; border-top:1px solid var(--border); font-size:13px; }
-.pop-host-summary .host-incident-table { width:100%; table-layout:fixed; border-collapse:collapse; font-size:12px; }
-.pop-host-summary .host-incident-table th { background:transparent; color:var(--muted); font-weight:500; font-size:11px; }
-.pop-host-summary .host-incident-table :is(th, td) { box-sizing:border-box; text-align:left; padding:7px 5px; border-bottom:1px solid color-mix(in srgb, var(--border) 65%, transparent); }
+.pop-host-summary .host-incident-table { --data-table-min-width:0; table-layout:fixed; font-size:12px; }
+.pop-host-summary .host-incident-table :is(th, td) { padding:7px 5px; }
 .pop-host-summary .host-incident-table th:nth-child(1) { width:112px; }
 .pop-host-summary .host-incident-table th:nth-child(2) { width:90px; }
 .pop-host-summary .host-incident-table th:nth-child(3) { width:auto; }
@@ -760,8 +749,8 @@ body:has(#workspace.map-expanded) { overflow:hidden; }
 .pop-host-summary .host-incident-table :is(th, td):last-child { text-align:center; }
 .pop-host-summary .host-all-incidents { display:flex; align-items:center; gap:7px; align-self:flex-start; color:var(--cyan); text-decoration:none; margin-top:9px; font-size:12px; }
 .pop-host-summary .host-all-incidents:hover { text-decoration:underline; }
-.pop-host-summary .host-all-incidents:focus-visible, .pop-host-summary .host-incident-scroll:focus-visible { outline:2px solid var(--focus); outline-offset:3px; border-radius:3px; }
-.pop-host-summary .host-incident-scroll { width:100%; min-width:0; overflow:auto; }
+.pop-host-summary .host-all-incidents:focus-visible { outline:2px solid var(--focus); outline-offset:3px; border-radius:3px; }
+.pop-host-summary .host-incident-scroll { width:100%; min-width:0; border:0; background:transparent; }
 .pop-host-summary > footer { position:static; display:flex; width:auto; justify-content:flex-start; margin-top:12px; padding-top:10px; font-size:11px; }
 .pop-host-summary .pop-updated { font-size:11px; }
 @media (max-width:540px) {

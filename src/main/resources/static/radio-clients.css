@@ -1,10 +1,9 @@
 .radio-clients-page .query-filter-row > .query-filter-field { flex:1 1 420px; max-width:640px; }
-.radio-clients-page .hosts-table { min-width:900px; table-layout:auto; }
-.radio-clients-page .hosts-table :is(th, td) { width:auto; }
-.radio-clients-page .hosts-table thead th:nth-child(n) { width:auto; }
-#radio-rows tr { cursor:pointer; }
+.radio-clients-page { --data-table-min-width:1150px; }
+#radio-history { --data-table-min-width:1180px; }
 #radio-rows tr:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
 #radio-dialog [role=tabpanel]:focus-visible { outline:2px solid var(--focus); outline-offset:3px; }
+#radio-history .hosts-table tbody th small { display:block; max-width:360px; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font-size:11px; font-weight:400; margin-top:5px; }
 #radio-dialog dd { margin:0; overflow-wrap:anywhere; font-weight:600; font-variant-numeric:tabular-nums; }
 #radio-dialog dt { color:var(--muted); }
 .radio-observation { padding:14px 16px; margin:0 0 18px; border:1px solid var(--border); border-radius:8px; background:var(--surface-bg); color:var(--muted); font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
@@ -17,7 +16,6 @@
 #radio-dialog :is(input, select) { color-scheme:dark; }
 #radio-history article { padding:18px; margin-bottom:16px; border:1px solid var(--border); border-radius:8px; background:var(--app-bg); }
 #radio-history article h3 { margin:0 0 12px; font-size:14px; line-height:1.6; overflow-wrap:anywhere; }
-#radio-history nav { display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; align-items:center; margin-top:18px; font-size:12px; color:var(--muted); }
 #radio-dialog-state { color:var(--error); font-size:13px; }
 #radio-dialog :is(#radio-dialog-state, #radio-binding-preview, #radio-history-state):empty { display:none; }
 #radio-dialog .settings-actions { display:flex; margin-top:24px; }
@@ -27,17 +25,10 @@
 }
 
 .radio-clients-page .query-filter-row > .query-filter-field { flex:1 1 240px; max-width:none; }
-.radio-clients-page .system-table-compact { --compact-table-min-width:1150px; }
-#radio-rows tr { cursor:default; }
 :is(#radio-rows, #radio-history-items) [data-connection=normal] { color:var(--success); }
 :is(#radio-rows, #radio-history-items) [data-connection=attention] { color:var(--warning); }
 :is(#radio-rows, #radio-history-items) [data-connection=critical] { color:var(--error); }
 
-#radio-history .table-scroll { max-width:100%; }
-#radio-history .hosts-table { min-width:850px; table-layout:auto; font-size:12px; }
-#radio-history .hosts-table :is(th, td) { padding:10px 14px; width:auto; white-space:nowrap; text-align:left; }
-#radio-history .hosts-table thead th:nth-child(n) { width:auto; }
-#radio-history .hosts-table tbody th small { display:block; max-width:360px; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font-size:11px; font-weight:400; margin-top:5px; }
 
 #radio-dialog #radio-dialog-state.radio-copy-success { color:var(--success); }
 .radio-copy-buffer { position:absolute; inset:0 auto auto 0; width:1px; height:1px; opacity:0; pointer-events:none; }
@@ -45,11 +36,7 @@
 #radio-collection-description { color:var(--muted); font-size:13px; line-height:1.6; }
 #radio-collection-dialog .settings-actions { display:flex; }
 
-.radio-pagination { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:18px; font-size:12px; }
-.radio-pagination > span { text-align:center; }
-@media(max-width:600px) { .radio-pagination { flex-wrap:wrap; } .radio-pagination > span { order:3; flex-basis:100%; } }
 
-#radio-state:empty { display:none; }
 
 /* Compact client analysis: changes stay scoped to this modal. */
 #radio-dialog { --radio-dialog-gutter:24px; padding:20px 0 0; }
@@ -92,12 +79,7 @@
 .radio-property { display:grid; grid-template-columns:minmax(0, 3fr) minmax(0, 7fr); gap:12px; align-items:center; min-height:40px; padding:4px; box-sizing:border-box; font-size:13px; line-height:1.6; }
 .radio-property + .radio-property { border-top:1px solid var(--border); }
 .radio-property dt { overflow-wrap:anywhere; }
-#radio-history .hosts-table { min-width:1180px; }
-#radio-history .hosts-table :is(th, td) { padding:10px 12px; }
-#radio-history .hosts-table thead th { font-size:12px; }
-#radio-history .hosts-table tbody tr:hover { background:var(--hover-bg); }
 #radio-history-items [data-severity="2"] { color:#fb923c; }
-#radio-history .system-pagination { margin-top:14px; }
 @media(max-width:820px) { .radio-summary-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }
 @media(max-width:600px) {
   #radio-dialog { --radio-dialog-gutter:14px; padding-top:16px; }

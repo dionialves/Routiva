@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -23,14 +24,17 @@ async function setup(size = 2) {
   const requests = [];
   const document = { activeElement: null, getElementById: id => elements[id], createElement: () => new Element(),
     querySelector: () => ({ dataset: { configured: 'true' } }), querySelectorAll: () => [], addEventListener: (_, fn) => { ready = fn; } };
-  vm.runInNewContext(fs.readFileSync('src/main/resources/static/zabbix-import-results.js', 'utf8') + '\n' + fs.readFileSync('src/main/resources/static/zabbix-settings.js', 'utf8'), {
+  const source = fs.readFileSync('src/main/resources/static/zabbix-import-results.js', 'utf8') + '\n' + fs.readFileSync('src/main/resources/static/zabbix-settings.js', 'utf8');
+  const context = {
     document, window: { notify() {}, addEventListener() {}, AppIcon: () => new Element() }, URLSearchParams, FormData,
     fetch: async (url, options) => {
       requests.push({ url, options });
       if (!options) return { ok: !fail, json: async () => data };
       return { ok: true, json: async () => ({ selectedHosts: JSON.parse(options.body).hosts, imported: data.hosts, result: { state: 'completed', imported: size, updated: 0, unchanged: 0, ignored: 0, failed: 0 } }) };
     }
-  });
+  };
+  installPagination(context, elements, {'zabbix-host-pagination': ['hosts','previous-page','page-label','next-page'], 'import-pagination': ['registros','import-previous','import-page','import-next']});
+  vm.runInContext(source, context);
   ready(); await new Promise(resolve => setImmediate(resolve));
   return { elements, requests, data, failRefresh: () => { fail = true; } };
 }

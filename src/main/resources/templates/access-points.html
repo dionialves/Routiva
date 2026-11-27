@@ -5,10 +5,10 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Access Point • TraceOne</title>
   <link rel="icon" href="/favicon.svg"><th:block th:replace="~{design-system :: base}"></th:block>
-  <link rel="stylesheet" href="/availability.css"><th:block th:replace="~{design-system :: picker}"></th:block><link rel="stylesheet" href="/access-points.css?v=20261124-ap-import-shared-footer">
+  <link rel="stylesheet" href="/availability.css?v=20261127-table-states"><th:block th:replace="~{design-system :: picker}"></th:block><link rel="stylesheet" href="/access-points.css?v=20261127-table-states">
 
   <link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261124-terminal-access" defer></script>
-  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261121-direct-panel" defer></script>
+  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261127-table-states" defer></script>
 <th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{host-dialog :: resources}"></th:block></head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('ap')}"></aside>
@@ -23,11 +23,11 @@
     </div>
   </section>
   <section class="card availability-host-section" aria-labelledby="ap-title">
-    <h2 id="ap-title">Access Points cadastrados</h2>
-    <p id="ap-state" role="status" aria-live="polite">Carregando Access Points…</p>
+    <div th:replace="~{design-system :: tableHeading('ap-title', 'Access Points cadastrados', 'radio-tower', 'ap-rows')}"></div>
+
     <button id="ap-retry" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>Tentar novamente</button>
     <div th:replace="~{design-system :: dataTable('Access Points cadastrados', ~{access-points :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col" aria-sort="none"><button type="button" id="ap-sort-name">Nome<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-ip">IP<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-manufacturer">Fabricante / Modelo<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-connectedClients">Clientes conectados<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-lastCollectedAt">Última leitura<span data-ap-icon="arrow-up-down"></span></button></th></tr></thead><tbody id="ap-rows"></tbody></th:block></div>
-    <nav class="ap-pagination system-pagination" aria-label="Paginação dos Access Points"><button id="ap-previous" disabled class="system-button"><span data-ap-icon="chevron-left"></span>Anterior</button><span id="ap-page-count">Exibindo 0–0 de 0 APs</span><button id="ap-next" disabled class="system-button"><span data-ap-icon="chevron-right"></span>Próxima</button></nav>
+    <nav th:replace="~{design-system :: tablePagination('Paginação dos Access Points', 'ap-pagination', 'APs', 'ap-rows', null)}"></nav>
   </section>
 </main></div>
 <dialog th:replace="~{design-system :: formDialog('ap-dialog', 'ap-dialog-title', 'ap-dialog-description', ~{access-points :: ap-dialog-modal-content})}"><th:block th:fragment="ap-dialog-modal-content">

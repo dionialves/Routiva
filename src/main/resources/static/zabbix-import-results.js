@@ -69,8 +69,6 @@ class ZabbixImportResults {
     this.$('import-sort').addEventListener('click', () => {
       this.model.descending = !this.model.descending; this.model.page = 0; this.renderTable();
     });
-    this.$('import-previous').addEventListener('click', () => { this.model.page--; this.renderTable(); });
-    this.$('import-next').addEventListener('click', () => { this.model.page++; this.renderTable(); });
     this.$('import-details').addEventListener('click', event => {
       if (event.target === this.$('import-details')) {
         const bounds = event.target.getBoundingClientRect();
@@ -123,7 +121,7 @@ class ZabbixImportResults {
     });
   }
   renderTable() {
-    const { entries, total, pages } = this.model.visible();
+    const { entries, total } = this.model.visible();
     const list = this.$('import-log'); list.replaceChildren();
     const statuses = { error: ['Erro', 'error'], warning: ['Aviso', 'alert'], success: ['Sucesso', 'check-circle'], info: ['Informação', 'info'] };
     entries.forEach(entry => {
@@ -143,15 +141,11 @@ class ZabbixImportResults {
       tr.addEventListener('click', () => this.details(entry));
       list.append(tr);
     });
-    if (!entries.length) {
-      const row = this.node('tr'), cell = this.node('td', this.model.result?.state === 'running'
-        ? 'A execução anterior não teve conclusão confirmada. Salve e importe novamente para tentar concluir.'
-        : 'Nenhum registro corresponde aos filtros. Execuções antigas podem conter apenas os detalhes de erros.');
-      cell.colSpan = 4; cell.className = 'table-empty'; row.append(cell); list.append(row);
-    }
-    this.$('import-page').textContent = `Exibindo ${total ? this.model.page * this.model.pageSize + 1 : 0}–${Math.min((this.model.page + 1) * this.model.pageSize, total)} de ${total} registros`;
-    this.$('import-previous').disabled = this.model.page === 0;
-    this.$('import-next').disabled = this.model.page + 1 >= pages;
+    globalThis.TableState?.done('import-log');
+    TablePagination.render(this.$('import-pagination'), this.model.page + 1, this.model.pageSize, total, target => {
+      this.model.page = target - 1;
+      this.renderTable();
+    });
     this.$('import-sort-heading').setAttribute('aria-sort', this.model.descending ? 'descending' : 'ascending');
   }
   details(entry) {

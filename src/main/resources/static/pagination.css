@@ -1,21 +1,46 @@
-/* Shared pagination: previous / visible range / next. */
-body .system-pagination {
-  display:grid !important;
-  grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr);
+.system-pagination:not([hidden]) {
+  display:flex;
   align-items:center;
-  gap:14px;
-  margin-top:18px;
+  gap:8px;
+  margin:12px 0 0;
+  min-width:0;
+  overflow-x:auto;
+  padding:2px;
+  font:400 12px/1.5 var(--font-ui);
+  color:var(--muted);
+}
+.system-pagination-status {
+  margin-inline: auto 16px;
+  white-space:nowrap;
+}
+.system-pagination-status[hidden] + button { margin-inline-start:auto; }
+.system-pagination button[data-page-action] {
+  display:inline-grid;
+  place-items:center;
+  flex:none;
+  box-sizing:border-box;
+  width:30px;
+  height:30px;
+  min-height:0;
   padding:0;
-  border:0;
-  background:transparent;
-  font:400 12px/20px var(--font-ui);
+  border:1px solid var(--border);
+  border-radius:5px;
+  background:var(--surface-bg);
   color:var(--text);
+  font:inherit;
+  cursor:pointer;
 }
-body .system-pagination > button:first-of-type { grid-column:1; grid-row:1; justify-self:start; }
-body .system-pagination > span { grid-column:2; grid-row:1; text-align:center; color:var(--text); }
-body .system-pagination > button:last-of-type { grid-column:3; grid-row:1; justify-self:end; }
-@media(max-width:600px) {
-  body .system-pagination { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
-  body .system-pagination > span { grid-column:1 / -1; grid-row:2; }
-  body .system-pagination > button:last-of-type { grid-column:2; }
+.system-pagination button[hidden] { display:none; }
+.system-pagination button[data-page-action]:disabled { opacity:.45; cursor:default; }
+.system-pagination button[data-page-action]:hover:not(:disabled) { border-color:var(--focus); }
+.system-pagination button[data-page-action][aria-current=page] {
+  border-color:var(--focus);
+  background:color-mix(in srgb, var(--focus) 14%, var(--surface-bg));
+  color:var(--focus);
+  opacity:1;
 }
+.system-pagination button[data-page-action]:focus-visible { outline:2px solid var(--focus); outline-offset:-3px; }
+.system-pagination button svg { width:14px; height:14px; }
+.system-data-table.paged-table-fixed { table-layout:fixed; }
+.system-data-table.paged-table-fixed :is(th, td) { overflow:hidden; text-overflow:ellipsis; }
+.system-data-table tr[data-pagination-off-page] { display:none; }

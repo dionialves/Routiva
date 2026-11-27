@@ -1,3 +1,4 @@
+const { install: installPagination } = require('./support/table-pagination.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -62,6 +63,7 @@ function harness() {
         headers: { get: () => new Date(next.time).toUTCString() }, json: async () => next.wait ? await next.wait : next.body };
     },
   };
+  installPagination(context, nodes, {'latency-pagination': [], 'latency-final-pagination': []});
   vm.runInNewContext(fs.readFileSync('src/main/resources/static/ap-latency.js', 'utf8'), context);
   return { nodes, queue, timers, requests, async tick(delay) {
     const entry = [...timers].find(([, timer]) => timer.delay === delay);

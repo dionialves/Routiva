@@ -87,13 +87,10 @@
     const td = node('td', text);
     row.append(td); return td;
   }
-  function empty(body, columns, text) {
-    const row = node('tr'), td = cell(row, text); td.colSpan = columns; body.append(row);
-  }
   async function load(silent = false) {
     if (loading) return;
     loading = true;
-    $('schedule-rows').setAttribute('aria-busy', 'true');
+    globalThis.TableState?.loading('schedule-rows');
     try {
       const data = await request('/api');
       schedules = data.schedules; tasks = data.tasks; defaultZone = data.defaultZone;
@@ -119,12 +116,12 @@
         }
         rows.append(row);
       }
-      if (!schedules.length) empty(rows, 6, 'Nenhum agendamento cadastrado.');
-      $('schedule-previous').disabled = schedulePage === 0;
-      $('schedule-next').disabled = (schedulePage + 1) * 25 >= schedules.length;
-      $('schedule-page').textContent = `Exibindo ${schedules.length ? schedulePage * 25 + 1 : 0}–${Math.min((schedulePage + 1) * 25, schedules.length)} de ${schedules.length} registros`;
+      globalThis.TableState?.done('schedule-rows');
+      TablePagination.render('schedule-pagination', schedulePage + 1, 25, schedules.length, target => {
+        if (!loading) { schedulePage = target - 1; return load(); }
+      });
       if (!silent) $('scheduler-feedback').textContent = '';
-    } catch (error) { $('scheduler-feedback').textContent = error.message; }
+    } catch (error) { globalThis.TableState?.error('schedule-rows', error.message); }
     finally { loading = false; $('schedule-rows').removeAttribute('aria-busy'); }
   }
   const executionDialog = $('execution-dialog');
@@ -143,19 +140,13 @@
     label.append(node('span', statusLabel(state, item)));
     return label;
   }
-  function renderPagination(prefix, current, total) {
-    $(prefix + '-previous').disabled = current === 0;
-    $(prefix + '-next').disabled = (current + 1) * historySize >= total;
-    $(prefix + '-page').textContent =
-      `Exibindo ${total ? current * historySize + 1 : 0}–${Math.min((current + 1) * historySize, total)} de ${total} registros`;
-  }
   async function loadHistory() {
     if (!selected || !dialog.open || historyLoading) return;
     const id = selected.id, version = ++historyVersion;
     historyLoading = true;
     const history = $('execution-rows');
     history.setAttribute('aria-busy', 'true');
-    if (!history.children.length) $('history-feedback').textContent = 'Carregando execuções…';
+    globalThis.TableState?.loading('execution-rows');
     try {
       const data = await request(`/api/${encodeURIComponent(id)}/history/summary?page=${page}`);
       if (version !== historyVersion || selected?.id !== id || !dialog.open) return;
@@ -165,7 +156,7 @@
         const row = node('tr'), zone = execution.zone;
         const button = node('button', date(execution.scheduledAt, zone));
         button.type = 'button';
-        button.className = 'scheduler-execution-link';
+        button.className = 'system-table-link scheduler-execution-link';
         button.setAttribute('aria-haspopup', 'dialog');
         button.setAttribute('aria-controls', 'execution-dialog');
         button.addEventListener('click', () => openLogs(id, execution));
@@ -175,12 +166,14 @@
         cell(row).append(badge(execution.state));
         history.append(row);
       }
-      if (!data.history.length) empty(history, 4, 'Nenhuma execução registrada.');
-      renderPagination('history', page, data.total);
+      globalThis.TableState?.done('execution-rows');
+      TablePagination.render('history-pagination', page + 1, historySize, data.total, target => {
+        if (!historyLoading) { page = target - 1; return loadHistory(); }
+      });
       $('history-feedback').textContent = '';
     } catch (error) {
       if (version === historyVersion) {
-        $('history-feedback').textContent = '';
+        globalThis.TableState?.error('execution-rows', error.message);
         notify(error.message, 'error');
       }
     } finally {
@@ -241,10 +234,11 @@
       cell(row).append(message);
       rows.append(row);
     }
-    if (!items.length) empty(rows, 3, filtered
-      ? 'Nenhum log corresponde aos filtros selecionados.'
-      : 'Nenhum resultado por equipamento registrado.');
-    renderPagination('logs', logPage, items.length);
+    globalThis.TableState?.done('execution-log-rows');
+    TablePagination.render('logs-pagination', logPage + 1, historySize, items.length, target => {
+      logPage = target - 1;
+      renderLogs();
+    });
   }
   async function openLogs(scheduleId, execution) {
     if (executionDialog.open) return;
@@ -252,9 +246,10 @@
     logs = null; logPage = 0;
     for (const filter of logFilters) filter.checked = false;
     $('execution-description').textContent = execution.taskLabel;
-    $('execution-feedback').textContent = 'Carregando logs…';
+    $('execution-log-rows').replaceChildren();
+    globalThis.TableState?.loading('execution-log-rows');
     $('execution-summary').hidden = true;
-    $('execution-logs').hidden = true;
+    $('execution-logs').hidden = false;
     $('execution-export').disabled = true;
     executionDialog.showModal();
     try {
@@ -274,20 +269,13 @@
       renderLogs();
     } catch (error) {
       if (version !== logsVersion || !executionDialog.open) return;
-      $('execution-feedback').textContent = 'Logs indisponíveis.';
+      globalThis.TableState?.error('execution-log-rows', error.message);
       notify(error.message, 'error');
     }
   }
   for (const id of ['execution-close', 'execution-dismiss'])
     $(id).addEventListener('click', () => executionDialog.close());
   executionDialog.addEventListener('close', () => { logsVersion++; logs = null; });
-  for (const [id, direction] of [['logs-previous', -1], ['logs-next', 1]]) {
-    $(id).addEventListener('click', () => {
-      if (!logs || $(id).disabled) return;
-      logPage += direction;
-      renderLogs();
-    });
-  }
   $('execution-export').addEventListener('click', () => {
     if (!logs) return;
     const url = URL.createObjectURL(new Blob([exportText(logs.execution, logs.items)], { type: 'text/plain;charset=utf-8' }));
@@ -454,10 +442,6 @@
       confirm.removeAttribute('aria-busy');
     }
   });
-  $('schedule-previous').addEventListener('click', () => { if (!loading) { schedulePage--; load(); } });
-  $('schedule-next').addEventListener('click', () => { if (!loading) { schedulePage++; load(); } });
-  $('history-previous').addEventListener('click', () => { if (!historyLoading && !$('history-previous').disabled) { page--; loadHistory(); } });
-  $('history-next').addEventListener('click', () => { if (!historyLoading && !$('history-next').disabled) { page++; loadHistory(); } });
   load();
   setInterval(() => {
     if (!document.hidden && !dialog.open && !deletion.open) load(true);

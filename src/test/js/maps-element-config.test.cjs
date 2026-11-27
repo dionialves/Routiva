@@ -98,6 +98,7 @@ test('loading interfaces preserves slots and displays the server diagnostic as t
   const states=[];
   context.renderSwitchSlots=()=>states.push(context.loadingInterfaces);
   $('interface-load-status').setAttribute=function(name,value){this[name]=value;};
+  context.TableState = { error(id, message) { context.discoveryError = message; } };
   let respond;
   context.fetch=()=>new Promise(resolve=>{respond=resolve;});
   vm.runInContext(source.slice(source.indexOf("$('load-switch-interfaces').onclick ="),
@@ -111,7 +112,7 @@ test('loading interfaces preserves slots and displays the server diagnostic as t
   assert.deepEqual(states,[true,false]);
   assert.equal(context.configuredSlots.length,1);
   assert.equal($('interface-load-status').role,'alert');
-  assert.equal($('interface-load-status').textContent,'SSH conectado, mas o formato de show interface link não foi reconhecido.');
+  assert.equal(context.discoveryError,'SSH conectado, mas o formato de show interface link não foi reconhecido.');
 });
 
 test('group submap selection is restored and persisted; changing type clears it',()=>{
@@ -154,10 +155,11 @@ for (const [label, response, message] of [
     const { $, context } = setup();
     $('type').value = 'host'; $('group').value = '42'; $('element-dialog').open = true;
     $('interface-load-status').setAttribute = function (key, value) { this[key] = value; };
+    context.TableState = { error(id, text) { context.discoveryError = text; } };
     context.fetch = async () => response;
     vm.runInContext(source.slice(source.indexOf("$('load-switch-interfaces').onclick ="), source.indexOf("$('add-switch-slot').onclick =")), context);
     await $('load-switch-interfaces').onclick();
-    assert.match($('interface-load-status').textContent, message);
+    assert.match(context.discoveryError, message);
     assert.equal(context.configuredSlots.length, 1);
     assert.equal(context.loadingInterfaces, false);
   });
@@ -166,11 +168,12 @@ test('discovery distinguishes a browser port assembly error from an SSH failure'
   const { $, context } = setup();
   $('type').value = 'host'; $('group').value = '42'; $('element-dialog').open = true;
   $('interface-load-status').setAttribute = function (key, value) { this[key] = value; };
+  context.TableState = { error(id, text) { context.discoveryError = text; } };
   context.fetch = async () => ({ ok: true, status: 200, json: async () => [{ name: 'ether1' }] });
   context.MapSwitch = { ...MapSwitch, importInterfaces() { throw new TypeError('crypto.randomUUID is not a function'); } };
   vm.runInContext(source.slice(source.indexOf("$('load-switch-interfaces').onclick ="), source.indexOf("$('add-switch-slot').onclick =")), context);
   await $('load-switch-interfaces').onclick();
-  assert.match($('interface-load-status').textContent, /recebidas.*navegador/);
+  assert.match(context.discoveryError, /recebidas.*navegador/);
   assert.equal(context.configuredSlots.length, 1);
 });
 

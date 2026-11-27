@@ -9,10 +9,10 @@
   <th:block th:replace="~{design-system :: actions}"></th:block>
   <th:block th:replace="~{design-system :: dialogStyles}"></th:block>
   <th:block th:replace="~{design-system :: analysisDialogStyles}"></th:block>
-  <link rel="stylesheet" href="/availability.css?v=20261118-compact-tables">
-  <link rel="stylesheet" href="/task-scheduler.css?v=20261126-status-text">
+  <link rel="stylesheet" href="/availability.css?v=20261127-table-states">
+  <link rel="stylesheet" href="/task-scheduler.css?v=20261127-table-density">
   <script src="/shell.js?v=20261124-dialog-notifications" defer></script>
-  <script src="/task-scheduler.js?v=20261126-status-text" defer></script>
+  <script src="/task-scheduler.js?v=20261127-table-states" defer></script>
 </head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('scheduler')}"></aside>
@@ -22,9 +22,9 @@
     <button id="new-schedule" aria-haspopup="dialog" aria-controls="schedule-dialog" class="system-button system-button-primary query-primary-action" type="button" th:disabled="${#lists.isEmpty(tasks)}"><svg th:replace="~{shell :: icon('plus')}"></svg>Novo agendamento</button>
   </div>
   <p th:if="${#lists.isEmpty(tasks)}" class="scheduler-notice">Nenhuma tarefa disponível. O agendador está preparado; as tarefas serão disponibilizadas após a definição do catálogo.</p>
-  <section class="card availability-host-section system-table-compact" aria-labelledby="schedules-title">
-    <h2 id="schedules-title">Agendamentos</h2>
-    <p id="scheduler-feedback" role="status" aria-live="polite">Carregando agendamentos…</p>
+  <section class="card availability-host-section" aria-labelledby="schedules-title">
+    <div th:replace="~{design-system :: tableHeading('schedules-title', 'Agendamentos', 'settings', 'schedule-rows')}"></div>
+    <p id="scheduler-feedback" role="status" aria-live="polite"></p>
     <div th:replace="~{design-system :: dataTable('Agendamentos cadastrados', ~{task-scheduler :: scheduleSections})}"><th:block th:fragment="scheduleSections">
       <thead>
         <tr>
@@ -38,11 +38,7 @@
       </thead>
       <tbody id="schedule-rows"></tbody>
     </th:block></div>
-    <nav class="system-pagination" aria-label="Paginação de agendamentos">
-      <button th:replace="~{design-system :: action('schedule-previous', 'chevron-left', 'Anterior')}"></button>
-      <span id="schedule-page" role="status" aria-live="polite"></span>
-      <button th:replace="~{design-system :: action('schedule-next', 'chevron-right', 'Próxima')}"></button>
-    </nav>
+    <nav th:replace="~{design-system :: tablePagination('Paginação de agendamentos', 'schedule-pagination', 'registros', 'schedule-rows', null)}"></nav>
   </section>
 </main></div>
 <dialog th:replace="~{design-system :: analysisDialog('schedule-dialog', 'schedule-title', 'schedule-description', ~{task-scheduler :: scheduleContent})}"><th:block th:fragment="scheduleContent">
@@ -71,11 +67,7 @@
     <div th:replace="~{design-system :: dataTable('Histórico de execuções', ~{task-scheduler :: historySections})}"><th:block th:fragment="historySections">
       <thead><tr><th scope="col">Horário previsto</th><th scope="col">Início</th><th scope="col">Término</th><th scope="col">Status</th></tr></thead><tbody id="execution-rows"></tbody>
     </th:block></div>
-    <nav class="system-pagination" aria-label="Páginas do histórico">
-      <button th:replace="~{design-system :: action('history-previous', 'chevron-left', 'Anterior')}"></button>
-      <span id="history-page" aria-live="polite"></span>
-      <button th:replace="~{design-system :: action('history-next', 'chevron-right', 'Próxima')}"></button>
-    </nav>
+    <nav th:replace="~{design-system :: tablePagination('Páginas do histórico', 'history-pagination', 'registros', 'execution-rows', null)}"></nav>
   </section>
   <footer class="analysis-footer">
     <div class="settings-actions">
@@ -121,11 +113,7 @@
               <tbody id="execution-log-rows"></tbody>
             </th:block>
           </div>
-          <div class="system-pagination">
-            <button th:replace="~{design-system :: action('logs-previous', 'chevron-left', 'Anterior')}"></button>
-            <span id="logs-page" aria-live="polite"></span>
-            <button th:replace="~{design-system :: action('logs-next', 'chevron-right', 'Próxima')}"></button>
-          </div>
+          <nav th:replace="~{design-system :: tablePagination('Paginação dos logs', 'logs-pagination', 'registros', 'execution-log-rows', null)}"></nav>
         </div>
       </section>
       <footer class="analysis-footer">
