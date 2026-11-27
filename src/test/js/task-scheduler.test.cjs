@@ -55,7 +55,7 @@ async function schedulerHarness({ empty = false } = {}) {
   let deferred, fixtureSchedules = empty ? [] : [schedule('one'), schedule('two')];
   const context = {
     document: { getElementById: get, createElement: tag => new Element(tag), querySelector: () => null },
-    window: { notify() {} }, Intl, Date, setInterval() {},
+    window: { notify() {} }, Intl, Date, URLSearchParams, setInterval() {},
     fetch: async (url, options) => {
       requests.push(url);
       let data;

@@ -28,7 +28,6 @@
     for (const key of sortKeys) {
       const button = $('diagnostic-sort-' + key);
       button.closest('th').setAttribute('aria-sort', key === sortKey ? sortDirection === 1 ? 'ascending' : 'descending' : 'none');
-      $('diagnostic-sort-icon-' + key).textContent = key === sortKey ? sortDirection === 1 ? '↑' : '↓' : '↕';
     }
   }
   for (const key of sortKeys) {

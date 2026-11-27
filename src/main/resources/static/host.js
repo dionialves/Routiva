@@ -82,7 +82,6 @@
           wirelessSort = { key:null, direction:1 };
           document.querySelectorAll('[data-wireless-sort]').forEach(item => {
             item.closest('th').setAttribute('aria-sort', 'none');
-            item.querySelector('span').textContent = '↕';
           });
           Array.from(badges.children).forEach((item, index) =>
             item.setAttribute('aria-pressed', String(counts[index][2] === quality)));
@@ -1040,7 +1039,6 @@
       document.querySelectorAll('[data-wireless-sort]').forEach(item => {
         const active = item.dataset.wirelessSort === key;
         item.closest('th').setAttribute('aria-sort', active ? wirelessSort.direction === 1 ? 'ascending' : 'descending' : 'none');
-        item.querySelector('span').textContent = active ? wirelessSort.direction === 1 ? '↑' : '↓' : '↕';
       });
       wireless();
     };

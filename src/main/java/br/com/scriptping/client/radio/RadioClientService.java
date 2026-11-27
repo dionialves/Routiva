@@ -297,10 +297,98 @@ public class RadioClientService {
         return rows("SELECT host_id FROM radio_collection WHERE client_id = ?", client).stream().filter(row -> visible.contains(row.get("host_id"))).count();
     }
     public List<Map<String, Object>> history(String client, int page) {
-        Set<String> visible = visibleHosts();
-        return rows("SELECT * FROM radio_collection WHERE client_id = ? ORDER BY observed_to DESC, id DESC", client).stream()
-            .filter(r -> visible.contains(r.get("host_id"))).skip((long) Math.max(0, page) * 20).limit(20).map(this::collection).toList();
+        return history(client, page, "observed", true);
     }
+
+    public List<Map<String, Object>> history(String client, int page, String sort, boolean descending) {
+        Set<String> visible = visibleHosts();
+        if (visible.isEmpty()) return List.of();
+        String placeholders = String.join(",", Collections.nCopies(visible.size(), "?"));
+        String historyCte = "WITH selected_collections AS (SELECT * FROM radio_collection WHERE client_id = ? AND host_id IN ("
+            + placeholders + ")) ";
+        var arguments = new ArrayList<Object>();
+        arguments.add(client);
+        arguments.addAll(visible);
+        Object[] params = arguments.toArray();
+        var candidates = rows(historyCte + "SELECT * FROM selected_collections ORDER BY observed_to DESC, id DESC", params);
+        long offset = (long) Math.max(0, page) * 20;
+        if ("observed".equals(sort) && descending) {
+            return candidates.stream().skip(offset).limit(20).map(this::collection).toList();
+        }
+        boolean needsCollection = Set.of("status", "latency", "loss").contains(sort);
+        var results = needsCollection ? collectionsWithDetails(historyCte, candidates, params) : candidates;
+        List<Map<String, Object>> selected;
+        if (Set.of("mac", "ap").contains(sort)) {
+            Comparator<String> textOrder = String.CASE_INSENSITIVE_ORDER;
+            if (descending) textOrder = textOrder.reversed();
+            selected = historyPage(results, row -> historyText(row, sort), textOrder, offset);
+        } else {
+            Comparator<Double> numberOrder = descending ? Comparator.reverseOrder() : Comparator.naturalOrder();
+            selected = historyPage(results, row -> historyNumber(row, sort), numberOrder, offset);
+        }
+        return needsCollection ? selected : selected.stream().map(this::collection).toList();
+    }
+
+    private record HistoryKey<T>(Map<String, Object> row, T key) {}
+
+    private static <T> List<Map<String, Object>> historyPage(List<Map<String, Object>> rows,
+            java.util.function.Function<Map<String, Object>, T> key, Comparator<T> order, long offset) {
+        return rows.stream().map(row -> new HistoryKey<>(row, key.apply(row)))
+            .sorted(Comparator.comparing(HistoryKey::key, Comparator.nullsLast(order)))
+            .skip(offset).limit(20).map(HistoryKey::row).toList();
+    }
+
+    private String historyText(Map<String, Object> row, String sort) {
+        Object text = "mac".equals(sort) ? row.get("mac") : decode(row.get("data")).getOrDefault("apName", row.get("host_id"));
+        return text == null || text.toString().isBlank() ? null : text.toString();
+    }
+
+    private Double historyNumber(Map<String, Object> row, String sort) {
+        Map<?, ?> data = row.get("data") instanceof Map<?, ?> decoded ? decoded : decode(row.get("data"));
+        Object value = switch (sort) {
+            case "signal", "snr", "ccq" -> {
+                String metric = switch (sort) {
+                    case "snr" -> "signal-to-noise";
+                    case "ccq" -> "tx-ccq";
+                    default -> "signal";
+                };
+                yield data.get("metrics") instanceof Map<?, ?> metrics
+                    && metrics.get(metric) instanceof Map<?, ?> stats ? stats.get("mean") : null;
+            }
+            case "status" -> data.get("connectionSeverity");
+            case "latency", "loss" -> row.get("latency") instanceof Map<?, ?> latency
+                && latency.get("data") instanceof Map<?, ?> stats ? stats.get(sort) : null;
+            default -> row.get("observed_to");
+        };
+        return value instanceof Number number ? number.doubleValue() : null;
+    }
+
+    private List<Map<String, Object>> collectionsWithDetails(String cte, List<Map<String, Object>> collections, Object... params) {
+        if (collections.isEmpty()) return List.of();
+        // Legacy collections may need their original diagnosis; fetch one source row per collection in a batch.
+        var sources = new HashMap<String, Map<String, Object>>();
+        for (var source : rows(cte + """
+                SELECT source.collection_id, o.raw_data, o.measured_at FROM (
+                    SELECT c.id AS collection_id, o.id AS observation_id,
+                        ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY o.measured_at DESC, o.id DESC) AS rn
+                    FROM selected_collections c JOIN radio_observation o ON o.visit_id = c.visit_id
+                        AND o.client_id = c.client_id AND o.mac = c.mac AND o.measured_at <= c.observed_to
+                ) source JOIN radio_observation o ON o.id = source.observation_id WHERE source.rn = 1
+                """, params)) sources.put(source.get("collection_id").toString(), source);
+        var tests = new HashMap<String, List<Map<String, Object>>>();
+        for (var test : rows(cte + """
+                SELECT c.id AS collection_id, l.* FROM selected_collections c JOIN radio_latency l
+                    ON l.visit_id = c.visit_id AND l.mac = c.mac ORDER BY l.tested_at DESC
+                """, params)) {
+            String collectionId = test.remove("collection_id").toString();
+            tests.computeIfAbsent(collectionId, key -> new ArrayList<>()).add(test);
+        }
+        return collections.stream().map(row -> {
+            String id = row.get("id").toString();
+            return collection(row, sources.get(id), tests.getOrDefault(id, List.of()));
+        }).toList();
+    }
+
     public List<Map<String, Object>> list() {
         var hosts = inventory.hosts();
         if (hosts.isEmpty()) return List.of();
@@ -327,33 +415,14 @@ public class RadioClientService {
                 WITH ranked AS (
                     SELECT id, ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY observed_to DESC, id DESC) AS rn
                     FROM radio_collection WHERE host_id IN (%s)
-                ), latest AS (
+                ), selected_collections AS (
                     SELECT c.* FROM radio_collection c JOIN ranked r ON r.id = c.id WHERE r.rn = 1
                 )
                 """.formatted(placeholders);
         var latest = new HashMap<String, Map<String, Object>>();
-        var collections = rows(latestCte + "SELECT * FROM latest", visible);
-        // Legacy collections may need their original diagnosis; fetch one source row per collection in a batch.
-        var sources = new HashMap<String, Map<String, Object>>();
-        for (var source : rows(latestCte + """
-                SELECT source.collection_id, o.raw_data, o.measured_at FROM (
-                    SELECT c.id AS collection_id, o.id AS observation_id,
-                        ROW_NUMBER() OVER (PARTITION BY c.id ORDER BY o.measured_at DESC, o.id DESC) AS rn
-                    FROM latest c JOIN radio_observation o ON o.visit_id = c.visit_id
-                        AND o.client_id = c.client_id AND o.mac = c.mac AND o.measured_at <= c.observed_to
-                ) source JOIN radio_observation o ON o.id = source.observation_id WHERE source.rn = 1
-                """, visible)) sources.put(source.get("collection_id").toString(), source);
-        var tests = new HashMap<String, List<Map<String, Object>>>();
-        for (var test : rows(latestCte + """
-                SELECT c.id AS collection_id, l.* FROM latest c JOIN radio_latency l
-                    ON l.visit_id = c.visit_id AND l.mac = c.mac ORDER BY l.tested_at DESC
-                """, visible)) {
-            String collectionId = test.remove("collection_id").toString();
-            tests.computeIfAbsent(collectionId, key -> new ArrayList<>()).add(test);
-        }
-        for (var row : collections) {
-            String id = row.get("id").toString();
-            latest.put(row.get("client_id").toString(), collection(row, sources.get(id), tests.getOrDefault(id, List.of())));
+        var collections = rows(latestCte + "SELECT * FROM selected_collections", visible);
+        for (var row : collectionsWithDetails(latestCte, collections, visible)) {
+            latest.put(row.get("client_id").toString(), row);
         }
         var result = new ArrayList<Map<String, Object>>();
         for (var client : rows("SELECT * FROM radio_client ORDER BY login, provisional_mac")) {

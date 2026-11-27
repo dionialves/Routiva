@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/availability.css?v=20261127-table-states"><th:block th:replace="~{design-system :: picker}"></th:block><link rel="stylesheet" href="/access-points.css?v=20261127-table-states">
 
   <link rel="stylesheet" href="/host-menu.css?v=20261117-host-actions"><script src="/host-menu.js?v=20261124-terminal-access" defer></script>
-  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261127-table-states" defer></script>
+  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/multi-picker.js?v=20261112-standard" defer></script><script src="/access-points.js?v=20261127-sort-icon" defer></script>
 <th:block th:replace="~{design-system :: filters}"></th:block><th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{host-dialog :: resources}"></th:block></head>
 <body class="availability-dashboard">
 <aside th:replace="~{shell :: sidebar('ap')}"></aside>
@@ -26,7 +26,7 @@
     <div th:replace="~{design-system :: tableHeading('ap-title', 'Access Points cadastrados', 'radio-tower', 'ap-rows')}"></div>
 
     <button id="ap-retry" hidden class="system-button"><svg class="system-button-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>Tentar novamente</button>
-    <div th:replace="~{design-system :: dataTable('Access Points cadastrados', ~{access-points :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col" aria-sort="none"><button type="button" id="ap-sort-name">Nome<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-ip">IP<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-manufacturer">Fabricante / Modelo<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-connectedClients">Clientes conectados<span data-ap-icon="arrow-up-down"></span></button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-lastCollectedAt">Última leitura<span data-ap-icon="arrow-up-down"></span></button></th></tr></thead><tbody id="ap-rows"></tbody></th:block></div>
+    <div th:replace="~{design-system :: dataTable('Access Points cadastrados', ~{access-points :: listSections})}"><th:block th:fragment="listSections"><thead><tr><th scope="col" aria-sort="none"><button type="button" id="ap-sort-name" class="system-table-sort">Nome</button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-ip" class="system-table-sort">IP</button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-manufacturer" class="system-table-sort">Fabricante / Modelo</button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-connectedClients" class="system-table-sort">Clientes conectados</button></th><th scope="col" aria-sort="none"><button type="button" id="ap-sort-lastCollectedAt" class="system-table-sort">Última leitura</button></th></tr></thead><tbody id="ap-rows"></tbody></th:block></div>
     <nav th:replace="~{design-system :: tablePagination('Paginação dos Access Points', 'ap-pagination', 'APs', 'ap-rows', null)}"></nav>
   </section>
 </main></div>

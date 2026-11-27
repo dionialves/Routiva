@@ -19,9 +19,6 @@
     'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     'chevron-left': '<path d="m15 18-6-6 6-6"/>',
     'chevron-right': '<path d="m9 18 6-6-6-6"/>',
-    'arrow-up-down': '<path d="m3 6 3-3 3 3M6 3v18m9-3 3 3 3-3M18 21V3"/>',
-    'arrow-up': '<path d="m5 12 7-7 7 7M12 19V5"/>',
-    'arrow-down': '<path d="m5 12 7 7 7-7M12 5v14"/>',
     x: '<path d="m18 6-12 12M6 6l12 12"/>',
     'arrow-right': '<path d="M5 12h14m-7-7 7 7-7 7"/>',
     'arrow-left': '<path d="M19 12H5m7 7-7-7 7-7"/>',
@@ -212,7 +209,6 @@
     for (const key of ['name', 'ip', 'manufacturer', 'connectedClients', 'lastCollectedAt']) {
       const button = $('sort-' + key);
       button.parentElement.setAttribute('aria-sort', sortKey === key ? (direction === 1 ? 'ascending' : 'descending') : 'none');
-      button.lastElementChild.replaceChildren(icon(sortKey === key ? (direction === 1 ? 'arrow-up' : 'arrow-down') : 'arrow-up-down'));
     }
   }
   updateSort();

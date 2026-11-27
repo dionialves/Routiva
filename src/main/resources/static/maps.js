@@ -1128,6 +1128,14 @@ async function toggleMapFavorite(map) {
     renderList(map.id);
   }
 }
+let mapOrder;
+TableSort.bind('maps', order => { mapOrder = order; page = 0; renderList(); });
+
+function mapType(map) {
+  return maps.some(parent => parent.id !== map.id &&
+    parent.layout.nodes.some(node => node.groupId && node.subMapId === map.id)) ? 'Sub-mapa' : 'Principal';
+}
+
 function renderList(focusFavoriteId) {
   const query = $('map-search').value.trim().toLocaleLowerCase('pt-BR');
   const favoriteOrder = new Map(favoriteMaps.map((id, index) => [id, index]));
@@ -1136,7 +1144,12 @@ function renderList(focusFavoriteId) {
       || (b.updatedAt || 0) - (a.updatedAt || 0));
   page = Math.min(page, Math.max(0, Math.ceil(filtered.length / pageSize) - 1));
   const start = page * pageSize;
-  const rows = filtered.slice(start, start + pageSize);
+  const favorites = filtered.filter(map => favoriteOrder.has(map.id));
+  const otherMaps = TableSort.sort(filtered.filter(map => !favoriteOrder.has(map.id)), mapOrder, [
+    () => 0, map => map.layout.name, map => map.layout.nodes.length,
+    map => map.layout.links.length, map => map.updatedAt || null, mapType,
+  ]);
+  const rows = [...favorites, ...otherMaps].slice(start, start + pageSize);
   $('maps').replaceChildren();
   for (const map of rows) {
     const row = $('maps').insertRow();
@@ -1168,8 +1181,7 @@ function renderList(focusFavoriteId) {
       map.updatedAt ? new Date(map.updatedAt).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'}) : '—']) {
       row.insertCell().textContent = value;
     }
-    row.insertCell().textContent = maps.some(parent => parent.id !== map.id &&
-      parent.layout.nodes.some(node => node.groupId && node.subMapId === map.id)) ? 'Sub-mapa' : 'Principal';
+    row.insertCell().textContent = mapType(map);
   }
   globalThis.TableState?.done('maps');
   TablePagination.render('map-pagination', page + 1, pageSize, filtered.length, target => { page = target - 1; renderList(); });

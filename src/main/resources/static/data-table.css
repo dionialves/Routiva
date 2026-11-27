@@ -163,3 +163,11 @@
   font-weight:600;
   white-space:nowrap;
 }
+
+.system-data-table thead .system-table-sort::after {
+  content:'↕' / '';
+  color:var(--muted);
+}
+.system-data-table thead :is([aria-sort=ascending], [aria-sort=descending]) .system-table-sort::after {
+  color:var(--cyan);
+}

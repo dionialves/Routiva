@@ -70,6 +70,9 @@
     return td;
   }
 
+  let entryOrder;
+  TableSort.bind('backup-rows', order => { entryOrder = order; page = 0; renderEntries(); });
+
   function renderEntries() {
     const groupIds = filterSelection('backup-history-group');
     const hostIds = filterSelection('backup-history-host');
@@ -79,7 +82,10 @@
     const start = page * pageSize;
     const rows = $('backup-rows');
     rows.replaceChildren();
-    for (const entry of filtered.slice(start, start + pageSize)) {
+    const ordered = TableSort.sort(filtered, entryOrder, [
+      entry => entry.hostName, entry => entry.manufacturer, entry => entry.createdAt, entry => entry.filename,
+    ]);
+    for (const entry of ordered.slice(start, start + pageSize)) {
       const row = rows.insertRow();
       const heading = document.createElement('th');
       heading.scope = 'row';

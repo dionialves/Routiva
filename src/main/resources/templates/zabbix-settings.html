@@ -4,8 +4,8 @@
   <th:block th:replace="~{shell :: security}"></th:block>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Integração Zabbix • TraceOne</title><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/zabbix-settings.css?v=20261127-import-heading">
-  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/zabbix-import-results.js?v=20261127-table-states" defer></script><script src="/zabbix-settings.js?v=20261127-table-states" defer></script>
+  <th:block th:replace="~{design-system :: base}"></th:block><link rel="stylesheet" href="/zabbix-settings.css?v=20261127-sort">
+  <script src="/shell.js?v=20261124-dialog-notifications" defer></script><script src="/zabbix-import-results.js?v=20261127-no-sort" defer></script><script src="/zabbix-settings.js?v=20261127-no-sort" defer></script>
 <th:block th:replace="~{design-system :: layout}"></th:block><th:block th:replace="~{design-system :: actions}"></th:block><th:block th:replace="~{design-system :: dialogStyles}"></th:block></head>
 <body>
 <aside th:replace="~{shell :: sidebar('settings')}"></aside>
@@ -48,7 +48,7 @@
           <label class="inline-field">Exibir<select id="selection-filter"><option value="all">Todos</option><option value="selected">Selecionados</option><option value="unselected">Não selecionados</option></select></label>
         </div>
         <label class="zabbix-select-all"><input type="checkbox" id="group-all">Selecionar todos os hosts do grupo</label>
-        <div class="zabbix-scroll host-table-scroll"><table th:replace="~{design-system :: dataTableContent('integration-table host-selection-table', ~{zabbix-settings :: hostSelectionSections})}"><th:block th:fragment="hostSelectionSections"><thead><tr><th scope="col"><span class="visually-hidden">Seleção</span></th><th scope="col">Host</th><th scope="col">IP</th><th scope="col">Situação</th></tr></thead><tbody id="host-list"></tbody></th:block></table></div>
+        <div class="zabbix-scroll host-table-scroll"><table th:replace="~{design-system :: dataTableContent('system-data-table-static-order integration-table host-selection-table', ~{zabbix-settings :: hostSelectionSections})}"><th:block th:fragment="hostSelectionSections"><thead><tr><th scope="col"><span class="visually-hidden">Seleção</span></th><th scope="col">Host</th><th scope="col">IP</th><th scope="col">Situação</th></tr></thead><tbody id="host-list"></tbody></th:block></table></div>
         <nav th:replace="~{design-system :: tablePagination('Paginação dos hosts', 'zabbix-host-pagination', 'hosts', 'host-list', null)}"></nav>
       </section>
     </div>
@@ -62,7 +62,7 @@
       </div>
       <div id="import-summary" class="import-summary"></div>
       <div id="import-filters" class="import-filters" role="group" aria-label="Filtrar resultados"></div>
-      <div class="import-table-scroll"><table th:replace="~{design-system :: dataTableContent('integration-table import-table', ~{zabbix-settings :: importSections})}"><th:block th:fragment="importSections"><thead><tr><th scope="col" id="import-sort-heading" aria-sort="ascending"><button type="button" id="import-sort">Host/ID<svg th:replace="~{shell :: icon('sort')}"></svg></button></th><th scope="col">Categoria</th><th scope="col">Mensagem</th><th scope="col">Status</th></tr></thead><tbody id="import-log"></tbody></th:block></table></div>
+      <div class="import-table-scroll"><table th:replace="~{design-system :: dataTableContent('system-data-table-static-order integration-table import-table', ~{zabbix-settings :: importSections})}"><th:block th:fragment="importSections"><thead><tr><th scope="col">Host/ID</th><th scope="col">Categoria</th><th scope="col">Mensagem</th><th scope="col">Status</th></tr></thead><tbody id="import-log"></tbody></th:block></table></div>
       <nav th:replace="~{design-system :: tablePagination('Paginação dos resultados da importação', 'import-pagination', 'registros', 'import-log', null)}"></nav>
     </section>
     <p class="selection-policy">Desmarcar interrompe futuras sincronizações e preserva os dados históricos.</p>

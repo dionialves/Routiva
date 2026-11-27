@@ -87,6 +87,20 @@
     const td = node('td', text);
     row.append(td); return td;
   }
+  let scheduleOrder, logOrder, historyOrder;
+  TableSort.bind('schedule-rows', order => { scheduleOrder = order; schedulePage = 0; load(); });
+  TableSort.bind('execution-log-rows', order => {
+    logOrder = order;
+    logPage = 0;
+    if (logs) renderLogs();
+  });
+  TableSort.bind('execution-rows', order => {
+    historyOrder = order;
+    page = 0;
+    historyLoading = false;
+    loadHistory();
+  });
+
   async function load(silent = false) {
     if (loading) return;
     loading = true;
@@ -97,7 +111,14 @@
       $('new-schedule').disabled = !tasks.some(task => !schedules.some(schedule => schedule.taskKey === task.key));
       const rows = $('schedule-rows'); rows.replaceChildren();
       schedulePage = Math.min(schedulePage, Math.max(0, Math.ceil(schedules.length / 25) - 1));
-      for (const schedule of schedules.slice(schedulePage * 25, (schedulePage + 1) * 25)) {
+      const ordered = TableSort.sort(schedules, scheduleOrder, [
+        schedule => schedule.taskLabel, schedule => describe(schedule.rule),
+        schedule => schedule.enabled ? 'Ativo' : schedule.nextRun === 0 ? 'Somente manual' : 'Pausado',
+        schedule => schedule.enabled ? schedule.nextRun : null,
+        schedule => data.latest[schedule.id]?.startedAt,
+        schedule => data.latest[schedule.id] ? statusLabel(data.latest[schedule.id].state, true) : null,
+      ]);
+      for (const schedule of ordered.slice(schedulePage * 25, (schedulePage + 1) * 25)) {
         const row = node('tr'), zone = schedule.rule.zone;
         const heading = node('th'), link = node('a', schedule.taskLabel);
         heading.scope = 'row'; link.href = '#schedule-dialog'; link.className = 'availability-host-name';
@@ -148,7 +169,12 @@
     history.setAttribute('aria-busy', 'true');
     globalThis.TableState?.loading('execution-rows');
     try {
-      const data = await request(`/api/${encodeURIComponent(id)}/history/summary?page=${page}`);
+      const params = new URLSearchParams({ page });
+      if (historyOrder) {
+        params.set('sort', ['scheduled_at', 'started_at', 'finished_at', 'state'][historyOrder.column]);
+        params.set('direction', historyOrder.direction);
+      }
+      const data = await request(`/api/${encodeURIComponent(id)}/history/summary?${params}`);
       if (version !== historyVersion || selected?.id !== id || !dialog.open) return;
       page = data.page;
       history.replaceChildren();
@@ -218,7 +244,10 @@
     const items = filtered ? logs.items.filter(({ state }) =>
       (success && state === 'COMPLETED') || (failure && (state === 'FAILED' || state === 'PARTIAL'))
     ) : logs.items;
-    for (const item of items.slice(logPage * historySize, (logPage + 1) * historySize)) {
+    const ordered = TableSort.sort(items, logOrder, [
+      item => item.hostName, item => statusLabel(item.state, true), item => item.message,
+    ]);
+    for (const item of ordered.slice(logPage * historySize, (logPage + 1) * historySize)) {
       const row = node('tr');
       row.className = 'execution-log-row';
       const host = node('span', item.hostName);

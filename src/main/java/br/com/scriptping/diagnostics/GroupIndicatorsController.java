@@ -95,7 +95,7 @@ public class GroupIndicatorsController {
                 default -> r.incidents() == null ? null : r.incidents().doubleValue();
             }, Comparator.nullsLast(values));
         } else {
-            comparator = Comparator.comparing(r -> normalize(r.name()));
+            comparator = Comparator.comparing(r -> normalize(sort.equals("status") ? r.status() : r.name()));
             if (descending) comparator = comparator.reversed();
         }
         return comparator.thenComparing(Row::id);

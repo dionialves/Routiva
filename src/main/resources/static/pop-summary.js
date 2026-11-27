@@ -323,7 +323,9 @@ class PopSummary {
         const row = el('tr');
         const date = el('td', hostIncidentDate(issue.timestamp));
         date.title = new Date(issue.timestamp).toLocaleString('pt-BR');
+        date.setAttribute('data-sort-value', issue.timestamp);
         const severity = el('td');
+        severity.setAttribute('data-sort-value', issue.severity);
         const badge = el('span', this.labels[issue.severity + 2] || 'Desconhecida', 'host-severity');
         badge.style.color = this.colors[issue.severity + 2] || 'var(--muted)';
         severity.append(badge);

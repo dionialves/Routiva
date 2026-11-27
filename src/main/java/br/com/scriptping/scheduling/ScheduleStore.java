@@ -40,8 +40,19 @@ public class ScheduleStore {
         return historySummary(scheduleId, page, 25);
     }
     public List<Execution> historySummary(String scheduleId, int page, int size) {
-        return jdbc.query("SELECT * FROM task_execution WHERE schedule_id=? ORDER BY scheduled_at DESC, id LIMIT ? OFFSET ?",
-            this::execution, scheduleId, size, (long) page * size);
+        return historySummary(scheduleId, page, size, "scheduled_at", true);
+    }
+
+    public List<Execution> historySummary(String scheduleId, int page, int size, String sort, boolean descending) {
+        String column = switch (sort) {
+            case "started_at" -> "started_at";
+            case "finished_at" -> "finished_at";
+            case "state" -> "state";
+            default -> "scheduled_at";
+        };
+        String direction = descending ? " DESC" : " ASC";
+        return jdbc.query("SELECT * FROM task_execution WHERE schedule_id=? ORDER BY "
+            + column + direction + " NULLS LAST, id LIMIT ? OFFSET ?", this::execution, scheduleId, size, (long) page * size);
     }
 
     public Optional<Execution> execution(String scheduleId, String executionId) {

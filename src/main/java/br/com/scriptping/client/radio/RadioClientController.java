@@ -13,7 +13,12 @@ public class RadioClientController {
     @GetMapping("/api/clients/radio") @ResponseBody
     public Object list() { return clients.list(); }
     @GetMapping("/api/clients/radio/{id}/history") @ResponseBody
-    public Object history(@PathVariable String id, @RequestParam(defaultValue = "0") int page) { return org.springframework.http.ResponseEntity.ok().header("X-Total-Count", Long.toString(clients.historyCount(id))).body(clients.history(id, page)); }
+    public Object history(@PathVariable String id, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "observed") String sort,
+            @RequestParam(defaultValue = "descending") String direction) {
+        return org.springframework.http.ResponseEntity.ok().header("X-Total-Count", Long.toString(clients.historyCount(id)))
+            .body(clients.history(id, page, sort, "descending".equals(direction)));
+    }
     public record Binding(String login, long from, boolean confirm) {}
     @PostMapping("/api/clients/radio/{id}/binding") @ResponseBody
     public Object bind(@PathVariable String id, @RequestBody Binding request, Principal operator) {

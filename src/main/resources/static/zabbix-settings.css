@@ -90,7 +90,6 @@
 .import-table th:nth-child(1) { width: 23%; }
 .import-table th:nth-child(2) { width: 20%; }
 .import-table th:nth-child(4) { width: 100px; }
-.settings-page #import-sort { background: transparent; border: 0; color: inherit; padding: 0; min-height: auto; font-size: 11px; }
 .settings-page .result-host-button { background: transparent; border: 0; padding: 0; min-height: auto; justify-content: flex-start; text-align: left; font-size: 12px; }
 .settings-page .result-host-button:hover:not(:disabled) { background: transparent; color: var(--focus); }
 .import-table td:first-child small { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }

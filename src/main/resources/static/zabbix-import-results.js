@@ -8,7 +8,6 @@ class ZabbixImportLog {
     this.severity = 'all';
     this.page = 0;
     this.pageSize = 25;
-    this.descending = false;
   }
   static normalize(value) {
     return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -40,7 +39,7 @@ class ZabbixImportLog {
     const query = ZabbixImportLog.normalize(this.query.trim());
     return this.entries.filter(entry => this.matches(entry)
       && (this.severity === 'all' || entry.severity === this.severity) && entry.search.includes(query))
-      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'pt-BR', { numeric: true }) * (this.descending ? -1 : 1));
+      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'pt-BR', { numeric: true }));
   }
   visible() {
     const entries = this.filtered();
@@ -65,9 +64,6 @@ class ZabbixImportResults {
     this.$('import-result').addEventListener('query-filters-cleared', () => {
       this.model.filter = 'all'; this.model.page = 0;
       this.renderFilters(); this.renderTable();
-    });
-    this.$('import-sort').addEventListener('click', () => {
-      this.model.descending = !this.model.descending; this.model.page = 0; this.renderTable();
     });
     this.$('import-details').addEventListener('click', event => {
       if (event.target === this.$('import-details')) {
@@ -146,7 +142,6 @@ class ZabbixImportResults {
       this.model.page = target - 1;
       this.renderTable();
     });
-    this.$('import-sort-heading').setAttribute('aria-sort', this.model.descending ? 'descending' : 'ascending');
   }
   details(entry) {
     const fields = this.$('import-detail-fields'); fields.replaceChildren();

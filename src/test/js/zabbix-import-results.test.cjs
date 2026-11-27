@@ -17,12 +17,12 @@ test('search, category pills and severity combine without discarding records', (
   model.filter = 'imported'; assert.deepEqual(model.filtered().map(e => e.id), ['12']);
   assert.equal(model.entries.length, 3);
 });
-test('pagination is bounded and sorting compares host names and numeric IDs', () => {
+test('pagination is bounded and preserves the default host order', () => {
   const model = new ZabbixImportLog();
   model.load({ state: 'completed', entries: Array.from({ length: 1100 }, (_, id) => ({ id: String(id), name: '', outcome: 'updated', severity: 'success', message: 'Atualizado' })) });
   assert.equal(model.visible().entries.length, 25);
   model.page = 500; assert.equal(model.visible().pages, 44); assert.equal(model.page, 43);
-  model.descending = true; model.page = 0; assert.equal(model.visible().entries[0].id, '1099');
+  assert.equal(model.visible().entries[0].id, '1075');
   model.query = 'not found'; assert.equal(model.visible().total, 0); assert.equal(model.page, 0);
 });
 test('legacy results retain known errors without inventing success records', () => {

@@ -169,6 +169,8 @@ class RadioClientServiceTests {
         persist(new RadioCollection.Batch(visit.id(), visit.host(), visit.hostName(), visit.owner(), visit.startedAt(), visit.touchedAt(), visit.samples(), List.of(new RadioCollection.Latency(MAC, now, stats))));
         var client = service.list().getFirst().get("id").toString(); assertThat(service.history(client, 0).getFirst()).containsKey("latency");
         complete("ap1", MAC, now - 10000); assertThat(service.history(client, 0).getFirst()).doesNotContainKey("latency");
+        assertThat(service.history(client, 0, "loss", false)).hasSize(2)
+            .first().satisfies(collection -> assertThat(collection).containsKey("latency"));
     }
     @Test void ownersSharingOneMacInTheSameVisitKeepTheCorrectTestPeriod() {
         var samples = List.of(sample(MAC, now - 40000, "-60", "alice"), sample(MAC, now - 30000, "-60", "alice"),

@@ -162,6 +162,18 @@
       if (snapshot) render(snapshot);
     });
   }
+  let incidentOrder, occurrenceOrder;
+  TableSort.bind('incident-rows', order => {
+    incidentOrder = order;
+    periods.forEach(period => { period.page = 1; });
+    if (snapshot) render(snapshot);
+  });
+  TableSort.bind('incident-trigger-rows', order => {
+    occurrenceOrder = order;
+    occurrencePage = 1;
+    renderOccurrences();
+  });
+
   function render(data) {
     hideComments();
     snapshot = data;
@@ -180,7 +192,11 @@
       `Antes de ${calendarLabel(calendarDay - 7)}`];
     let visible = 0;
     periods.forEach((period, index) => {
-      const rows = grouped[index].sort((a, b) => b.timestamp - a.timestamp || a.eventId.localeCompare(b.eventId));
+      const chronological = grouped[index].sort((a, b) => b.timestamp - a.timestamp || a.eventId.localeCompare(b.eventId));
+      const rows = TableSort.sort(chronological, incidentOrder, [
+        row => row.timestamp, row => row.severity, row => row.hosts[0]?.name, row => row.hosts[0]?.ip,
+        row => row.name, row => -row.timestamp, row => Number(row.acknowledged), row => row.messageCount,
+      ]);
       if (!rows.length) return;
       period.page = Math.min(period.page, Math.ceil(rows.length / size));
       const header = document.createElement('tr'); header.className = 'incident-period';
@@ -633,7 +649,7 @@
   }
   function updateOccurrenceTimes() {
     if (!dialog.open || dialog.dataset.activeTab !== 'trigger' || !occurrenceRows) return;
-    const visible = occurrenceRows.slice((occurrencePage - 1) * 10, occurrencePage * 10);
+    const visible = orderedOccurrences().slice((occurrencePage - 1) * 10, occurrencePage * 10);
     for (const [index, row] of visible.entries()) {
       const cells = $('incident-trigger-rows').children[index]?.children;
       if (!cells) continue;
@@ -641,11 +657,18 @@
       if (!row.resolved) cells[4].textContent = occurrenceDuration(row);
     }
   }
+  function orderedOccurrences() {
+    return TableSort.sort(occurrenceRows || [], occurrenceOrder, [
+      row => row.timestamp, row => row.resolved ? row.recoveredAt : null, row => Number(row.resolved),
+      row => -row.timestamp, row => (row.resolved ? row.recoveredAt : Date.now()) - row.timestamp,
+      row => Number(row.acknowledged), row => row.messageCount,
+    ]);
+  }
   function renderOccurrences() {
     hideComments();
     const body = $('incident-trigger-rows'); body.replaceChildren();
     $('incident-trigger-scroll').scrollTop = 0;
-    const rows = occurrenceRows || [];
+    const rows = orderedOccurrences();
 
     for (const row of rows.slice((occurrencePage - 1) * 10, occurrencePage * 10)) {
       const tr = document.createElement('tr');

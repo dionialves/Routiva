@@ -207,7 +207,6 @@
     document.querySelectorAll('[data-radio-sort]').forEach(button => {
       const active = button.dataset.radioSort === sortKey;
       button.closest('th').setAttribute('aria-sort', active ? (direction === 1 ? 'ascending' : 'descending') : 'none');
-      button.querySelector('span').textContent = active ? (direction === 1 ? '↑' : '↓') : '↕';
     });
     globalThis.TableState?.done('radio-rows');
   }
@@ -248,11 +247,22 @@
     $('radio-binding-confirm').hidden = true;
     tab(false); $('radio-dialog').showModal();
   }
+  let historyOrder;
+  TableSort.bind('radio-history-items', order => {
+    historyOrder = order;
+    page = 0;
+    if (selected) loadHistory();
+  });
   async function loadHistory() {
     const own = ++generation;
     globalThis.TableState?.loading('radio-history-items');
     try {
-      const items = await request('/' + selected.id + '/history?page=' + page);
+      const params = new URLSearchParams({ page });
+      if (historyOrder) {
+        params.set('sort', ['mac', 'observed', 'ap', 'signal', 'status', 'snr', 'ccq', 'latency', 'loss'][historyOrder.column]);
+        params.set('direction', historyOrder.direction);
+      }
+      const items = await request('/' + selected.id + '/history?' + params);
       if (own !== generation) return;
       $('radio-history-items').replaceChildren(...items.map(item => {
         const row = document.createElement('tr'), heading = document.createElement('th'), link = document.createElement('a');

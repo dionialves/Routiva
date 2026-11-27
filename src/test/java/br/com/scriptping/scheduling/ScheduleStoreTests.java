@@ -45,6 +45,8 @@ class ScheduleStoreTests {
         assertThat(store.historyCount("one")).isEqualTo(26);
         assertThat(store.history("one", 0)).hasSize(25).allMatch(e -> e.scheduleId().equals("one"));
         assertThat(store.history("one", 1)).hasSize(1);
+        assertThat(store.historySummary("one", 1, 10, "scheduled_at", false)).hasSize(10)
+            .first().extracting(ScheduleStore.Execution::scheduledAt).isEqualTo(now + 10 * 86400000L);
         store.change("one", "delete", now);
         assertThat(store.historyCount("one")).isEqualTo(26);
     }

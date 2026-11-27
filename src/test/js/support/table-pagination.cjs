@@ -4,6 +4,8 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '../../../main/resources/static/table-pagination.js'), 'utf8');
 
+const sortSource = fs.readFileSync(path.join(__dirname, '../../../main/resources/static/table-sort.js'), 'utf8');
+
 function pager(unit = 'registros') {
   const children = Array.from({ length: 10 }, () => ({
     attributes: {},
@@ -33,7 +35,9 @@ function install(context, elements = {}, definitions = {}) {
   }
   context.document ??= {};
   context.document.getElementById ??= id => elements[id];
-  vm.runInContext(source, vm.isContext(context) ? context : vm.createContext(context));
+  const sandbox = vm.isContext(context) ? context : vm.createContext(context);
+  vm.runInContext(source, sandbox);
+  vm.runInContext(sortSource, sandbox);
 }
 
 module.exports = { install, pager };

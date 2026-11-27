@@ -20,7 +20,7 @@ test('library derives map type from all group bindings, including maps outside t
   const makeElement = () => ({setAttribute(){},addEventListener(){},append(){}});
   const context = vm.createContext({$,maps,page:0,pageSize:10,favoriteMaps:[],favoriteSaving:false,svg:makeElement,document:{createElement:makeElement}});
   installPagination(context, {}, {'map-pagination': ['mapas']});
-  vm.runInContext(source.slice(source.indexOf('function renderList('),source.indexOf("$('map-search').oninput")),context);
+  vm.runInContext(source.slice(source.indexOf('let mapOrder;'),source.indexOf("$('map-search').oninput")),context);
   vm.runInContext('renderList()',context);
   assert.equal(rows.length,3);
   assert.ok(rows.every(row=>row.length===6));
@@ -50,6 +50,9 @@ test('favorites appear first before pagination and update only after the server 
   vm.runInContext('renderList()',context);
   assert.equal(rows[0][1].child.textContent,'Map 11');
   assert.equal(rows[0][0].child.attrs['aria-pressed'],'true');
+  vm.runInContext("mapOrder = { column: 1, direction: 'descending' }; renderList()", context);
+  assert.deepEqual(rows.slice(0, 3).map(row => row[1].child.textContent), ['Map 11', 'Map 10', 'Map 9']);
+  vm.runInContext('mapOrder = undefined', context);
   await vm.runInContext('toggleMapFavorite(maps[3])',context);
   assert.equal(rows[0][1].child.textContent,'Map 3');
   assert.equal(rows[1][1].child.textContent,'Map 11');

@@ -1,7 +1,7 @@
 @import url("/design-tokens.css?v=20261126-equipment-modal");
 @import url("/modal-tabs.css?v=20261121-grid-height");
 @import url("/pagination.css?v=20261127-table-states");
-@import url("/data-table.css?v=20261127-compact-heading");
+@import url("/data-table.css?v=20261127-sort-icon");
 @import url("/signal-indicators.css");
 
 * {

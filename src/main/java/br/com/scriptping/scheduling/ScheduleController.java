@@ -30,11 +30,16 @@ public class ScheduleController {
         return Map.of("history", history, "details", store.details(history), "total", count, "page", current);
     }
     @GetMapping("/api/{id}/history/summary") @ResponseBody
-    public Map<String, Object> historySummary(@PathVariable String id, @RequestParam(defaultValue = "0") int page) {
+    public Map<String, Object> historySummary(@PathVariable String id, @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "scheduled_at") String sort,
+            @RequestParam(defaultValue = "descending") String direction) {
         int size = 10;
         long count = store.historyCount(id);
         int current = (int) Math.min(Math.max(0, page), Math.max(0, (count - 1) / size));
-        return Map.of("history", store.historySummary(id, current, size), "total", count, "page", current);
+        var history = "scheduled_at".equals(sort) && "descending".equals(direction)
+            ? store.historySummary(id, current, size)
+            : store.historySummary(id, current, size, sort, "descending".equals(direction));
+        return Map.of("history", history, "total", count, "page", current);
     }
 
     @GetMapping("/api/{id}/history/{executionId}") @ResponseBody
