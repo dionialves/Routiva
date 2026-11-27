@@ -562,27 +562,28 @@ armazenados no PostgreSQL. Preserve a chave `ap.secrets-key-file` (ou
 
 #### Receber backups Digistar no próprio TraceOne
 
-Em produção Linux, habilite `compose.digistar.yaml` para subir o serviço
-`tftp` junto com o TraceOne. Ele escuta no IPv4 de gerência do servidor,
-aceita somente uploads com o nome gerado pelo TraceOne e compartilha a pasta
-de recebimento com o serviço `app`. O app valida o TAR, remove o arquivo
-temporário e armazena o backup criptografado no PostgreSQL.
+O Compose principal sobe o serviço `tftp` e compartilha o volume de recebimento
+com o `app`. O serviço aceita uploads com o nome gerado pelo TraceOne. O app
+valida o TAR, remove o arquivo temporário e armazena o backup criptografado no
+PostgreSQL. Sem `BACKUP_TFTP_HOST`, o TFTP escuta apenas em loopback e o app
+mantém a coleta Digistar indisponível.
 
-1. No `.env`, defina `BACKUP_TFTP_HOST` com um IPv4 configurado no servidor
-   e alcançável pelas OLTs. Se quiser outro diretório, defina também
-   `BACKUP_TFTP_DIRECTORY`.
-2. Crie a pasta usada pelos containers. Para o caminho padrão, execute
-   `sudo install -d -m 0700 -o 10001 -g 10001 /srv/traceone/tftp`.
+1. Em produção Linux, defina `BACKUP_TFTP_HOST` no `.env` com um IPv4 configurado
+   no servidor e alcançável pelas OLTs.
+2. Para usar um diretório do servidor em vez do volume Docker, defina
+   `BACKUP_TFTP_DIRECTORY` com o caminho absoluto e prepare a pasta. Por exemplo,
+   use `sudo install -d -m 0700 -o 10001 -g 10001 /srv/traceone/tftp`.
 3. No firewall do servidor, permita UDP/69 e UDP/40000–40015 no IPv4 de
    gerência, somente a partir dos endereços das OLTs autorizadas. A porta
    69 desse endereço deve estar livre.
-4. Execute `docker compose -f compose.yaml -f compose.digistar.yaml up -d --build`.
-   Use os mesmos arquivos nas próximas atualizações, ou inclua os dois em
-   `COMPOSE_FILE` no `.env` (separados por dois pontos no Linux).
+4. Execute `docker compose up -d --build`. Se estiver migrando do Compose
+   complementar, remova `compose.digistar.yaml` de `COMPOSE_FILE` ou dos
+   argumentos do comando. Para manter a pasta antiga, defina
+   `BACKUP_TFTP_DIRECTORY` com o caminho que a implantação já utiliza.
 5. Configure a autenticação de um host Digistar e selecione-o em **Backup →
    Novo backup**. Clique em **Backup**. Confira se o `.tar` aparece no
    histórico e pode ser baixado.
 
-Para uma instalação que já usa um TFTP externo, o serviço integrado é opcional.
-Nesse caso, configure `BACKUP_TFTP_HOST` com o endereço do TFTP visto pela OLT
-e `BACKUP_TFTP_INBOX` com a pasta de recebimento acessível dentro do app.
+Para uma instalação que usa um TFTP externo, configure o endereço visto pela
+OLT e compartilhe a pasta de recebimento com o app. No Compose, ajuste
+`BACKUP_TFTP_BIND_HOST=127.0.0.1` para manter o serviço integrado em loopback.
